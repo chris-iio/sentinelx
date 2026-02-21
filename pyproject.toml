@@ -11,3 +11,6 @@ select = ["E", "F", "W", "S", "B"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "e2e: end-to-end tests requiring a live browser (deselect with -m 'not e2e')",
+]
