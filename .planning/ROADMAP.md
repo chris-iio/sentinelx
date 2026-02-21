@@ -31,10 +31,10 @@ Decimal phases appear between their surrounding integers in numeric order.
   5. Pasting a 600 KB blob is rejected before extraction runs with a clear error message
 **Plans:** 4/4 plans complete
 Plans:
-- [ ] 01-01-PLAN.md — Project scaffold, app factory with security config, models, test fixtures
-- [ ] 01-02-PLAN.md — TDD: IOC normalizer (defanging) and classifier (type detection)
-- [ ] 01-03-PLAN.md — TDD: IOC extractor (iocextract + iocsearcher) and pipeline integration
-- [ ] 01-04-PLAN.md — Routes, templates, static assets, and visual verification
+- [x] 01-01-PLAN.md — Project scaffold, app factory with security config, models, test fixtures
+- [x] 01-02-PLAN.md — TDD: IOC normalizer (defanging) and classifier (type detection)
+- [x] 01-03-PLAN.md — TDD: IOC extractor (iocextract + iocsearcher) and pipeline integration
+- [x] 01-04-PLAN.md — Routes, templates, static assets, and visual verification
 
 ### Phase 2: Core Enrichment
 **Goal**: Analyst can submit in online mode and receive VirusTotal enrichment results for all supported IOC types, displayed with source attribution and no combined score, while all HTTP safety controls are in force

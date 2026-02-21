@@ -72,7 +72,7 @@ completed: 2026-02-21
 - **Duration:** 3 min
 - **Started:** 2026-02-21T08:37:06Z
 - **Completed:** 2026-02-21T08:40:54Z
-- **Tasks:** 2 auto (checkpoint:human-verify pending user confirmation)
+- **Tasks:** 3 (2 auto + 1 checkpoint:human-verify — approved by user)
 - **Files modified:** 8
 
 ## Accomplishments
@@ -89,7 +89,7 @@ Each task was committed atomically:
 1. **Task 1: Implement routes and integration tests** - `57fe625` (feat)
 2. **Task 2: Build templates and static assets** - `81f330f` (feat)
 
-_Task 3 (checkpoint:human-verify) pending user visual confirmation_
+3. **Task 3: Visual and functional verification** - checkpoint approved by user
 
 ## Files Created/Modified
 
@@ -125,9 +125,9 @@ None - no external service configuration required. The app is running on port 50
 - Full offline IOC extraction UI is functional: paste text, see grouped results, copy IOC values
 - POST /analyze is ready for Phase 2 to extend with online enrichment calls (gated by ALLOWED_API_HOSTS)
 - All security properties verified by integration tests and live curl checks
-- Human visual verification (Task 3 checkpoint) pending
+- Human visual verification (Task 3 checkpoint) approved — dark theme, accordion grouping, mode indicator, copy buttons, and security headers all confirmed working
 
-No blockers.
+No blockers. Phase 1 is complete.
 
 ## Self-Check: PASSED
 
