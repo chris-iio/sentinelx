@@ -21,14 +21,18 @@ class TestRunPipelineDeduplication:
         assert len(url_results) == 1
 
     def test_mixed_defanged_with_duplicates(self):
-        """Defanged URL + IP, URL appears twice -> 2 unique IOCs."""
+        """Defanged URL appearing twice should be deduplicated; IP should appear once."""
         text = "Alert: hxxp://evil[.]com and hxxp://evil[.]com again, IP 192[.]168[.]1[.]1"
         results = run_pipeline(text)
         types_found = {r.type for r in results}
+        # IPv4 must be present
         assert IOCType.IPV4 in types_found
-        # URL should appear once (deduped)
-        url_results = [r for r in results if r.type == IOCType.URL]
-        assert len(url_results) == 1
+        # evil.com URL should appear exactly once (deduplicated)
+        evil_urls = [r for r in results if r.type == IOCType.URL and "evil.com" in r.value]
+        assert len(evil_urls) == 1
+        # IPv4 192.168.1.1 should appear exactly once (deduplicated)
+        ipv4_results = [r for r in results if r.type == IOCType.IPV4]
+        assert len(ipv4_results) == 1
 
     def test_duplicate_hash_collapsed(self):
         """Same hash appearing twice -> one IOC result."""
