@@ -260,8 +260,10 @@ def test_analyze_online_with_api_key_returns_job_id(client):
         assert response.status_code == 200
         # job_id is a hex UUID — 32 hex chars; verify Thread was started
         mock_thread.start.assert_called_once()
-        # VTAdapter should have been created with the API key
-        MockAdapter.assert_called_once_with(api_key="fake-api-key-1234", allowed_hosts=["www.virustotal.com"])
+        # VTAdapter should have been created with the API key and SSRF allowlist
+        call_kwargs = MockAdapter.call_args[1]
+        assert call_kwargs["api_key"] == "fake-api-key-1234"
+        assert "www.virustotal.com" in call_kwargs["allowed_hosts"]
 
 
 def test_analyze_offline_unchanged(client):

@@ -188,6 +188,13 @@ class VTAdapter:
         allowed_hosts: SSRF allowlist — only these hostnames may be contacted.
     """
 
+    # Types supported by VT API v3 (derived from ENDPOINT_MAP keys)
+    # CVE is excluded — VT has no CVE endpoint (Pitfall 5)
+    supported_types = {
+        IOCType.IPV4, IOCType.IPV6, IOCType.DOMAIN, IOCType.URL,
+        IOCType.MD5, IOCType.SHA1, IOCType.SHA256,
+    }
+
     def __init__(self, api_key: str, allowed_hosts: list[str]) -> None:
         self._api_key = api_key
         self._allowed_hosts = allowed_hosts
