@@ -10,27 +10,27 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 ## Current Position
 
 Phase: 1 of 4 (Foundation and Offline Pipeline)
-Plan: 3 of TBD in current phase
-Status: In progress
-Last activity: 2026-02-21 — Completed 01-03: IOC extractor and pipeline integration
+Plan: 4 of TBD in current phase
+Status: In progress (awaiting checkpoint:human-verify for 01-04 Task 3)
+Last activity: 2026-02-21 — Completed 01-04: Routes, templates, integration tests (pending visual verification)
 
-Progress: [███░░░░░░░] 30%
+Progress: [████░░░░░░] 40%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 3
-- Average duration: 3.7 min
+- Total plans completed: 4
+- Average duration: 3.5 min
 - Total execution time: 0.2 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01-foundation-and-offline-pipeline | 3 | 11 min | 3.7 min |
+| 01-foundation-and-offline-pipeline | 4 | 14 min | 3.5 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (4 min), 01-02 (3 min), 01-03 (4 min)
+- Last 5 plans: 01-01 (4 min), 01-02 (3 min), 01-03 (4 min), 01-04 (3 min)
 - Trend: stable
 
 *Updated after each plan completion*
@@ -56,6 +56,9 @@ Recent decisions affecting current work:
 - [Phase 01-03]: Module-level _searcher = Searcher() at import time per iocsearcher docs — Searcher is expensive to construct and should be reused
 - [Phase 01-03]: Two-stage deduplication: extract_iocs deduplicates by raw string; run_pipeline deduplicates by (IOCType, normalized_value) — handles same IOC appearing defanged and fanged
 - [Phase 01-03]: Exception handlers around each library call — defensive isolation so one library failure does not block the other
+- [Phase 01-04]: ALLOWED_API_HOSTS exposed in app config (empty in Phase 1) — establishes SEC-16 SSRF prevention structure for Phase 2 enrichment calls
+- [Phase 01-04]: <details>/<summary> accordion for IOC groups — no JavaScript needed, all sections open by default
+- [Phase 01-04]: navigator.clipboard.writeText() with execCommand fallback — works in both HTTPS and HTTP (localhost) contexts
 
 ### Pending Todos
 
@@ -70,5 +73,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-21
-Stopped at: Completed 01-03-PLAN.md (IOC extractor and pipeline integration)
+Stopped at: checkpoint:human-verify in 01-04-PLAN.md (Task 3 — visual verification of dark theme UI, IOC accordion, copy buttons, security headers)
 Resume file: None

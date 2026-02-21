@@ -12,7 +12,7 @@ sentinelx is built in four phases, each delivering a complete, verifiable capabi
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Foundation and Offline Pipeline** - Flask app with security scaffold, IOC extraction/normalization/classification, and complete offline mode
+- [x] **Phase 1: Foundation and Offline Pipeline** - Flask app with security scaffold, IOC extraction/normalization/classification, and complete offline mode (completed 2026-02-21)
 - [ ] **Phase 2: Core Enrichment** - VirusTotal enrichment via parallel orchestrator, full online mode end-to-end
 - [ ] **Phase 3: Additional TI Providers** - MalwareBazaar and ThreatFox adapters completing the v1 provider set
 - [ ] **Phase 4: UX Polish and Security Verification** - Verdict clarity, analyst UX refinements, and full security checklist confirmation
@@ -29,7 +29,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Results page groups IOCs by type (IPv4, IPv6, domain, URL, hash, CVE) and clearly indicates offline mode was used
   4. Submitting a POST request with a Host header not on the trusted list returns HTTP 400
   5. Pasting a 600 KB blob is rejected before extraction runs with a clear error message
-**Plans:** 3/4 plans executed
+**Plans:** 4/4 plans complete
 Plans:
 - [ ] 01-01-PLAN.md — Project scaffold, app factory with security config, models, test fixtures
 - [ ] 01-02-PLAN.md — TDD: IOC normalizer (defanging) and classifier (type detection)
@@ -76,7 +76,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation and Offline Pipeline | 3/4 | In Progress|  |
+| 1. Foundation and Offline Pipeline | 4/4 | Complete   | 2026-02-21 |
 | 2. Core Enrichment | 0/TBD | Not started | - |
 | 3. Additional TI Providers | 0/TBD | Not started | - |
 | 4. UX Polish and Security Verification | 0/TBD | Not started | - |

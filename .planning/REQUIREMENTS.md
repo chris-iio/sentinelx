@@ -26,13 +26,13 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### UI
 
-- [ ] **UI-01**: Single-page web interface with a large text input field, a submit button, and a visible offline/online mode toggle
-- [ ] **UI-02**: In offline mode, only extraction, normalization, and classification are performed — zero outbound network calls
+- [x] **UI-01**: Single-page web interface with a large text input field, a submit button, and a visible offline/online mode toggle
+- [x] **UI-02**: In offline mode, only extraction, normalization, and classification are performed — zero outbound network calls
 - [ ] **UI-03**: In online mode, enrichment queries fire after extraction and classification complete
-- [ ] **UI-04**: Results page groups extracted IOCs by type (IPv4, IPv6, domain, URL, hash, CVE)
+- [x] **UI-04**: Results page groups extracted IOCs by type (IPv4, IPv6, domain, URL, hash, CVE)
 - [ ] **UI-05**: Visual loading indicator is displayed while enrichment API calls are in progress
 - [ ] **UI-06**: Results clearly distinguish between "no data found" (provider has no record) and "clean verdict" (provider explicitly reports benign)
-- [ ] **UI-07**: UI visually indicates whether the current submission used offline or online mode
+- [x] **UI-07**: UI visually indicates whether the current submission used offline or online mode
 
 ### Security
 
@@ -51,7 +51,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **SEC-13**: No subprocess calls, no shell execution, no eval/exec anywhere in the codebase
 - [x] **SEC-14**: No persistent storage of raw pasted text blobs
 - [x] **SEC-15**: Debug mode is hardcoded to False in all non-development entry points
-- [ ] **SEC-16**: Outbound API calls only target hostnames on an explicit allowlist (SSRF prevention)
+- [x] **SEC-16**: Outbound API calls only target hostnames on an explicit allowlist (SSRF prevention)
 
 ## v2 Requirements
 
@@ -106,13 +106,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ENRC-04 | Phase 2 | Pending |
 | ENRC-05 | Phase 2 | Pending |
 | ENRC-06 | Phase 2 | Pending |
-| UI-01 | Phase 1 | Pending |
-| UI-02 | Phase 1 | Pending |
+| UI-01 | Phase 1 | Complete |
+| UI-02 | Phase 1 | Complete |
 | UI-03 | Phase 2 | Pending |
-| UI-04 | Phase 1 | Pending |
+| UI-04 | Phase 1 | Complete |
 | UI-05 | Phase 2 | Pending |
 | UI-06 | Phase 4 | Pending |
-| UI-07 | Phase 1 | Pending |
+| UI-07 | Phase 1 | Complete |
 | SEC-01 | Phase 1 | Complete |
 | SEC-02 | Phase 1 | Complete |
 | SEC-03 | Phase 1 | Complete |
@@ -128,7 +128,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SEC-13 | Phase 1 | Complete |
 | SEC-14 | Phase 1 | Complete |
 | SEC-15 | Phase 1 | Complete |
-| SEC-16 | Phase 1 | Pending |
+| SEC-16 | Phase 1 | Complete |
 
 **Coverage:**
 - v1 requirements: 34 total
