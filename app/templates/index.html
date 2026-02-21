@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-index">
+    <div class="input-card">
+        <h1 class="input-title">Extract IOCs</h1>
+        <p class="input-subtitle">
+            Paste a threat report, SIEM alert, or raw IOC list below.
+            Defanged values are automatically refanged.
+        </p>
+
+        {% if error %}
+        <div class="alert alert-error" role="alert">{{ error }}</div>
+        {% endif %}
+
+        <form method="post" action="{{ url_for('main.analyze') }}" id="analyze-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
+            <div class="form-field">
+                <label for="ioc-text" class="form-label">IOC Text</label>
+                <textarea
+                    id="ioc-text"
+                    name="text"
+                    class="ioc-textarea"
+                    rows="14"
+                    placeholder="Paste IOCs here, e.g.:&#10;192[.]168[.]1[.]1&#10;hxxp://evil[.]com/malware&#10;e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855&#10;CVE-2025-49596"
+                    spellcheck="false"
+                    autocomplete="off"
+                ></textarea>
+            </div>
+
+            <div class="form-options">
+                <div class="mode-toggle">
+                    <label class="form-label" for="mode-select">Analysis Mode</label>
+                    <select id="mode-select" name="mode" class="mode-select">
+                        <option value="offline" selected>Offline (no network calls)</option>
+                        <option value="online">Online (enrichment via APIs)</option>
+                    </select>
+                </div>
+
+                <div class="form-actions">
+                    <button
+                        type="button"
+                        class="btn btn-secondary"
+                        id="clear-btn"
+                    >Clear</button>
+                    <button
+                        type="submit"
+                        class="btn btn-primary"
+                        id="submit-btn"
+                        disabled
+                    >Extract IOCs</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SentinelX — IOC Extractor</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <header class="site-header">
+        <div class="header-inner">
+            <span class="site-logo">SentinelX</span>
+            <span class="site-tagline">Offline IOC Extractor</span>
+        </div>
+    </header>
+
+    <main class="site-main">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="site-footer">
+        <p>SentinelX — Phase 1 Offline Pipeline</p>
+    </footer>
+
+    <script src="{{ url_for('static', filename='main.js') }}" defer></script>
+</body>
+</html>

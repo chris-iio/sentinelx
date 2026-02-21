@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-results">
+
+    <div class="results-header">
+        <div class="mode-indicator mode-{{ mode }}">
+            Results &mdash;
+            {% if mode == "offline" %}
+                Offline Mode
+            {% else %}
+                Online Mode
+            {% endif %}
+        </div>
+
+        <div class="results-summary">
+            {% if no_results or total_count == 0 %}
+                <span class="ioc-count">No IOCs found</span>
+            {% else %}
+                <span class="ioc-count">Found {{ total_count }} unique IOC{{ "s" if total_count != 1 }}</span>
+            {% endif %}
+        </div>
+
+        <a href="{{ url_for('main.index') }}" class="btn btn-secondary back-link">&larr; Back to input</a>
+    </div>
+
+    {% if no_results or total_count == 0 %}
+    <div class="no-results">
+        <p>No IOCs detected in the pasted text.</p>
+        <p class="no-results-hint">
+            Supported types: IPv4, IPv6, domain, URL, MD5, SHA1, SHA256, CVE.
+        </p>
+    </div>
+    {% else %}
+
+    <div class="results-grouped">
+        {% for ioc_type, iocs in grouped.items() %}
+        <details class="ioc-group ioc-group--{{ ioc_type.value }}" open>
+            <summary class="ioc-group-header">
+                <span class="ioc-type-label">{{ ioc_type.value | upper }}</span>
+                <span class="ioc-count-badge">{{ iocs | length }}</span>
+            </summary>
+
+            <div class="ioc-table-wrapper">
+                <table class="ioc-table">
+                    <thead>
+                        <tr>
+                            <th class="col-value">Normalized Value</th>
+                            <th class="col-original">Original (if different)</th>
+                            <th class="col-copy">Copy</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for ioc in iocs %}
+                        <tr class="ioc-row">
+                            <td class="col-value">
+                                <code class="ioc-value">{{ ioc.value }}</code>
+                            </td>
+                            <td class="col-original">
+                                {% if ioc.raw_match != ioc.value %}
+                                    <code class="ioc-original">{{ ioc.raw_match }}</code>
+                                {% endif %}
+                            </td>
+                            <td class="col-copy">
+                                <button
+                                    class="btn btn-copy copy-btn"
+                                    data-value="{{ ioc.value }}"
+                                    type="button"
+                                    aria-label="Copy {{ ioc.value }}"
+                                >Copy</button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </details>
+        {% endfor %}
+    </div>
+
+    {% endif %}
+
+</div>
+{% endblock %}
