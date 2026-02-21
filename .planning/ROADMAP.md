@@ -61,7 +61,11 @@ Plans:
   1. Submitting a SHA256 hash returns enrichment results from all three providers (VirusTotal, MalwareBazaar, ThreatFox) in the same results view
   2. A MalwareBazaar or ThreatFox failure returns a per-provider error result without affecting VirusTotal results or other providers
   3. Each provider adapter is independently testable with mocked HTTP — no shared state between adapters
-**Plans**: TBD
+**Plans:** 3 plans
+Plans:
+- [ ] 03-01-PLAN.md — TDD: Multi-adapter orchestrator refactor + MalwareBazaar adapter
+- [ ] 03-02-PLAN.md — TDD: ThreatFox adapter with confidence-based verdict mapping
+- [ ] 03-03-PLAN.md — Multi-provider route wiring, JS/CSS updates, visual verification
 
 ### Phase 4: UX Polish and Security Verification
 **Goal**: Analyst can clearly distinguish "no record found" from "explicitly clean verdict" for every provider result, the UI communicates enrichment state without blocking, and the full security posture is confirmed before shipping
@@ -83,5 +87,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 |-------|----------------|--------|-----------|
 | 1. Foundation and Offline Pipeline | 4/4 | Complete    | 2026-02-21 |
 | 2. Core Enrichment | 4/4 | Complete   | 2026-02-21 |
-| 3. Additional TI Providers | 0/TBD | Not started | - |
+| 3. Additional TI Providers | 0/3 | Planned | - |
 | 4. UX Polish and Security Verification | 0/TBD | Not started | - |
