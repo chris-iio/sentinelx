@@ -95,46 +95,46 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| EXTR-01 | — | Pending |
-| EXTR-02 | — | Pending |
-| EXTR-03 | — | Pending |
-| EXTR-04 | — | Pending |
-| EXTR-05 | — | Pending |
-| ENRC-01 | — | Pending |
-| ENRC-02 | — | Pending |
-| ENRC-03 | — | Pending |
-| ENRC-04 | — | Pending |
-| ENRC-05 | — | Pending |
-| ENRC-06 | — | Pending |
-| UI-01 | — | Pending |
-| UI-02 | — | Pending |
-| UI-03 | — | Pending |
-| UI-04 | — | Pending |
-| UI-05 | — | Pending |
-| UI-06 | — | Pending |
-| UI-07 | — | Pending |
-| SEC-01 | — | Pending |
-| SEC-02 | — | Pending |
-| SEC-03 | — | Pending |
-| SEC-04 | — | Pending |
-| SEC-05 | — | Pending |
-| SEC-06 | — | Pending |
-| SEC-07 | — | Pending |
-| SEC-08 | — | Pending |
-| SEC-09 | — | Pending |
-| SEC-10 | — | Pending |
-| SEC-11 | — | Pending |
-| SEC-12 | — | Pending |
-| SEC-13 | — | Pending |
-| SEC-14 | — | Pending |
-| SEC-15 | — | Pending |
-| SEC-16 | — | Pending |
+| EXTR-01 | Phase 1 | Pending |
+| EXTR-02 | Phase 1 | Pending |
+| EXTR-03 | Phase 1 | Pending |
+| EXTR-04 | Phase 1 | Pending |
+| EXTR-05 | Phase 1 | Pending |
+| ENRC-01 | Phase 2 | Pending |
+| ENRC-02 | Phase 3 | Pending |
+| ENRC-03 | Phase 3 | Pending |
+| ENRC-04 | Phase 2 | Pending |
+| ENRC-05 | Phase 2 | Pending |
+| ENRC-06 | Phase 2 | Pending |
+| UI-01 | Phase 1 | Pending |
+| UI-02 | Phase 1 | Pending |
+| UI-03 | Phase 2 | Pending |
+| UI-04 | Phase 1 | Pending |
+| UI-05 | Phase 2 | Pending |
+| UI-06 | Phase 4 | Pending |
+| UI-07 | Phase 1 | Pending |
+| SEC-01 | Phase 1 | Pending |
+| SEC-02 | Phase 1 | Pending |
+| SEC-03 | Phase 1 | Pending |
+| SEC-04 | Phase 2 | Pending |
+| SEC-05 | Phase 2 | Pending |
+| SEC-06 | Phase 2 | Pending |
+| SEC-07 | Phase 2 | Pending |
+| SEC-08 | Phase 1 | Pending |
+| SEC-09 | Phase 1 | Pending |
+| SEC-10 | Phase 1 | Pending |
+| SEC-11 | Phase 1 | Pending |
+| SEC-12 | Phase 1 | Pending |
+| SEC-13 | Phase 1 | Pending |
+| SEC-14 | Phase 1 | Pending |
+| SEC-15 | Phase 1 | Pending |
+| SEC-16 | Phase 1 | Pending |
 
 **Coverage:**
 - v1 requirements: 34 total
-- Mapped to phases: 0
-- Unmapped: 34 ⚠️
+- Mapped to phases: 34
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-02-21*
-*Last updated: 2026-02-21 after initial definition*
+*Last updated: 2026-02-21 after roadmap creation*
