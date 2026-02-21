@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 ## Current Position
 
 Phase: 3 of 4 (Additional TI Providers)
-Plan: 2 of 3 in current phase (Plan 03-02 COMPLETE)
-Status: Phase 3, Plan 2 complete — ThreatFox adapter with confidence-based verdict mapping; suspicious verdict introduced
-Last activity: 2026-02-21 — 03-02 complete: TFAdapter with CONFIDENCE_THRESHOLD=75, search_hash for hashes, search_ioc for domain/IP/URL, suspicious verdict, 218 tests passing, SSRF allowlist updated
+Plan: 3 of 3 in current phase (Plan 03-03 AWAITING HUMAN VERIFICATION — checkpoint:human-verify)
+Status: Phase 3, Plan 3 tasks 1+2 complete — all three providers wired into /analyze; multi-provider JS rendering with worst-verdict; suspicious badge added; awaiting visual verification
+Last activity: 2026-02-21 — 03-03: tasks 1+2 complete: MBAdapter+TFAdapter in routes, multi-provider JS polling (ioc+provider dedup key), worst-verdict copy/export, .verdict-suspicious amber badge, 221 tests passing
 
-Progress: [████████░░] 85%
+Progress: [█████████░] 90%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 9
-- Average duration: 3.8 min
-- Total execution time: 0.57 hours
+- Total plans completed: 10
+- Average duration: 3.7 min
+- Total execution time: 0.62 hours
 
 **By Phase:**
 
@@ -29,10 +29,10 @@ Progress: [████████░░] 85%
 |-------|-------|-------|----------|
 | 01-foundation-and-offline-pipeline | 4 | 14 min | 3.5 min |
 | 02-core-enrichment | 4 | 15 min | 3.75 min |
-| 03-additional-ti-providers | 2 | 8 min | 4 min |
+| 03-additional-ti-providers | 3 | 11 min | 3.67 min |
 
 **Recent Trend:**
-- Last 5 plans: 02-03 (3 min), 02-04 (5 min), 03-01 (4 min), 03-02 (4 min)
+- Last 5 plans: 02-04 (5 min), 03-01 (4 min), 03-02 (4 min), 03-03 (3 min)
 - Trend: stable
 
 *Updated after each plan completion*
@@ -83,6 +83,11 @@ Recent decisions affecting current work:
 - [Phase 03-02]: CONFIDENCE_THRESHOLD=75: >=75 maps to malicious, <75 maps to suspicious for ThreatFox confidence-based verdict mapping
 - [Phase 03-02]: suspicious verdict is a plain string in verdict: str field — no EnrichmentResult model changes needed
 - [Phase 03-02]: ThreatFox POST API routing: search_hash for MD5/SHA1/SHA256, search_ioc for domain/IP/URL
+- [Phase 03-03]: Routes wire all three adapters (VT, MB, TF) in online mode — no API key gating for MB/TF (public endpoints)
+- [Phase 03-03]: enrichable_count decoupled from ENDPOINT_MAP — computed from adapter.supported_types for each adapter in adapters_list
+- [Phase 03-03]: Dedup key is ioc_value+"|"+provider — each provider result appended separately, not replacing
+- [Phase 03-03]: Worst-verdict for copy/export: severity order error<no_data<clean<suspicious<malicious; most severe wins per IOC
+- [Phase 03-03]: Spinner wrapped in .spinner-wrapper div for clean DOM removal on first provider result arrival
 
 ### Pending Todos
 
@@ -97,5 +102,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-21
-Stopped at: Phase 3, Plan 02 complete — ThreatFox adapter with confidence-based verdicts (suspicious/malicious). 15 TDD tests, 218 tests passing, SSRF allowlist updated with threatfox-api.abuse.ch. Ready for Plan 03-03.
+Stopped at: Phase 3, Plan 03 checkpoint:human-verify — Tasks 1+2 complete. All three adapters wired into /analyze, multi-provider JS rendering, worst-verdict copy/export, suspicious badge. 221 tests passing. Awaiting human visual verification of multi-provider UI.
 Resume file: None
