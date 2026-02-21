@@ -4,9 +4,11 @@ Tests cover:
 - Functional behavior of GET / and POST /analyze
 - Security properties: 413, 400 (bad host), CSRF, CSP headers, debug=False
 - Offline mode: no outbound HTTP calls during extraction (UI-02)
+- Online mode: API key check, background enrichment launch, job_id in response
+- Polling endpoint: JSON structure, 404 for unknown jobs, result serialization
 - Edge cases: empty input, no IOCs, duplicate IOC deduplication
 """
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 
 # ---------------------------------------------------------------------------
@@ -191,3 +193,214 @@ def test_analyze_deduplicates(client):
     # Should appear at least once (it was found) but not 3 times as separate entries
     assert count >= 1
     assert count < 10  # Sanity: not repeated many times as separate rows
+
+
+# ---------------------------------------------------------------------------
+# Online mode tests
+# ---------------------------------------------------------------------------
+
+
+def test_analyze_online_without_api_key_redirects_to_settings(client):
+    """POST /analyze online mode with no API key redirects to /settings."""
+    with patch("app.routes.ConfigStore") as MockStore:
+        mock_instance = MagicMock()
+        mock_instance.get_vt_api_key.return_value = None
+        MockStore.return_value = mock_instance
+
+        response = client.post(
+            "/analyze",
+            data={"text": "192[.]168[.]1[.]1", "mode": "online"},
+        )
+        assert response.status_code == 302
+        assert "/settings" in response.headers["Location"]
+
+
+def test_analyze_online_without_api_key_redirects_follows(client):
+    """POST /analyze online mode with no API key, following redirect, shows flash message."""
+    with patch("app.routes.ConfigStore") as MockStore:
+        mock_instance = MagicMock()
+        mock_instance.get_vt_api_key.return_value = None
+        MockStore.return_value = mock_instance
+
+        response = client.post(
+            "/analyze",
+            data={"text": "192[.]168[.]1[.]1", "mode": "online"},
+            follow_redirects=True,
+        )
+        assert response.status_code == 200
+        assert b"VirusTotal API key" in response.data or b"configure" in response.data.lower()
+
+
+def test_analyze_online_with_api_key_returns_job_id(client):
+    """POST /analyze online mode with mock API key returns results page with job_id."""
+    with (
+        patch("app.routes.ConfigStore") as MockStore,
+        patch("app.routes.VTAdapter") as MockAdapter,
+        patch("app.routes.EnrichmentOrchestrator") as MockOrchestrator,
+        patch("app.routes.Thread") as MockThread,
+    ):
+        mock_store = MagicMock()
+        mock_store.get_vt_api_key.return_value = "fake-api-key-1234"
+        MockStore.return_value = mock_store
+
+        mock_adapter = MagicMock()
+        MockAdapter.return_value = mock_adapter
+
+        mock_orchestrator = MagicMock()
+        MockOrchestrator.return_value = mock_orchestrator
+
+        mock_thread = MagicMock()
+        MockThread.return_value = mock_thread
+
+        response = client.post(
+            "/analyze",
+            data={"text": "192[.]168[.]1[.]1", "mode": "online"},
+        )
+
+        assert response.status_code == 200
+        # job_id is a hex UUID — 32 hex chars; verify Thread was started
+        mock_thread.start.assert_called_once()
+        # VTAdapter should have been created with the API key
+        MockAdapter.assert_called_once_with(api_key="fake-api-key-1234", allowed_hosts=["www.virustotal.com"])
+
+
+def test_analyze_offline_unchanged(client):
+    """POST /analyze offline mode behaves identically to Phase 1 (no job_id, no enrichment)."""
+    with patch("app.routes.Thread") as MockThread:
+        response = client.post(
+            "/analyze",
+            data={"text": "10[.]0[.]0[.]1", "mode": "offline"},
+        )
+        assert response.status_code == 200
+        assert b"10.0.0.1" in response.data
+        # Thread should NOT have been started for offline mode
+        MockThread.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Polling endpoint tests
+# ---------------------------------------------------------------------------
+
+
+def test_enrichment_status_unknown_job(client):
+    """GET /enrichment/status/nonexistent returns 404 JSON with error key."""
+    response = client.get("/enrichment/status/nonexistentjob123")
+    assert response.status_code == 404
+    data = response.get_json()
+    assert data is not None
+    assert "error" in data
+
+
+def test_enrichment_status_returns_json(client):
+    """GET /enrichment/status/{job_id} returns correct JSON structure."""
+    import app.routes as routes_module
+
+    mock_orchestrator = MagicMock()
+    mock_orchestrator.get_status.return_value = {
+        "total": 3,
+        "done": 2,
+        "complete": False,
+        "results": [],
+    }
+
+    job_id = "testjob123abc"
+    # Inject directly into module-level registry
+    routes_module._orchestrators[job_id] = mock_orchestrator
+
+    try:
+        response = client.get(f"/enrichment/status/{job_id}")
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["total"] == 3
+        assert data["done"] == 2
+        assert data["complete"] is False
+        assert "results" in data
+    finally:
+        routes_module._orchestrators.pop(job_id, None)
+
+
+def test_enrichment_result_serialization(client):
+    """GET /enrichment/status/{job_id} serializes EnrichmentResult with provider, verdict, scan_date (ENRC-05)."""
+    import app.routes as routes_module
+    from app.enrichment.models import EnrichmentResult
+    from app.pipeline.models import IOC, IOCType
+
+    sample_ioc = IOC(type=IOCType.IPV4, value="1.2.3.4", raw_match="1.2.3.4")
+    sample_result = EnrichmentResult(
+        ioc=sample_ioc,
+        provider="VirusTotal",
+        verdict="malicious",
+        detection_count=5,
+        total_engines=72,
+        scan_date="2026-02-21T00:00:00+00:00",
+        raw_stats={"malicious": 5, "clean": 67},
+    )
+
+    mock_orchestrator = MagicMock()
+    mock_orchestrator.get_status.return_value = {
+        "total": 1,
+        "done": 1,
+        "complete": True,
+        "results": [sample_result],
+    }
+
+    job_id = "serialjob456def"
+    routes_module._orchestrators[job_id] = mock_orchestrator
+
+    try:
+        response = client.get(f"/enrichment/status/{job_id}")
+        assert response.status_code == 200
+        data = response.get_json()
+        assert len(data["results"]) == 1
+
+        r = data["results"][0]
+        assert r["type"] == "result"
+        assert r["provider"] == "VirusTotal"         # ENRC-05: provider name
+        assert r["verdict"] == "malicious"            # ENRC-05: raw verdict
+        assert r["scan_date"] == "2026-02-21T00:00:00+00:00"  # ENRC-05: timestamp
+        assert r["ioc_value"] == "1.2.3.4"
+        assert r["ioc_type"] == "ipv4"
+        assert r["detection_count"] == 5
+        assert r["total_engines"] == 72
+    finally:
+        routes_module._orchestrators.pop(job_id, None)
+
+
+def test_enrichment_error_serialization(client):
+    """GET /enrichment/status/{job_id} serializes EnrichmentError with provider and error fields."""
+    import app.routes as routes_module
+    from app.enrichment.models import EnrichmentError
+    from app.pipeline.models import IOC, IOCType
+
+    sample_ioc = IOC(type=IOCType.DOMAIN, value="evil.com", raw_match="evil.com")
+    sample_error = EnrichmentError(
+        ioc=sample_ioc,
+        provider="VirusTotal",
+        error="Timeout",
+    )
+
+    mock_orchestrator = MagicMock()
+    mock_orchestrator.get_status.return_value = {
+        "total": 1,
+        "done": 1,
+        "complete": True,
+        "results": [sample_error],
+    }
+
+    job_id = "errorjob789ghi"
+    routes_module._orchestrators[job_id] = mock_orchestrator
+
+    try:
+        response = client.get(f"/enrichment/status/{job_id}")
+        assert response.status_code == 200
+        data = response.get_json()
+        assert len(data["results"]) == 1
+
+        r = data["results"][0]
+        assert r["type"] == "error"
+        assert r["provider"] == "VirusTotal"
+        assert r["error"] == "Timeout"
+        assert r["ioc_value"] == "evil.com"
+        assert r["ioc_type"] == "domain"
+    finally:
+        routes_module._orchestrators.pop(job_id, None)
