@@ -36,6 +36,9 @@ def create_app(config_override: dict | None = None) -> Flask:
     app.config["TRUSTED_HOSTS"] = config.TRUSTED_HOSTS
     app.config["MAX_CONTENT_LENGTH"] = config.MAX_CONTENT_LENGTH  # SEC-12
     app.config["WTF_CSRF_ENABLED"] = config.WTF_CSRF_ENABLED  # SEC-10
+    # SEC-16: SSRF prevention allowlist — empty in Phase 1 (no outbound calls).
+    # Phase 2 will add permitted API hostnames here before making any network calls.
+    app.config["ALLOWED_API_HOSTS"] = config.ALLOWED_API_HOSTS
 
     # SEC-15: Debug mode is HARDCODED to False. Never read from env or config_override.
     app.debug = False
