@@ -1,0 +1,44 @@
+# Virtual environment
+.venv/
+venv/
+env/
+ENV/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pycache
+.Python
+
+# Distribution / packaging
+*.egg-info/
+dist/
+build/
+*.egg
+MANIFEST
+*.whl
+
+# Environment files
+.env
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Test output
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Ruff cache
+.ruff_cache/
+
+# Bandit output
+bandit-report.json

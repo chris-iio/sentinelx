@@ -1,0 +1,7 @@
+Flask==3.1.1
+Flask-WTF==1.2.2
+iocextract==1.16.1
+iocsearcher==2.7.2
+python-dotenv==1.1.0
+# iocextract requires requests but does not declare it as a dependency
+requests==2.32.5
