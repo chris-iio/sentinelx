@@ -36,21 +36,21 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Security
 
-- [ ] **SEC-01**: Application binds to 127.0.0.1 only by default
-- [ ] **SEC-02**: API keys are read exclusively from environment variables, never from config files, CLI args, or query parameters
-- [ ] **SEC-03**: Application fails fast at startup with a clear error if required API keys are missing (when online mode is configured)
+- [x] **SEC-01**: Application binds to 127.0.0.1 only by default
+- [x] **SEC-02**: API keys are read exclusively from environment variables, never from config files, CLI args, or query parameters
+- [x] **SEC-03**: Application fails fast at startup with a clear error if required API keys are missing (when online mode is configured)
 - [ ] **SEC-04**: All outbound HTTP requests enforce strict per-request timeouts (no indefinite hangs)
 - [ ] **SEC-05**: All outbound HTTP requests enforce a maximum response size limit (streaming + byte counting)
 - [ ] **SEC-06**: Outbound HTTP requests do not follow redirects unless explicitly justified per-provider
 - [ ] **SEC-07**: Application never fetches, crawls, or makes HTTP requests to the IOC URL itself — only calls TI API endpoints
-- [ ] **SEC-08**: All IOC strings and API response fields are HTML-escaped before rendering (Jinja2 autoescaping, no |safe on untrusted data)
-- [ ] **SEC-09**: Content Security Policy header blocks inline scripts (default-src 'self'; script-src 'self')
-- [ ] **SEC-10**: CSRF protection is enabled on all POST endpoints
-- [ ] **SEC-11**: Host header validation rejects requests from unexpected origins (TRUSTED_HOSTS for DNS rebinding prevention)
-- [ ] **SEC-12**: Input size is capped (MAX_CONTENT_LENGTH) to prevent ReDoS and memory exhaustion
-- [ ] **SEC-13**: No subprocess calls, no shell execution, no eval/exec anywhere in the codebase
-- [ ] **SEC-14**: No persistent storage of raw pasted text blobs
-- [ ] **SEC-15**: Debug mode is hardcoded to False in all non-development entry points
+- [x] **SEC-08**: All IOC strings and API response fields are HTML-escaped before rendering (Jinja2 autoescaping, no |safe on untrusted data)
+- [x] **SEC-09**: Content Security Policy header blocks inline scripts (default-src 'self'; script-src 'self')
+- [x] **SEC-10**: CSRF protection is enabled on all POST endpoints
+- [x] **SEC-11**: Host header validation rejects requests from unexpected origins (TRUSTED_HOSTS for DNS rebinding prevention)
+- [x] **SEC-12**: Input size is capped (MAX_CONTENT_LENGTH) to prevent ReDoS and memory exhaustion
+- [x] **SEC-13**: No subprocess calls, no shell execution, no eval/exec anywhere in the codebase
+- [x] **SEC-14**: No persistent storage of raw pasted text blobs
+- [x] **SEC-15**: Debug mode is hardcoded to False in all non-development entry points
 - [ ] **SEC-16**: Outbound API calls only target hostnames on an explicit allowlist (SSRF prevention)
 
 ## v2 Requirements
@@ -113,21 +113,21 @@ Which phases cover which requirements. Updated during roadmap creation.
 | UI-05 | Phase 2 | Pending |
 | UI-06 | Phase 4 | Pending |
 | UI-07 | Phase 1 | Pending |
-| SEC-01 | Phase 1 | Pending |
-| SEC-02 | Phase 1 | Pending |
-| SEC-03 | Phase 1 | Pending |
+| SEC-01 | Phase 1 | Complete |
+| SEC-02 | Phase 1 | Complete |
+| SEC-03 | Phase 1 | Complete |
 | SEC-04 | Phase 2 | Pending |
 | SEC-05 | Phase 2 | Pending |
 | SEC-06 | Phase 2 | Pending |
 | SEC-07 | Phase 2 | Pending |
-| SEC-08 | Phase 1 | Pending |
-| SEC-09 | Phase 1 | Pending |
-| SEC-10 | Phase 1 | Pending |
-| SEC-11 | Phase 1 | Pending |
-| SEC-12 | Phase 1 | Pending |
-| SEC-13 | Phase 1 | Pending |
-| SEC-14 | Phase 1 | Pending |
-| SEC-15 | Phase 1 | Pending |
+| SEC-08 | Phase 1 | Complete |
+| SEC-09 | Phase 1 | Complete |
+| SEC-10 | Phase 1 | Complete |
+| SEC-11 | Phase 1 | Complete |
+| SEC-12 | Phase 1 | Complete |
+| SEC-13 | Phase 1 | Complete |
+| SEC-14 | Phase 1 | Complete |
+| SEC-15 | Phase 1 | Complete |
 | SEC-16 | Phase 1 | Pending |
 
 **Coverage:**

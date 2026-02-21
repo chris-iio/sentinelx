@@ -29,7 +29,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Results page groups IOCs by type (IPv4, IPv6, domain, URL, hash, CVE) and clearly indicates offline mode was used
   4. Submitting a POST request with a Host header not on the trusted list returns HTTP 400
   5. Pasting a 600 KB blob is rejected before extraction runs with a clear error message
-**Plans:** 4 plans
+**Plans:** 1/4 plans executed
 Plans:
 - [ ] 01-01-PLAN.md — Project scaffold, app factory with security config, models, test fixtures
 - [ ] 01-02-PLAN.md — TDD: IOC normalizer (defanging) and classifier (type detection)
@@ -76,7 +76,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation and Offline Pipeline | 0/4 | Planning complete | - |
+| 1. Foundation and Offline Pipeline | 1/4 | In Progress|  |
 | 2. Core Enrichment | 0/TBD | Not started | - |
 | 3. Additional TI Providers | 0/TBD | Not started | - |
 | 4. UX Polish and Security Verification | 0/TBD | Not started | - |
