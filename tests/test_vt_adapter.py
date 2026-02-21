@@ -16,7 +16,8 @@ import requests
 
 from app.pipeline.models import IOC, IOCType
 from app.enrichment.models import EnrichmentError, EnrichmentResult
-from app.enrichment.adapters.virustotal import VTAdapter, MAX_RESPONSE_BYTES, TIMEOUT, VT_BASE
+from app.enrichment.adapters.virustotal import VTAdapter, VT_BASE
+from app.enrichment.http_safety import MAX_RESPONSE_BYTES, TIMEOUT
 
 
 ALLOWED_HOSTS = ["www.virustotal.com"]

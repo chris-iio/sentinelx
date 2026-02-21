@@ -27,6 +27,7 @@ from app.enrichment.adapters.malwarebazaar import MBAdapter
 from app.enrichment.adapters.threatfox import TFAdapter
 from app.enrichment.adapters.virustotal import VTAdapter
 from app.enrichment.config_store import ConfigStore
+from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.enrichment.orchestrator import EnrichmentOrchestrator
 from app.pipeline.extractor import run_pipeline
 from app.pipeline.models import group_by_type
@@ -47,6 +48,32 @@ def _mask_key(key: str | None) -> str | None:
     if not key or len(key) <= 4:
         return None
     return "*" * (len(key) - 4) + key[-4:]
+
+
+def _serialize_result(r: EnrichmentResult | EnrichmentError) -> dict:
+    """Serialize an enrichment result or error to a JSON-safe dict.
+
+    Used by the polling endpoint to return incremental results to the browser.
+    """
+    if isinstance(r, EnrichmentResult):
+        return {
+            "type": "result",
+            "ioc_value": r.ioc.value,
+            "ioc_type": r.ioc.type.value,
+            "provider": r.provider,
+            "verdict": r.verdict,
+            "detection_count": r.detection_count,
+            "total_engines": r.total_engines,
+            "scan_date": r.scan_date,
+            "raw_stats": r.raw_stats,
+        }
+    return {
+        "type": "error",
+        "ioc_value": r.ioc.value,
+        "ioc_type": r.ioc.type.value,
+        "provider": r.provider,
+        "error": r.error,
+    }
 
 
 @bp.route("/")
@@ -76,6 +103,8 @@ def analyze():
     grouped = group_by_type(iocs)
     total_count = len(iocs)
 
+    # Online mode — launch background enrichment
+    template_extras: dict = {}
     if mode == "online":
         config_store = ConfigStore()
         api_key = config_store.get_vt_api_key()
@@ -109,44 +138,16 @@ def analyze():
             1 for ioc in iocs for adapter in adapters_list
             if ioc.type in adapter.supported_types
         )
+        template_extras = {"job_id": job_id, "enrichable_count": enrichable_count}
 
-        if total_count == 0:
-            return render_template(
-                "results.html",
-                grouped={},
-                mode=mode,
-                total_count=0,
-                no_results=True,
-                job_id=job_id,
-                enrichable_count=enrichable_count,
-            )
-
-        return render_template(
-            "results.html",
-            grouped=grouped,
-            mode=mode,
-            total_count=total_count,
-            no_results=False,
-            job_id=job_id,
-            enrichable_count=enrichable_count,
-        )
-
-    # Offline mode — no enrichment
-    if total_count == 0:
-        return render_template(
-            "results.html",
-            grouped={},
-            mode=mode,
-            total_count=0,
-            no_results=True,
-        )
-
+    no_results = total_count == 0
     return render_template(
         "results.html",
-        grouped=grouped,
+        grouped={} if no_results else grouped,
         mode=mode,
         total_count=total_count,
-        no_results=False,
+        no_results=no_results,
+        **template_extras,
     )
 
 
@@ -209,34 +210,7 @@ def enrichment_status(job_id: str):
     if status is None:
         return jsonify({"error": "job not found"}), 404
 
-    serialized_results = []
-    for r in status["results"]:
-        from app.enrichment.models import EnrichmentResult, EnrichmentError
-
-        if isinstance(r, EnrichmentResult):
-            serialized_results.append(
-                {
-                    "type": "result",
-                    "ioc_value": r.ioc.value,
-                    "ioc_type": r.ioc.type.value,
-                    "provider": r.provider,
-                    "verdict": r.verdict,
-                    "detection_count": r.detection_count,
-                    "total_engines": r.total_engines,
-                    "scan_date": r.scan_date,
-                    "raw_stats": r.raw_stats,
-                }
-            )
-        elif isinstance(r, EnrichmentError):
-            serialized_results.append(
-                {
-                    "type": "error",
-                    "ioc_value": r.ioc.value,
-                    "ioc_type": r.ioc.type.value,
-                    "provider": r.provider,
-                    "error": r.error,
-                }
-            )
+    serialized_results = [_serialize_result(r) for r in status["results"]]
 
     return jsonify(
         {

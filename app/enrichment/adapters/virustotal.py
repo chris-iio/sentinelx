@@ -14,18 +14,15 @@ from __future__ import annotations
 
 import base64
 import datetime
-import json
-from urllib.parse import urlparse
 
 import requests
 import requests.exceptions
 
+from app.enrichment.http_safety import TIMEOUT, read_limited, validate_endpoint
 from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.pipeline.models import IOC, IOCType
 
 VT_BASE = "https://www.virustotal.com/api/v3"
-TIMEOUT = (5, 30)  # (connect, read) — SEC-04
-MAX_RESPONSE_BYTES = 1 * 1024 * 1024  # 1 MB cap — SEC-05
 
 ENDPOINT_MAP: dict[IOCType, object] = {
     IOCType.IPV4: lambda v: f"{VT_BASE}/ip_addresses/{v}",
@@ -48,45 +45,6 @@ def _url_id(url: str) -> str:
     Source: https://docs.virustotal.com/reference/url
     """
     return base64.urlsafe_b64encode(url.encode()).decode().strip("=")
-
-
-def _validate_endpoint(url: str, allowed_hosts: list[str]) -> None:
-    """Raise ValueError if endpoint hostname is not on the SSRF allowlist.
-
-    Enforces SEC-16: no outbound calls to hosts outside ALLOWED_API_HOSTS.
-    Called before every network request.
-    """
-    parsed = urlparse(url)
-    if parsed.hostname not in allowed_hosts:
-        raise ValueError(
-            f"Endpoint hostname {parsed.hostname!r} not in allowed_hosts "
-            f"(SSRF allowlist SEC-16). Allowed: {allowed_hosts!r}"
-        )
-
-
-def _read_limited(resp: requests.Response) -> dict:
-    """Read streaming response with byte cap (SEC-05).
-
-    Reads response body in 8 KB chunks. Raises ValueError if total
-    exceeds MAX_RESPONSE_BYTES before completing. Returns parsed JSON.
-
-    Args:
-        resp: An open streaming requests.Response.
-
-    Raises:
-        ValueError: If response body exceeds MAX_RESPONSE_BYTES.
-        json.JSONDecodeError: If body is not valid JSON.
-    """
-    chunks: list[bytes] = []
-    total = 0
-    for chunk in resp.iter_content(chunk_size=8192):
-        total += len(chunk)
-        if total > MAX_RESPONSE_BYTES:
-            raise ValueError(
-                f"Response exceeded size limit of {MAX_RESPONSE_BYTES} bytes (SEC-05)"
-            )
-        chunks.append(chunk)
-    return json.loads(b"".join(chunks))
 
 
 def _parse_response(ioc: IOC, body: dict) -> EnrichmentResult:
@@ -223,7 +181,7 @@ class VTAdapter:
         url = endpoint_fn(ioc.value)  # type: ignore[call-arg]
 
         try:
-            _validate_endpoint(url, self._allowed_hosts)
+            validate_endpoint(url, self._allowed_hosts)
         except ValueError as exc:
             return EnrichmentError(ioc=ioc, provider="VirusTotal", error=str(exc))
 
@@ -252,7 +210,7 @@ class VTAdapter:
                 )
             # For other 4xx/5xx: raise before reading body so _map_http_error fires
             resp.raise_for_status()
-            body = _read_limited(resp)  # SEC-05: byte cap enforced here (success only)
+            body = read_limited(resp)  # SEC-05: byte cap enforced here (success only)
             return _parse_response(ioc, body)
         except requests.exceptions.Timeout:
             return EnrichmentError(ioc=ioc, provider="VirusTotal", error="Timeout")

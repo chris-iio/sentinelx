@@ -15,7 +15,8 @@ import requests
 
 from app.pipeline.models import IOC, IOCType
 from app.enrichment.models import EnrichmentError, EnrichmentResult
-from app.enrichment.adapters.threatfox import TFAdapter, MAX_RESPONSE_BYTES, CONFIDENCE_THRESHOLD
+from app.enrichment.adapters.threatfox import TFAdapter, CONFIDENCE_THRESHOLD
+from app.enrichment.http_safety import MAX_RESPONSE_BYTES
 
 
 ALLOWED_HOSTS = ["threatfox-api.abuse.ch"]

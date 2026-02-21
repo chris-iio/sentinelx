@@ -20,61 +20,18 @@ Thread safety: a fresh requests.Session is created inside each lookup() call.
 """
 from __future__ import annotations
 
-import json
-from urllib.parse import urlparse
-
 import requests
 import requests.exceptions
 
+from app.enrichment.http_safety import TIMEOUT, read_limited, validate_endpoint
 from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.pipeline.models import IOC, IOCType
 
 TF_BASE = "https://threatfox-api.abuse.ch/api/v1/"
-TIMEOUT = (5, 30)  # (connect, read) — SEC-04
-MAX_RESPONSE_BYTES = 1 * 1024 * 1024  # 1 MB cap — SEC-05
 CONFIDENCE_THRESHOLD = 75  # >=75 = malicious, <75 = suspicious (per user decision)
 
 # Hash types use a different ThreatFox query endpoint than domain/IP/URL types
 _HASH_TYPES = {IOCType.MD5, IOCType.SHA1, IOCType.SHA256}
-
-
-def _validate_endpoint(url: str, allowed_hosts: list[str]) -> None:
-    """Raise ValueError if endpoint hostname is not on the SSRF allowlist.
-
-    Enforces SEC-16: no outbound calls to hosts outside ALLOWED_API_HOSTS.
-    Called before every network request.
-    """
-    parsed = urlparse(url)
-    if parsed.hostname not in allowed_hosts:
-        raise ValueError(
-            f"Endpoint hostname {parsed.hostname!r} not in allowed_hosts "
-            f"(SSRF allowlist SEC-16). Allowed: {allowed_hosts!r}"
-        )
-
-
-def _read_limited(resp: requests.Response) -> dict:
-    """Read streaming response with byte cap (SEC-05).
-
-    Reads response body in 8 KB chunks. Raises ValueError if total
-    exceeds MAX_RESPONSE_BYTES before completing. Returns parsed JSON.
-
-    Args:
-        resp: An open streaming requests.Response.
-
-    Raises:
-        ValueError: If response body exceeds MAX_RESPONSE_BYTES.
-        json.JSONDecodeError: If body is not valid JSON.
-    """
-    chunks: list[bytes] = []
-    total = 0
-    for chunk in resp.iter_content(chunk_size=8192):
-        total += len(chunk)
-        if total > MAX_RESPONSE_BYTES:
-            raise ValueError(
-                f"Response exceeded size limit of {MAX_RESPONSE_BYTES} bytes (SEC-05)"
-            )
-        chunks.append(chunk)
-    return json.loads(b"".join(chunks))
 
 
 def _select_best_record(data: list[dict]) -> dict:
@@ -193,7 +150,7 @@ class TFAdapter:
             )
 
         try:
-            _validate_endpoint(TF_BASE, self._allowed_hosts)
+            validate_endpoint(TF_BASE, self._allowed_hosts)
         except ValueError as exc:
             return EnrichmentError(ioc=ioc, provider="ThreatFox", error=str(exc))
 
@@ -215,7 +172,7 @@ class TFAdapter:
                 stream=True,              # SEC-05 setup
             )
             resp.raise_for_status()
-            body = _read_limited(resp)   # SEC-05: byte cap enforced here
+            body = read_limited(resp)   # SEC-05: byte cap enforced here
             return _parse_response(ioc, body)
         except requests.exceptions.Timeout:
             return EnrichmentError(ioc=ioc, provider="ThreatFox", error="Timeout")
