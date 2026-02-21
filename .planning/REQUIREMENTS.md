@@ -11,8 +11,8 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [ ] **EXTR-01**: User can paste free-form text (single IOC, SIEM alert snippet, email headers/body, threat report) into a single large input field
 - [ ] **EXTR-02**: Application extracts all IOCs from pasted text, supporting IPv4, IPv6, domain, URL, MD5, SHA1, SHA256, and CVE types
-- [ ] **EXTR-03**: Application normalizes common defanging patterns (hxxp, hxxps, [.], {.}, (.), [dot], _dot_, [@], [at], [://]) before classification
-- [ ] **EXTR-04**: Application classifies each extracted IOC by type using deterministic logic (no ML, no heuristics)
+- [x] **EXTR-03**: Application normalizes common defanging patterns (hxxp, hxxps, [.], {.}, (.), [dot], _dot_, [@], [at], [://]) before classification
+- [x] **EXTR-04**: Application classifies each extracted IOC by type using deterministic logic (no ML, no heuristics)
 - [ ] **EXTR-05**: Application deduplicates extracted IOCs before enrichment (same normalized value = one lookup)
 
 ### Enrichment
@@ -97,8 +97,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 |-------------|-------|--------|
 | EXTR-01 | Phase 1 | Pending |
 | EXTR-02 | Phase 1 | Pending |
-| EXTR-03 | Phase 1 | Pending |
-| EXTR-04 | Phase 1 | Pending |
+| EXTR-03 | Phase 1 | Complete |
+| EXTR-04 | Phase 1 | Complete |
 | EXTR-05 | Phase 1 | Pending |
 | ENRC-01 | Phase 2 | Pending |
 | ENRC-02 | Phase 3 | Pending |

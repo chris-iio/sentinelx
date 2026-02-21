@@ -10,27 +10,27 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 ## Current Position
 
 Phase: 1 of 4 (Foundation and Offline Pipeline)
-Plan: 1 of TBD in current phase
+Plan: 2 of TBD in current phase
 Status: In progress
-Last activity: 2026-02-21 — Completed 01-01: Project scaffold and security foundation
+Last activity: 2026-02-21 — Completed 01-02: IOC normalizer and classifier
 
-Progress: [█░░░░░░░░░] 10%
+Progress: [██░░░░░░░░] 20%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 1
-- Average duration: 4 min
+- Total plans completed: 2
+- Average duration: 3.5 min
 - Total execution time: 0.1 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01-foundation-and-offline-pipeline | 1 | 4 min | 4 min |
+| 01-foundation-and-offline-pipeline | 2 | 7 min | 3.5 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (4 min)
+- Last 5 plans: 01-01 (4 min), 01-02 (3 min)
 - Trend: —
 
 *Updated after each plan completion*
@@ -50,6 +50,9 @@ Recent decisions affecting current work:
 - [01-01]: requests added as explicit requirement — iocextract 1.16.1 undeclared dependency
 - [01-01]: flask-talisman excluded — manual after_request headers used per research recommendation
 - [01-01]: app.debug = False applied twice in create_app to prevent accidental override via config_override
+- [Phase 01-02]: Sequential regex in normalizer: all patterns applied left-to-right for compound defanging support
+- [Phase 01-02]: ipaddress.ip_address() stdlib used for IP validation — handles edge cases like 999.999.999.999 rejection
+- [Phase 01-02]: Exact hex-length anchored regex for hash classification prevents partial matches and cross-type collisions
 
 ### Pending Todos
 
@@ -64,5 +67,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-21
-Stopped at: Completed 01-01-PLAN.md (project scaffold and security foundation)
+Stopped at: Completed 01-02-PLAN.md (IOC normalizer and classifier)
 Resume file: None
