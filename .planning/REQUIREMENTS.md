@@ -21,14 +21,14 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **ENRC-02**: Application queries MalwareBazaar API for MD5, SHA1, and SHA256 hashes and displays file type, malware family, tags, and first/last seen
 - [ ] **ENRC-03**: Application queries ThreatFox API for hash, domain, IP, and URL IOCs and displays threat type, malware family, confidence level, and C2 indicator status
 - [x] **ENRC-04**: Application executes all provider queries in parallel per IOC (not sequentially)
-- [ ] **ENRC-05**: Each enrichment result displays the provider name, lookup timestamp, and raw provider verdict with no transformation or score blending
+- [x] **ENRC-05**: Each enrichment result displays the provider name, lookup timestamp, and raw provider verdict with no transformation or score blending
 - [x] **ENRC-06**: Provider failures return a clear error result per-provider without blocking other providers' results
 
 ### UI
 
 - [x] **UI-01**: Single-page web interface with a large text input field, a submit button, and a visible offline/online mode toggle
 - [x] **UI-02**: In offline mode, only extraction, normalization, and classification are performed — zero outbound network calls
-- [ ] **UI-03**: In online mode, enrichment queries fire after extraction and classification complete
+- [x] **UI-03**: In online mode, enrichment queries fire after extraction and classification complete
 - [x] **UI-04**: Results page groups extracted IOCs by type (IPv4, IPv6, domain, URL, hash, CVE)
 - [ ] **UI-05**: Visual loading indicator is displayed while enrichment API calls are in progress
 - [ ] **UI-06**: Results clearly distinguish between "no data found" (provider has no record) and "clean verdict" (provider explicitly reports benign)
@@ -104,11 +104,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ENRC-02 | Phase 3 | Pending |
 | ENRC-03 | Phase 3 | Pending |
 | ENRC-04 | Phase 2 | Complete |
-| ENRC-05 | Phase 2 | Pending |
+| ENRC-05 | Phase 2 | Complete |
 | ENRC-06 | Phase 2 | Complete |
 | UI-01 | Phase 1 | Complete |
 | UI-02 | Phase 1 | Complete |
-| UI-03 | Phase 2 | Pending |
+| UI-03 | Phase 2 | Complete |
 | UI-04 | Phase 1 | Complete |
 | UI-05 | Phase 2 | Pending |
 | UI-06 | Phase 4 | Pending |

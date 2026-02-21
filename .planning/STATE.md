@@ -10,28 +10,28 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 ## Current Position
 
 Phase: 2 of 4 (Core Enrichment)
-Plan: 2 of 4 in current phase (Plan 02-02 COMPLETE)
-Status: Phase 2, Plan 2 complete — EnrichmentOrchestrator with parallel execution, retry-once, LRU job tracking
-Last activity: 2026-02-21 — 02-02 complete: ThreadPoolExecutor orchestrator, 100% coverage, 11 tests
+Plan: 3 of 4 in current phase (Plan 02-03 COMPLETE)
+Status: Phase 2, Plan 3 complete — Flask routes wired: settings page, online-mode /analyze, polling endpoint
+Last activity: 2026-02-21 — 02-03 complete: settings page, online-mode /analyze with daemon Thread, /enrichment/status polling endpoint, 187 tests passing
 
-Progress: [██████░░░░] 60%
+Progress: [███████░░░] 65%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 5
-- Average duration: 3.8 min
-- Total execution time: 0.32 hours
+- Total plans completed: 6
+- Average duration: 3.7 min
+- Total execution time: 0.37 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-foundation-and-offline-pipeline | 4 | 14 min | 3.5 min |
-| 02-core-enrichment | 2 | 7 min | 3.5 min |
+| 02-core-enrichment | 3 | 10 min | 3.3 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-03 (4 min), 01-04 (3 min), 02-01 (5 min), 02-02 (2 min)
+- Last 5 plans: 01-04 (3 min), 02-01 (5 min), 02-02 (2 min), 02-03 (3 min)
 - Trend: stable
 
 *Updated after each plan completion*
@@ -68,6 +68,9 @@ Recent decisions affecting current work:
 - [Phase 02-02]: max_jobs parameter on __init__ (not hardcoded) — enables test isolation without patching
 - [Phase 02-02]: OrderedDict for LRU eviction — no external dependency, popitem(last=False) gives deterministic FIFO
 - [Phase 02-02]: get_status() returns shallow copy — prevents external callers from mutating internal job state
+- [Phase 02-core-enrichment]: Module-level _orchestrators dict stores job_id -> orchestrator for polling endpoint lookup without Flask app context
+- [Phase 02-core-enrichment]: daemon=True on enrichment Thread prevents orphaned threads blocking process exit (Pitfall 4)
+- [Phase 02-core-enrichment]: _mask_key() reveals only last 4 chars of stored VT API key for display in settings UI
 
 ### Pending Todos
 
@@ -82,5 +85,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-21
-Stopped at: Phase 2, Plan 02 complete — EnrichmentOrchestrator built and tested at 100% coverage. Ready for Plan 03 (Flask routes wiring enrich_all).
+Stopped at: Phase 2, Plan 03 complete — Flask routes wired: settings page, online-mode /analyze with background daemon Thread, /enrichment/status polling endpoint. Ready for Plan 04.
 Resume file: None
