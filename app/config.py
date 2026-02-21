@@ -34,8 +34,12 @@ class Config:
     DEBUG: bool = False
 
     # SSRF prevention: allowlist of permitted outbound API hostnames (SEC-16)
-    # Phase 2: VirusTotal is the only permitted outbound host.
-    ALLOWED_API_HOSTS: list[str] = ["www.virustotal.com"]
+    # Phase 2: VirusTotal; Phase 3: MalwareBazaar and ThreatFox (abuse.ch) added.
+    ALLOWED_API_HOSTS: list[str] = [
+        "www.virustotal.com",
+        "mb-api.abuse.ch",
+        "threatfox-api.abuse.ch",
+    ]
 
     def validate(self) -> None:
         """Raise ValueError at startup if required env vars are missing.
