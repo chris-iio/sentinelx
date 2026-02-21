@@ -29,7 +29,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Results page groups IOCs by type (IPv4, IPv6, domain, URL, hash, CVE) and clearly indicates offline mode was used
   4. Submitting a POST request with a Host header not on the trusted list returns HTTP 400
   5. Pasting a 600 KB blob is rejected before extraction runs with a clear error message
-**Plans**: TBD
+**Plans:** 4 plans
+Plans:
+- [ ] 01-01-PLAN.md — Project scaffold, app factory with security config, models, test fixtures
+- [ ] 01-02-PLAN.md — TDD: IOC normalizer (defanging) and classifier (type detection)
+- [ ] 01-03-PLAN.md — TDD: IOC extractor (iocextract + iocsearcher) and pipeline integration
+- [ ] 01-04-PLAN.md — Routes, templates, static assets, and visual verification
 
 ### Phase 2: Core Enrichment
 **Goal**: Analyst can submit in online mode and receive VirusTotal enrichment results for all supported IOC types, displayed with source attribution and no combined score, while all HTTP safety controls are in force
@@ -71,7 +76,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation and Offline Pipeline | 0/TBD | Not started | - |
+| 1. Foundation and Offline Pipeline | 0/4 | Planning complete | - |
 | 2. Core Enrichment | 0/TBD | Not started | - |
 | 3. Additional TI Providers | 0/TBD | Not started | - |
 | 4. UX Polish and Security Verification | 0/TBD | Not started | - |
