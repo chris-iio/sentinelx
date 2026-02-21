@@ -8,6 +8,13 @@
  * - Disable submit button when textarea is empty
  * - Clear button resets textarea and re-disables submit
  * - Clipboard copy for IOC values via navigator.clipboard API
+ * - Enrichment polling loop: fetches /enrichment/status/{job_id} every 750ms
+ * - Incremental result rendering with verdict badges (XSS-safe DOM methods)
+ * - Copy-with-enrichment: compact text format for analyst ticket pasting
+ * - Export button: copies all IOCs + enrichment summaries to clipboard
+ *
+ * XSS safety (SEC-08): All API response data is rendered via .textContent or
+ * .setAttribute only. No .innerHTML concatenation of external strings.
  */
 
 (function () {
@@ -60,16 +67,20 @@
                 var value = btn.getAttribute("data-value");
                 if (!value) return;
 
+                // Check for enrichment summary set by polling loop
+                var enrichment = btn.getAttribute("data-enrichment");
+                var copyText = enrichment ? (value + " | " + enrichment) : value;
+
                 if (!navigator.clipboard) {
                     // Fallback for non-HTTPS or older browsers
-                    fallbackCopy(value, btn);
+                    fallbackCopy(copyText, btn);
                     return;
                 }
 
-                navigator.clipboard.writeText(value).then(function () {
+                navigator.clipboard.writeText(copyText).then(function () {
                     showCopiedFeedback(btn);
                 }).catch(function () {
-                    fallbackCopy(value, btn);
+                    fallbackCopy(copyText, btn);
                 });
             });
         });
@@ -105,17 +116,229 @@
         }
     }
 
+    // ---- Enrichment polling loop ----
+
+    function initEnrichmentPolling() {
+        var pageResults = document.querySelector(".page-results");
+        if (!pageResults) return;
+
+        var jobId = pageResults.getAttribute("data-job-id");
+        var mode = pageResults.getAttribute("data-mode");
+
+        if (!jobId || mode !== "online") return;
+
+        // Track which IOC values have already been rendered to avoid re-rendering
+        var rendered = {};
+
+        var intervalId = setInterval(function () {
+            fetch("/enrichment/status/" + jobId).then(function (resp) {
+                if (!resp.ok) return null;
+                return resp.json();
+            }).then(function (data) {
+                if (!data) return;
+
+                updateProgressBar(data.done, data.total);
+
+                // Render any new results not yet displayed
+                var results = data.results || [];
+                for (var i = 0; i < results.length; i++) {
+                    var result = results[i];
+                    if (!rendered[result.ioc_value]) {
+                        rendered[result.ioc_value] = true;
+                        renderEnrichmentResult(result);
+                    }
+                }
+
+                // Check for rate-limit or auth errors to show warning banner
+                for (var j = 0; j < results.length; j++) {
+                    var r = results[j];
+                    if (r.type === "error" && r.error) {
+                        var errLower = r.error.toLowerCase();
+                        if (errLower.indexOf("rate limit") !== -1 || errLower.indexOf("429") !== -1) {
+                            showEnrichWarning("Rate limit reached for " + r.provider + ".");
+                        } else if (errLower.indexOf("authentication") !== -1 || errLower.indexOf("401") !== -1 || errLower.indexOf("403") !== -1) {
+                            showEnrichWarning("Authentication error for " + r.provider + ". Please check your API key in Settings.");
+                        }
+                    }
+                }
+
+                if (data.complete) {
+                    clearInterval(intervalId);
+                    markEnrichmentComplete(data.done, data.total);
+                }
+            }).catch(function () {
+                // Fetch error — silently continue; retry on next interval tick
+            });
+        }, 750);
+    }
+
+    function updateProgressBar(done, total) {
+        var fill = document.getElementById("enrich-progress-fill");
+        var text = document.getElementById("enrich-progress-text");
+        if (!fill || !text) return;
+
+        var pct = total > 0 ? Math.round((done / total) * 100) : 0;
+        fill.style.width = pct + "%";
+        text.textContent = done + "/" + total + " IOCs enriched";
+    }
+
+    function renderEnrichmentResult(result) {
+        // Find the enrichment row for this IOC value
+        var rows = document.querySelectorAll(".ioc-enrichment-row");
+        var targetRow = null;
+        for (var i = 0; i < rows.length; i++) {
+            if (rows[i].getAttribute("data-ioc-value") === result.ioc_value) {
+                targetRow = rows[i];
+                break;
+            }
+        }
+        if (!targetRow) return;
+
+        var slot = targetRow.querySelector(".enrichment-slot");
+        if (!slot) return;
+
+        // Clear spinner and pending text
+        slot.textContent = "";
+
+        var badge = document.createElement("span");
+        var detail = document.createElement("span");
+        detail.className = "enrichment-detail";
+
+        var summaryText = "";
+
+        if (result.type === "result") {
+            var verdict = result.verdict || "no_data";
+            badge.className = "verdict-badge verdict-" + verdict;
+            badge.textContent = verdict;
+
+            var verdictText = "";
+            if (verdict === "malicious") {
+                verdictText = result.detection_count + "/" + result.total_engines + " malicious";
+            } else if (verdict === "clean") {
+                verdictText = "Clean";
+            } else {
+                verdictText = "No data";
+            }
+
+            var scanDateStr = formatDate(result.scan_date);
+            detail.textContent = result.provider + ": " + verdictText + (scanDateStr ? " — Scanned " + scanDateStr : "");
+
+            summaryText = result.provider + ": " + verdict + " (" + verdictText + ")";
+        } else {
+            // Error result
+            badge.className = "verdict-badge verdict-error";
+            badge.textContent = "Error";
+            detail.textContent = result.provider + ": " + result.error;
+            summaryText = result.provider + ": error — " + result.error;
+        }
+
+        slot.appendChild(badge);
+        slot.appendChild(detail);
+
+        // Store enrichment summary on the copy button so copy-with-enrichment works
+        var copyBtn = findCopyButtonForIoc(result.ioc_value);
+        if (copyBtn) {
+            copyBtn.setAttribute("data-enrichment", summaryText);
+        }
+    }
+
+    function findCopyButtonForIoc(iocValue) {
+        var btns = document.querySelectorAll(".copy-btn");
+        for (var i = 0; i < btns.length; i++) {
+            if (btns[i].getAttribute("data-value") === iocValue) {
+                return btns[i];
+            }
+        }
+        return null;
+    }
+
+    function formatDate(iso) {
+        if (!iso) return "";
+        try {
+            return new Date(iso).toLocaleDateString();
+        } catch (e) {
+            return iso;
+        }
+    }
+
+    function markEnrichmentComplete(done, total) {
+        var container = document.getElementById("enrich-progress");
+        if (container) {
+            container.classList.add("complete");
+        }
+        var text = document.getElementById("enrich-progress-text");
+        if (text) {
+            text.textContent = "Enrichment complete";
+        }
+        var exportBtn = document.getElementById("export-btn");
+        if (exportBtn) {
+            exportBtn.removeAttribute("disabled");
+        }
+    }
+
+    function showEnrichWarning(message) {
+        var banner = document.getElementById("enrich-warning");
+        if (!banner) return;
+        banner.style.display = "block";
+        // Use textContent to safely set the warning message (SEC-08)
+        banner.textContent = "Warning: " + message + " Consider using offline mode or checking your API key in Settings.";
+    }
+
+    // ---- Export button: copy all IOCs + enrichment to clipboard ----
+
+    function initExportButton() {
+        var exportBtn = document.getElementById("export-btn");
+        if (!exportBtn) return;
+
+        exportBtn.addEventListener("click", function () {
+            var lines = [];
+            var iocRows = document.querySelectorAll(".ioc-row");
+
+            iocRows.forEach(function (row) {
+                var valueEl = row.querySelector(".ioc-value");
+                if (!valueEl) return;
+
+                var iocValue = valueEl.textContent.trim();
+                var copyBtn = findCopyButtonForIoc(iocValue);
+                var enrichment = copyBtn ? copyBtn.getAttribute("data-enrichment") : null;
+
+                if (enrichment) {
+                    lines.push(iocValue + " | " + enrichment);
+                } else {
+                    lines.push(iocValue);
+                }
+            });
+
+            var exportText = lines.join("\n");
+
+            if (!navigator.clipboard) {
+                fallbackCopy(exportText, exportBtn);
+                return;
+            }
+
+            navigator.clipboard.writeText(exportText).then(function () {
+                showCopiedFeedback(exportBtn);
+            }).catch(function () {
+                fallbackCopy(exportText, exportBtn);
+            });
+        });
+    }
+
     // ---- Initialise on DOM ready ----
 
     if (document.readyState === "loading") {
         document.addEventListener("DOMContentLoaded", function () {
             initSubmitButton();
             initCopyButtons();
+            initEnrichmentPolling();
+            initExportButton();
         });
     } else {
         // DOM already ready (script is deferred or loaded late)
         initSubmitButton();
         initCopyButtons();
+        initEnrichmentPolling();
+        initExportButton();
     }
 
 }());
