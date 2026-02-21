@@ -10,28 +10,28 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 ## Current Position
 
 Phase: 1 of 4 (Foundation and Offline Pipeline)
-Plan: 2 of TBD in current phase
+Plan: 3 of TBD in current phase
 Status: In progress
-Last activity: 2026-02-21 — Completed 01-02: IOC normalizer and classifier
+Last activity: 2026-02-21 — Completed 01-03: IOC extractor and pipeline integration
 
-Progress: [██░░░░░░░░] 20%
+Progress: [███░░░░░░░] 30%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 2
-- Average duration: 3.5 min
-- Total execution time: 0.1 hours
+- Total plans completed: 3
+- Average duration: 3.7 min
+- Total execution time: 0.2 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01-foundation-and-offline-pipeline | 2 | 7 min | 3.5 min |
+| 01-foundation-and-offline-pipeline | 3 | 11 min | 3.7 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (4 min), 01-02 (3 min)
-- Trend: —
+- Last 5 plans: 01-01 (4 min), 01-02 (3 min), 01-03 (4 min)
+- Trend: stable
 
 *Updated after each plan completion*
 
@@ -53,6 +53,9 @@ Recent decisions affecting current work:
 - [Phase 01-02]: Sequential regex in normalizer: all patterns applied left-to-right for compound defanging support
 - [Phase 01-02]: ipaddress.ip_address() stdlib used for IP validation — handles edge cases like 999.999.999.999 rejection
 - [Phase 01-02]: Exact hex-length anchored regex for hash classification prevents partial matches and cross-type collisions
+- [Phase 01-03]: Module-level _searcher = Searcher() at import time per iocsearcher docs — Searcher is expensive to construct and should be reused
+- [Phase 01-03]: Two-stage deduplication: extract_iocs deduplicates by raw string; run_pipeline deduplicates by (IOCType, normalized_value) — handles same IOC appearing defanged and fanged
+- [Phase 01-03]: Exception handlers around each library call — defensive isolation so one library failure does not block the other
 
 ### Pending Todos
 
@@ -67,5 +70,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-21
-Stopped at: Completed 01-02-PLAN.md (IOC normalizer and classifier)
+Stopped at: Completed 01-03-PLAN.md (IOC extractor and pipeline integration)
 Resume file: None
