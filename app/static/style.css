@@ -576,10 +576,22 @@ body {
 
 .enrichment-slot {
     display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    min-height: 1.5rem;
+}
+
+.spinner-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.provider-result-row {
+    display: flex;
     align-items: center;
     gap: 0.5rem;
     flex-wrap: wrap;
-    min-height: 1.5rem;
 }
 
 .enrichment-pending-text {
@@ -632,6 +644,11 @@ body {
 .verdict-error {
     background-color: rgba(227, 98, 9, 0.2);
     color: #d29922;
+}
+
+.verdict-suspicious {
+    background-color: #f59e0b;  /* amber-500 — brighter than error's muted amber */
+    color: #000;
 }
 
 .enrichment-detail {

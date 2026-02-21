@@ -10,8 +10,9 @@
  * - Clipboard copy for IOC values via navigator.clipboard API
  * - Enrichment polling loop: fetches /enrichment/status/{job_id} every 750ms
  * - Incremental result rendering with verdict badges (XSS-safe DOM methods)
- * - Copy-with-enrichment: compact text format for analyst ticket pasting
- * - Export button: copies all IOCs + enrichment summaries to clipboard
+ * - Multi-provider display: multiple provider results stacked vertically per IOC
+ * - Copy-with-enrichment: worst verdict across all providers for that IOC
+ * - Export button: copies all IOCs + worst-verdict enrichment summaries to clipboard
  *
  * XSS safety (SEC-08): All API response data is rendered via .textContent or
  * .setAttribute only. No .innerHTML concatenation of external strings.
@@ -67,7 +68,7 @@
                 var value = btn.getAttribute("data-value");
                 if (!value) return;
 
-                // Check for enrichment summary set by polling loop
+                // Check for enrichment summary set by polling loop (worst verdict)
                 var enrichment = btn.getAttribute("data-enrichment");
                 var copyText = enrichment ? (value + " | " + enrichment) : value;
 
@@ -118,6 +119,14 @@
 
     // ---- Enrichment polling loop ----
 
+    // Verdict severity order for worst-verdict computation (highest index = most severe)
+    var VERDICT_SEVERITY = ["error", "no_data", "clean", "suspicious", "malicious"];
+
+    function verdictSeverity(verdict) {
+        var idx = VERDICT_SEVERITY.indexOf(verdict);
+        return idx === -1 ? -1 : idx;
+    }
+
     function initEnrichmentPolling() {
         var pageResults = document.querySelector(".page-results");
         if (!pageResults) return;
@@ -127,8 +136,12 @@
 
         if (!jobId || mode !== "online") return;
 
-        // Track which IOC values have already been rendered to avoid re-rendering
+        // Dedup key: "ioc_value|provider" — each provider result per IOC rendered once
         var rendered = {};
+
+        // Per-IOC verdict tracking for worst-verdict copy/export computation
+        // iocVerdicts[ioc_value] = [{provider, verdict, summaryText}]
+        var iocVerdicts = {};
 
         var intervalId = setInterval(function () {
             fetch("/enrichment/status/" + jobId).then(function (resp) {
@@ -143,9 +156,10 @@
                 var results = data.results || [];
                 for (var i = 0; i < results.length; i++) {
                     var result = results[i];
-                    if (!rendered[result.ioc_value]) {
-                        rendered[result.ioc_value] = true;
-                        renderEnrichmentResult(result);
+                    var dedupKey = result.ioc_value + "|" + result.provider;
+                    if (!rendered[dedupKey]) {
+                        rendered[dedupKey] = true;
+                        renderEnrichmentResult(result, iocVerdicts);
                     }
                 }
 
@@ -182,7 +196,7 @@
         text.textContent = done + "/" + total + " IOCs enriched";
     }
 
-    function renderEnrichmentResult(result) {
+    function renderEnrichmentResult(result, iocVerdicts) {
         // Find the enrichment row for this IOC value
         var rows = document.querySelectorAll(".ioc-enrichment-row");
         var targetRow = null;
@@ -197,23 +211,33 @@
         var slot = targetRow.querySelector(".enrichment-slot");
         if (!slot) return;
 
-        // Clear spinner and pending text
-        slot.textContent = "";
+        // Remove spinner wrapper on first result for this IOC (slot still has spinner-wrapper)
+        var spinnerWrapper = slot.querySelector(".spinner-wrapper");
+        if (spinnerWrapper) {
+            slot.removeChild(spinnerWrapper);
+        }
+
+        // Build provider result row div (appended, not replacing)
+        var providerRow = document.createElement("div");
+        providerRow.className = "provider-result-row";
 
         var badge = document.createElement("span");
         var detail = document.createElement("span");
         detail.className = "enrichment-detail";
 
         var summaryText = "";
+        var verdict = "";
 
         if (result.type === "result") {
-            var verdict = result.verdict || "no_data";
+            verdict = result.verdict || "no_data";
             badge.className = "verdict-badge verdict-" + verdict;
             badge.textContent = verdict;
 
             var verdictText = "";
             if (verdict === "malicious") {
                 verdictText = result.detection_count + "/" + result.total_engines + " malicious";
+            } else if (verdict === "suspicious") {
+                verdictText = "Suspicious";
             } else if (verdict === "clean") {
                 verdictText = "Clean";
             } else {
@@ -226,20 +250,47 @@
             summaryText = result.provider + ": " + verdict + " (" + verdictText + ")";
         } else {
             // Error result
+            verdict = "error";
             badge.className = "verdict-badge verdict-error";
             badge.textContent = "Error";
             detail.textContent = result.provider + ": " + result.error;
             summaryText = result.provider + ": error — " + result.error;
         }
 
-        slot.appendChild(badge);
-        slot.appendChild(detail);
+        providerRow.appendChild(badge);
+        providerRow.appendChild(detail);
+        slot.appendChild(providerRow);
 
-        // Store enrichment summary on the copy button so copy-with-enrichment works
-        var copyBtn = findCopyButtonForIoc(result.ioc_value);
-        if (copyBtn) {
-            copyBtn.setAttribute("data-enrichment", summaryText);
+        // Track per-IOC verdicts for worst-verdict computation
+        if (!iocVerdicts[result.ioc_value]) {
+            iocVerdicts[result.ioc_value] = [];
         }
+        iocVerdicts[result.ioc_value].push({
+            provider: result.provider,
+            verdict: verdict,
+            summaryText: summaryText
+        });
+
+        // Update copy button with worst verdict across all providers for this IOC
+        updateCopyButtonWorstVerdict(result.ioc_value, iocVerdicts);
+    }
+
+    function updateCopyButtonWorstVerdict(iocValue, iocVerdicts) {
+        var copyBtn = findCopyButtonForIoc(iocValue);
+        if (!copyBtn) return;
+
+        var verdicts = iocVerdicts[iocValue] || [];
+        if (verdicts.length === 0) return;
+
+        // Find the entry with the highest severity verdict
+        var worst = verdicts[0];
+        for (var i = 1; i < verdicts.length; i++) {
+            if (verdictSeverity(verdicts[i].verdict) > verdictSeverity(worst.verdict)) {
+                worst = verdicts[i];
+            }
+        }
+
+        copyBtn.setAttribute("data-enrichment", worst.summaryText);
     }
 
     function findCopyButtonForIoc(iocValue) {
@@ -284,7 +335,7 @@
         banner.textContent = "Warning: " + message + " Consider using offline mode or checking your API key in Settings.";
     }
 
-    // ---- Export button: copy all IOCs + enrichment to clipboard ----
+    // ---- Export button: copy all IOCs + worst-verdict enrichment to clipboard ----
 
     function initExportButton() {
         var exportBtn = document.getElementById("export-btn");
@@ -300,6 +351,7 @@
 
                 var iocValue = valueEl.textContent.trim();
                 var copyBtn = findCopyButtonForIoc(iocValue);
+                // data-enrichment holds the worst verdict summary (set by polling loop)
                 var enrichment = copyBtn ? copyBtn.getAttribute("data-enrichment") : null;
 
                 if (enrichment) {
