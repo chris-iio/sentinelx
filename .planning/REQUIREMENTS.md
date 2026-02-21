@@ -17,7 +17,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Enrichment
 
-- [ ] **ENRC-01**: Application queries VirusTotal API v3 for IP, domain, URL, and hash IOC types and displays detection count, category, and last analysis date
+- [x] **ENRC-01**: Application queries VirusTotal API v3 for IP, domain, URL, and hash IOC types and displays detection count, category, and last analysis date
 - [ ] **ENRC-02**: Application queries MalwareBazaar API for MD5, SHA1, and SHA256 hashes and displays file type, malware family, tags, and first/last seen
 - [ ] **ENRC-03**: Application queries ThreatFox API for hash, domain, IP, and URL IOCs and displays threat type, malware family, confidence level, and C2 indicator status
 - [ ] **ENRC-04**: Application executes all provider queries in parallel per IOC (not sequentially)
@@ -39,10 +39,10 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **SEC-01**: Application binds to 127.0.0.1 only by default
 - [x] **SEC-02**: API keys are read exclusively from environment variables, never from config files, CLI args, or query parameters
 - [x] **SEC-03**: Application fails fast at startup with a clear error if required API keys are missing (when online mode is configured)
-- [ ] **SEC-04**: All outbound HTTP requests enforce strict per-request timeouts (no indefinite hangs)
-- [ ] **SEC-05**: All outbound HTTP requests enforce a maximum response size limit (streaming + byte counting)
-- [ ] **SEC-06**: Outbound HTTP requests do not follow redirects unless explicitly justified per-provider
-- [ ] **SEC-07**: Application never fetches, crawls, or makes HTTP requests to the IOC URL itself — only calls TI API endpoints
+- [x] **SEC-04**: All outbound HTTP requests enforce strict per-request timeouts (no indefinite hangs)
+- [x] **SEC-05**: All outbound HTTP requests enforce a maximum response size limit (streaming + byte counting)
+- [x] **SEC-06**: Outbound HTTP requests do not follow redirects unless explicitly justified per-provider
+- [x] **SEC-07**: Application never fetches, crawls, or makes HTTP requests to the IOC URL itself — only calls TI API endpoints
 - [x] **SEC-08**: All IOC strings and API response fields are HTML-escaped before rendering (Jinja2 autoescaping, no |safe on untrusted data)
 - [x] **SEC-09**: Content Security Policy header blocks inline scripts (default-src 'self'; script-src 'self')
 - [x] **SEC-10**: CSRF protection is enabled on all POST endpoints
@@ -100,7 +100,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | EXTR-03 | Phase 1 | Complete |
 | EXTR-04 | Phase 1 | Complete |
 | EXTR-05 | Phase 1 | Complete |
-| ENRC-01 | Phase 2 | Pending |
+| ENRC-01 | Phase 2 | Complete |
 | ENRC-02 | Phase 3 | Pending |
 | ENRC-03 | Phase 3 | Pending |
 | ENRC-04 | Phase 2 | Pending |
@@ -116,10 +116,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SEC-01 | Phase 1 | Complete |
 | SEC-02 | Phase 1 | Complete |
 | SEC-03 | Phase 1 | Complete |
-| SEC-04 | Phase 2 | Pending |
-| SEC-05 | Phase 2 | Pending |
-| SEC-06 | Phase 2 | Pending |
-| SEC-07 | Phase 2 | Pending |
+| SEC-04 | Phase 2 | Complete |
+| SEC-05 | Phase 2 | Complete |
+| SEC-06 | Phase 2 | Complete |
+| SEC-07 | Phase 2 | Complete |
 | SEC-08 | Phase 1 | Complete |
 | SEC-09 | Phase 1 | Complete |
 | SEC-10 | Phase 1 | Complete |

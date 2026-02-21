@@ -48,7 +48,7 @@ Plans:
   5. No outbound request follows a redirect, and no outbound request targets an IOC value as a URL — verified by HTTP client configuration test
 **Plans:** 4 plans
 Plans:
-- [ ] 02-01-PLAN.md — TDD: Enrichment models, VT adapter with HTTP safety controls, ConfigStore
+- [x] 02-01-PLAN.md — TDD: Enrichment models, VT adapter with HTTP safety controls, ConfigStore
 - [ ] 02-02-PLAN.md — TDD: Enrichment orchestrator with parallel execution and retry
 - [ ] 02-03-PLAN.md — Settings page, online-mode routing, polling endpoint
 - [ ] 02-04-PLAN.md — Enrichment UI: verdict badges, progress bar, copy/export, visual verification
@@ -82,6 +82,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation and Offline Pipeline | 4/4 | Complete    | 2026-02-21 |
-| 2. Core Enrichment | 0/4 | Planned | - |
+| 2. Core Enrichment | 1/4 | In Progress | - |
 | 3. Additional TI Providers | 0/TBD | Not started | - |
 | 4. UX Polish and Security Verification | 0/TBD | Not started | - |

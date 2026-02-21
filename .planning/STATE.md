@@ -5,32 +5,33 @@
 See: .planning/PROJECT.md (updated 2026-02-21)
 
 **Core value:** Safe, correct, and transparent IOC extraction and enrichment — never invent scores, never make network calls the analyst didn't ask for, never trust input or API responses.
-**Current focus:** Phase 1 — Foundation and Offline Pipeline
+**Current focus:** Phase 2 — Core Enrichment
 
 ## Current Position
 
-Phase: 1 of 4 (Foundation and Offline Pipeline)
-Plan: 4 of 4 in current phase (Phase 1 COMPLETE)
-Status: Phase 1 complete — ready for Phase 2 (Core Enrichment)
-Last activity: 2026-02-21 — Phase 1 fully complete: visual verification approved, all 4 plans delivered
+Phase: 2 of 4 (Core Enrichment)
+Plan: 1 of 4 in current phase (Plan 02-01 COMPLETE)
+Status: Phase 2, Plan 1 complete — VTAdapter, models, ConfigStore built and tested
+Last activity: 2026-02-21 — 02-01 complete: VTAdapter with full HTTP safety controls, 98% coverage
 
-Progress: [████░░░░░░] 40%
+Progress: [█████░░░░░] 50%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 4
-- Average duration: 3.5 min
-- Total execution time: 0.2 hours
+- Total plans completed: 5
+- Average duration: 3.8 min
+- Total execution time: 0.32 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-foundation-and-offline-pipeline | 4 | 14 min | 3.5 min |
+| 02-core-enrichment | 1 | 5 min | 5 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (4 min), 01-02 (3 min), 01-03 (4 min), 01-04 (3 min)
+- Last 5 plans: 01-02 (3 min), 01-03 (4 min), 01-04 (3 min), 02-01 (5 min)
 - Trend: stable
 
 *Updated after each plan completion*
@@ -59,6 +60,10 @@ Recent decisions affecting current work:
 - [Phase 01-04]: ALLOWED_API_HOSTS exposed in app config (empty in Phase 1) — establishes SEC-16 SSRF prevention structure for Phase 2 enrichment calls
 - [Phase 01-04]: <details>/<summary> accordion for IOC groups — no JavaScript needed, all sections open by default
 - [Phase 01-04]: navigator.clipboard.writeText() with execCommand fallback — works in both HTTPS and HTTP (localhost) contexts
+- [Phase 02-01]: Fresh requests.Session per lookup() call — avoids thread safety issues under ThreadPoolExecutor (Pitfall 3)
+- [Phase 02-01]: raise_for_status() after 404 check — VT 404 is "no data" semantic; ordering prevents JSONDecodeError on error body parse
+- [Phase 02-01]: ALLOWED_API_HOSTS passed to VTAdapter constructor — allows use outside Flask request context (background threads)
+- [Phase 02-01]: ConfigStore accepts config_path param — test isolation via tmp_path without mocking filesystem
 
 ### Pending Todos
 
@@ -73,5 +78,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-21
-Stopped at: Phase 1 complete — all 4 plans executed and verified. Ready to begin Phase 2 (Core Enrichment).
+Stopped at: Phase 2, Plan 01 complete — VTAdapter, EnrichmentResult/Error, ConfigStore built and tested at 98% coverage. Ready for Plan 02 (EnrichmentOrchestrator).
 Resume file: None
