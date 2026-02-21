@@ -382,11 +382,13 @@ EXCLUDE_DIRS = {
     ".ruff_cache", ".pytest_cache", ".mypy_cache",
     "htmlcov", "dist", "build", ".tox",
     "everything-claude-code", ".planning",
+    "tools",  # exclude the scanner itself
 }
 
 EXCLUDE_FILES = {
     ".secrets.baseline",
     "bandit-report.json",
+    "security_check.py",  # exclude the scanner itself
 }
 
 TEST_INDICATORS = {"test_", "conftest", "tests/", "testing/"}
