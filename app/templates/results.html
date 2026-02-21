@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="page-results">
+<div class="page-results"{% if mode == "online" and job_id %} data-job-id="{{ job_id }}" data-mode="{{ mode }}"{% else %} data-mode="{{ mode }}"{% endif %}>
 
     <div class="results-header">
         <div class="mode-indicator mode-{{ mode }}">
@@ -21,8 +21,25 @@
             {% endif %}
         </div>
 
+        {% if mode == "online" and job_id %}
+        <button class="btn btn-export" id="export-btn" type="button" disabled>Export All</button>
+        {% endif %}
+
         <a href="{{ url_for('main.index') }}" class="btn btn-secondary back-link">&larr; Back to input</a>
     </div>
+
+    {# Warning banner — hidden by default; JS shows it for rate-limit or auth errors #}
+    <div class="enrich-warning" id="enrich-warning" style="display:none;"></div>
+
+    {% if mode == "online" and job_id %}
+    {# Global progress bar — only rendered in online mode with an active job #}
+    <div class="enrich-progress" id="enrich-progress">
+        <div class="enrich-progress-bar">
+            <div class="enrich-progress-fill" id="enrich-progress-fill" style="width:0%;"></div>
+        </div>
+        <span class="enrich-progress-text" id="enrich-progress-text">Enriching 0/{{ enrichable_count }} IOCs...</span>
+    </div>
+    {% endif %}
 
     {% if no_results or total_count == 0 %}
     <div class="no-results">
@@ -65,11 +82,22 @@
                                 <button
                                     class="btn btn-copy copy-btn"
                                     data-value="{{ ioc.value }}"
+                                    data-ioc-type="{{ ioc.type.value }}"
                                     type="button"
                                     aria-label="Copy {{ ioc.value }}"
                                 >Copy</button>
                             </td>
                         </tr>
+                        {% if mode == "online" and job_id %}
+                        <tr class="ioc-enrichment-row" data-ioc-value="{{ ioc.value }}">
+                            <td colspan="3">
+                                <div class="enrichment-slot">
+                                    <span class="enrichment-spinner"></span>
+                                    <span class="enrichment-pending-text">Pending enrichment...</span>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endif %}
                         {% endfor %}
                     </tbody>
                 </table>

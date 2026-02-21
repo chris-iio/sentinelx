@@ -23,6 +23,7 @@ from threading import Thread
 
 from flask import Blueprint, current_app, flash, jsonify, redirect, render_template, request, url_for
 
+from app.enrichment.adapters.virustotal import ENDPOINT_MAP
 from app.enrichment.adapters.virustotal import VTAdapter
 from app.enrichment.config_store import ConfigStore
 from app.enrichment.orchestrator import EnrichmentOrchestrator
@@ -100,6 +101,8 @@ def analyze():
         )
         thread.start()
 
+        enrichable_count = sum(1 for ioc in iocs if ioc.type in ENDPOINT_MAP)
+
         if total_count == 0:
             return render_template(
                 "results.html",
@@ -108,6 +111,7 @@ def analyze():
                 total_count=0,
                 no_results=True,
                 job_id=job_id,
+                enrichable_count=enrichable_count,
             )
 
         return render_template(
@@ -117,6 +121,7 @@ def analyze():
             total_count=total_count,
             no_results=False,
             job_id=job_id,
+            enrichable_count=enrichable_count,
         )
 
     # Offline mode — no enrichment
