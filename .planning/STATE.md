@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 ## Current Position
 
 Phase: 2 of 4 (Core Enrichment)
-Plan: 1 of 4 in current phase (Plan 02-01 COMPLETE)
-Status: Phase 2, Plan 1 complete — VTAdapter, models, ConfigStore built and tested
-Last activity: 2026-02-21 — 02-01 complete: VTAdapter with full HTTP safety controls, 98% coverage
+Plan: 2 of 4 in current phase (Plan 02-02 COMPLETE)
+Status: Phase 2, Plan 2 complete — EnrichmentOrchestrator with parallel execution, retry-once, LRU job tracking
+Last activity: 2026-02-21 — 02-02 complete: ThreadPoolExecutor orchestrator, 100% coverage, 11 tests
 
-Progress: [█████░░░░░] 50%
+Progress: [██████░░░░] 60%
 
 ## Performance Metrics
 
@@ -28,10 +28,10 @@ Progress: [█████░░░░░] 50%
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-foundation-and-offline-pipeline | 4 | 14 min | 3.5 min |
-| 02-core-enrichment | 1 | 5 min | 5 min |
+| 02-core-enrichment | 2 | 7 min | 3.5 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-02 (3 min), 01-03 (4 min), 01-04 (3 min), 02-01 (5 min)
+- Last 5 plans: 01-03 (4 min), 01-04 (3 min), 02-01 (5 min), 02-02 (2 min)
 - Trend: stable
 
 *Updated after each plan completion*
@@ -64,6 +64,10 @@ Recent decisions affecting current work:
 - [Phase 02-01]: raise_for_status() after 404 check — VT 404 is "no data" semantic; ordering prevents JSONDecodeError on error body parse
 - [Phase 02-01]: ALLOWED_API_HOSTS passed to VTAdapter constructor — allows use outside Flask request context (background threads)
 - [Phase 02-01]: ConfigStore accepts config_path param — test isolation via tmp_path without mocking filesystem
+- [Phase 02-02]: max_workers=4 default respects VT free tier 4 req/min rate limit (Pitfall 7)
+- [Phase 02-02]: max_jobs parameter on __init__ (not hardcoded) — enables test isolation without patching
+- [Phase 02-02]: OrderedDict for LRU eviction — no external dependency, popitem(last=False) gives deterministic FIFO
+- [Phase 02-02]: get_status() returns shallow copy — prevents external callers from mutating internal job state
 
 ### Pending Todos
 
@@ -78,5 +82,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-21
-Stopped at: Phase 2, Plan 01 complete — VTAdapter, EnrichmentResult/Error, ConfigStore built and tested at 98% coverage. Ready for Plan 02 (EnrichmentOrchestrator).
+Stopped at: Phase 2, Plan 02 complete — EnrichmentOrchestrator built and tested at 100% coverage. Ready for Plan 03 (Flask routes wiring enrich_all).
 Resume file: None
