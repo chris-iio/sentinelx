@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-21)
 
 **Core value:** Safe, correct, and transparent IOC extraction and enrichment — never invent scores, never make network calls the analyst didn't ask for, never trust input or API responses.
-**Current focus:** Phase 2 — Core Enrichment
+**Current focus:** Phase 3 — Additional TI Providers
 
 ## Current Position
 
-Phase: 2 of 4 (Core Enrichment)
-Plan: 4 of 4 in current phase (Plan 02-04 COMPLETE)
-Status: Phase 2, Plan 4 complete — Enrichment display UI: polling loop, verdict badges, copy/export, human-verified Phase 2 end-to-end
-Last activity: 2026-02-21 — 02-04 complete: enrichment UI with progress bar, per-IOC spinners, color-coded verdict badges, copy/export, safe DOM rendering (SEC-08), human visual verification approved
+Phase: 3 of 4 (Additional TI Providers)
+Plan: 1 of 4 in current phase (Plan 03-01 COMPLETE)
+Status: Phase 3, Plan 1 complete — Multi-adapter orchestrator and MalwareBazaar adapter for hash IOC lookups
+Last activity: 2026-02-21 — 03-01 complete: refactored orchestrator to accept adapters list, built MBAdapter querying abuse.ch, supported_types on VTAdapter, 218 tests passing, 100% coverage on new code
 
-Progress: [████████░░] 80%
+Progress: [████████░░] 82%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 7
-- Average duration: 3.7 min
-- Total execution time: 0.37 hours
+- Total plans completed: 8
+- Average duration: 3.75 min
+- Total execution time: 0.5 hours
 
 **By Phase:**
 
@@ -29,9 +29,10 @@ Progress: [████████░░] 80%
 |-------|-------|-------|----------|
 | 01-foundation-and-offline-pipeline | 4 | 14 min | 3.5 min |
 | 02-core-enrichment | 4 | 15 min | 3.75 min |
+| 03-additional-ti-providers | 1 | 4 min | 4 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-04 (3 min), 02-01 (5 min), 02-02 (2 min), 02-03 (3 min), 02-04 (5 min)
+- Last 5 plans: 02-02 (2 min), 02-03 (3 min), 02-04 (5 min), 03-01 (4 min)
 - Trend: stable
 
 *Updated after each plan completion*
@@ -74,6 +75,14 @@ Recent decisions affecting current work:
 - [Phase 02-04]: textContent only for all API-sourced dynamic content — no innerHTML to prevent XSS (SEC-08)
 - [Phase 02-04]: setInterval at 750ms with a rendered-object prevents duplicate enrichment row rendering on repeated polls
 - [Phase 02-04]: enrichable_count passed from route (excludes CVE types) — accurate progress denominator
+- [Phase 03-01]: adapters list replaces single adapter in EnrichmentOrchestrator — each adapter declares supported_types set; orchestrator dispatches all matching (adapter, ioc) pairs
+- [Phase 03-01]: total in job status reflects dispatched lookups (IOC x matching adapters), not just IOC count — enables accurate multi-provider progress tracking
+- [Phase 03-01]: MBAdapter uses standalone requests.post per lookup (no shared Session) for thread safety — matches VTAdapter pattern
+- [Phase 03-01]: MalwareBazaar presence-based semantics: found=verdict:malicious (confirmed sample), absent=verdict:no_data (not clean)
+- [Phase 03-01]: No API key required for MalwareBazaar public hash queries
+- [Phase 03-02]: CONFIDENCE_THRESHOLD=75: >=75 maps to malicious, <75 maps to suspicious for ThreatFox confidence-based verdict mapping
+- [Phase 03-02]: suspicious verdict is a plain string in verdict: str field — no EnrichmentResult model changes needed
+- [Phase 03-02]: ThreatFox POST API routing: search_hash for MD5/SHA1/SHA256, search_ioc for domain/IP/URL
 
 ### Pending Todos
 
@@ -88,5 +97,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-21
-Stopped at: Phase 2, Plan 04 complete — Enrichment display UI with polling loop, verdict badges, copy/export, human-verified Phase 2 end-to-end. Phase 2 complete.
+Stopped at: Phase 3, Plan 01 complete — Multi-adapter orchestrator with MBAdapter for hash lookups. 218 tests passing, 100% coverage on new code. Ready for Plan 03-02.
 Resume file: None

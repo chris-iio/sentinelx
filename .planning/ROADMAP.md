@@ -61,7 +61,7 @@ Plans:
   1. Submitting a SHA256 hash returns enrichment results from all three providers (VirusTotal, MalwareBazaar, ThreatFox) in the same results view
   2. A MalwareBazaar or ThreatFox failure returns a per-provider error result without affecting VirusTotal results or other providers
   3. Each provider adapter is independently testable with mocked HTTP — no shared state between adapters
-**Plans:** 3 plans
+**Plans:** 2/3 plans executed
 Plans:
 - [ ] 03-01-PLAN.md — TDD: Multi-adapter orchestrator refactor + MalwareBazaar adapter
 - [ ] 03-02-PLAN.md — TDD: ThreatFox adapter with confidence-based verdict mapping
@@ -87,5 +87,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 |-------|----------------|--------|-----------|
 | 1. Foundation and Offline Pipeline | 4/4 | Complete    | 2026-02-21 |
 | 2. Core Enrichment | 4/4 | Complete   | 2026-02-21 |
-| 3. Additional TI Providers | 0/3 | Planned | - |
+| 3. Additional TI Providers | 2/3 | In Progress|  |
 | 4. UX Polish and Security Verification | 0/TBD | Not started | - |

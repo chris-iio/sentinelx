@@ -18,8 +18,8 @@ Requirements for initial release. Each maps to roadmap phases.
 ### Enrichment
 
 - [x] **ENRC-01**: Application queries VirusTotal API v3 for IP, domain, URL, and hash IOC types and displays detection count, category, and last analysis date
-- [ ] **ENRC-02**: Application queries MalwareBazaar API for MD5, SHA1, and SHA256 hashes and displays file type, malware family, tags, and first/last seen
-- [ ] **ENRC-03**: Application queries ThreatFox API for hash, domain, IP, and URL IOCs and displays threat type, malware family, confidence level, and C2 indicator status
+- [x] **ENRC-02**: Application queries MalwareBazaar API for MD5, SHA1, and SHA256 hashes and displays file type, malware family, tags, and first/last seen
+- [x] **ENRC-03**: Application queries ThreatFox API for hash, domain, IP, and URL IOCs and displays threat type, malware family, confidence level, and C2 indicator status
 - [x] **ENRC-04**: Application executes all provider queries in parallel per IOC (not sequentially)
 - [x] **ENRC-05**: Each enrichment result displays the provider name, lookup timestamp, and raw provider verdict with no transformation or score blending
 - [x] **ENRC-06**: Provider failures return a clear error result per-provider without blocking other providers' results
@@ -101,8 +101,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | EXTR-04 | Phase 1 | Complete |
 | EXTR-05 | Phase 1 | Complete |
 | ENRC-01 | Phase 2 | Complete |
-| ENRC-02 | Phase 3 | Pending |
-| ENRC-03 | Phase 3 | Pending |
+| ENRC-02 | Phase 3 | Complete |
+| ENRC-03 | Phase 3 | Complete |
 | ENRC-04 | Phase 2 | Complete |
 | ENRC-05 | Phase 2 | Complete |
 | ENRC-06 | Phase 2 | Complete |
