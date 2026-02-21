@@ -11,7 +11,7 @@ Routes:
     GET  /enrichment/status/<job_id> — returns JSON enrichment progress for polling
 
 Security:
-    - SEC-16: ALLOWED_API_HOSTS established in config; enforced by VTAdapter before calls
+    - SEC-16: ALLOWED_API_HOSTS established in config; enforced by each adapter before calls
     - No outbound network calls in offline mode (UI-02)
     - Input size capped by MAX_CONTENT_LENGTH before route runs (SEC-12)
     - CSRF token validated by Flask-WTF on all POST requests (SEC-10)
@@ -23,7 +23,8 @@ from threading import Thread
 
 from flask import Blueprint, current_app, flash, jsonify, redirect, render_template, request, url_for
 
-from app.enrichment.adapters.virustotal import ENDPOINT_MAP
+from app.enrichment.adapters.malwarebazaar import MBAdapter
+from app.enrichment.adapters.threatfox import TFAdapter
 from app.enrichment.adapters.virustotal import VTAdapter
 from app.enrichment.config_store import ConfigStore
 from app.enrichment.orchestrator import EnrichmentOrchestrator
@@ -89,8 +90,11 @@ def analyze():
         job_id = uuid.uuid4().hex
 
         allowed_hosts = current_app.config.get("ALLOWED_API_HOSTS", [])
-        adapter = VTAdapter(api_key=api_key, allowed_hosts=allowed_hosts)
-        orchestrator = EnrichmentOrchestrator(adapter)
+        vt_adapter = VTAdapter(api_key=api_key, allowed_hosts=allowed_hosts)
+        mb_adapter = MBAdapter(allowed_hosts=allowed_hosts)
+        tf_adapter = TFAdapter(allowed_hosts=allowed_hosts)
+        adapters_list = [vt_adapter, mb_adapter, tf_adapter]
+        orchestrator = EnrichmentOrchestrator(adapters=adapters_list)
 
         _orchestrators[job_id] = orchestrator
 
@@ -101,7 +105,10 @@ def analyze():
         )
         thread.start()
 
-        enrichable_count = sum(1 for ioc in iocs if ioc.type in ENDPOINT_MAP)
+        enrichable_count = sum(
+            1 for ioc in iocs for adapter in adapters_list
+            if ioc.type in adapter.supported_types
+        )
 
         if total_count == 0:
             return render_template(

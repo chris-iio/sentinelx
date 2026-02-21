@@ -235,7 +235,9 @@ def test_analyze_online_with_api_key_returns_job_id(client):
     """POST /analyze online mode with mock API key returns results page with job_id."""
     with (
         patch("app.routes.ConfigStore") as MockStore,
-        patch("app.routes.VTAdapter") as MockAdapter,
+        patch("app.routes.VTAdapter") as MockVTAdapter,
+        patch("app.routes.MBAdapter") as MockMBAdapter,
+        patch("app.routes.TFAdapter") as MockTFAdapter,
         patch("app.routes.EnrichmentOrchestrator") as MockOrchestrator,
         patch("app.routes.Thread") as MockThread,
     ):
@@ -243,8 +245,12 @@ def test_analyze_online_with_api_key_returns_job_id(client):
         mock_store.get_vt_api_key.return_value = "fake-api-key-1234"
         MockStore.return_value = mock_store
 
-        mock_adapter = MagicMock()
-        MockAdapter.return_value = mock_adapter
+        mock_vt_adapter = MagicMock()
+        MockVTAdapter.return_value = mock_vt_adapter
+        mock_mb_adapter = MagicMock()
+        MockMBAdapter.return_value = mock_mb_adapter
+        mock_tf_adapter = MagicMock()
+        MockTFAdapter.return_value = mock_tf_adapter
 
         mock_orchestrator = MagicMock()
         MockOrchestrator.return_value = mock_orchestrator
@@ -261,9 +267,130 @@ def test_analyze_online_with_api_key_returns_job_id(client):
         # job_id is a hex UUID — 32 hex chars; verify Thread was started
         mock_thread.start.assert_called_once()
         # VTAdapter should have been created with the API key and SSRF allowlist
-        call_kwargs = MockAdapter.call_args[1]
+        call_kwargs = MockVTAdapter.call_args[1]
         assert call_kwargs["api_key"] == "fake-api-key-1234"
         assert "www.virustotal.com" in call_kwargs["allowed_hosts"]
+
+
+def test_analyze_online_creates_all_three_adapters(client):
+    """Online mode creates VT, MB, and TF adapters and passes them all to the orchestrator."""
+    with (
+        patch("app.routes.ConfigStore") as MockStore,
+        patch("app.routes.VTAdapter") as MockVTAdapter,
+        patch("app.routes.MBAdapter") as MockMBAdapter,
+        patch("app.routes.TFAdapter") as MockTFAdapter,
+        patch("app.routes.EnrichmentOrchestrator") as MockOrchestrator,
+        patch("app.routes.Thread") as MockThread,
+    ):
+        mock_store = MagicMock()
+        mock_store.get_vt_api_key.return_value = "fake-api-key-5678"
+        MockStore.return_value = mock_store
+
+        mock_vt = MagicMock()
+        mock_mb = MagicMock()
+        mock_tf = MagicMock()
+        MockVTAdapter.return_value = mock_vt
+        MockMBAdapter.return_value = mock_mb
+        MockTFAdapter.return_value = mock_tf
+
+        MockOrchestrator.return_value = MagicMock()
+        MockThread.return_value = MagicMock()
+
+        client.post("/analyze", data={"text": "192[.]168[.]1[.]1", "mode": "online"})
+
+        # All three adapters must be instantiated
+        MockVTAdapter.assert_called_once()
+        MockMBAdapter.assert_called_once()
+        MockTFAdapter.assert_called_once()
+
+        # Orchestrator receives all three adapters
+        orch_call_kwargs = MockOrchestrator.call_args[1]
+        adapters_passed = orch_call_kwargs["adapters"]
+        assert mock_vt in adapters_passed
+        assert mock_mb in adapters_passed
+        assert mock_tf in adapters_passed
+
+
+def test_enrichable_count_multi_provider(client):
+    """SHA256 hash IOC yields enrichable_count=3 (VT + MB + TF all support hashes)."""
+    from app.pipeline.models import IOCType
+
+    with (
+        patch("app.routes.ConfigStore") as MockStore,
+        patch("app.routes.VTAdapter") as MockVTAdapter,
+        patch("app.routes.MBAdapter") as MockMBAdapter,
+        patch("app.routes.TFAdapter") as MockTFAdapter,
+        patch("app.routes.EnrichmentOrchestrator") as MockOrchestrator,
+        patch("app.routes.Thread") as MockThread,
+    ):
+        mock_store = MagicMock()
+        mock_store.get_vt_api_key.return_value = "key-abc"
+        MockStore.return_value = mock_store
+
+        # Adapters with real supported_types sets
+        from app.enrichment.adapters.virustotal import VTAdapter as RealVTAdapter
+        from app.enrichment.adapters.malwarebazaar import MBAdapter as RealMBAdapter
+        from app.enrichment.adapters.threatfox import TFAdapter as RealTFAdapter
+
+        mock_vt = MagicMock()
+        mock_vt.supported_types = RealVTAdapter.supported_types
+        mock_mb = MagicMock()
+        mock_mb.supported_types = RealMBAdapter.supported_types
+        mock_tf = MagicMock()
+        mock_tf.supported_types = RealTFAdapter.supported_types
+
+        MockVTAdapter.return_value = mock_vt
+        MockMBAdapter.return_value = mock_mb
+        MockTFAdapter.return_value = mock_tf
+        MockOrchestrator.return_value = MagicMock()
+        MockThread.return_value = MagicMock()
+
+        # SHA256 hash — all three adapters support it
+        sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        response = client.post("/analyze", data={"text": sha256, "mode": "online"})
+        assert response.status_code == 200
+        # enrichable_count=3 appears in the progress text
+        assert b"0/3" in response.data or b"Enriching 0/3" in response.data
+
+
+def test_enrichable_count_domain_two_providers(client):
+    """Domain IOC yields enrichable_count=2 (VT + TF support domains, MB does not)."""
+    with (
+        patch("app.routes.ConfigStore") as MockStore,
+        patch("app.routes.VTAdapter") as MockVTAdapter,
+        patch("app.routes.MBAdapter") as MockMBAdapter,
+        patch("app.routes.TFAdapter") as MockTFAdapter,
+        patch("app.routes.EnrichmentOrchestrator") as MockOrchestrator,
+        patch("app.routes.Thread") as MockThread,
+    ):
+        mock_store = MagicMock()
+        mock_store.get_vt_api_key.return_value = "key-def"
+        MockStore.return_value = mock_store
+
+        from app.enrichment.adapters.virustotal import VTAdapter as RealVTAdapter
+        from app.enrichment.adapters.malwarebazaar import MBAdapter as RealMBAdapter
+        from app.enrichment.adapters.threatfox import TFAdapter as RealTFAdapter
+
+        mock_vt = MagicMock()
+        mock_vt.supported_types = RealVTAdapter.supported_types
+        mock_mb = MagicMock()
+        mock_mb.supported_types = RealMBAdapter.supported_types
+        mock_tf = MagicMock()
+        mock_tf.supported_types = RealTFAdapter.supported_types
+
+        MockVTAdapter.return_value = mock_vt
+        MockMBAdapter.return_value = mock_mb
+        MockTFAdapter.return_value = mock_tf
+        MockOrchestrator.return_value = MagicMock()
+        MockThread.return_value = MagicMock()
+
+        # Domain — VT and TF support it, MB does not
+        response = client.post("/analyze", data={"text": "hxxps://evil[.]example[.]com", "mode": "online"})
+        assert response.status_code == 200
+        # enrichable_count=2 (VT + TF for domain) or more if URL also counted
+        # The domain evil.example.com may also be extracted as URL — check that MB is excluded
+        # The count should NOT be a multiple of 3 for a single domain IOC
+        assert b"Enriching 0/2" in response.data or b"0/2" in response.data or b"0/4" in response.data
 
 
 def test_analyze_offline_unchanged(client):
