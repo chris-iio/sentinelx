@@ -34,8 +34,8 @@ class Config:
     DEBUG: bool = False
 
     # SSRF prevention: allowlist of permitted outbound API hostnames (SEC-16)
-    # Phase 1 has zero outbound calls. Phase 2 adds entries here.
-    ALLOWED_API_HOSTS: list[str] = []
+    # Phase 2: VirusTotal is the only permitted outbound host.
+    ALLOWED_API_HOSTS: list[str] = ["www.virustotal.com"]
 
     def validate(self) -> None:
         """Raise ValueError at startup if required env vars are missing.
