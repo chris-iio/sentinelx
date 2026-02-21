@@ -46,7 +46,12 @@ Plans:
   3. A loading indicator is visible while enrichment calls are in progress
   4. When VirusTotal is unreachable, the result for that IOC shows a clear per-provider error rather than crashing or blocking other results
   5. No outbound request follows a redirect, and no outbound request targets an IOC value as a URL — verified by HTTP client configuration test
-**Plans**: TBD
+**Plans:** 4 plans
+Plans:
+- [ ] 02-01-PLAN.md — TDD: Enrichment models, VT adapter with HTTP safety controls, ConfigStore
+- [ ] 02-02-PLAN.md — TDD: Enrichment orchestrator with parallel execution and retry
+- [ ] 02-03-PLAN.md — Settings page, online-mode routing, polling endpoint
+- [ ] 02-04-PLAN.md — Enrichment UI: verdict badges, progress bar, copy/export, visual verification
 
 ### Phase 3: Additional TI Providers
 **Goal**: Analyst receives enrichment from MalwareBazaar (for hashes) and ThreatFox (for hashes, domains, IPs, URLs) alongside VirusTotal, completing the v1 provider set
@@ -77,6 +82,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation and Offline Pipeline | 4/4 | Complete    | 2026-02-21 |
-| 2. Core Enrichment | 0/TBD | Not started | - |
+| 2. Core Enrichment | 0/4 | Planned | - |
 | 3. Additional TI Providers | 0/TBD | Not started | - |
 | 4. UX Polish and Security Verification | 0/TBD | Not started | - |
