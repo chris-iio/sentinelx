@@ -20,7 +20,7 @@ affects:
 tech-stack:
   added: []
   patterns:
-    - Per-adapter isolation: each adapter module copies _validate_endpoint and _read_limited helpers
+    - Shared HTTP safety: _validate_endpoint and _read_limited initially per-adapter; extracted to app/enrichment/http_safety.py (commit a716378)
     - Confidence-based verdict: ThreatFox confidence_level >=75 -> malicious, <75 -> suspicious
     - Multi-record selection: max() by confidence_level when ThreatFox returns multiple records
     - Hash vs IOC routing: MD5/SHA1/SHA256 use search_hash; domain/IP/URL use search_ioc
@@ -91,7 +91,7 @@ _TDD: test commit (RED) then implementation commit (GREEN). Both in main branch.
 
 - **CONFIDENCE_THRESHOLD=75**: >=75 confidence level maps to malicious, <75 maps to suspicious. Exact boundary (75) is malicious. Decision from plan context based on ThreatFox score semantics.
 - **suspicious verdict as plain string**: The EnrichmentResult model uses `verdict: str` (not an enum), so "suspicious" requires zero model changes. CSS class `verdict-suspicious` will be added in Plan 03.
-- **Per-adapter helper isolation**: Each adapter module contains its own copy of `_validate_endpoint` and `_read_limited` rather than a shared utilities module, matching the established VTAdapter pattern.
+- **Shared HTTP safety module**: Helper functions `_validate_endpoint` and `_read_limited` were initially per-adapter copies; subsequently extracted to `app/enrichment/http_safety.py` (commit a716378). Adapters now import from the shared module.
 - **Search routing**: Hashes (MD5/SHA1/SHA256) use `{"query": "search_hash", "hash": value}`; all others use `{"query": "search_ioc", "search_term": value}` per ThreatFox API v1.
 - **Both abuse.ch hosts in config**: Plan note that Plan 01 and 02 both modify ALLOWED_API_HOSTS was resolved by adding both `mb-api.abuse.ch` and `threatfox-api.abuse.ch` in this commit since mb-api.abuse.ch was already present from the MalwareBazaar adapter.
 

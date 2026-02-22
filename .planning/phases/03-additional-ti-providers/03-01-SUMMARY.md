@@ -45,7 +45,7 @@ key-decisions:
 patterns-established:
   - "Adapter pattern: each adapter declares supported_types: set[IOCType] and lookup(ioc) method"
   - "Presence-based verdict: binary source (malware repo) maps found=malicious, absent=no_data"
-  - "Shared helper isolation: _validate_endpoint and _read_limited copied per-module (not extracted to shared utils) — deliberate isolation matches adapter-per-file pattern"
+  - "Shared HTTP safety module: _validate_endpoint and _read_limited initially copied per-adapter; subsequently extracted to app/enrichment/http_safety.py (commit a716378) — adapters now import from the shared module"
 
 requirements-completed: [ENRC-02]
 
@@ -98,7 +98,7 @@ Each task committed atomically:
 - `total` counts dispatched lookups (not IOC count) so the UI progress bar accurately reflects multi-provider enrichment work
 - MBAdapter uses standalone `requests.post` per call (no shared Session), matching VTAdapter's thread safety pattern
 - MalwareBazaar presence-based semantics: found in sample repo = confirmed malware (`verdict=malicious`); absent = `verdict=no_data` (not clean)
-- Helper functions (`_validate_endpoint`, `_read_limited`) copied into MBAdapter module for isolation — deliberate choice to keep adapters self-contained
+- Helper functions (`_validate_endpoint`, `_read_limited`) initially copied into MBAdapter module; subsequently extracted to shared `app/enrichment/http_safety.py` module (commit a716378) — adapters now import from the shared module
 
 ## Deviations from Plan
 
