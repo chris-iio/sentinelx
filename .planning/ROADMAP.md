@@ -2,7 +2,7 @@
 
 ## Overview
 
-sentinelx is built in four phases, each delivering a complete, verifiable capability. Phase 1 delivers a fully functional offline pipeline — the analyst can paste text, see extracted and classified IOCs, and trust that no network calls are made. Phase 2 wires in VirusTotal enrichment through a parallel orchestrator, proving the full online request flow end-to-end. Phase 3 adds MalwareBazaar and ThreatFox as additive provider adapters with no changes to existing code. Phase 4 sharpens analyst UX (verdict clarity, visual affordances) and verifies the security posture before shipping. Security defenses are established in Phase 1 — they are never retrofitted.
+sentinelx is built in four phases plus one inserted fix phase, each delivering a complete, verifiable capability. Phase 1 delivers a fully functional offline pipeline — the analyst can paste text, see extracted and classified IOCs, and trust that no network calls are made. Phase 2 wires in VirusTotal enrichment through a parallel orchestrator, proving the full online request flow end-to-end. Phase 3 adds MalwareBazaar and ThreatFox as additive provider adapters with no changes to existing code. Phase 3.1 closes integration gaps identified by the milestone audit (CSP regression, untracked files, stale docs). Phase 4 sharpens analyst UX (verdict clarity, visual affordances) and verifies the security posture before shipping. Security defenses are established in Phase 1 — they are never retrofitted.
 
 ## Phases
 
@@ -15,6 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Foundation and Offline Pipeline** - Flask app with security scaffold, IOC extraction/normalization/classification, and complete offline mode (completed 2026-02-21)
 - [x] **Phase 2: Core Enrichment** - VirusTotal enrichment via parallel orchestrator, full online mode end-to-end (completed 2026-02-21)
 - [x] **Phase 3: Additional TI Providers** - MalwareBazaar and ThreatFox adapters completing the v1 provider set (completed 2026-02-21)
+- [ ] **Phase 3.1: Integration Fixes and Git Hygiene** - Fix CSP regression, commit untracked files, clean up stale docs (INSERTED — audit gap closure)
 - [ ] **Phase 4: UX Polish and Security Verification** - Verdict clarity, analyst UX refinements, and full security checklist confirmation
 
 ## Phase Details
@@ -49,9 +50,9 @@ Plans:
 **Plans:** 4/4 plans complete
 Plans:
 - [x] 02-01-PLAN.md — TDD: Enrichment models, VT adapter with HTTP safety controls, ConfigStore
-- [ ] 02-02-PLAN.md — TDD: Enrichment orchestrator with parallel execution and retry
-- [ ] 02-03-PLAN.md — Settings page, online-mode routing, polling endpoint
-- [ ] 02-04-PLAN.md — Enrichment UI: verdict badges, progress bar, copy/export, visual verification
+- [x] 02-02-PLAN.md — TDD: Enrichment orchestrator with parallel execution and retry
+- [x] 02-03-PLAN.md — Settings page, online-mode routing, polling endpoint
+- [x] 02-04-PLAN.md — Enrichment UI: verdict badges, progress bar, copy/export, visual verification
 
 ### Phase 3: Additional TI Providers
 **Goal**: Analyst receives enrichment from MalwareBazaar (for hashes) and ThreatFox (for hashes, domains, IPs, URLs) alongside VirusTotal, completing the v1 provider set
@@ -63,9 +64,21 @@ Plans:
   3. Each provider adapter is independently testable with mocked HTTP — no shared state between adapters
 **Plans:** 3/3 plans complete
 Plans:
-- [ ] 03-01-PLAN.md — TDD: Multi-adapter orchestrator refactor + MalwareBazaar adapter
-- [ ] 03-02-PLAN.md — TDD: ThreatFox adapter with confidence-based verdict mapping
-- [ ] 03-03-PLAN.md — Multi-provider route wiring, JS/CSS updates, visual verification
+- [x] 03-01-PLAN.md — TDD: Multi-adapter orchestrator refactor + MalwareBazaar adapter
+- [x] 03-02-PLAN.md — TDD: ThreatFox adapter with confidence-based verdict mapping
+- [x] 03-03-PLAN.md — Multi-provider route wiring, JS/CSS updates, visual verification
+
+### Phase 3.1: Integration Fixes and Git Hygiene (INSERTED)
+**Goal**: Fix CSP regression from Phase 2 inline script, commit untracked shared module to git, and clean up stale documentation — closing all integration gaps identified by milestone audit
+**Depends on**: Phase 3
+**Requirements**: None (regression fixes — SEC-08, SEC-09 already satisfied in Phase 1; this phase restores compliance)
+**Gap Closure**: Closes 2 critical integration issues and 4 tech debt items from v1.0 milestone audit
+**Success Criteria** (what must be TRUE):
+  1. No inline `<script>` blocks exist in any template — all JavaScript lives in `app/static/main.js`
+  2. `app/enrichment/http_safety.py` is tracked by git and included in commits
+  3. All working directory changes from Phases 2-3 are committed — `git status` shows clean tree
+  4. ROADMAP.md plan-level checkboxes match actual completion status
+**Plans**: TBD
 
 ### Phase 4: UX Polish and Security Verification
 **Goal**: Analyst can clearly distinguish "no record found" from "explicitly clean verdict" for every provider result, the UI communicates enrichment state without blocking, and the full security posture is confirmed before shipping
@@ -81,11 +94,12 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4
+Phases execute in numeric order: 1 → 2 → 3 → 3.1 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation and Offline Pipeline | 4/4 | Complete    | 2026-02-21 |
-| 2. Core Enrichment | 4/4 | Complete   | 2026-02-21 |
-| 3. Additional TI Providers | 3/3 | Complete    | 2026-02-21 |
+| 1. Foundation and Offline Pipeline | 4/4 | Complete | 2026-02-21 |
+| 2. Core Enrichment | 4/4 | Complete | 2026-02-21 |
+| 3. Additional TI Providers | 3/3 | Complete | 2026-02-21 |
+| 3.1. Integration Fixes and Git Hygiene | 0/TBD | Not started | - |
 | 4. UX Polish and Security Verification | 0/TBD | Not started | - |
