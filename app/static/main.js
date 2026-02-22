@@ -376,6 +376,23 @@
         });
     }
 
+    // ---- Settings page: show/hide API key toggle ----
+
+    function initSettingsPage() {
+        var btn = document.getElementById('toggle-key-btn');
+        var input = document.getElementById('api-key');
+        if (!btn || !input) return;
+        btn.addEventListener('click', function () {
+            if (input.type === 'password') {
+                input.type = 'text';
+                btn.textContent = 'Hide';
+            } else {
+                input.type = 'password';
+                btn.textContent = 'Show';
+            }
+        });
+    }
+
     // ---- Initialise on DOM ready ----
 
     if (document.readyState === "loading") {
@@ -384,6 +401,7 @@
             initCopyButtons();
             initEnrichmentPolling();
             initExportButton();
+            initSettingsPage();
         });
     } else {
         // DOM already ready (script is deferred or loaded late)
@@ -391,6 +409,7 @@
         initCopyButtons();
         initEnrichmentPolling();
         initExportButton();
+        initSettingsPage();
     }
 
 }());

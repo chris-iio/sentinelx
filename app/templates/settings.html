@@ -61,21 +61,4 @@
     </div>
 </div>
 
-<script>
-(function () {
-    var btn = document.getElementById('toggle-key-btn');
-    var input = document.getElementById('api-key');
-    if (btn && input) {
-        btn.addEventListener('click', function () {
-            if (input.type === 'password') {
-                input.type = 'text';
-                btn.textContent = 'Hide';
-            } else {
-                input.type = 'password';
-                btn.textContent = 'Show';
-            }
-        });
-    }
-}());
-</script>
 {% endblock %}
