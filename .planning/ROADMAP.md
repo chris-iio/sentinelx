@@ -78,7 +78,9 @@ Plans:
   2. `app/enrichment/http_safety.py` is tracked by git and included in commits
   3. All working directory changes from Phases 2-3 are committed — `git status` shows clean tree
   4. ROADMAP.md plan-level checkboxes match actual completion status
-**Plans**: TBD
+**Plans:** 1 plan
+Plans:
+- [ ] 03.1-01-PLAN.md — CSP fix (inline script migration), SUMMARY.md corrections, audit report commit and update
 
 ### Phase 4: UX Polish and Security Verification
 **Goal**: Analyst can clearly distinguish "no record found" from "explicitly clean verdict" for every provider result, the UI communicates enrichment state without blocking, and the full security posture is confirmed before shipping
@@ -101,5 +103,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 3.1 → 4
 | 1. Foundation and Offline Pipeline | 4/4 | Complete | 2026-02-21 |
 | 2. Core Enrichment | 4/4 | Complete | 2026-02-21 |
 | 3. Additional TI Providers | 3/3 | Complete | 2026-02-21 |
-| 3.1. Integration Fixes and Git Hygiene | 0/TBD | Not started | - |
+| 3.1. Integration Fixes and Git Hygiene | 0/1 | Not started | - |
 | 4. UX Polish and Security Verification | 0/TBD | Not started | - |
