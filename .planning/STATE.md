@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-21)
 
 **Core value:** Safe, correct, and transparent IOC extraction and enrichment — never invent scores, never make network calls the analyst didn't ask for, never trust input or API responses.
-**Current focus:** Phase 3 — Additional TI Providers
+**Current focus:** Phase 3.1 — Integration Fixes and Git Hygiene (audit gap closure)
 
 ## Current Position
 
-Phase: 3 of 4 (Additional TI Providers)
-Plan: 3 of 3 in current phase (COMPLETE — all plans in phase 03 done)
-Status: Phase 3 complete — all three providers (VT, MB, TF) wired into /analyze; multi-provider JS rendering with worst-verdict; suspicious badge; human-verified end-to-end
-Last activity: 2026-02-21 — 03-03: COMPLETE: all tasks done, human verification approved, SUMMARY.md finalized, 221 tests passing
+Phase: 3.1 of 4 (Integration Fixes and Git Hygiene — INSERTED gap closure)
+Plan: 0 of TBD in current phase (not yet planned)
+Status: Phase 3.1 created from milestone audit gap closure — fixes CSP regression, untracked files, stale docs
+Last activity: 2026-02-22 — Gap closure phases created from v1.0 milestone audit
 
-Progress: [██████████] 100% (Phase 3 complete)
+Progress: [███████░░░] 75% (Phases 1-3 complete, 3.1 + 4 remain)
 
 ## Performance Metrics
 
@@ -102,6 +102,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-02-21
-Stopped at: Phase 3 complete — Plan 03-03 finalized. Human verification of multi-provider UI approved. All three TI providers (VT, MB, TF) wired and verified. 221 tests passing. SUMMARY.md created.
+Last session: 2026-02-22
+Stopped at: Gap closure Phase 3.1 created from milestone audit. Ready to plan Phase 3.1.
 Resume file: None
