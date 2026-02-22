@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-21)
 
 **Core value:** Safe, correct, and transparent IOC extraction and enrichment — never invent scores, never make network calls the analyst didn't ask for, never trust input or API responses.
-**Current focus:** Phase 3.1 — Integration Fixes and Git Hygiene (audit gap closure)
+**Current focus:** Phase 4 — UX Polish and Security Verification
 
 ## Current Position
 
-Phase: 3.1 of 4 (Integration Fixes and Git Hygiene — INSERTED gap closure)
-Plan: 0 of TBD in current phase (not yet planned)
-Status: Phase 3.1 created from milestone audit gap closure — fixes CSP regression, untracked files, stale docs
-Last activity: 2026-02-22 — Gap closure phases created from v1.0 milestone audit
+Phase: 4 of 4 (UX Polish and Security Verification)
+Plan: 0 of TBD in current phase (not yet started)
+Status: Phase 3.1 COMPLETE — all integration gaps resolved. CSP compliance restored, docs corrected, audit committed.
+Last activity: 2026-02-22 — Phase 3.1 plan 01 complete
 
-Progress: [███████░░░] 75% (Phases 1-3 complete, 3.1 + 4 remain)
+Progress: [████████░░] 85% (Phases 1-3 + 3.1 complete, Phase 4 remains)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 11
-- Average duration: 3.64 min
-- Total execution time: 0.67 hours
+- Total plans completed: 12
+- Average duration: 3.58 min
+- Total execution time: 0.72 hours
 
 **By Phase:**
 
@@ -30,9 +30,10 @@ Progress: [███████░░░] 75% (Phases 1-3 complete, 3.1 + 4 rem
 | 01-foundation-and-offline-pipeline | 4 | 14 min | 3.5 min |
 | 02-core-enrichment | 4 | 15 min | 3.75 min |
 | 03-additional-ti-providers | 3 | 11 min | 3.67 min |
+| 03.1-integration-fixes-git-hygiene | 1 | 5 min | 5 min |
 
 **Recent Trend:**
-- Last 5 plans: 02-04 (5 min), 03-01 (4 min), 03-02 (4 min), 03-03 (3 min)
+- Last 5 plans: 03-01 (4 min), 03-02 (4 min), 03-03 (3 min), 03.1-01 (5 min)
 - Trend: stable
 
 *Updated after each plan completion*
@@ -89,6 +90,9 @@ Recent decisions affecting current work:
 - [Phase 03-03]: Worst-verdict for copy/export: severity order error<no_data<clean<suspicious<malicious; most severe wins per IOC
 - [Phase 03-03]: Spinner wrapped in .spinner-wrapper div for clean DOM removal on first provider result arrival
 - [Phase 03-03 COMPLETE]: Human-verified end-to-end: 3 providers for SHA256 hashes, 2 for domains, suspicious badge amber, copy/export worst-verdict confirmed
+- [Phase 03.1-01]: initSettingsPage() placed inside IIFE with guard pattern — consistent with all other init functions; called in both DOMContentLoaded branches
+- [Phase 03.1-01]: Milestone audit report updated in-place to resolved status — integration score 3/5 → 5/5; per CONTEXT.md user decision to not keep as historical snapshot
+- [Phase 03.1-01 COMPLETE]: All v1.0 integration gaps resolved. CSP compliance restored, docs corrected, audit committed.
 
 ### Pending Todos
 
@@ -103,5 +107,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-22
-Stopped at: Gap closure Phase 3.1 created from milestone audit. Ready to plan Phase 3.1.
+Stopped at: Completed 03.1-01-PLAN.md — Phase 3.1 complete. Ready to start Phase 4.
 Resume file: None

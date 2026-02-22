@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Foundation and Offline Pipeline** - Flask app with security scaffold, IOC extraction/normalization/classification, and complete offline mode (completed 2026-02-21)
 - [x] **Phase 2: Core Enrichment** - VirusTotal enrichment via parallel orchestrator, full online mode end-to-end (completed 2026-02-21)
 - [x] **Phase 3: Additional TI Providers** - MalwareBazaar and ThreatFox adapters completing the v1 provider set (completed 2026-02-21)
-- [ ] **Phase 3.1: Integration Fixes and Git Hygiene** - Fix CSP regression, commit untracked files, clean up stale docs (INSERTED — audit gap closure)
+- [x] **Phase 3.1: Integration Fixes and Git Hygiene** - Fix CSP regression, commit untracked files, clean up stale docs (INSERTED — audit gap closure, completed 2026-02-22)
 - [ ] **Phase 4: UX Polish and Security Verification** - Verdict clarity, analyst UX refinements, and full security checklist confirmation
 
 ## Phase Details
@@ -80,7 +80,7 @@ Plans:
   4. ROADMAP.md plan-level checkboxes match actual completion status
 **Plans:** 1 plan
 Plans:
-- [ ] 03.1-01-PLAN.md — CSP fix (inline script migration), SUMMARY.md corrections, audit report commit and update
+- [x] 03.1-01-PLAN.md — CSP fix (inline script migration), SUMMARY.md corrections, audit report commit and update
 
 ### Phase 4: UX Polish and Security Verification
 **Goal**: Analyst can clearly distinguish "no record found" from "explicitly clean verdict" for every provider result, the UI communicates enrichment state without blocking, and the full security posture is confirmed before shipping
@@ -103,5 +103,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 3.1 → 4
 | 1. Foundation and Offline Pipeline | 4/4 | Complete | 2026-02-21 |
 | 2. Core Enrichment | 4/4 | Complete | 2026-02-21 |
 | 3. Additional TI Providers | 3/3 | Complete | 2026-02-21 |
-| 3.1. Integration Fixes and Git Hygiene | 0/1 | Not started | - |
+| 3.1. Integration Fixes and Git Hygiene | 1/1 | Complete | 2026-02-22 |
 | 4. UX Polish and Security Verification | 0/TBD | Not started | - |
