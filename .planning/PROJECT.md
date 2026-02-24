@@ -33,12 +33,33 @@ Safe, correct, and transparent IOC extraction and enrichment — never invent sc
 - ✓ No subprocess calls, no shell execution, no dynamic code execution — v1.0
 - ✓ No persistent storage of raw pasted blobs — v1.0
 
-### Active
+### Active (v1.1 UX Overhaul)
 
-(None — next milestone requirements to be defined via `/gsd:new-milestone`)
+- **LAYOUT-01**: Card-based IOC display replacing table rows
+- **LAYOUT-02**: Summary dashboard with verdict counts
+- **LAYOUT-03**: Cards sorted by verdict severity (malicious first)
+- **LAYOUT-04**: Responsive card grid with colored severity borders
+- **FILTER-01**: Verdict filter bar (All | Malicious | Suspicious | Clean | No Data)
+- **FILTER-02**: IOC type filter pills (only types present in results)
+- **FILTER-03**: Text search across IOC values
+- **FILTER-04**: Sticky filter bar, dashboard cards clickable as filters
+- **INPUT-01**: Toggle switch replacing mode dropdown
+- **INPUT-02**: Paste feedback ("N characters pasted")
+- **INPUT-03**: Contextual submit button ("Extract IOCs" / "Extract & Enrich")
+- **EXPORT-01**: Export dropdown (clipboard text, JSON download, CSV download)
+- **EXPORT-02**: Structured clipboard format with headers/sections
+- **EXPORT-03**: Bulk selection with checkboxes
+- **EXPORT-04**: "Copy Selected" / "Select All" buttons
+- **POLISH-01**: "Test Connection" button for VT API key in settings
+- **POLISH-02**: Accessibility audit (keyboard nav, ARIA labels, focus management)
+- **POLISH-03**: Performance verification with 100+ IOCs
+
+Full requirements: `.planning/REQUIREMENTS.md`
 
 ### Out of Scope
 
+- New threat intelligence providers (v1.1 is frontend-only)
+- Backend route changes or new API endpoints
 - Public internet exposure — this is a local/jump-box tool only
 - User authentication — single-user, local access assumed
 - Historical analysis or trending — v1 is single-shot triage
@@ -54,6 +75,7 @@ Safe, correct, and transparent IOC extraction and enrichment — never invent sc
 - **Users:** SOC analysts performing initial triage of alerts, emails, and threat reports
 - **Environment:** Runs on analyst's local machine or an internal jump box (not internet-facing)
 - **Tech stack:** Python 3.10 + Flask 3.1, iocextract + iocsearcher for extraction, requests for HTTP
+- **Frontend stack (v1.1):** Tailwind CSS (standalone CLI) + Alpine.js CSP build (~15KB) + vanilla JS for enrichment/clipboard
 - **Codebase:** ~1,674 LOC app Python, ~1,534 LOC frontend (HTML/CSS/JS), ~3,893 LOC tests
 - **Test suite:** 224 tests, 97% coverage
 - **Threat intel providers:** VirusTotal (API key required), MalwareBazaar (public), ThreatFox (public)
@@ -83,5 +105,10 @@ Safe, correct, and transparent IOC extraction and enrichment — never invent sc
 | ThreadPoolExecutor parallel | max_workers=4 respects VT free tier rate limit | ✓ Good — parallel without API abuse |
 | textContent only (no innerHTML) | Prevent XSS from API responses in dynamic DOM | ✓ Good — SEC-08 maintained throughout |
 
+| Tailwind CSS standalone CLI | No Node.js needed, generates CSS from utility classes, theme extends existing CSS vars | Pending — v1.1 Phase 6 |
+| Alpine.js CSP build | Declarative reactivity (~15KB), CSP-compatible (no eval), served from /static/ | Pending — v1.1 Phase 6 |
+| Keep vanilla JS for enrichment | Polling and clipboard code works well, no reason to rewrite into Alpine | Pending — v1.1 Phase 6 |
+| Zero backend changes in v1.1 | All v1.1 is frontend-only — same routes, same data models | Pending — v1.1 |
+
 ---
-*Last updated: 2026-02-24 after v1.0 milestone*
+*Last updated: 2026-02-24 after v1.1 milestone setup*

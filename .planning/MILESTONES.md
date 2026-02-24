@@ -27,3 +27,24 @@
 
 ---
 
+## v1.1 UX Overhaul (In Progress)
+
+**Phases:** 5 (6, 7, 8, 9, 10) | **Plans:** TBD | **Requirements:** 19
+**Started:** 2026-02-24
+**Stack:** Tailwind CSS standalone CLI + Alpine.js CSP build + vanilla JS
+**Scope:** Frontend-only — zero backend changes
+
+**Goal:** Make SentinelX's results page the one place a SOC analyst looks — better visual hierarchy, filtering, and export. No new providers; make existing data shine.
+
+**Phases:**
+1. Phase 6: Foundation — Tailwind + Alpine + Card Layout (LAYOUT-01 through LAYOUT-05)
+2. Phase 7: Filtering & Search (FILTER-01 through FILTER-04)
+3. Phase 8: Input Page Polish (INPUT-01 through INPUT-03)
+4. Phase 9: Export & Copy Enhancements (EXPORT-01 through EXPORT-04)
+5. Phase 10: Settings & Polish (POLISH-01 through POLISH-03)
+
+**Archives:**
+- `milestones/v1.1-ROADMAP.md`
+- `milestones/v1.1-phases/` (when complete)
+
+---
