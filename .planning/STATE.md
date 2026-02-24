@@ -38,6 +38,7 @@ Progress: [█████████░] 88% (Phases 1-3 + 3.1 complete, Phase
 - Trend: stable
 
 *Updated after each plan completion*
+| Phase 04-ux-polish-and-security-verification P01 | 3 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -97,6 +98,9 @@ Recent decisions affecting current work:
 - [Phase 04-ux-polish-and-security-verification]: pathlib used for file scanning in security tests — no subprocess or shell invocations, clean Python
 - [Phase 04-ux-polish-and-security-verification]: word boundary \b in |safe regex prevents false positives on |upper, |length, etc.
 - [Phase 04-ux-polish-and-security-verification]: VT base64 URL ID excluded from SSRF scan via safe_exclusions list to avoid false positives
+- [Phase 04-01]: VERDICT_LABELS map added inside IIFE — display strings (MALICIOUS/CLEAN/NO RECORD) decoupled from internal verdict strings
+- [Phase 04-01]: no_data results appended to collapsed details section, not main slot — reduces visual noise for clean results
+- [Phase 04-01]: IOC_PROVIDER_COUNTS uses data-ioc-type attribute on enrichment row — no Python route change needed
 
 ### Pending Todos
 
@@ -111,5 +115,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-24
-Stopped at: Completed 04-02-PLAN.md — security audit tests created. Phase 4 plan 02 complete.
+Stopped at: Completed 04-01 Tasks 1 and 2 (verdict labels, no-data section, pending indicator, progress text, CSS); at checkpoint:human-verify Task 3 in 04-01-PLAN.md
 Resume file: None
