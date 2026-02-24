@@ -1,7 +1,8 @@
 """E2E tests for the IOC extraction flow.
 
 Covers: successful extraction, empty input, no IOCs found, defanging,
-deduplication, multiple IOC types, and mode indicator.
+deduplication, multiple IOC types, mode indicator, card layout,
+type badges, verdict labels, and dashboard.
 """
 
 from playwright.sync_api import Page, expect
@@ -42,7 +43,7 @@ DUPLICATE_IOCS = """\
 
 
 def test_extract_mixed_iocs_offline(page: Page, index_url: str) -> None:
-    """Mixed IOC text produces grouped results in offline mode."""
+    """Mixed IOC text produces card results in offline mode."""
     idx = IndexPage(page, index_url.rstrip("/"))
     idx.goto()
     idx.extract_iocs(MIXED_IOCS, mode="offline")
@@ -50,9 +51,9 @@ def test_extract_mixed_iocs_offline(page: Page, index_url: str) -> None:
     results = ResultsPage(page)
     results.expect_mode("offline")
 
-    # Verify at least some groups are present
-    group_count = results.ioc_groups.count()
-    assert group_count >= 3, f"Expected at least 3 IOC groups, got {group_count}"
+    # Verify cards are present for multiple types
+    card_count = results.ioc_cards.count()
+    assert card_count >= 3, f"Expected at least 3 IOC cards, got {card_count}"
 
 
 def test_extract_shows_correct_total_count(page: Page, index_url: str) -> None:
@@ -66,15 +67,14 @@ def test_extract_shows_correct_total_count(page: Page, index_url: str) -> None:
     results.expect_total_count(2)
 
 
-def test_extract_ipv4_group(page: Page, index_url: str) -> None:
-    """IPv4 addresses appear in the ipv4 group."""
+def test_extract_ipv4_cards(page: Page, index_url: str) -> None:
+    """IPv4 addresses appear as cards with ipv4 type."""
     idx = IndexPage(page, index_url.rstrip("/"))
     idx.goto()
     idx.extract_iocs(IPV4_ONLY)
 
     results = ResultsPage(page)
-    results.expect_group_visible("ipv4")
-    results.expect_group_count("ipv4", 2)
+    results.expect_cards_for_type("ipv4", 2)
 
     values = results.ioc_values("ipv4")
     texts = [values.nth(i).text_content() for i in range(values.count())]
@@ -82,28 +82,26 @@ def test_extract_ipv4_group(page: Page, index_url: str) -> None:
     assert "172.16.0.1" in texts
 
 
-def test_extract_sha256_group(page: Page, index_url: str) -> None:
-    """SHA256 hashes appear in the sha256 group."""
+def test_extract_sha256_card(page: Page, index_url: str) -> None:
+    """SHA256 hashes appear as cards with sha256 type."""
     sha256_text = "Hash: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     idx = IndexPage(page, index_url.rstrip("/"))
     idx.goto()
     idx.extract_iocs(sha256_text)
 
     results = ResultsPage(page)
-    results.expect_group_visible("sha256")
-    results.expect_group_count("sha256", 1)
+    results.expect_cards_for_type("sha256", 1)
 
 
-def test_extract_cve_group(page: Page, index_url: str) -> None:
-    """CVE identifiers appear in the cve group."""
+def test_extract_cve_cards(page: Page, index_url: str) -> None:
+    """CVE identifiers appear as cards with cve type."""
     cve_text = "Exploited: CVE-2024-12345 and CVE-2023-99999"
     idx = IndexPage(page, index_url.rstrip("/"))
     idx.goto()
     idx.extract_iocs(cve_text)
 
     results = ResultsPage(page)
-    results.expect_group_visible("cve")
-    results.expect_group_count("cve", 2)
+    results.expect_cards_for_type("cve", 2)
 
 
 def test_defanged_iocs_are_normalized(page: Page, index_url: str) -> None:
@@ -146,7 +144,7 @@ def test_deduplication(page: Page, index_url: str) -> None:
     results = ResultsPage(page)
     # 5 lines with 2 unique IPs
     results.expect_total_count(2)
-    results.expect_group_count("ipv4", 2)
+    results.expect_cards_for_type("ipv4", 2)
 
 
 def test_empty_input_shows_error(page: Page, index_url: str) -> None:
@@ -202,49 +200,84 @@ def test_online_mode_indicator(page: Page, index_url: str) -> None:
     results.expect_mode("online")
 
 
-def test_accordion_groups_are_open_by_default(page: Page, index_url: str) -> None:
-    """All IOC group accordions start in the open state."""
+def test_cards_have_type_badges(page: Page, index_url: str) -> None:
+    """Each IOC card has a type badge with the correct label."""
     idx = IndexPage(page, index_url.rstrip("/"))
     idx.goto()
-    idx.extract_iocs(MIXED_IOCS)
+    idx.extract_iocs(IPV4_ONLY)
 
     results = ResultsPage(page)
-    groups = results.ioc_groups
-    count = groups.count()
+    badges = results.type_badge("ipv4")
+    expect(badges).to_have_count(2)
+    expect(badges.first).to_have_text("IPV4")
+
+
+def test_cards_have_verdict_labels(page: Page, index_url: str) -> None:
+    """Each IOC card has a verdict label (defaults to NO DATA in offline mode)."""
+    idx = IndexPage(page, index_url.rstrip("/"))
+    idx.goto()
+    idx.extract_iocs(IPV4_ONLY)
+
+    results = ResultsPage(page)
+    labels = results.verdict_labels("ipv4")
+    expect(labels).to_have_count(2)
+    expect(labels.first).to_have_text("NO DATA")
+
+
+def test_cards_have_data_verdict_attribute(page: Page, index_url: str) -> None:
+    """Each IOC card has a data-verdict attribute (defaults to no_data)."""
+    idx = IndexPage(page, index_url.rstrip("/"))
+    idx.goto()
+    idx.extract_iocs(IPV4_ONLY)
+
+    results = ResultsPage(page)
+    cards = results.cards_for_type("ipv4")
+    count = cards.count()
 
     for i in range(count):
-        group = groups.nth(i)
-        assert group.get_attribute("open") is not None, f"Group {i} should be open"
+        card = cards.nth(i)
+        verdict = card.get_attribute("data-verdict")
+        assert verdict == "no_data", f"Card {i} should have data-verdict='no_data', got '{verdict}'"
 
 
-def test_accordion_can_be_collapsed(page: Page, index_url: str) -> None:
-    """Clicking a group summary collapses the accordion."""
+def test_cards_have_data_ioc_value_attribute(page: Page, index_url: str) -> None:
+    """Each IOC card carries its value in data-ioc-value attribute."""
+    idx = IndexPage(page, index_url.rstrip("/"))
+    idx.goto()
+    idx.extract_iocs("10.0.0.1")
+
+    results = ResultsPage(page)
+    card = results.cards_for_type("ipv4").first
+    data_value = card.get_attribute("data-ioc-value")
+    assert data_value == "10.0.0.1"
+
+
+def test_online_mode_shows_verdict_dashboard(page: Page, index_url: str) -> None:
+    """Online mode results page shows the verdict dashboard."""
+    idx = IndexPage(page, index_url.rstrip("/"))
+    idx.goto()
+    idx.extract_iocs(IPV4_ONLY, mode="online")
+
+    results = ResultsPage(page)
+    expect(results.verdict_dashboard).to_be_visible()
+
+
+def test_offline_mode_hides_verdict_dashboard(page: Page, index_url: str) -> None:
+    """Offline mode results page does not show the verdict dashboard."""
+    idx = IndexPage(page, index_url.rstrip("/"))
+    idx.goto()
+    idx.extract_iocs(IPV4_ONLY, mode="offline")
+
+    results = ResultsPage(page)
+    expect(results.verdict_dashboard).to_have_count(0)
+
+
+def test_responsive_grid_layout(page: Page, index_url: str) -> None:
+    """Cards grid uses responsive layout."""
     idx = IndexPage(page, index_url.rstrip("/"))
     idx.goto()
     idx.extract_iocs(IPV4_ONLY)
 
-    results = ResultsPage(page)
-    group = results.group_for_type("ipv4")
-    summary = group.locator("summary")
-
-    # Initially open
-    assert group.get_attribute("open") is not None
-
-    # Click to collapse
-    summary.click()
-    assert group.get_attribute("open") is None
-
-    # Click to re-open
-    summary.click()
-    assert group.get_attribute("open") is not None
-
-
-def test_type_labels_are_uppercase(page: Page, index_url: str) -> None:
-    """IOC type labels are displayed in uppercase."""
-    idx = IndexPage(page, index_url.rstrip("/"))
-    idx.goto()
-    idx.extract_iocs(IPV4_ONLY)
-
-    results = ResultsPage(page)
-    label = results.type_label("ipv4")
-    expect(label).to_have_text("IPV4")
+    # Verify the grid container exists
+    grid = page.locator("#ioc-cards-grid")
+    expect(grid).to_be_visible()

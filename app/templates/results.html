@@ -50,61 +50,58 @@
     </div>
     {% else %}
 
-    <div class="results-grouped">
-        {% for ioc_type, iocs in grouped.items() %}
-        <details class="ioc-group ioc-group--{{ ioc_type.value }}" open>
-            <summary class="ioc-group-header">
-                <span class="ioc-type-label">{{ ioc_type.value | upper }}</span>
-                <span class="ioc-count-badge">{{ iocs | length }}</span>
-            </summary>
+    {# Verdict dashboard — counts updated by JS as enrichment results arrive #}
+    {% if mode == "online" and job_id %}
+    <div class="verdict-dashboard" id="verdict-dashboard">
+        <span class="verdict-dashboard-badge" data-verdict="malicious">
+            <span class="verdict-dashboard-count" data-verdict-count="malicious">0</span> Malicious
+        </span>
+        <span class="verdict-dashboard-badge" data-verdict="suspicious">
+            <span class="verdict-dashboard-count" data-verdict-count="suspicious">0</span> Suspicious
+        </span>
+        <span class="verdict-dashboard-badge" data-verdict="clean">
+            <span class="verdict-dashboard-count" data-verdict-count="clean">0</span> Clean
+        </span>
+        <span class="verdict-dashboard-badge" data-verdict="no_data">
+            <span class="verdict-dashboard-count" data-verdict-count="no_data">0</span> No Data
+        </span>
+    </div>
+    {% endif %}
 
-            <div class="ioc-table-wrapper">
-                <table class="ioc-table">
-                    <thead>
-                        <tr>
-                            <th class="col-value">Normalized Value</th>
-                            <th class="col-original">Original (if different)</th>
-                            <th class="col-copy">Copy</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for ioc in iocs %}
-                        <tr class="ioc-row">
-                            <td class="col-value">
-                                <code class="ioc-value">{{ ioc.value }}</code>
-                            </td>
-                            <td class="col-original">
-                                {% if ioc.raw_match != ioc.value %}
-                                    <code class="ioc-original">{{ ioc.raw_match }}</code>
-                                {% endif %}
-                            </td>
-                            <td class="col-copy">
-                                <button
-                                    class="btn btn-copy copy-btn"
-                                    data-value="{{ ioc.value }}"
-                                    data-ioc-type="{{ ioc.type.value }}"
-                                    type="button"
-                                    aria-label="Copy {{ ioc.value }}"
-                                >Copy</button>
-                            </td>
-                        </tr>
-                        {% if mode == "online" and job_id %}
-                        <tr class="ioc-enrichment-row" data-ioc-value="{{ ioc.value }}" data-ioc-type="{{ ioc.type.value }}">
-                            <td colspan="3">
-                                <div class="enrichment-slot">
-                                    <div class="spinner-wrapper">
-                                        <span class="enrichment-spinner"></span>
-                                        <span class="enrichment-pending-text">Pending enrichment...</span>
-                                    </div>
-                                </div>
-                            </td>
-                        </tr>
-                        {% endif %}
-                        {% endfor %}
-                    </tbody>
-                </table>
+    <div class="ioc-cards-grid" id="ioc-cards-grid">
+        {# Flatten all IOCs from grouped dict into a flat card list #}
+        {% for ioc_type, iocs in grouped.items() %}
+            {% for ioc in iocs %}
+            <div class="ioc-card" data-ioc-value="{{ ioc.value }}" data-ioc-type="{{ ioc.type.value }}" data-verdict="no_data">
+                <div class="ioc-card-header">
+                    <code class="ioc-value">{{ ioc.value }}</code>
+                    <span class="ioc-type-badge ioc-type-badge--{{ ioc.type.value }}">{{ ioc.type.value | upper }}</span>
+                    <span class="verdict-label verdict-label--no_data">NO DATA</span>
+                    <div class="ioc-card-actions">
+                        <button
+                            class="btn btn-copy copy-btn"
+                            data-value="{{ ioc.value }}"
+                            data-ioc-type="{{ ioc.type.value }}"
+                            type="button"
+                            aria-label="Copy {{ ioc.value }}"
+                        >Copy</button>
+                    </div>
+                </div>
+
+                {% if ioc.raw_match != ioc.value %}
+                <div class="ioc-original">Original: {{ ioc.raw_match }}</div>
+                {% endif %}
+
+                {% if mode == "online" and job_id %}
+                <div class="enrichment-slot">
+                    <div class="spinner-wrapper">
+                        <span class="enrichment-spinner"></span>
+                        <span class="enrichment-pending-text">Pending enrichment...</span>
+                    </div>
+                </div>
+                {% endif %}
             </div>
-        </details>
+            {% endfor %}
         {% endfor %}
     </div>
 

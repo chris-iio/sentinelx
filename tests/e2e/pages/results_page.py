@@ -1,4 +1,4 @@
-"""Page Object Model for the SentinelX results page."""
+"""Page Object Model for the SentinelX results page (card layout)."""
 
 from __future__ import annotations
 
@@ -18,36 +18,47 @@ class ResultsPage:
         self.no_results_box = page.locator(".no-results")
         self.no_results_hint = page.locator(".no-results-hint")
 
-    # ---- IOC Groups ----
+    # ---- IOC Cards ----
 
     @property
-    def ioc_groups(self) -> Locator:
-        """All accordion IOC groups on the page."""
-        return self.page.locator("details.ioc-group")
+    def ioc_cards(self) -> Locator:
+        """All IOC cards on the page."""
+        return self.page.locator(".ioc-card")
 
-    def group_for_type(self, ioc_type: str) -> Locator:
-        """Return the <details> accordion for a specific IOC type (lowercase)."""
-        return self.page.locator(f"details.ioc-group--{ioc_type}")
+    def cards_for_type(self, ioc_type: str) -> Locator:
+        """Return cards for a specific IOC type (lowercase)."""
+        return self.page.locator(f'.ioc-card[data-ioc-type="{ioc_type}"]')
 
-    def type_label(self, ioc_type: str) -> Locator:
-        """Return the type label element inside a group."""
-        return self.group_for_type(ioc_type).locator(".ioc-type-label")
-
-    def count_badge(self, ioc_type: str) -> Locator:
-        """Return the count badge element inside a group."""
-        return self.group_for_type(ioc_type).locator(".ioc-count-badge")
+    def type_badge(self, ioc_type: str) -> Locator:
+        """Return type badge elements for a specific IOC type."""
+        return self.cards_for_type(ioc_type).locator(".ioc-type-badge")
 
     def ioc_values(self, ioc_type: str) -> Locator:
         """Return all normalized value elements for a given IOC type."""
-        return self.group_for_type(ioc_type).locator(".ioc-value")
+        return self.cards_for_type(ioc_type).locator(".ioc-value")
 
     def ioc_originals(self, ioc_type: str) -> Locator:
         """Return all original value elements for a given IOC type."""
-        return self.group_for_type(ioc_type).locator(".ioc-original")
+        return self.cards_for_type(ioc_type).locator(".ioc-original")
 
     def copy_buttons(self, ioc_type: str) -> Locator:
         """Return all copy buttons for a given IOC type."""
-        return self.group_for_type(ioc_type).locator(".copy-btn")
+        return self.cards_for_type(ioc_type).locator(".copy-btn")
+
+    def verdict_labels(self, ioc_type: str) -> Locator:
+        """Return all verdict label elements for a given IOC type."""
+        return self.cards_for_type(ioc_type).locator(".verdict-label")
+
+    # ---- Verdict Dashboard ----
+
+    @property
+    def verdict_dashboard(self) -> Locator:
+        """The verdict dashboard element."""
+        return self.page.locator("#verdict-dashboard")
+
+    def verdict_count(self, verdict: str) -> Locator:
+        """Return the count element for a specific verdict in the dashboard."""
+        return self.page.locator(f'[data-verdict-count="{verdict}"]')
 
     # ---- Assertions ----
 
@@ -70,13 +81,9 @@ class ResultsPage:
         expect(self.no_results_box).to_be_visible()
         expect(self.no_results_hint).to_contain_text("Supported types")
 
-    def expect_group_visible(self, ioc_type: str) -> None:
-        """Assert a specific IOC type group is visible."""
-        expect(self.group_for_type(ioc_type)).to_be_visible()
-
-    def expect_group_count(self, ioc_type: str, count: int) -> None:
-        """Assert the count badge for a type shows the expected number."""
-        expect(self.count_badge(ioc_type)).to_have_text(str(count))
+    def expect_cards_for_type(self, ioc_type: str, count: int) -> None:
+        """Assert the number of cards for a specific IOC type."""
+        expect(self.cards_for_type(ioc_type)).to_have_count(count)
 
     def go_back(self) -> None:
         """Click the 'Back to input' link."""

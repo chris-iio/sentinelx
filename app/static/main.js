@@ -13,6 +13,8 @@
  * - Multi-provider display: multiple provider results stacked vertically per IOC
  * - Copy-with-enrichment: worst verdict across all providers for that IOC
  * - Export button: copies all IOCs + worst-verdict enrichment summaries to clipboard
+ * - Card verdict updates: colored borders, verdict labels, dashboard counts
+ * - Severity sorting: cards reorder by verdict severity as results arrive
  *
  * XSS safety (SEC-08): All API response data is rendered via .textContent or
  * .setAttribute only. No .innerHTML concatenation of external strings.
@@ -129,7 +131,7 @@
         "malicious":  "MALICIOUS",
         "suspicious": "SUSPICIOUS",
         "clean":      "CLEAN",
-        "no_data":    "NO RECORD",
+        "no_data":    "NO DATA",
         "error":      "ERROR"
     };
 
@@ -149,6 +151,87 @@
     function verdictSeverity(verdict) {
         var idx = VERDICT_SEVERITY.indexOf(verdict);
         return idx === -1 ? -1 : idx;
+    }
+
+    // ---- Card verdict + dashboard + sorting helpers ----
+
+    function findCardForIoc(iocValue) {
+        return document.querySelector('.ioc-card[data-ioc-value="' + CSS.escape(iocValue) + '"]');
+    }
+
+    function updateCardVerdict(iocValue, worstVerdict) {
+        var card = findCardForIoc(iocValue);
+        if (!card) return;
+
+        // Update data-verdict attribute (drives CSS border color)
+        card.setAttribute("data-verdict", worstVerdict);
+
+        // Update verdict label text and class
+        var label = card.querySelector(".verdict-label");
+        if (label) {
+            // Remove all verdict-label--* classes
+            var classes = label.className.split(" ");
+            var newClasses = [];
+            for (var i = 0; i < classes.length; i++) {
+                if (classes[i].indexOf("verdict-label--") !== 0) {
+                    newClasses.push(classes[i]);
+                }
+            }
+            newClasses.push("verdict-label--" + worstVerdict);
+            label.className = newClasses.join(" ");
+            label.textContent = VERDICT_LABELS[worstVerdict] || worstVerdict.toUpperCase();
+        }
+    }
+
+    function updateDashboardCounts() {
+        var dashboard = document.getElementById("verdict-dashboard");
+        if (!dashboard) return;
+
+        var cards = document.querySelectorAll(".ioc-card");
+        var counts = { malicious: 0, suspicious: 0, clean: 0, no_data: 0 };
+
+        for (var i = 0; i < cards.length; i++) {
+            var v = cards[i].getAttribute("data-verdict");
+            if (Object.prototype.hasOwnProperty.call(counts, v)) {
+                counts[v]++;
+            }
+        }
+
+        var verdicts = ["malicious", "suspicious", "clean", "no_data"];
+        for (var j = 0; j < verdicts.length; j++) {
+            var countEl = dashboard.querySelector('[data-verdict-count="' + verdicts[j] + '"]');
+            if (countEl) {
+                countEl.textContent = String(counts[verdicts[j]]);
+            }
+        }
+    }
+
+    // Debounced severity sort — reorders cards in the grid by verdict severity
+    var sortTimer = null;
+
+    function sortCardsBySeverity() {
+        if (sortTimer) clearTimeout(sortTimer);
+        sortTimer = setTimeout(doSortCards, 100);
+    }
+
+    function doSortCards() {
+        var grid = document.getElementById("ioc-cards-grid");
+        if (!grid) return;
+
+        var cards = Array.prototype.slice.call(grid.querySelectorAll(".ioc-card"));
+        if (cards.length === 0) return;
+
+        cards.sort(function (a, b) {
+            var va = verdictSeverity(a.getAttribute("data-verdict") || "no_data");
+            var vb = verdictSeverity(b.getAttribute("data-verdict") || "no_data");
+            // Higher severity first (descending)
+            return vb - va;
+        });
+
+        // Reorder DOM elements without removing them from the document
+        for (var i = 0; i < cards.length; i++) {
+            grid.appendChild(cards[i]);
+        }
     }
 
     function initEnrichmentPolling() {
@@ -248,8 +331,8 @@
     }
 
     // Show or update the pending provider indicator after first result for an IOC
-    function updatePendingIndicator(slot, targetRow, receivedCount) {
-        var iocType = targetRow ? targetRow.getAttribute("data-ioc-type") : "";
+    function updatePendingIndicator(slot, card, receivedCount) {
+        var iocType = card ? card.getAttribute("data-ioc-type") : "";
         var totalExpected = IOC_PROVIDER_COUNTS[iocType] || 0;
         var remaining = totalExpected - receivedCount;
 
@@ -279,21 +362,14 @@
     }
 
     function renderEnrichmentResult(result, iocVerdicts, iocResultCounts) {
-        // Find the enrichment row for this IOC value
-        var rows = document.querySelectorAll(".ioc-enrichment-row");
-        var targetRow = null;
-        for (var i = 0; i < rows.length; i++) {
-            if (rows[i].getAttribute("data-ioc-value") === result.ioc_value) {
-                targetRow = rows[i];
-                break;
-            }
-        }
-        if (!targetRow) return;
+        // Find the card for this IOC value
+        var card = findCardForIoc(result.ioc_value);
+        if (!card) return;
 
-        var slot = targetRow.querySelector(".enrichment-slot");
+        var slot = card.querySelector(".enrichment-slot");
         if (!slot) return;
 
-        // Remove spinner wrapper on first result for this IOC (slot still has spinner-wrapper)
+        // Remove spinner wrapper on first result for this IOC
         var spinnerWrapper = slot.querySelector(".spinner-wrapper");
         if (spinnerWrapper) {
             slot.removeChild(spinnerWrapper);
@@ -360,7 +436,7 @@
         }
 
         // Update pending indicator for remaining providers
-        updatePendingIndicator(slot, targetRow, receivedCount);
+        updatePendingIndicator(slot, card, receivedCount);
 
         // Track per-IOC verdicts for worst-verdict computation
         if (!iocVerdicts[result.ioc_value]) {
@@ -372,8 +448,27 @@
             summaryText: summaryText
         });
 
+        // Compute worst verdict for this IOC
+        var worstVerdict = computeWorstVerdict(iocVerdicts[result.ioc_value]);
+
+        // Update card verdict, dashboard, and sort
+        updateCardVerdict(result.ioc_value, worstVerdict);
+        updateDashboardCounts();
+        sortCardsBySeverity();
+
         // Update copy button with worst verdict across all providers for this IOC
         updateCopyButtonWorstVerdict(result.ioc_value, iocVerdicts);
+    }
+
+    function computeWorstVerdict(verdicts) {
+        if (!verdicts || verdicts.length === 0) return "no_data";
+        var worst = verdicts[0];
+        for (var i = 1; i < verdicts.length; i++) {
+            if (verdictSeverity(verdicts[i].verdict) > verdictSeverity(worst.verdict)) {
+                worst = verdicts[i];
+            }
+        }
+        return worst.verdict;
     }
 
     function updateCopyButtonWorstVerdict(iocValue, iocVerdicts) {
@@ -444,10 +539,10 @@
 
         exportBtn.addEventListener("click", function () {
             var lines = [];
-            var iocRows = document.querySelectorAll(".ioc-row");
+            var iocCards = document.querySelectorAll(".ioc-card");
 
-            iocRows.forEach(function (row) {
-                var valueEl = row.querySelector(".ioc-value");
+            iocCards.forEach(function (card) {
+                var valueEl = card.querySelector(".ioc-value");
                 if (!valueEl) return;
 
                 var iocValue = valueEl.textContent.trim();

@@ -10,7 +10,7 @@ from tests.e2e.pages import IndexPage, ResultsPage
 
 
 def test_copy_buttons_present_for_each_ioc(page: Page, index_url: str) -> None:
-    """Every IOC row has a copy button."""
+    """Every IOC card has a copy button."""
     idx = IndexPage(page, index_url.rstrip("/"))
     idx.goto()
     idx.extract_iocs("10.0.0.1 and 172.16.0.1")
