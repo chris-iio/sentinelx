@@ -36,20 +36,14 @@ def create_app(config_override: dict | None = None) -> Flask:
     app.config["TRUSTED_HOSTS"] = config.TRUSTED_HOSTS
     app.config["MAX_CONTENT_LENGTH"] = config.MAX_CONTENT_LENGTH  # SEC-12
     app.config["WTF_CSRF_ENABLED"] = config.WTF_CSRF_ENABLED  # SEC-10
-    # SEC-16: SSRF prevention allowlist — empty in Phase 1 (no outbound calls).
-    # Phase 2 will add permitted API hostnames here before making any network calls.
     app.config["ALLOWED_API_HOSTS"] = config.ALLOWED_API_HOSTS
 
-    # SEC-15: Debug mode is HARDCODED to False. Never read from env or config_override.
-    app.debug = False
-
     # Apply optional test/environment overrides AFTER security defaults are set.
-    # Note: config_override cannot override app.debug — it is set unconditionally above
-    # and after config_override to ensure it cannot be accidentally enabled.
     if config_override:
         app.config.update(config_override)
 
-    # Enforce debug=False regardless of any override (SEC-15)
+    # SEC-15: Debug mode is HARDCODED to False after all overrides.
+    # Placed last to ensure config_override cannot accidentally enable it.
     app.debug = False
 
     # SEC-10: CSRF protection on all POST endpoints

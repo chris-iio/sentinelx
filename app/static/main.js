@@ -72,17 +72,7 @@
                 var enrichment = btn.getAttribute("data-enrichment");
                 var copyText = enrichment ? (value + " | " + enrichment) : value;
 
-                if (!navigator.clipboard) {
-                    // Fallback for non-HTTPS or older browsers
-                    fallbackCopy(copyText, btn);
-                    return;
-                }
-
-                navigator.clipboard.writeText(copyText).then(function () {
-                    showCopiedFeedback(btn);
-                }).catch(function () {
-                    fallbackCopy(copyText, btn);
-                });
+                writeToClipboard(copyText, btn);
             });
         });
     }
@@ -115,6 +105,18 @@
         } finally {
             document.body.removeChild(tmp);
         }
+    }
+
+    function writeToClipboard(text, btn) {
+        if (!navigator.clipboard) {
+            fallbackCopy(text, btn);
+            return;
+        }
+        navigator.clipboard.writeText(text).then(function () {
+            showCopiedFeedback(btn);
+        }).catch(function () {
+            fallbackCopy(text, btn);
+        });
     }
 
     // ---- Enrichment polling loop ----
@@ -177,7 +179,7 @@
 
                 updateProgressBar(data.done, data.total);
 
-                // Render any new results not yet displayed
+                // Render any new results not yet displayed, and check for warnings
                 var results = data.results || [];
                 for (var i = 0; i < results.length; i++) {
                     var result = results[i];
@@ -186,17 +188,14 @@
                         rendered[dedupKey] = true;
                         renderEnrichmentResult(result, iocVerdicts, iocResultCounts);
                     }
-                }
 
-                // Check for rate-limit or auth errors to show warning banner
-                for (var j = 0; j < results.length; j++) {
-                    var r = results[j];
-                    if (r.type === "error" && r.error) {
-                        var errLower = r.error.toLowerCase();
+                    // Show warning banner for rate-limit or auth errors
+                    if (result.type === "error" && result.error) {
+                        var errLower = result.error.toLowerCase();
                         if (errLower.indexOf("rate limit") !== -1 || errLower.indexOf("429") !== -1) {
-                            showEnrichWarning("Rate limit reached for " + r.provider + ".");
+                            showEnrichWarning("Rate limit reached for " + result.provider + ".");
                         } else if (errLower.indexOf("authentication") !== -1 || errLower.indexOf("401") !== -1 || errLower.indexOf("403") !== -1) {
-                            showEnrichWarning("Authentication error for " + r.provider + ". Please check your API key in Settings.");
+                            showEnrichWarning("Authentication error for " + result.provider + ". Please check your API key in Settings.");
                         }
                     }
                 }
@@ -465,16 +464,7 @@
 
             var exportText = lines.join("\n");
 
-            if (!navigator.clipboard) {
-                fallbackCopy(exportText, exportBtn);
-                return;
-            }
-
-            navigator.clipboard.writeText(exportText).then(function () {
-                showCopiedFeedback(exportBtn);
-            }).catch(function () {
-                fallbackCopy(exportText, exportBtn);
-            });
+            writeToClipboard(exportText, exportBtn);
         });
     }
 
@@ -497,21 +487,18 @@
 
     // ---- Initialise on DOM ready ----
 
-    if (document.readyState === "loading") {
-        document.addEventListener("DOMContentLoaded", function () {
-            initSubmitButton();
-            initCopyButtons();
-            initEnrichmentPolling();
-            initExportButton();
-            initSettingsPage();
-        });
-    } else {
-        // DOM already ready (script is deferred or loaded late)
+    function init() {
         initSubmitButton();
         initCopyButtons();
         initEnrichmentPolling();
         initExportButton();
         initSettingsPage();
+    }
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", init);
+    } else {
+        init();
     }
 
 }());

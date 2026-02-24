@@ -95,33 +95,22 @@ def _parse_response(ioc: IOC, body: dict) -> EnrichmentResult:
     )
 
 
-def _map_http_error(ioc: IOC, err: requests.exceptions.HTTPError) -> EnrichmentResult | EnrichmentError:
-    """Map HTTP error codes to typed enrichment results.
+def _map_http_error(ioc: IOC, err: requests.exceptions.HTTPError) -> EnrichmentError:
+    """Map HTTP error codes to typed enrichment errors.
 
-    VT 404 semantics: "VirusTotal has never seen this IOC" — not an error.
-    Returns EnrichmentResult(verdict="no_data") for 404 (Pitfall 1).
+    Note: 404 is handled directly in lookup() before raise_for_status() fires,
+    so this function only receives non-404 error codes.
 
     Args:
         ioc: The IOC that was queried.
         err: The HTTPError raised by raise_for_status().
 
     Returns:
-        EnrichmentResult for 404; EnrichmentError for all other codes.
+        EnrichmentError with a human-readable message for the status code.
     """
     response = err.response
     code: int | str = response.status_code if response is not None else "unknown"
 
-    if code == 404:
-        # 404 = VT has no record — meaningful information, not a failure
-        return EnrichmentResult(
-            ioc=ioc,
-            provider="VirusTotal",
-            verdict="no_data",
-            detection_count=0,
-            total_engines=0,
-            scan_date=None,
-            raw_stats={},
-        )
     if code == 429:
         return EnrichmentError(ioc=ioc, provider="VirusTotal", error="Rate limit exceeded (429)")
     if code in (401, 403):

@@ -42,19 +42,12 @@ class Config:
     ]
 
     def validate(self) -> None:
-        """Raise ValueError at startup if required env vars are missing.
+        """Validate configuration at startup.
 
-        SEC-03: Fail fast when online mode is configured but API keys absent.
-        Called in create_app() before serving any requests.
+        SEC-03: Currently a no-op. The VT API key is not required at startup
+        because it is configured via the Settings page and checked per-request
+        in the /analyze route (redirects to /settings if missing).
         """
-        # Phase 1: no required API keys (offline only).
-        # Phase 2: uncomment when online mode is added.
-        # if self.VIRUSTOTAL_API_KEY is None:
-        #     raise ValueError(
-        #         "VIRUSTOTAL_API_KEY environment variable is required for online mode. "
-        #         "Set it in your .env file or environment."
-        #     )
-        pass
 
 
 class TestConfig(Config):
