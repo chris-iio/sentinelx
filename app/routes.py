@@ -19,7 +19,8 @@ Security:
     - Background enrichment runs in daemon thread — does not block Flask (Pitfall 4)
 """
 import uuid
-from threading import Thread
+from collections import OrderedDict
+from threading import Lock, Thread
 
 from flask import Blueprint, current_app, flash, jsonify, redirect, render_template, request, url_for
 
@@ -36,8 +37,10 @@ bp = Blueprint("main", __name__)
 
 # Module-level registry mapping job_id -> EnrichmentOrchestrator instance.
 # Allows the polling endpoint to look up the orchestrator for a given job.
-# This dict is shared across threads; orchestrators are written once then only read.
-_orchestrators: dict[str, EnrichmentOrchestrator] = {}
+# SEC-18: Bounded OrderedDict with LRU eviction to prevent memory exhaustion.
+_MAX_ORCHESTRATORS = 200
+_orchestrators: OrderedDict[str, EnrichmentOrchestrator] = OrderedDict()
+_orch_lock = Lock()
 
 
 def _mask_key(key: str | None) -> str | None:
@@ -125,7 +128,10 @@ def analyze():
         adapters_list = [vt_adapter, mb_adapter, tf_adapter]
         orchestrator = EnrichmentOrchestrator(adapters=adapters_list)
 
-        _orchestrators[job_id] = orchestrator
+        with _orch_lock:
+            _orchestrators[job_id] = orchestrator
+            while len(_orchestrators) > _MAX_ORCHESTRATORS:
+                _orchestrators.popitem(last=False)
 
         thread = Thread(
             target=orchestrator.enrich_all,
@@ -202,7 +208,8 @@ def enrichment_status(job_id: str):
         - verdict: "malicious" | "clean" | "no_data" (ENRC-05)
         - scan_date: ISO8601 timestamp or None (ENRC-05)
     """
-    orchestrator = _orchestrators.get(job_id)
+    with _orch_lock:
+        orchestrator = _orchestrators.get(job_id)
     if orchestrator is None:
         return jsonify({"error": "job not found"}), 404
 

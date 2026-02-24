@@ -17,6 +17,7 @@ For tests, pass a tmp_path to isolate from the real filesystem:
 from __future__ import annotations
 
 import configparser
+import os
 from pathlib import Path
 
 CONFIG_PATH = Path.home() / ".sentinelx" / "config.ini"
@@ -54,11 +55,13 @@ class ConfigStore:
         Args:
             key: The API key to store.
         """
-        self._config_path.parent.mkdir(parents=True, exist_ok=True)
+        self._config_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         cfg = configparser.ConfigParser()
         cfg.read(self._config_path)
         if _SECTION not in cfg:
             cfg[_SECTION] = {}
         cfg[_SECTION][_KEY_NAME] = key
-        with open(self._config_path, "w") as fh:
+        # SEC-17: Write with owner-only permissions (0o600) to protect API key
+        fd = os.open(str(self._config_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as fh:
             cfg.write(fh)
