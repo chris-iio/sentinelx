@@ -54,10 +54,11 @@ class Config:
 
 
 class TestConfig(Config):
-    """Test configuration. Disables CSRF and sets SERVER_NAME for test client."""
+    """Test configuration. Disables CSRF and rate limiting for test client."""
 
     TESTING: bool = True
     WTF_CSRF_ENABLED: bool = False
+    RATELIMIT_ENABLED: bool = False  # SEC-21: disable rate limiting in tests
     SERVER_NAME: str = "localhost"
     # Use a fixed secret key for deterministic test behaviour
     SECRET_KEY: str = "test-secret-key-not-for-production"

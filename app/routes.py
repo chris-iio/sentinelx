@@ -24,6 +24,7 @@ from threading import Lock, Thread
 
 from flask import Blueprint, current_app, flash, jsonify, redirect, render_template, request, url_for
 
+from app import limiter
 from app.enrichment.adapters.malwarebazaar import MBAdapter
 from app.enrichment.adapters.threatfox import TFAdapter
 from app.enrichment.adapters.virustotal import VTAdapter
@@ -80,12 +81,14 @@ def _serialize_result(r: EnrichmentResult | EnrichmentError) -> dict:
 
 
 @bp.route("/")
+@limiter.limit("60 per minute")
 def index():
     """Home page — shows the IOC paste form."""
     return render_template("index.html")
 
 
 @bp.route("/analyze", methods=["POST"])
+@limiter.limit("10 per minute")
 def analyze():
     """IOC analysis endpoint.
 
@@ -158,6 +161,7 @@ def analyze():
 
 
 @bp.route("/settings", methods=["GET"])
+@limiter.limit("30 per minute")
 def settings_get():
     """Settings page — shows the API key configuration form.
 
@@ -172,6 +176,7 @@ def settings_get():
 
 
 @bp.route("/settings", methods=["POST"])
+@limiter.limit("10 per minute")
 def settings_post():
     """Save the VT API key submitted via the settings form.
 
@@ -192,6 +197,7 @@ def settings_post():
 
 
 @bp.route("/enrichment/status/<job_id>", methods=["GET"])
+@limiter.limit("120 per minute")
 def enrichment_status(job_id: str):
     """Return the current enrichment progress for a job as JSON.
 

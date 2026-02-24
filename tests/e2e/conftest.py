@@ -48,7 +48,7 @@ def live_server():
     The server shuts down automatically when the session ends.
     """
     port = _find_free_port()
-    app = create_app({"TESTING": False, "WTF_CSRF_ENABLED": True})
+    app = create_app({"TESTING": False, "WTF_CSRF_ENABLED": True, "RATELIMIT_ENABLED": False})
     server = make_server("127.0.0.1", port, app)
 
     thread = threading.Thread(target=server.serve_forever, daemon=True)

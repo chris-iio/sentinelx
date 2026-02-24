@@ -6,11 +6,15 @@ Security scaffold is established here, before any routes are registered:
 - SEC-11: TRUSTED_HOSTS rejects requests with unexpected Host header (400)
 - SEC-12: MAX_CONTENT_LENGTH caps input size before route handler runs
 - SEC-15: debug=False hardcoded — never from environment
+- SEC-21: Rate limiting via Flask-Limiter (in-memory, per-route)
 """
 from flask import Flask
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from flask_wtf.csrf import CSRFProtect
 
 csrf = CSRFProtect()
+limiter = Limiter(key_func=get_remote_address, storage_uri="memory://")
 
 
 def create_app(config_override: dict | None = None) -> Flask:
@@ -50,6 +54,9 @@ def create_app(config_override: dict | None = None) -> Flask:
     # SEC-10: CSRF protection on all POST endpoints
     csrf.init_app(app)
 
+    # SEC-21: Rate limiting — in-memory, per-route limits defined in routes.py
+    limiter.init_app(app)
+
     # Validate configuration: fail fast if required env vars missing (SEC-03)
     config.validate()
 
@@ -73,6 +80,11 @@ def create_app(config_override: dict | None = None) -> Flask:
     @app.errorhandler(413)
     def request_entity_too_large(error):  # type: ignore[return]
         return "Input too large. Maximum paste size is 512 KB.", 413
+
+    # SEC-21: User-friendly 429 response for rate-limited requests
+    @app.errorhandler(429)
+    def rate_limit_exceeded(error):  # type: ignore[return]
+        return "Too many requests. Please wait a moment and try again.", 429
 
     # Security invariants enforced by architecture (SEC-08, SEC-13, SEC-14):
     # - Jinja2 autoescaping is ON by default for .html templates (SEC-08)
