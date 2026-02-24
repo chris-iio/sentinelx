@@ -662,6 +662,43 @@ body {
     margin-left: 0.5rem;
 }
 
+/* No-data collapsed section — groups providers with no record */
+.enrichment-nodata-section {
+    margin-top: 0.35rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background-color: var(--bg-tertiary);
+}
+
+.enrichment-nodata-summary {
+    padding: 0.35rem 0.75rem;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+    user-select: none;
+    list-style: none;
+}
+
+.enrichment-nodata-summary::-webkit-details-marker {
+    display: none;
+}
+
+.enrichment-nodata-summary::before {
+    content: "\25B6";
+    font-size: 0.5rem;
+    margin-right: 0.4rem;
+    display: inline-block;
+    transition: transform 0.15s ease;
+}
+
+.enrichment-nodata-section[open] .enrichment-nodata-summary::before {
+    transform: rotate(90deg);
+}
+
+.enrichment-nodata-section .provider-result-row {
+    padding: 0.25rem 0.75rem;
+}
+
 .btn-export {
     background-color: var(--btn-secondary-bg);
     color: var(--text-primary);

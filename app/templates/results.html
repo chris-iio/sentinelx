@@ -37,7 +37,7 @@
         <div class="enrich-progress-bar">
             <div class="enrich-progress-fill" id="enrich-progress-fill" style="width:0%;"></div>
         </div>
-        <span class="enrich-progress-text" id="enrich-progress-text">Enriching 0/{{ enrichable_count }} IOCs...</span>
+        <span class="enrich-progress-text" id="enrich-progress-text">0/{{ enrichable_count }} providers complete</span>
     </div>
     {% endif %}
 
@@ -89,7 +89,7 @@
                             </td>
                         </tr>
                         {% if mode == "online" and job_id %}
-                        <tr class="ioc-enrichment-row" data-ioc-value="{{ ioc.value }}">
+                        <tr class="ioc-enrichment-row" data-ioc-value="{{ ioc.value }}" data-ioc-type="{{ ioc.type.value }}">
                             <td colspan="3">
                                 <div class="enrichment-slot">
                                     <div class="spinner-wrapper">
