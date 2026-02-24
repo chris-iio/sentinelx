@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import base64
 import datetime
+import logging
 
 import requests
 import requests.exceptions
@@ -21,6 +22,8 @@ import requests.exceptions
 from app.enrichment.http_safety import TIMEOUT, read_limited, validate_endpoint
 from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.pipeline.models import IOC, IOCType
+
+logger = logging.getLogger(__name__)
 
 VT_BASE = "https://www.virustotal.com/api/v3"
 
@@ -205,5 +208,6 @@ class VTAdapter:
             return EnrichmentError(ioc=ioc, provider="VirusTotal", error="Timeout")
         except requests.exceptions.HTTPError as exc:
             return _map_http_error(ioc, exc)
-        except Exception as exc:
-            return EnrichmentError(ioc=ioc, provider="VirusTotal", error=str(exc))
+        except Exception:
+            logger.exception("Unexpected error during VT lookup for %s", ioc.value)
+            return EnrichmentError(ioc=ioc, provider="VirusTotal", error="Unexpected error during lookup")

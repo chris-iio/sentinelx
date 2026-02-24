@@ -37,6 +37,7 @@ def create_app(config_override: dict | None = None) -> Flask:
     app.config["MAX_CONTENT_LENGTH"] = config.MAX_CONTENT_LENGTH  # SEC-12
     app.config["WTF_CSRF_ENABLED"] = config.WTF_CSRF_ENABLED  # SEC-10
     app.config["ALLOWED_API_HOSTS"] = config.ALLOWED_API_HOSTS
+    app.config["SESSION_COOKIE_SAMESITE"] = config.SESSION_COOKIE_SAMESITE  # SEC-19
 
     # Apply optional test/environment overrides AFTER security defaults are set.
     if config_override:
@@ -64,6 +65,8 @@ def create_app(config_override: dict | None = None) -> Flask:
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "SAMEORIGIN"
         response.headers["Referrer-Policy"] = "no-referrer"
+        # SEC-20: Restrict browser features not needed by this app
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), payment=()"
         return response
 
     # SEC-12: User-friendly 413 response with size limit stated

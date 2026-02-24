@@ -15,12 +15,16 @@ Security:
 """
 from __future__ import annotations
 
+import logging
+
 import iocextract
 from iocsearcher.searcher import Searcher
 
 from app.pipeline.classifier import classify
 from app.pipeline.models import IOC, IOCType
 from app.pipeline.normalizer import normalize
+
+logger = logging.getLogger(__name__)
 
 # Module-level Searcher — created once, reused across calls (per iocsearcher docs)
 _searcher = Searcher()
@@ -59,33 +63,43 @@ def extract_iocs(text: str) -> list[dict]:
     try:
         for url in iocextract.extract_urls(text, refang=True):
             _add(url, "url")
-    except Exception:
+    except (ValueError, TypeError, AttributeError, UnicodeError):
         pass
+    except Exception:
+        logger.warning("Unexpected error in iocextract URL extraction", exc_info=True)
 
     try:
         for ip in iocextract.extract_ipv4s(text, refang=True):
             _add(ip, "ipv4")
-    except Exception:
+    except (ValueError, TypeError, AttributeError, UnicodeError):
         pass
+    except Exception:
+        logger.warning("Unexpected error in iocextract IPv4 extraction", exc_info=True)
 
     try:
         for ip6 in iocextract.extract_ipv6s(text):
             _add(ip6, "ipv6")
-    except Exception:
+    except (ValueError, TypeError, AttributeError, UnicodeError):
         pass
+    except Exception:
+        logger.warning("Unexpected error in iocextract IPv6 extraction", exc_info=True)
 
     try:
         for h in iocextract.extract_hashes(text):
             _add(h, "hash")
-    except Exception:
+    except (ValueError, TypeError, AttributeError, UnicodeError):
         pass
+    except Exception:
+        logger.warning("Unexpected error in iocextract hash extraction", exc_info=True)
 
     # --- iocsearcher extractions ---
     try:
         for ioc in _searcher.search_data(text):
             _add(ioc.value, ioc.name)
-    except Exception:
+    except (ValueError, TypeError, AttributeError, UnicodeError):
         pass
+    except Exception:
+        logger.warning("Unexpected error in iocsearcher extraction", exc_info=True)
 
     return list(candidates.values())
 

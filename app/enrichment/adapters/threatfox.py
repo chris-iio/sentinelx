@@ -20,12 +20,16 @@ Thread safety: a fresh requests.Session is created inside each lookup() call.
 """
 from __future__ import annotations
 
+import logging
+
 import requests
 import requests.exceptions
 
 from app.enrichment.http_safety import TIMEOUT, read_limited, validate_endpoint
 from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.pipeline.models import IOC, IOCType
+
+logger = logging.getLogger(__name__)
 
 TF_BASE = "https://threatfox-api.abuse.ch/api/v1/"
 CONFIDENCE_THRESHOLD = 75  # >=75 = malicious, <75 = suspicious (per user decision)
@@ -179,5 +183,6 @@ class TFAdapter:
         except requests.exceptions.HTTPError as exc:
             code = exc.response.status_code if exc.response is not None else "unknown"
             return EnrichmentError(ioc=ioc, provider="ThreatFox", error=f"HTTP {code}")
-        except Exception as exc:
-            return EnrichmentError(ioc=ioc, provider="ThreatFox", error=str(exc))
+        except Exception:
+            logger.exception("Unexpected error during ThreatFox lookup for %s", ioc.value)
+            return EnrichmentError(ioc=ioc, provider="ThreatFox", error="Unexpected error during lookup")

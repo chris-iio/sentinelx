@@ -30,6 +30,9 @@ class Config:
     MAX_CONTENT_LENGTH: int = 512 * 1024  # 512 KB — rejects oversize before route runs (SEC-12)
     WTF_CSRF_ENABLED: bool = True
 
+    # SEC-19: SameSite cookie attribute for CSRF defense-in-depth
+    SESSION_COOKIE_SAMESITE: str = "Lax"
+
     # Debug: hardcoded to False — never read from env (SEC-15)
     DEBUG: bool = False
 
