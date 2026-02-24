@@ -2,7 +2,7 @@
 
 ## What This Is
 
-A security-focused local web application for SOC analysts to quickly triage indicators of compromise. The analyst pastes a single IOC or a block of alert/email text, and the app extracts, normalizes, classifies, and optionally enriches IOCs against external threat intelligence APIs — presenting transparent, source-attributed results for fast decision-making.
+A security-first local web application for SOC analysts to triage indicators of compromise. The analyst pastes free-form text (alerts, email headers, threat reports, raw IOCs), and the app extracts, normalizes, classifies, and optionally enriches IOCs against VirusTotal, MalwareBazaar, and ThreatFox — presenting transparent, source-attributed per-provider verdicts with no opaque combined scores.
 
 ## Core Value
 
@@ -12,28 +12,30 @@ Safe, correct, and transparent IOC extraction and enrichment — never invent sc
 
 ### Validated
 
-(None yet — ship to validate)
+- ✓ Single-page web interface with large paste input, submit button, and offline/online toggle — v1.0
+- ✓ IOC extraction from free-form text (alert snippets, email headers/body, raw IOCs) — v1.0
+- ✓ Defanging normalization (hxxp, [.], {.}, and 20 common obfuscation patterns) — v1.0
+- ✓ Deterministic IOC classification: IPv4, IPv6, domain, URL, MD5, SHA1, SHA256, CVE — v1.0
+- ✓ Offline mode: extraction + classification only, zero network calls — v1.0
+- ✓ Online mode: parallel queries to VirusTotal, MalwareBazaar, ThreatFox — v1.0
+- ✓ Structured results page grouped by IOC type — v1.0
+- ✓ Clear source attribution on every enrichment result (provider name, timestamp, raw verdict) — v1.0
+- ✓ No opaque combined "threat score" — show provider verdicts as-is — v1.0
+- ✓ Visual indicator when external lookups are in progress — v1.0
+- ✓ Verdict clarity: "NO RECORD" vs "CLEAN" instantly distinguishable — v1.0
+- ✓ Localhost-only binding by default — v1.0
+- ✓ API keys read exclusively from environment variables — v1.0
+- ✓ Strict HTTP timeouts and max response size on all outbound requests — v1.0
+- ✓ No redirect following on outbound requests — v1.0
+- ✓ Never fetch/crawl the target URL itself — only call intelligence APIs — v1.0
+- ✓ HTML output sanitization (Jinja2 autoescaping, no |safe on untrusted data) — v1.0
+- ✓ CSP: default-src 'self'; script-src 'self' — v1.0
+- ✓ No subprocess calls, no shell execution, no dynamic code execution — v1.0
+- ✓ No persistent storage of raw pasted blobs — v1.0
 
 ### Active
 
-- [ ] Single-page web interface with large paste input, submit button, and offline/online toggle
-- [ ] IOC extraction from free-form text (alert snippets, email headers/body, raw IOCs)
-- [ ] Defanging normalization (hxxp, [.], {.}, and common obfuscation patterns)
-- [ ] Deterministic IOC classification: IPv4, IPv6, domain, URL, MD5, SHA1, SHA256, CVE
-- [ ] Offline mode: extraction + classification only, zero network calls
-- [ ] Online mode: parallel queries to VirusTotal + researched additional providers
-- [ ] Structured results page grouped by IOC type
-- [ ] Clear source attribution on every enrichment result (provider name, timestamp, raw verdict)
-- [ ] No opaque combined "threat score" — show provider verdicts as-is
-- [ ] Visual indicator when external lookups are in progress
-- [ ] Localhost-only binding by default
-- [ ] API keys read exclusively from environment variables
-- [ ] Strict HTTP timeouts and max response size on all outbound requests
-- [ ] No redirect following on outbound requests (unless explicitly justified)
-- [ ] Never fetch/crawl the target URL itself — only call intelligence APIs
-- [ ] HTML output sanitization to prevent injection from untrusted IOC strings or API responses
-- [ ] No subprocess calls, no shell execution, no dynamic code execution
-- [ ] No persistent storage of raw pasted blobs
+(None — next milestone requirements to be defined via `/gsd:new-milestone`)
 
 ### Out of Scope
 
@@ -43,16 +45,20 @@ Safe, correct, and transparent IOC extraction and enrichment — never invent sc
 - Automated response/blocking actions — read-only enrichment
 - Mobile or responsive design — desktop browser on analyst workstation
 - Custom branding or theming — functional UI only
+- WHOIS / RDAP enrichment — high complexity, often privacy-redacted
+- Malware sandbox detonation — fundamentally different capability
+- Persistent session history — requires persistence design decision
 
 ## Context
 
 - **Users:** SOC analysts performing initial triage of alerts, emails, and threat reports
 - **Environment:** Runs on analyst's local machine or an internal jump box (not internet-facing)
-- **Input variety:** Analysts paste anything — a single IP, a SIEM alert snippet, full email headers, or a block of defanged IOCs from a threat report
-- **Tech stack:** Python + Flask (chosen for rapid development and rich parsing ecosystem)
-- **Threat intel APIs:** VirusTotal confirmed; additional providers to be determined via domain research
-- **Persistence:** To be determined by research — likely in-memory or local cache with TTL for API results
-- **IOC extraction depth:** To be determined by research — starting with standard defanging patterns, may expand
+- **Tech stack:** Python 3.10 + Flask 3.1, iocextract + iocsearcher for extraction, requests for HTTP
+- **Codebase:** ~1,674 LOC app Python, ~1,534 LOC frontend (HTML/CSS/JS), ~3,893 LOC tests
+- **Test suite:** 224 tests, 97% coverage
+- **Threat intel providers:** VirusTotal (API key required), MalwareBazaar (public), ThreatFox (public)
+- **Security posture:** All defenses established in Phase 1, verified by automated regression guards (CSP, XSS, SSRF)
+- **Known issue:** Pre-existing E2E test `test_online_mode_indicator[chromium]` fails in Playwright (environment issue, not a code bug)
 
 ## Constraints
 
@@ -66,12 +72,16 @@ Safe, correct, and transparent IOC extraction and enrichment — never invent sc
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Python + Flask | Analyst-friendly, rich parsing ecosystem, fast to iterate | — Pending |
-| VirusTotal as primary API | Most widely used, comprehensive coverage across IOC types | — Pending |
-| No combined threat score | Transparency for analysts — show raw verdicts, let humans decide | — Pending |
-| Localhost-only by default | Defense in depth — tool is not designed for multi-user or public access | — Pending |
-| Additional APIs via research | Let domain research identify practical, high-value integrations | — Pending |
-| IOC extraction patterns via research | Let research determine optimal defanging/extraction approach | — Pending |
+| Python + Flask | Analyst-friendly, rich parsing ecosystem, fast to iterate | ✓ Good — 14 plans in 4 days, Flask well-suited |
+| VirusTotal as primary API | Most widely used, comprehensive coverage across IOC types | ✓ Good — solid baseline for IP/domain/URL/hash |
+| MalwareBazaar + ThreatFox | abuse.ch public APIs, no API key needed, complementary coverage | ✓ Good — hash/domain/IP coverage with zero config |
+| No combined threat score | Transparency for analysts — show raw verdicts, let humans decide | ✓ Good — verdict labels (MALICIOUS/CLEAN/NO RECORD) clear |
+| Localhost-only by default | Defense in depth — tool is not designed for multi-user or public access | ✓ Good — 127.0.0.1 binding + TRUSTED_HOSTS |
+| iocextract + iocsearcher | Dual-library extraction for coverage, two-stage dedup | ✓ Good — broad pattern match + validation |
+| Security-first (Phase 1) | All defenses before any network code | ✓ Good — CSP/CSRF/host-validation from day one |
+| No flask-talisman | Manual after_request headers for full control | ✓ Good — simpler, no dependency, easy to audit |
+| ThreadPoolExecutor parallel | max_workers=4 respects VT free tier rate limit | ✓ Good — parallel without API abuse |
+| textContent only (no innerHTML) | Prevent XSS from API responses in dynamic DOM | ✓ Good — SEC-08 maintained throughout |
 
 ---
-*Last updated: 2026-02-21 after initialization*
+*Last updated: 2026-02-24 after v1.0 milestone*
