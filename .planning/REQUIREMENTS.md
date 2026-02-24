@@ -31,7 +31,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **UI-03**: In online mode, enrichment queries fire after extraction and classification complete
 - [x] **UI-04**: Results page groups extracted IOCs by type (IPv4, IPv6, domain, URL, hash, CVE)
 - [x] **UI-05**: Visual loading indicator is displayed while enrichment API calls are in progress
-- [ ] **UI-06**: Results clearly distinguish between "no data found" (provider has no record) and "clean verdict" (provider explicitly reports benign)
+- [x] **UI-06**: Results clearly distinguish between "no data found" (provider has no record) and "clean verdict" (provider explicitly reports benign)
 - [x] **UI-07**: UI visually indicates whether the current submission used offline or online mode
 
 ### Security
@@ -111,7 +111,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | UI-03 | Phase 2 | Complete |
 | UI-04 | Phase 1 | Complete |
 | UI-05 | Phase 2 | Complete |
-| UI-06 | Phase 4 | Pending |
+| UI-06 | Phase 4 | Complete |
 | UI-07 | Phase 1 | Complete |
 | SEC-01 | Phase 1 | Complete |
 | SEC-02 | Phase 1 | Complete |

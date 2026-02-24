@@ -91,7 +91,7 @@ Plans:
   2. A curl check on the app's security headers confirms CSP is set to `default-src 'self'; script-src 'self'`
   3. A grep of the codebase finds zero uses of `|safe` on any field sourced from user input or API responses
   4. A grep of the codebase finds zero outbound HTTP calls where the URL is constructed from an IOC value
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 Plans:
 - [ ] 04-01-PLAN.md — Verdict clarity UX: badge labels, no-data collapsed section, progress counter, per-provider loading
 - [ ] 04-02-PLAN.md — Security audit tests: CSP, template safety, HTTP safety verification
@@ -107,4 +107,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 3.1 → 4
 | 2. Core Enrichment | 4/4 | Complete | 2026-02-21 |
 | 3. Additional TI Providers | 3/3 | Complete | 2026-02-21 |
 | 3.1. Integration Fixes and Git Hygiene | 1/1 | Complete | 2026-02-22 |
-| 4. UX Polish and Security Verification | 0/2 | Not started | - |
+| 4. UX Polish and Security Verification | 1/2 | In Progress|  |
