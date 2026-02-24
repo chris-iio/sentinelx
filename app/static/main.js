@@ -122,6 +122,28 @@
     // Verdict severity order for worst-verdict computation (highest index = most severe)
     var VERDICT_SEVERITY = ["error", "no_data", "clean", "suspicious", "malicious"];
 
+    // Human-readable display labels for verdict strings (UI-06)
+    var VERDICT_LABELS = {
+        "malicious":  "MALICIOUS",
+        "suspicious": "SUSPICIOUS",
+        "clean":      "CLEAN",
+        "no_data":    "NO RECORD",
+        "error":      "ERROR"
+    };
+
+    // Expected provider counts per IOC type
+    // VT supports all 7 enrichable types, MB supports md5/sha1/sha256, TF supports all 7
+    // => hashes get 3 providers, others (ipv4/ipv6/domain/url) get 2 providers
+    var IOC_PROVIDER_COUNTS = {
+        "ipv4":   2,
+        "ipv6":   2,
+        "domain": 2,
+        "url":    2,
+        "md5":    3,
+        "sha1":   3,
+        "sha256": 3
+    };
+
     function verdictSeverity(verdict) {
         var idx = VERDICT_SEVERITY.indexOf(verdict);
         return idx === -1 ? -1 : idx;
@@ -143,6 +165,9 @@
         // iocVerdicts[ioc_value] = [{provider, verdict, summaryText}]
         var iocVerdicts = {};
 
+        // Per-IOC result count tracking for pending indicator
+        var iocResultCounts = {};
+
         var intervalId = setInterval(function () {
             fetch("/enrichment/status/" + jobId).then(function (resp) {
                 if (!resp.ok) return null;
@@ -159,7 +184,7 @@
                     var dedupKey = result.ioc_value + "|" + result.provider;
                     if (!rendered[dedupKey]) {
                         rendered[dedupKey] = true;
-                        renderEnrichmentResult(result, iocVerdicts);
+                        renderEnrichmentResult(result, iocVerdicts, iocResultCounts);
                     }
                 }
 
@@ -193,10 +218,68 @@
 
         var pct = total > 0 ? Math.round((done / total) * 100) : 0;
         fill.style.width = pct + "%";
-        text.textContent = done + "/" + total + " IOCs enriched";
+        text.textContent = done + "/" + total + " providers complete";
     }
 
-    function renderEnrichmentResult(result, iocVerdicts) {
+    // Get or create the collapsed no-data section inside an enrichment slot
+    function getOrCreateNodataSection(slot) {
+        var existing = slot.querySelector(".enrichment-nodata-section");
+        if (existing) return existing;
+
+        var details = document.createElement("details");
+        details.className = "enrichment-nodata-section";
+        // Collapsed by default — no open attribute
+
+        var summary = document.createElement("summary");
+        summary.className = "enrichment-nodata-summary";
+        summary.textContent = "1 provider: no record";
+
+        details.appendChild(summary);
+        slot.appendChild(details);
+        return details;
+    }
+
+    // Update the summary count text after appending a no_data result row
+    function updateNodataSummary(detailsEl) {
+        var rows = detailsEl.querySelectorAll(".provider-result-row");
+        var count = rows.length;
+        var summary = detailsEl.querySelector("summary");
+        if (!summary) return;
+        summary.textContent = count + " provider" + (count !== 1 ? "s" : "") + ": no record";
+    }
+
+    // Show or update the pending provider indicator after first result for an IOC
+    function updatePendingIndicator(slot, targetRow, receivedCount) {
+        var iocType = targetRow ? targetRow.getAttribute("data-ioc-type") : "";
+        var totalExpected = IOC_PROVIDER_COUNTS[iocType] || 0;
+        var remaining = totalExpected - receivedCount;
+
+        if (remaining <= 0) {
+            // All providers accounted for — remove waiting indicator if present
+            var existingIndicator = slot.querySelector(".enrichment-waiting-text");
+            if (existingIndicator) {
+                slot.removeChild(existingIndicator);
+            }
+            return;
+        }
+
+        // Find or create the waiting indicator span
+        var indicator = slot.querySelector(".enrichment-waiting-text");
+        if (!indicator) {
+            indicator = document.createElement("span");
+            indicator.className = "enrichment-waiting-text enrichment-pending-text";
+            // Insert before nodata section if present, otherwise append
+            var nodataSection = slot.querySelector(".enrichment-nodata-section");
+            if (nodataSection) {
+                slot.insertBefore(indicator, nodataSection);
+            } else {
+                slot.appendChild(indicator);
+            }
+        }
+        indicator.textContent = remaining + " provider" + (remaining !== 1 ? "s" : "") + " still loading...";
+    }
+
+    function renderEnrichmentResult(result, iocVerdicts, iocResultCounts) {
         // Find the enrichment row for this IOC value
         var rows = document.querySelectorAll(".ioc-enrichment-row");
         var targetRow = null;
@@ -217,6 +300,10 @@
             slot.removeChild(spinnerWrapper);
         }
 
+        // Track received count for this IOC before rendering
+        iocResultCounts[result.ioc_value] = (iocResultCounts[result.ioc_value] || 0) + 1;
+        var receivedCount = iocResultCounts[result.ioc_value];
+
         // Build provider result row div (appended, not replacing)
         var providerRow = document.createElement("div");
         providerRow.className = "provider-result-row";
@@ -231,7 +318,8 @@
         if (result.type === "result") {
             verdict = result.verdict || "no_data";
             badge.className = "verdict-badge verdict-" + verdict;
-            badge.textContent = verdict;
+            // Use VERDICT_LABELS for display — never raw verdict strings (UI-06)
+            badge.textContent = VERDICT_LABELS[verdict] || verdict.toUpperCase();
 
             var verdictText = "";
             if (verdict === "malicious") {
@@ -239,9 +327,11 @@
             } else if (verdict === "suspicious") {
                 verdictText = "Suspicious";
             } else if (verdict === "clean") {
-                verdictText = "Clean";
+                // Explicitly mention engine count to distinguish from no_data (UI-06)
+                verdictText = "Clean — scanned by " + result.total_engines + " engines";
             } else {
-                verdictText = "No data";
+                // no_data: analyst-friendly phrasing (UI-06)
+                verdictText = "Not in " + result.provider + " database";
             }
 
             var scanDateStr = formatDate(result.scan_date);
@@ -252,14 +342,26 @@
             // Error result
             verdict = "error";
             badge.className = "verdict-badge verdict-error";
-            badge.textContent = "Error";
+            badge.textContent = VERDICT_LABELS["error"] || "ERROR";
             detail.textContent = result.provider + ": " + result.error;
             summaryText = result.provider + ": error — " + result.error;
         }
 
         providerRow.appendChild(badge);
         providerRow.appendChild(detail);
-        slot.appendChild(providerRow);
+
+        if (verdict === "no_data") {
+            // Route no_data results into the collapsed details section (UI-06)
+            var nodataSection = getOrCreateNodataSection(slot);
+            nodataSection.appendChild(providerRow);
+            updateNodataSummary(nodataSection);
+        } else {
+            // Active results go directly into the slot
+            slot.appendChild(providerRow);
+        }
+
+        // Update pending indicator for remaining providers
+        updatePendingIndicator(slot, targetRow, receivedCount);
 
         // Track per-IOC verdicts for worst-verdict computation
         if (!iocVerdicts[result.ioc_value]) {
