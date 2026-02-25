@@ -7,17 +7,17 @@ See: .planning/PROJECT.md
 ## Position
 
 **Milestone:** v1.1 UX Overhaul
-**Current phase:** Phase 8 of 10 — Input Page Polish
-**Current Plan:** Plan 02 at checkpoint — Task 1 complete, awaiting human-verify (2/2)
-**Status:** In progress — awaiting human verification
+**Current phase:** Phase 9 of 10 — Export & Copy Enhancements
+**Current Plan:** Plan 01 (not started)
+**Status:** Ready — Phase 8 complete, awaiting Phase 9 plan
 
 ## Progress
 
 Phases 1-4: v1.0 MVP ✓
 Phase 6: Foundation — Tailwind + Alpine + Card Layout ✓ (commit 148b15b)
 Phase 7: Filtering & Search — Plan 01 complete ✓ (commit 71f39a8), Plan 02 complete ✓ (commit 533b4b8)
-Phase 8: Input Page Polish — Plan 01 complete ✓ (commits 020e192, e128086), Plan 02 Task 1 complete ✓ (commit c11c976)
-Phases 9-10: Not started
+Phase 8: Input Page Polish — Plan 01 complete ✓ (commits 020e192, e128086), Plan 02 complete ✓ (commit c11c976, human-verified 2026-02-25)
+Phase 9-10: Not started
 
 ## Recent Decisions
 
@@ -34,6 +34,10 @@ Phases 9-10: Not started
 - Toggle widget uses data-mode attribute on wrapper div as single source of truth; CSS [data-mode=online] selectors drive thumb position and label color without JS class manipulation
 - Hidden input name=mode carries form POST value — Flask route unchanged (backward compatible)
 - paste-feedback uses style.display toggle matching existing main.js patterns; inline style=display:none in HTML is safe under current CSP
+- select_mode() retained as wrapper around toggle_mode() to keep extract_iocs() backward compatible without cascading test changes
+- Paste event simulated via page.evaluate() — sets textarea.value then dispatches paste event, satisfying setTimeout(0) deferred handler
+- expect_mode() asserts hidden input value (authoritative Flask POST field), not aria-pressed state
+- Human visual verification confirmed toggle switch, paste feedback, and reactive submit label all work correctly in browser (Phase 8 complete)
 
 ## Pending Todos
 
@@ -46,4 +50,4 @@ None
 ## Session Continuity
 
 Last session: 2026-02-25
-Stopped at: 08-02-PLAN.md Task 2 checkpoint (human-verify) — E2E tests updated, awaiting visual verification of toggle switch, paste feedback, and reactive label in browser
+Stopped at: Completed 08-02-PLAN.md — Phase 8 Input Page Polish fully complete. Ready to plan Phase 9 (Export & Copy Enhancements).

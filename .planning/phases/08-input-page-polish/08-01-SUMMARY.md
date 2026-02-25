@@ -114,6 +114,17 @@ None — no external service configuration required.
 - CSS and JS patterns established for the toggle are self-contained and don't require changes to base.html or any other template
 - Pre-existing E2E failures: `test_form_elements_present`, `test_mode_select_options`, `test_offline_mode_selected_by_default`, `test_mode_toggle_to_online`, `test_mode_toggle_back_to_offline` — all expected; Plan 02 will fix them
 
+## Self-Check: PASSED
+
+All files verified present, all commits found in git log:
+- FOUND: app/templates/index.html
+- FOUND: app/static/src/input.css
+- FOUND: app/static/main.js
+- FOUND: app/static/dist/style.css
+- FOUND: .planning/phases/08-input-page-polish/08-01-SUMMARY.md
+- FOUND commit: 020e192 (feat: toggle switch + paste feedback)
+- FOUND commit: e128086 (chore: regenerated CSS)
+
 ---
 *Phase: 08-input-page-polish*
 *Completed: 2026-02-25*

@@ -24,7 +24,7 @@ Full details: `milestones/v1.0-ROADMAP.md`
 
 - [ ] **Phase 6: Foundation — Tailwind + Alpine + Card Layout** - Set up Tailwind CLI and Alpine.js, rewrite results page from table to card layout with summary dashboard
 - [x] **Phase 7: Filtering & Search** - Verdict filter bar, IOC type pills, text search, sticky filters, grouped-by-type toggle (completed 2026-02-25)
-- [ ] **Phase 8: Input Page Polish** - Toggle switch, paste feedback, contextual submit button, larger textarea
+- [x] **Phase 8: Input Page Polish** - Toggle switch, paste feedback, contextual submit button, larger textarea (completed 2026-02-25)
 - [ ] **Phase 9: Export & Copy Enhancements** - Export dropdown (text/JSON/CSV), structured clipboard, bulk selection, copy selected
 - [ ] **Phase 10: Settings & Polish** - Test connection button, accessibility audit, performance verification, final E2E pass
 
@@ -66,10 +66,10 @@ Plans:
   1. Mode selector is a toggle switch (not dropdown) with clear "Offline" / "Online" labels and visual state
   2. Pasting text into the textarea shows "N characters pasted" feedback near the input
   3. Submit button reads "Extract IOCs" in offline mode and "Extract & Enrich" in online mode, updating reactively on toggle
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 Plans:
-- [ ] 08-01-PLAN.md — Toggle switch, paste feedback, reactive submit label (HTML + CSS + JS)
-- [ ] 08-02-PLAN.md — E2E test updates + human visual verification
+- [x] 08-01-PLAN.md — Toggle switch, paste feedback, reactive submit label (HTML + CSS + JS)
+- [x] 08-02-PLAN.md — E2E test updates + human visual verification
 
 ### Phase 9: Export & Copy Enhancements
 **Goal**: Analyst can export triage results in multiple formats and selectively copy IOCs, eliminating manual copy-paste into reports
@@ -109,6 +109,6 @@ Phases execute in numeric order: 6 → 7 → 8 → 9 → 10
 | 4. UX Polish and Security Verification | v1.0 | 2/2 | Complete | 2026-02-24 |
 | 6. Foundation — Tailwind + Alpine + Card Layout | v1.1 | 0/? | Pending | — |
 | 7. Filtering & Search | 2/2 | Complete   | 2026-02-25 | — |
-| 8. Input Page Polish | 1/2 | In Progress|  | — |
+| 8. Input Page Polish | 2/2 | Complete   | 2026-02-25 | 2026-02-25 |
 | 9. Export & Copy Enhancements | v1.1 | 0/? | Pending | — |
 | 10. Settings & Polish | v1.1 | 0/? | Pending | — |
