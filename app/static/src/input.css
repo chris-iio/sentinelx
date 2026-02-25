@@ -421,7 +421,7 @@
         font-size: 0.8rem;
         font-weight: 600;
         border: 1px solid;
-        cursor: default;
+        cursor: pointer;
     }
 
     .verdict-dashboard-badge[data-verdict="malicious"] {
@@ -451,6 +451,166 @@
     .verdict-dashboard-count {
         font-family: var(--font-mono);
         font-weight: 700;
+    }
+
+    /* ---- Filter Bar ---- */
+
+    .filter-bar-wrapper {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        background-color: var(--bg-primary);
+        padding: 0.75rem 0;
+        border-bottom: 1px solid var(--border);
+        margin-bottom: 1rem;
+    }
+
+    .filter-bar {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .filter-verdict-buttons {
+        display: flex;
+        gap: 0.35rem;
+        flex-wrap: wrap;
+    }
+
+    .filter-btn {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.3rem 0.65rem;
+        border-radius: 2rem;
+        border: 1px solid var(--border);
+        background-color: var(--bg-secondary);
+        color: var(--text-secondary);
+        font-family: var(--font-ui);
+        font-size: 0.78rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+    }
+
+    .filter-btn:hover {
+        border-color: var(--border-hover);
+        color: var(--text-primary);
+    }
+
+    .filter-btn--active {
+        background-color: var(--bg-tertiary);
+        border-color: var(--text-secondary);
+        color: var(--text-primary);
+        font-weight: 600;
+    }
+
+    /* Verdict-colored active states for filter buttons */
+    .filter-btn--malicious.filter-btn--active {
+        border-color: var(--verdict-malicious);
+        color: var(--verdict-malicious);
+        background-color: rgba(248, 81, 73, 0.15);
+    }
+
+    .filter-btn--suspicious.filter-btn--active {
+        border-color: var(--verdict-suspicious);
+        color: var(--verdict-suspicious);
+        background-color: rgba(245, 158, 11, 0.15);
+    }
+
+    .filter-btn--clean.filter-btn--active {
+        border-color: var(--verdict-clean);
+        color: var(--verdict-clean);
+        background-color: rgba(63, 185, 80, 0.15);
+    }
+
+    .filter-btn--no_data.filter-btn--active {
+        border-color: var(--verdict-no-data);
+        color: var(--verdict-no-data);
+        background-color: rgba(139, 148, 158, 0.15);
+    }
+
+    /* ---- IOC Type Filter Pills ---- */
+
+    .filter-type-pills {
+        display: flex;
+        gap: 0.35rem;
+        flex-wrap: wrap;
+    }
+
+    .filter-pill {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.2rem 0.5rem;
+        border-radius: 2rem;
+        border: 1px solid var(--border);
+        background-color: var(--bg-secondary);
+        color: var(--text-secondary);
+        font-family: var(--font-mono);
+        font-size: 0.7rem;
+        font-weight: 600;
+        letter-spacing: 0.03em;
+        cursor: pointer;
+        transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+    }
+
+    .filter-pill:hover {
+        border-color: var(--border-hover);
+        color: var(--text-primary);
+    }
+
+    .filter-pill--active {
+        background-color: var(--bg-tertiary);
+        border-color: var(--text-secondary);
+        color: var(--text-primary);
+    }
+
+    /* Type-colored active states for filter pills */
+    .filter-pill--ipv4.filter-pill--active   { border-color: var(--accent-ipv4);   color: var(--accent-ipv4); }
+    .filter-pill--ipv6.filter-pill--active   { border-color: var(--accent-ipv6);   color: var(--accent-ipv6); }
+    .filter-pill--domain.filter-pill--active { border-color: var(--accent-domain); color: var(--accent-domain); }
+    .filter-pill--url.filter-pill--active    { border-color: var(--accent-url);    color: var(--accent-url); }
+    .filter-pill--md5.filter-pill--active    { border-color: var(--accent-md5);    color: var(--accent-md5); }
+    .filter-pill--sha1.filter-pill--active   { border-color: var(--accent-sha1);   color: var(--accent-sha1); }
+    .filter-pill--sha256.filter-pill--active { border-color: var(--accent-sha256); color: var(--accent-sha256); }
+    .filter-pill--cve.filter-pill--active    { border-color: var(--accent-cve);    color: var(--accent-cve); }
+
+    /* ---- Filter Search Input ---- */
+
+    .filter-search {
+        display: flex;
+    }
+
+    .filter-search-input {
+        width: 100%;
+        max-width: 300px;
+        padding: 0.35rem 0.75rem;
+        background-color: var(--bg-secondary);
+        color: var(--text-primary);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        font-family: var(--font-mono);
+        font-size: 0.8rem;
+        transition: border-color 0.15s ease;
+    }
+
+    .filter-search-input:focus {
+        outline: none;
+        border-color: var(--accent-ipv4);
+        box-shadow: 0 0 0 3px rgba(74, 158, 255, 0.1);
+    }
+
+    .filter-search-input::placeholder {
+        color: var(--text-secondary);
+        opacity: 0.6;
+    }
+
+    /* ---- No Filter Results Message ---- */
+
+    .filter-no-results {
+        text-align: center;
+        padding: 2rem 1rem;
+        color: var(--text-secondary);
+        font-size: 0.875rem;
     }
 
     /* ---- IOC Cards Grid ---- */
@@ -760,6 +920,14 @@
 
         .back-link {
             margin-left: 0;
+        }
+
+        .filter-bar-wrapper {
+            padding: 0.5rem 0;
+        }
+
+        .filter-search-input {
+            max-width: 100%;
         }
     }
 }
