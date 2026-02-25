@@ -53,7 +53,10 @@ Plans:
   3. Typing in the search box filters cards in real-time (<100ms response) by IOC value substring match
   4. Filter bar remains visible (sticky) when scrolling through 50+ cards
   5. Dashboard verdict badges act as filter shortcuts — clicking one applies the corresponding verdict filter
+**Plans:** 2 plans
 Plans:
+- [ ] 07-01-PLAN.md — Alpine filter component + filter bar HTML + CSS + safelist
+- [ ] 07-02-PLAN.md — E2E tests for filter interactions + visual verification
 
 ### Phase 8: Input Page Polish
 **Goal**: Input page communicates mode clearly and provides immediate feedback on paste actions, reducing analyst confusion about what will happen when they submit
@@ -102,7 +105,7 @@ Phases execute in numeric order: 6 → 7 → 8 → 9 → 10
 | 3.1. Integration Fixes and Git Hygiene | v1.0 | 1/1 | Complete | 2026-02-22 |
 | 4. UX Polish and Security Verification | v1.0 | 2/2 | Complete | 2026-02-24 |
 | 6. Foundation — Tailwind + Alpine + Card Layout | v1.1 | 0/? | Pending | — |
-| 7. Filtering & Search | v1.1 | 0/? | Pending | — |
+| 7. Filtering & Search | v1.1 | 0/2 | Planned | — |
 | 8. Input Page Polish | v1.1 | 0/? | Pending | — |
 | 9. Export & Copy Enhancements | v1.1 | 0/? | Pending | — |
 | 10. Settings & Polish | v1.1 | 0/? | Pending | — |
