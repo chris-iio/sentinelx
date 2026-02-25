@@ -16,7 +16,10 @@ class IndexPage:
         self.textarea = page.locator("#ioc-text")
         self.submit_btn = page.locator("#submit-btn")
         self.clear_btn = page.locator("#clear-btn")
-        self.mode_select = page.locator("#mode-select")
+        self.mode_toggle_widget = page.locator("#mode-toggle-widget")
+        self.mode_toggle_btn = page.locator("#mode-toggle-btn")
+        self.mode_input = page.locator("#mode-input")
+        self.paste_feedback = page.locator("#paste-feedback")
         self.error_alert = page.locator(".alert-error")
         self.site_logo = page.locator(".site-logo")
         self.site_tagline = page.locator(".site-tagline")
@@ -29,9 +32,23 @@ class IndexPage:
         """Fill the IOC textarea with the given text."""
         self.textarea.fill(text)
 
+    def toggle_mode(self) -> None:
+        """Click the mode toggle button to switch between offline/online."""
+        self.mode_toggle_btn.click()
+
+    def get_mode(self) -> str:
+        """Return the current mode value from the hidden input."""
+        return self.mode_input.input_value()
+
+    def expect_mode(self, mode: str) -> None:
+        """Assert the hidden mode input has the expected value."""
+        expect(self.mode_input).to_have_value(mode)
+
     def select_mode(self, mode: str) -> None:
-        """Select analysis mode: 'offline' or 'online'."""
-        self.mode_select.select_option(mode)
+        """Set mode to the given value by toggling if needed."""
+        current = self.mode_input.input_value()
+        if current != mode:
+            self.toggle_mode()
 
     def submit(self) -> None:
         """Click the submit button."""

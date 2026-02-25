@@ -33,7 +33,7 @@ def test_form_elements_present(page: Page, index_url: str) -> None:
     expect(idx.textarea).to_be_visible()
     expect(idx.submit_btn).to_be_visible()
     expect(idx.clear_btn).to_be_visible()
-    expect(idx.mode_select).to_be_visible()
+    expect(idx.mode_toggle_widget).to_be_visible()
 
 
 def test_textarea_placeholder(page: Page, index_url: str) -> None:
@@ -48,23 +48,24 @@ def test_textarea_placeholder(page: Page, index_url: str) -> None:
     assert "CVE-" in placeholder
 
 
-def test_mode_select_options(page: Page, index_url: str) -> None:
-    """Mode select offers offline and online options."""
+def test_mode_toggle_labels(page: Page, index_url: str) -> None:
+    """Mode toggle shows Offline and Online labels."""
     idx = IndexPage(page, index_url.rstrip("/"))
     idx.goto()
 
-    options = idx.mode_select.locator("option")
-    expect(options).to_have_count(2)
-    expect(options.nth(0)).to_have_text("Offline (no network calls)")
-    expect(options.nth(1)).to_have_text("Online (enrichment via APIs)")
+    offline_label = idx.mode_toggle_widget.locator(".mode-toggle-label--offline")
+    online_label = idx.mode_toggle_widget.locator(".mode-toggle-label--online")
+    expect(offline_label).to_have_text("Offline")
+    expect(online_label).to_have_text("Online")
 
 
-def test_offline_mode_selected_by_default(page: Page, index_url: str) -> None:
-    """Offline mode is selected by default."""
+def test_offline_mode_by_default(page: Page, index_url: str) -> None:
+    """Offline mode is active by default."""
     idx = IndexPage(page, index_url.rstrip("/"))
     idx.goto()
 
-    expect(idx.mode_select).to_have_value("offline")
+    idx.expect_mode("offline")
+    expect(idx.mode_toggle_btn).to_have_attribute("aria-pressed", "false")
 
 
 def test_security_headers(page: Page, index_url: str) -> None:
