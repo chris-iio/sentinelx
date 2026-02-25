@@ -29,9 +29,9 @@
 
 ### Input Page
 
-- [ ] **INPUT-01**: Mode selector is a toggle switch (not a dropdown) clearly labeled "Offline" / "Online" with visual state indicator
-- [ ] **INPUT-02**: Paste event shows character count feedback ("N characters pasted") near the textarea
-- [ ] **INPUT-03**: Submit button label changes based on mode — "Extract IOCs" in offline mode, "Extract & Enrich" in online mode
+- [x] **INPUT-01**: Mode selector is a toggle switch (not a dropdown) clearly labeled "Offline" / "Online" with visual state indicator
+- [x] **INPUT-02**: Paste event shows character count feedback ("N characters pasted") near the textarea
+- [x] **INPUT-03**: Submit button label changes based on mode — "Extract IOCs" in offline mode, "Extract & Enrich" in online mode
 
 ### Export & Copy
 
@@ -73,9 +73,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | FILTER-02 | Phase 7 | Complete |
 | FILTER-03 | Phase 7 | Complete |
 | FILTER-04 | Phase 7 | Complete |
-| INPUT-01 | Phase 8 | Pending |
-| INPUT-02 | Phase 8 | Pending |
-| INPUT-03 | Phase 8 | Pending |
+| INPUT-01 | Phase 8 | Complete |
+| INPUT-02 | Phase 8 | Complete |
+| INPUT-03 | Phase 8 | Complete |
 | EXPORT-01 | Phase 9 | Pending |
 | EXPORT-02 | Phase 9 | Pending |
 | EXPORT-03 | Phase 9 | Pending |

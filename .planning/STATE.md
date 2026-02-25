@@ -7,16 +7,17 @@ See: .planning/PROJECT.md
 ## Position
 
 **Milestone:** v1.1 UX Overhaul
-**Current phase:** Phase 7 of 10 — Filtering & Search
-**Current Plan:** Not started
-**Status:** Milestone complete
+**Current phase:** Phase 8 of 10 — Input Page Polish
+**Current Plan:** Plan 01 complete (1/2)
+**Status:** In progress
 
 ## Progress
 
 Phases 1-4: v1.0 MVP ✓
 Phase 6: Foundation — Tailwind + Alpine + Card Layout ✓ (commit 148b15b)
 Phase 7: Filtering & Search — Plan 01 complete ✓ (commit 71f39a8), Plan 02 complete ✓ (commit 533b4b8)
-Phases 8-10: Not started
+Phase 8: Input Page Polish — Plan 01 complete ✓ (commits 020e192, e128086)
+Phases 9-10: Not started
 
 ## Recent Decisions
 
@@ -30,6 +31,9 @@ Phases 8-10: Not started
 - Dashboard verdict badges made clickable with toggle pattern (click once to filter, click again to reset to all)
 - Alpine CSP vendor file removed — no longer needed since Phase 7 switched to pure vanilla JS initFilterBar()
 - Human visual verification confirmed filter bar works: verdict buttons, type pills, text search, sticky positioning all functional in browser
+- Toggle widget uses data-mode attribute on wrapper div as single source of truth; CSS [data-mode=online] selectors drive thumb position and label color without JS class manipulation
+- Hidden input name=mode carries form POST value — Flask route unchanged (backward compatible)
+- paste-feedback uses style.display toggle matching existing main.js patterns; inline style=display:none in HTML is safe under current CSP
 
 ## Pending Todos
 
@@ -42,4 +46,4 @@ None
 ## Session Continuity
 
 Last session: 2026-02-25
-Stopped at: Completed 07-02-PLAN.md — Phase 7 Filtering & Search fully complete (human checkpoint approved)
+Stopped at: Completed 08-01-PLAN.md — Input Page Polish Plan 01 complete (toggle switch, paste feedback, reactive submit label)
