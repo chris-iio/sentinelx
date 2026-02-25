@@ -3,7 +3,8 @@
 ## Milestones
 
 - ✅ **v1.0 MVP** — Phases 1-4 (shipped 2026-02-24)
-- 🔲 **v1.1 UX Overhaul** — Phases 6-10 (in progress)
+- ✅ **v1.1 UX Overhaul** — Phases 6-8 (shipped 2026-02-25, reduced scope)
+- 📋 **v1.2 Modern UI Redesign** — Phases 11-14 (planned)
 
 ## Phases
 
@@ -20,85 +21,88 @@ Full details: `milestones/v1.0-ROADMAP.md`
 
 </details>
 
-### v1.1 UX Overhaul (Phases 6-10)
+<details>
+<summary>✅ v1.1 UX Overhaul (Phases 6-8) — SHIPPED 2026-02-25</summary>
 
-- [ ] **Phase 6: Foundation — Tailwind + Alpine + Card Layout** - Set up Tailwind CLI and Alpine.js, rewrite results page from table to card layout with summary dashboard
-- [x] **Phase 7: Filtering & Search** - Verdict filter bar, IOC type pills, text search, sticky filters, grouped-by-type toggle (completed 2026-02-25)
-- [x] **Phase 8: Input Page Polish** - Toggle switch, paste feedback, contextual submit button, larger textarea (completed 2026-02-25)
-- [ ] **Phase 9: Export & Copy Enhancements** - Export dropdown (text/JSON/CSV), structured clipboard, bulk selection, copy selected
-- [ ] **Phase 10: Settings & Polish** - Test connection button, accessibility audit, performance verification, final E2E pass
+- [x] Phase 6: Foundation — Tailwind + Alpine + Card Layout — completed 2026-02-24
+- [x] Phase 7: Filtering & Search — completed 2026-02-25
+- [x] Phase 8: Input Page Polish — completed 2026-02-25
+
+Phases 9-10 dropped: EXPORT and POLISH requirements superseded by v1.2 full redesign.
+
+Full details: `milestones/v1.1-ROADMAP.md`
+
+</details>
+
+### v1.2 Modern UI Redesign (Phases 11-14)
+
+- [ ] **Phase 11: Foundation — Design Tokens & Base CSS** - Establish verified zinc/emerald/teal token system, self-host Inter Variable and JetBrains Mono fonts, configure dark-first CSS infrastructure with WCAG AA verified contrast
+- [ ] **Phase 12: Shared Component Elevation** - Unify verdict badges, standardize focus rings, elevate buttons and form elements, create icon macro, redesign header/footer
+- [ ] **Phase 13: Results Page Redesign** - Extract Jinja2 template partials, add card hover elevation, dot indicators, shimmer skeleton loader, KPI dashboard, empty state, and search icon
+- [ ] **Phase 14: Input & Settings Page Redesign** - Refine textarea and submit button, upgrade mode toggle, animate paste feedback, redesign settings with section cards and monospace API key field
 
 ## Phase Details
 
-### Phase 6: Foundation — Tailwind + Alpine + Card Layout
-**Goal**: Results page displays IOCs as severity-sorted cards with a summary dashboard, powered by Tailwind CSS and Alpine.js, with all E2E tests passing on the new layout
-**Depends on**: v1.0 complete (Phase 4)
-**Requirements**: LAYOUT-01, LAYOUT-02, LAYOUT-03, LAYOUT-04, LAYOUT-05
+### Phase 11: Foundation — Design Tokens & Base CSS
+**Goal**: A verified dark-first design token system is in place — every color token passes WCAG AA contrast, Inter Variable and JetBrains Mono load from static fonts, and browser dark-mode signals are correct — with no structural template changes yet
+**Depends on**: v1.1 complete (Phase 8)
+**Requirements**: FOUND-01, FOUND-02, FOUND-03, FOUND-04, FOUND-05, FOUND-06, FOUND-07, FOUND-08
 **Success Criteria** (what must be TRUE):
-  1. Tailwind CSS standalone CLI is integrated into the build process (Makefile target) and generates production CSS
-  2. Alpine.js CSP build loads from `/static/` without CSP violations — verified by browser console check
-  3. Results page displays each IOC as a card with: value, type badge, verdict label, and provider details
-  4. Cards are sorted by verdict severity: malicious → suspicious → clean → no data
-  5. Summary dashboard at top shows clickable verdict count badges with correct totals
-  6. E2E tests pass with updated page object selectors targeting the new card layout
+  1. All IOC value displays render in JetBrains Mono Variable (verifiable by inspecting font-family in DevTools on any results page IOC)
+  2. All UI chrome text renders in Inter Variable (verifiable by inspecting font-family on the input page label or header)
+  3. Every text/background token pair in the design system passes WCAG AA: 4.5:1 for normal text, 3:1 for UI components (verified via contrast checker against documented token values)
+  4. Pasting into the settings API key field then refreshing does not produce a yellow autofill flash — the field stays dark zinc
+  5. Browser scrollbar and native form controls render in dark mode (no light scrollbar on dark background in any OS-level dark-aware browser)
+**Plans**: TBD
+
 Plans:
 
-### Phase 7: Filtering & Search
-**Goal**: Analyst can instantly narrow results by verdict, IOC type, or text search — reducing visual noise from 50+ IOCs to just the ones that matter
-**Depends on**: Phase 6
-**Requirements**: FILTER-01, FILTER-02, FILTER-03, FILTER-04
+### Phase 12: Shared Component Elevation
+**Goal**: All shared UI primitives — verdict badges, buttons, focus rings, form elements, header/footer, icon macro — are elevated to the target design system so every subsequent page starts from a consistent premium baseline
+**Depends on**: Phase 11
+**Requirements**: COMP-01, COMP-02, COMP-03, COMP-04, COMP-05, COMP-06, COMP-07
 **Success Criteria** (what must be TRUE):
-  1. Clicking "Malicious" in the verdict filter bar shows only malicious IOC cards, hiding all others
-  2. IOC type pills only appear for types present in current results (no phantom pills)
-  3. Typing in the search box filters cards in real-time (<100ms response) by IOC value substring match
-  4. Filter bar remains visible (sticky) when scrolling through 50+ cards
-  5. Dashboard verdict badges act as filter shortcuts — clicking one applies the corresponding verdict filter
-**Plans:** 2/2 plans complete
-Plans:
-- [ ] 07-01-PLAN.md — Alpine filter component + filter bar HTML + CSS + safelist
-- [ ] 07-02-PLAN.md — E2E tests for filter interactions + visual verification
+  1. All five verdict badge states (malicious, suspicious, clean, no record, pending) use the tinted-background + colored-border + colored-text pattern — the solid amber suspicious badge is gone
+  2. Every interactive element (buttons, filter pills, toggle, search input, links) shows a visible 2px teal outline on keyboard focus — no element has an invisible or box-shadow-only focus indicator
+  3. Primary (emerald), secondary (zinc), and ghost button variants are visually distinct with hover and disabled states that are observable without DevTools
+  4. The sticky filter bar has a frosted-glass blur effect visible when scrolling past cards (content visible through the blurred bar background)
+  5. Header and footer use Inter Variable at the correct weight hierarchy with emerald accent treatment on the brand name
+**Plans**: TBD
 
-### Phase 8: Input Page Polish
-**Goal**: Input page communicates mode clearly and provides immediate feedback on paste actions, reducing analyst confusion about what will happen when they submit
-**Depends on**: Phase 6 (needs Tailwind/Alpine foundation)
-**Requirements**: INPUT-01, INPUT-02, INPUT-03
-**Success Criteria** (what must be TRUE):
-  1. Mode selector is a toggle switch (not dropdown) with clear "Offline" / "Online" labels and visual state
-  2. Pasting text into the textarea shows "N characters pasted" feedback near the input
-  3. Submit button reads "Extract IOCs" in offline mode and "Extract & Enrich" in online mode, updating reactively on toggle
-**Plans:** 2/2 plans complete
-Plans:
-- [x] 08-01-PLAN.md — Toggle switch, paste feedback, reactive submit label (HTML + CSS + JS)
-- [x] 08-02-PLAN.md — E2E test updates + human visual verification
-
-### Phase 9: Export & Copy Enhancements
-**Goal**: Analyst can export triage results in multiple formats and selectively copy IOCs, eliminating manual copy-paste into reports
-**Depends on**: Phase 6 (needs card layout with checkboxes)
-**Requirements**: EXPORT-01, EXPORT-02, EXPORT-03, EXPORT-04
-**Success Criteria** (what must be TRUE):
-  1. Export dropdown offers three options: Copy to clipboard (text), Download JSON, Download CSV
-  2. Clipboard copy produces structured text with headers (IOC, Type, Verdict, Provider Details) not raw dump
-  3. Each IOC card has a checkbox; "Select All" and "Copy Selected" buttons appear when any box is checked
-  4. Bulk operations respect the current filter — "Select All" selects only visible (filtered) cards
-  5. Downloaded JSON contains all enrichment data; CSV contains flattened summary fields
 Plans:
 
-### Phase 10: Settings & Polish
-**Goal**: Settings page validates API configuration, all UI elements are keyboard-accessible with ARIA labels, and the app performs smoothly at scale
-**Depends on**: Phase 9 (all features complete)
-**Requirements**: POLISH-01, POLISH-02, POLISH-03
+### Phase 13: Results Page Redesign
+**Goal**: The results page is refactored into Jinja2 template partials and elevated to the target visual design — card hover elevation, dot type indicators, shimmer skeleton, KPI dashboard, empty state, and search icon prefix all in place
+**Depends on**: Phase 12
+**Requirements**: RESULTS-01, RESULTS-02, RESULTS-03, RESULTS-04, RESULTS-05, RESULTS-06, RESULTS-07, RESULTS-08
 **Success Criteria** (what must be TRUE):
-  1. "Test Connection" button in settings sends a lightweight VT API call and shows success/failure feedback
-  2. All interactive elements (cards, filters, buttons, toggles, checkboxes) are keyboard-navigable with visible focus indicators
-  3. Screen reader can navigate results: ARIA labels on cards, filters, and export controls
-  4. Results page with 100+ IOC cards renders without jank and filters respond in <100ms
-  5. Full E2E test suite passes covering the complete v1.1 feature set
+  1. All existing Playwright E2E tests pass after template partial extraction (before any visual changes) — `_ioc_card.html`, `_verdict_dashboard.html`, `_filter_bar.html`, and `_enrichment_slot.html` exist as separate partial files
+  2. Hovering an IOC card produces a visible lift effect (card moves up slightly with shadow) within 150ms
+  3. Each IOC type badge shows a small colored dot before the type label, distinguishable without reading the text
+  4. When no IOCs are found in results, a centered shield/search icon with "No IOCs detected" headline and supported-types body text is displayed instead of an empty list
+  5. During enrichment loading, each pending card shows animated shimmer rectangles instead of a spinner — the animation is smooth and does not jank during scroll
+  6. The verdict stat dashboard displays four KPI cards with large monospace numbers and colored top borders, not inline pills
+**Plans**: TBD
+
+Plans:
+
+### Phase 14: Input & Settings Page Redesign
+**Goal**: The input page and settings page are visually consistent with the v1.2 design system — refined textarea, mode-aware submit button, upgraded toggle, animated paste feedback, and Vercel-style settings section cards with monospace API key field
+**Depends on**: Phase 13
+**Requirements**: PAGE-01, PAGE-02, PAGE-03, PAGE-04, PAGE-05, PAGE-06
+**Success Criteria** (what must be TRUE):
+  1. The submit button is emerald when Online mode is active and zinc (secondary) when Offline mode is active, updating instantly on toggle without page reload
+  2. Pasting text into the textarea triggers a character count notification that appears and fades out via CSS animation (not an abrupt show/hide)
+  3. The settings page displays each section in a bordered card with the section name on the left and any action button on the right of a header row
+  4. The API key input field renders in JetBrains Mono with a show/hide toggle button and a "Configured" or "Not configured" status badge that reflects actual key presence
+**Plans**: TBD
+
 Plans:
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 6 → 7 → 8 → 9 → 10
+Phases execute in numeric order: 11 → 12 → 13 → 14
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -107,8 +111,10 @@ Phases execute in numeric order: 6 → 7 → 8 → 9 → 10
 | 3. Additional TI Providers | v1.0 | 3/3 | Complete | 2026-02-21 |
 | 3.1. Integration Fixes and Git Hygiene | v1.0 | 1/1 | Complete | 2026-02-22 |
 | 4. UX Polish and Security Verification | v1.0 | 2/2 | Complete | 2026-02-24 |
-| 6. Foundation — Tailwind + Alpine + Card Layout | v1.1 | 0/? | Pending | — |
-| 7. Filtering & Search | 2/2 | Complete   | 2026-02-25 | — |
-| 8. Input Page Polish | 2/2 | Complete   | 2026-02-25 | 2026-02-25 |
-| 9. Export & Copy Enhancements | v1.1 | 0/? | Pending | — |
-| 10. Settings & Polish | v1.1 | 0/? | Pending | — |
+| 6. Foundation — Tailwind + Alpine + Card Layout | v1.1 | 0/? | Complete | 2026-02-24 |
+| 7. Filtering & Search | v1.1 | 2/2 | Complete | 2026-02-25 |
+| 8. Input Page Polish | v1.1 | 2/2 | Complete | 2026-02-25 |
+| 11. Foundation — Design Tokens & Base CSS | v1.2 | 0/? | Not started | — |
+| 12. Shared Component Elevation | v1.2 | 0/? | Not started | — |
+| 13. Results Page Redesign | v1.2 | 0/? | Not started | — |
+| 14. Input & Settings Page Redesign | v1.2 | 0/? | Not started | — |
