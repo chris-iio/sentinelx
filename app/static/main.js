@@ -15,9 +15,15 @@
  * - Export button: copies all IOCs + worst-verdict enrichment summaries to clipboard
  * - Card verdict updates: colored borders, verdict labels, dashboard counts
  * - Severity sorting: cards reorder by verdict severity as results arrive
+ * - Filter bar: verdict/type/search filtering via vanilla JS (no Alpine needed)
  *
  * XSS safety (SEC-08): All API response data is rendered via .textContent or
  * .setAttribute only. No .innerHTML concatenation of external strings.
+ *
+ * Filter bar implementation note: the Alpine CSP build (alpine.csp.min.js) does
+ * not support inline JS expressions, $el, $event, or function calls with arguments
+ * in x-data directives.  The filter bar therefore uses pure vanilla JS for all
+ * interactivity.  Alpine is still loaded for any future CSP-safe uses.
  */
 
 (function () {
@@ -563,6 +569,129 @@
         });
     }
 
+    // ---- Filter bar: verdict/type/search (FILTER-01, FILTER-02, FILTER-03) ----
+    //
+    // Pure vanilla JS — no Alpine needed.  All state is stored on the filter-root
+    // element via data attributes so CSS can read the active state for styling.
+    //
+    // Verdict buttons carry data-filter-verdict="<verdict>".
+    // Type pills carry data-filter-type="<type>".
+    // Search input has id="filter-search-input".
+    // Cards carry data-verdict, data-ioc-type, data-ioc-value attributes.
+
+    function initFilterBar() {
+        var filterRoot = document.getElementById("filter-root");
+        if (!filterRoot) return;  // Not on results page
+
+        var filterState = {
+            verdict: "all",
+            type: "all",
+            search: ""
+        };
+
+        // Apply filter state: show/hide each card and update active button styles
+        function applyFilter() {
+            var cards = filterRoot.querySelectorAll(".ioc-card");
+            var verdictLC = filterState.verdict.toLowerCase();
+            var typeLC = filterState.type.toLowerCase();
+            var searchLC = filterState.search.toLowerCase();
+
+            for (var i = 0; i < cards.length; i++) {
+                var card = cards[i];
+                var cardVerdict = (card.getAttribute("data-verdict") || "").toLowerCase();
+                var cardType = (card.getAttribute("data-ioc-type") || "").toLowerCase();
+                var cardValue = (card.getAttribute("data-ioc-value") || "").toLowerCase();
+
+                var verdictMatch = verdictLC === "all" || cardVerdict === verdictLC;
+                var typeMatch = typeLC === "all" || cardType === typeLC;
+                var searchMatch = searchLC === "" || cardValue.indexOf(searchLC) !== -1;
+
+                card.style.display = (verdictMatch && typeMatch && searchMatch) ? "" : "none";
+            }
+
+            // Update active state on verdict buttons
+            var verdictBtns = filterRoot.querySelectorAll("[data-filter-verdict]");
+            for (var j = 0; j < verdictBtns.length; j++) {
+                var btn = verdictBtns[j];
+                var btnVerdict = btn.getAttribute("data-filter-verdict");
+                if (btnVerdict === filterState.verdict) {
+                    btn.classList.add("filter-btn--active");
+                } else {
+                    btn.classList.remove("filter-btn--active");
+                }
+            }
+
+            // Update active state on type pills
+            var typePills = filterRoot.querySelectorAll("[data-filter-type]");
+            for (var k = 0; k < typePills.length; k++) {
+                var pill = typePills[k];
+                var pillType = pill.getAttribute("data-filter-type");
+                if (pillType === filterState.type) {
+                    pill.classList.add("filter-pill--active");
+                } else {
+                    pill.classList.remove("filter-pill--active");
+                }
+            }
+        }
+
+        // Verdict button click handler
+        var verdictBtns = filterRoot.querySelectorAll("[data-filter-verdict]");
+        for (var i = 0; i < verdictBtns.length; i++) {
+            (function (btn) {
+                btn.addEventListener("click", function () {
+                    var verdict = btn.getAttribute("data-filter-verdict");
+                    if (verdict === "all") {
+                        filterState.verdict = "all";
+                    } else {
+                        // Toggle: clicking active verdict resets to 'all'
+                        filterState.verdict = filterState.verdict === verdict ? "all" : verdict;
+                    }
+                    applyFilter();
+                });
+            })(verdictBtns[i]);
+        }
+
+        // Type pill click handler
+        var typePills = filterRoot.querySelectorAll("[data-filter-type]");
+        for (var j = 0; j < typePills.length; j++) {
+            (function (pill) {
+                pill.addEventListener("click", function () {
+                    var type = pill.getAttribute("data-filter-type");
+                    if (type === "all") {
+                        filterState.type = "all";
+                    } else {
+                        filterState.type = filterState.type === type ? "all" : type;
+                    }
+                    applyFilter();
+                });
+            })(typePills[j]);
+        }
+
+        // Search input handler
+        var searchInput = document.getElementById("filter-search-input");
+        if (searchInput) {
+            searchInput.addEventListener("input", function () {
+                filterState.search = searchInput.value;
+                applyFilter();
+            });
+        }
+
+        // Verdict dashboard badge click handler (toggle filter from dashboard)
+        var dashboard = document.getElementById("verdict-dashboard");
+        if (dashboard) {
+            var dashBadges = dashboard.querySelectorAll(".verdict-dashboard-badge[data-verdict]");
+            for (var k = 0; k < dashBadges.length; k++) {
+                (function (badge) {
+                    badge.addEventListener("click", function () {
+                        var verdict = badge.getAttribute("data-verdict");
+                        filterState.verdict = filterState.verdict === verdict ? "all" : verdict;
+                        applyFilter();
+                    });
+                })(dashBadges[k]);
+            }
+        }
+    }
+
     // ---- Settings page: show/hide API key toggle ----
 
     function initSettingsPage() {
@@ -585,6 +714,7 @@
     function init() {
         initSubmitButton();
         initCopyButtons();
+        initFilterBar();
         initEnrichmentPolling();
         initExportButton();
         initSettingsPage();

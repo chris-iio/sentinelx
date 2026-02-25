@@ -50,25 +50,14 @@
     </div>
     {% else %}
 
-    <div x-data="{
-      activeVerdict: 'all',
-      activeType: 'all',
-      searchQuery: '',
-      cardVisible(card) {
-        var v = this.activeVerdict === 'all' || card.dataset.verdict === this.activeVerdict;
-        var t = this.activeType === 'all' || card.dataset.iocType === this.activeType;
-        var s = this.searchQuery === '' || card.dataset.iocValue.toLowerCase().includes(this.searchQuery.toLowerCase());
-        return v && t && s;
-      }
-    }" id="filter-root">
+    {# Filter root — vanilla JS filtering managed by initFilterBar() in main.js #}
+    <div id="filter-root">
 
     {# Verdict dashboard — counts updated by JS as enrichment results arrive #}
     {% if mode == "online" and job_id %}
     <div class="verdict-dashboard" id="verdict-dashboard">
         <span class="verdict-dashboard-badge"
               data-verdict="malicious"
-              @click="activeVerdict = activeVerdict === 'malicious' ? 'all' : 'malicious'"
-              style="cursor: pointer;"
               role="button"
               tabindex="0"
         >
@@ -76,8 +65,6 @@
         </span>
         <span class="verdict-dashboard-badge"
               data-verdict="suspicious"
-              @click="activeVerdict = activeVerdict === 'suspicious' ? 'all' : 'suspicious'"
-              style="cursor: pointer;"
               role="button"
               tabindex="0"
         >
@@ -85,8 +72,6 @@
         </span>
         <span class="verdict-dashboard-badge"
               data-verdict="clean"
-              @click="activeVerdict = activeVerdict === 'clean' ? 'all' : 'clean'"
-              style="cursor: pointer;"
               role="button"
               tabindex="0"
         >
@@ -94,8 +79,6 @@
         </span>
         <span class="verdict-dashboard-badge"
               data-verdict="no_data"
-              @click="activeVerdict = activeVerdict === 'no_data' ? 'all' : 'no_data'"
-              style="cursor: pointer;"
               role="button"
               tabindex="0"
         >
@@ -105,28 +88,30 @@
     {% endif %}
 
     {# Filter bar — visible in both online and offline modes #}
+    {# All interaction is handled by initFilterBar() in main.js via data-filter-value attributes #}
     <div class="filter-bar-wrapper">
       <div class="filter-bar">
-        {# Verdict filter buttons (FILTER-01) #}
+        {# Verdict filter buttons (FILTER-01) — data-filter-value read by JS click handler #}
         <div class="filter-verdict-buttons">
-          <button type="button" class="filter-btn" :class="{ 'filter-btn--active': activeVerdict === 'all' }" @click="activeVerdict = 'all'">All</button>
-          <button type="button" class="filter-btn filter-btn--malicious" :class="{ 'filter-btn--active': activeVerdict === 'malicious' }" @click="activeVerdict = activeVerdict === 'malicious' ? 'all' : 'malicious'">Malicious</button>
-          <button type="button" class="filter-btn filter-btn--suspicious" :class="{ 'filter-btn--active': activeVerdict === 'suspicious' }" @click="activeVerdict = activeVerdict === 'suspicious' ? 'all' : 'suspicious'">Suspicious</button>
-          <button type="button" class="filter-btn filter-btn--clean" :class="{ 'filter-btn--active': activeVerdict === 'clean' }" @click="activeVerdict = activeVerdict === 'clean' ? 'all' : 'clean'">Clean</button>
-          <button type="button" class="filter-btn filter-btn--no_data" :class="{ 'filter-btn--active': activeVerdict === 'no_data' }" @click="activeVerdict = activeVerdict === 'no_data' ? 'all' : 'no_data'">No Data</button>
+          <button type="button" class="filter-btn filter-btn--active" data-filter-verdict="all">All</button>
+          <button type="button" class="filter-btn filter-btn--malicious" data-filter-verdict="malicious">Malicious</button>
+          <button type="button" class="filter-btn filter-btn--suspicious" data-filter-verdict="suspicious">Suspicious</button>
+          <button type="button" class="filter-btn filter-btn--clean" data-filter-verdict="clean">Clean</button>
+          <button type="button" class="filter-btn filter-btn--no_data" data-filter-verdict="no_data">No Data</button>
         </div>
 
         {# IOC type pills — only rendered for types present in results (FILTER-02) #}
+        {# data-filter-type read by JS click handler #}
         <div class="filter-type-pills">
-          <button type="button" class="filter-pill" :class="{ 'filter-pill--active': activeType === 'all' }" @click="activeType = 'all'">All Types</button>
+          <button type="button" class="filter-pill filter-pill--active" data-filter-type="all">All Types</button>
           {% for ioc_type in grouped.keys() %}
-          <button type="button" class="filter-pill filter-pill--{{ ioc_type.value }}" :class="{ 'filter-pill--active': activeType === '{{ ioc_type.value }}' }" @click="activeType = activeType === '{{ ioc_type.value }}' ? 'all' : '{{ ioc_type.value }}'">{{ ioc_type.value | upper }}</button>
+          <button type="button" class="filter-pill filter-pill--{{ ioc_type.value }}" data-filter-type="{{ ioc_type.value }}">{{ ioc_type.value | upper }}</button>
           {% endfor %}
         </div>
 
-        {# Text search (FILTER-03) #}
+        {# Text search (FILTER-03) — id="filter-search-input" used by JS #}
         <div class="filter-search">
-          <input type="search" x-model="searchQuery" placeholder="Search IOCs..." class="filter-search-input" autocomplete="off" />
+          <input type="search" id="filter-search-input" placeholder="Search IOCs..." class="filter-search-input" autocomplete="off" />
         </div>
       </div>
     </div>
@@ -135,7 +120,7 @@
         {# Flatten all IOCs from grouped dict into a flat card list #}
         {% for ioc_type, iocs in grouped.items() %}
             {% for ioc in iocs %}
-            <div class="ioc-card" data-ioc-value="{{ ioc.value }}" data-ioc-type="{{ ioc.type.value }}" data-verdict="no_data" x-show="cardVisible($el)">
+            <div class="ioc-card" data-ioc-value="{{ ioc.value }}" data-ioc-type="{{ ioc.type.value }}" data-verdict="no_data">
                 <div class="ioc-card-header">
                     <code class="ioc-value">{{ ioc.value }}</code>
                     <span class="ioc-type-badge ioc-type-badge--{{ ioc.type.value }}">{{ ioc.type.value | upper }}</span>
@@ -168,7 +153,7 @@
         {% endfor %}
     </div>
 
-    </div>{# end #filter-root (Alpine x-data wrapper) #}
+    </div>{# end #filter-root #}
 
     {% endif %}
 

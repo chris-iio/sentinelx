@@ -88,3 +88,57 @@ class ResultsPage:
     def go_back(self) -> None:
         """Click the 'Back to input' link."""
         self.back_link.click()
+
+    # ---- Filter Bar ----
+
+    @property
+    def filter_bar(self) -> Locator:
+        """The sticky filter bar wrapper."""
+        return self.page.locator(".filter-bar-wrapper")
+
+    @property
+    def filter_verdict_buttons(self) -> Locator:
+        """All verdict filter buttons in the filter bar."""
+        return self.page.locator(".filter-verdict-buttons .filter-btn")
+
+    def filter_by_verdict(self, verdict: str) -> None:
+        """Click the filter button for the given verdict (e.g., 'malicious', 'all')."""
+        label = verdict.replace("_", " ").title()
+        self.page.locator(".filter-btn").filter(has_text=label).click()
+
+    @property
+    def filter_type_pills(self) -> Locator:
+        """All IOC type pills in the filter bar."""
+        return self.page.locator(".filter-type-pills .filter-pill")
+
+    def filter_by_type(self, ioc_type: str) -> None:
+        """Click the type pill for the given IOC type (e.g., 'ipv4')."""
+        self.page.locator(".filter-pill").filter(has_text=ioc_type.upper()).click()
+
+    @property
+    def search_input(self) -> Locator:
+        """The text search input field."""
+        return self.page.locator(".filter-search-input")
+
+    def search(self, query: str) -> None:
+        """Type a search query into the filter search input."""
+        self.search_input.fill(query)
+
+    @property
+    def visible_cards(self) -> Locator:
+        """IOC cards that are currently visible (not hidden by x-show)."""
+        return self.page.locator(".ioc-card:visible")
+
+    @property
+    def hidden_cards(self) -> Locator:
+        """IOC cards that are currently hidden by x-show."""
+        return self.page.locator(".ioc-card:not(:visible)")
+
+    @property
+    def dashboard_badges(self) -> Locator:
+        """All verdict dashboard badge elements."""
+        return self.page.locator(".verdict-dashboard-badge")
+
+    def click_dashboard_badge(self, verdict: str) -> None:
+        """Click the dashboard badge for the given verdict."""
+        self.page.locator(f".verdict-dashboard-badge[data-verdict='{verdict}']").click()
