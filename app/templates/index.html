@@ -27,15 +27,20 @@
                     spellcheck="false"
                     autocomplete="off"
                 ></textarea>
+                <span id="paste-feedback" class="paste-feedback" style="display:none;" aria-live="polite"></span>
             </div>
 
             <div class="form-options">
                 <div class="mode-toggle">
-                    <label class="form-label" for="mode-select">Analysis Mode</label>
-                    <select id="mode-select" name="mode" class="mode-select">
-                        <option value="offline" selected>Offline (no network calls)</option>
-                        <option value="online">Online (enrichment via APIs)</option>
-                    </select>
+                    <label class="form-label">Analysis Mode</label>
+                    <div class="mode-toggle-widget" id="mode-toggle-widget" data-mode="offline">
+                        <span class="mode-toggle-label mode-toggle-label--offline">Offline</span>
+                        <button type="button" class="mode-toggle-track" id="mode-toggle-btn" aria-pressed="false" aria-label="Toggle analysis mode">
+                            <span class="mode-toggle-thumb"></span>
+                        </button>
+                        <span class="mode-toggle-label mode-toggle-label--online">Online</span>
+                    </div>
+                    <input type="hidden" name="mode" id="mode-input" value="offline">
                 </div>
 
                 <div class="form-actions">

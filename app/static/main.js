@@ -50,7 +50,10 @@
         // Also handle paste events (browser may not fire "input" immediately)
         textarea.addEventListener("paste", function () {
             // Defer until after paste content is applied
-            setTimeout(updateSubmitState, 0);
+            setTimeout(function () {
+                updateSubmitState();
+                showPasteFeedback(textarea.value.length);
+            }, 0);
         });
 
         // Initial state (page load with pre-filled content)
@@ -64,6 +67,46 @@
                 textarea.focus();
             });
         }
+    }
+
+    // ---- Mode toggle switch (INPUT-01, INPUT-03) ----
+
+    function initModeToggle() {
+        var widget = document.getElementById("mode-toggle-widget");
+        var toggleBtn = document.getElementById("mode-toggle-btn");
+        var modeInput = document.getElementById("mode-input");
+        if (!widget || !toggleBtn || !modeInput) return;
+
+        toggleBtn.addEventListener("click", function () {
+            var current = widget.getAttribute("data-mode");
+            var next = current === "offline" ? "online" : "offline";
+            widget.setAttribute("data-mode", next);
+            modeInput.value = next;
+            toggleBtn.setAttribute("aria-pressed", next === "online" ? "true" : "false");
+            updateSubmitLabel(next);
+        });
+
+        // Set initial label based on current mode (defensive)
+        updateSubmitLabel(modeInput.value);
+    }
+
+    function updateSubmitLabel(mode) {
+        var submitBtn = document.getElementById("submit-btn");
+        if (!submitBtn) return;
+        submitBtn.textContent = mode === "online" ? "Extract & Enrich" : "Extract IOCs";
+    }
+
+    // ---- Paste character count feedback (INPUT-02) ----
+
+    function showPasteFeedback(charCount) {
+        var feedback = document.getElementById("paste-feedback");
+        if (!feedback) return;
+        feedback.textContent = charCount + " characters pasted";
+        feedback.style.display = "";
+        clearTimeout(feedback._timer);
+        feedback._timer = setTimeout(function () {
+            feedback.style.display = "none";
+        }, 2000);
     }
 
     // ---- Clipboard copy for IOC values ----
@@ -713,6 +756,7 @@
 
     function init() {
         initSubmitButton();
+        initModeToggle();
         initCopyButtons();
         initFilterBar();
         initEnrichmentPolling();
