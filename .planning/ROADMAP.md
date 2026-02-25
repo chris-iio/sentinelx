@@ -66,7 +66,10 @@ Plans:
   1. Mode selector is a toggle switch (not dropdown) with clear "Offline" / "Online" labels and visual state
   2. Pasting text into the textarea shows "N characters pasted" feedback near the input
   3. Submit button reads "Extract IOCs" in offline mode and "Extract & Enrich" in online mode, updating reactively on toggle
+**Plans:** 2 plans
 Plans:
+- [ ] 08-01-PLAN.md — Toggle switch, paste feedback, reactive submit label (HTML + CSS + JS)
+- [ ] 08-02-PLAN.md — E2E test updates + human visual verification
 
 ### Phase 9: Export & Copy Enhancements
 **Goal**: Analyst can export triage results in multiple formats and selectively copy IOCs, eliminating manual copy-paste into reports
@@ -106,6 +109,6 @@ Phases execute in numeric order: 6 → 7 → 8 → 9 → 10
 | 4. UX Polish and Security Verification | v1.0 | 2/2 | Complete | 2026-02-24 |
 | 6. Foundation — Tailwind + Alpine + Card Layout | v1.1 | 0/? | Pending | — |
 | 7. Filtering & Search | 2/2 | Complete   | 2026-02-25 | — |
-| 8. Input Page Polish | v1.1 | 0/? | Pending | — |
+| 8. Input Page Polish | v1.1 | 0/2 | Pending | — |
 | 9. Export & Copy Enhancements | v1.1 | 0/? | Pending | — |
 | 10. Settings & Polish | v1.1 | 0/? | Pending | — |
