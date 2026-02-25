@@ -1,8 +1,25 @@
-# Feature Research
+# Feature Research — UI Patterns for v1.2 Modern Redesign
 
-**Domain:** IOC triage and enrichment tool (local web application for SOC analysts)
-**Researched:** 2026-02-21
-**Confidence:** HIGH (core feature set), MEDIUM (API-specific details), LOW (rate limits without direct verification)
+**Domain:** Premium dark-first SaaS UI patterns for a security/analyst tool
+**Researched:** 2026-02-25
+**Confidence:** HIGH (pattern analysis from Linear, Vercel, Stripe, shadcn/ui), MEDIUM (specific implementation values), LOW (where noted)
+
+> **Scope note:** This document supersedes the v1.0 functional feature research (which covered IOC extraction, enrichment providers, and API integrations). That document remains at `.planning/research/FEATURES.md.v1` for reference. This document covers **UI patterns only** — the visual and interaction design patterns that make the existing functional features feel premium. Zero new backend features are in scope.
+
+---
+
+## Context: What Already Exists
+
+The codebase has a functioning dark UI built on CSS custom properties + Tailwind CSS. The color system is GitHub-dark-inspired (zinc/slate backgrounds, green primary button). What it lacks is the premium SaaS treatment applied to each component category. The redesign is not a rewrite — it is a visual elevation of the existing structure.
+
+**Existing design tokens (from `app/static/src/input.css`):**
+- Background: `#0d1117` (primary), `#161b22` (secondary), `#1c2128` (tertiary)
+- Border: `#30363d` (default), `#484f58` (hover)
+- Verdict colors: red `#f85149`, amber `#f59e0b`, green `#3fb950`, gray `#8b949e`
+- IOC type accents: blue `#4a9eff`, green `#4aff9e`, cyan `#4aeeee`, orange `#ff9e4a`, red `#ff4a4a`
+- Font UI: system-ui stack; Font mono: Fira Code / JetBrains Mono
+
+**The gap:** Components exist structurally but lack the micro-detail that produces the premium feel — hover states are abrupt, borders are flat, the verdict dashboard has no visual weight, cards don't communicate state hierarchy, and the typography lacks the size differentiation of Linear/Vercel dashboards.
 
 ---
 
@@ -10,273 +27,382 @@
 
 ### Table Stakes (Users Expect These)
 
-Features SOC analysts assume any IOC triage tool provides. Missing these means the tool is not usable as a daily driver.
+Premium dark tool UI patterns that analysts will notice if missing. These are not optional polish — they are the foundation of "this feels like a real product."
 
 | Feature | Why Expected | Complexity | Notes |
 |---------|--------------|------------|-------|
-| Free-form text paste with multi-IOC extraction | Analysts paste SIEM snippets, email headers, threat reports — never single IOCs | MEDIUM | iocextract/iocsearcher are proven Python libs; handle defanged + plain |
-| Defanging normalization (hxxp, [.], {.}, [dot], _dot_, [@]) | All threat reports defang IOCs; tool must refang before enrichment | MEDIUM | iocextract handles most; edge cases exist (custom analyst defangs) |
-| IOC classification by type | Analysts need to know what they're looking at before enriching | LOW | Deterministic regex per type; IPv4, IPv6, domain, URL, MD5, SHA1, SHA256, CVE are standard |
-| Deduplication of extracted IOCs | Pasted text often has repeats; duplicates in results are noise | LOW | Hash-based dedup before enrichment calls |
-| VirusTotal enrichment (IP, domain, URL, hash) | VT is the industry baseline — every SOC has it | MEDIUM | Free tier: 500 req/day, 4 req/min; covers all four IOC types; returns detection verdicts |
-| Results grouped by IOC type | Analysts scan results differently by type (IPs vs. hashes vs. domains) | LOW | Standard presentation in IntelOwl, Cortex, Pulsedive |
-| Source attribution on every verdict | Analysts must know where a verdict came from to trust it | LOW | Critical for analyst decision-making; never aggregate without attribution |
-| Offline mode (extraction only, zero network) | Jump boxes may have no outbound; offline extractions still valuable | LOW | Toggle that disables all API calls cleanly |
-| Visual in-progress indicator during lookups | Parallel API calls can take 2–10 seconds; UI must show activity | LOW | Basic spinner or per-IOC status states |
-| Timestamp on enrichment results | Analysts need to know if data is fresh or stale | LOW | Include API response timestamp, not just request time |
-| CVE recognition and extraction | CVEs appear in alert text and threat reports constantly | LOW | Standard regex: CVE-YYYY-NNNNN+ |
-| Localhost-only binding | Security requirement; analysts won't use a tool that exposes IOCs to the network | LOW | Flask default + explicit bind to 127.0.0.1 |
+| Card border + background differentiation (elevation) | In dark UIs, shadows disappear — border + background contrast is how elevation is communicated. A card that looks identical to the page background feels broken. | LOW | Move from flat `var(--bg-secondary)` cards on `var(--bg-primary)` background to a 3-level system: page bg / card bg / card header bg. Current difference is too subtle. |
+| Verdict-colored card left border (thick, 3-4px) | Every security tool with severity levels uses colored left borders to convey verdict at a glance. Present in current code but underutilized — needs more visual weight. | LOW | Increase from 3px to 4px, add a `box-shadow: inset 3px 0 0 var(--verdict-X)` fallback for browsers that need it. |
+| Focus ring on all interactive elements | Accessibility requirement and quality signal — premium tools have clearly styled focus rings that match the accent color. Current implementation uses blue (#4a9eff) universally but inconsistently. | LOW | Standardize: all inputs get `0 0 0 3px rgba(accent, 0.25)` ring; emerald/teal for online-mode forms, blue for offline-mode. Remove outline:none-without-replacement entirely. |
+| Smooth hover transitions on all interactive elements | Click targets that respond instantly feel cheap; 150ms ease transitions signal quality. Current code has transitions on some elements but not all (missing on verdict-dashboard-badge, IOC cards, enrichment slots). | LOW | Audit all interactive elements, add `transition: all 0.15s ease` or per-property transitions everywhere. |
+| Typography weight differentiation | Primary/secondary text hierarchy is the single most effective way to create visual clarity. Current: 1.5rem titles, 0.85rem body, but intermediate levels are missing. | LOW | Add a 3-tier scale: `1.1rem/600` for section headers, `0.875rem/400` for body, `0.75rem/400` for captions/metadata. |
+| Monospace font for all IOC values | IOC values (IPs, hashes, domains) must render in monospace for analyst readability. Currently implemented but inconsistently — some enrichment detail rows fall through to system-ui. | LOW | Audit all `.enrichment-detail`, `.provider-result-row`, `.ioc-original` selectors. Confirm `var(--font-mono)` applied universally to IOC data. |
+| Accessible color contrast (WCAG AA minimum) | Dark themes routinely fail contrast. The current `#8b949e` secondary text on `#161b22` background is marginal at WCAG AA. | LOW | Test current palette with browser devtools contrast checker. Raise secondary text to `#9ca3af` minimum (Tailwind zinc-400) where needed. |
+| Sticky filter bar backdrop blur | A sticky element without background treatment causes text to overlap visually. Current sticky filter bar has `background-color: var(--bg-primary)` but no blur — looks abrupt on scroll. | LOW | Add `backdrop-filter: blur(8px)` with semi-transparent background fallback for the sticky filter bar. Standard pattern in Linear, Vercel, and GitHub's nav. |
 
 ### Differentiators (Competitive Advantage)
 
-Features that distinguish sentinelx from ad-hoc searches or a pile of browser tabs. Not table stakes, but meaningfully valuable.
+These patterns make SentinelX feel like a purpose-built security product, not a generic dark dashboard. The reference products for these patterns are Linear (precision, minimal chrome), Vercel (developer-centric data display), and Stripe (status badge system).
 
 | Feature | Value Proposition | Complexity | Notes |
 |---------|-------------------|------------|-------|
-| AbuseIPDB enrichment for IPs | Best-in-class crowdsourced IP reputation; 1,000 free checks/day; covers IPv4+IPv6; returns abuse confidence score, ISP, country, reports count | LOW | IP-only; complements VT which is weaker on raw IP reputation |
-| Shodan InternetDB enrichment for IPs | No API key required; returns open ports, CPEs, CVEs, hostnames, tags; reveals infrastructure context VT doesn't provide | LOW | Updated weekly; rate limits generous for non-commercial; no banner data |
-| ThreatFox enrichment for hashes/domains/IPs | abuse.ch community data on active C2 infrastructure; covers malware family attribution; free with auth key | MEDIUM | IOC expiration after 6 months (since 2025-05-01); good for active threats |
-| MalwareBazaar enrichment for file hashes | Hash-specific: returns file type, malware family, tags, first/last seen, ClamAV verdict, imphash, TLSH, ssdeep; free community API | LOW | Hashes only; deepest file hash context of any free provider |
-| URLhaus enrichment for URLs/hashes | Malware distribution URLs; returns tags, URL status (online/offline), associated payloads; free community API | LOW | URL and hash only; pairs well with VT for URL classification |
-| AlienVault OTX enrichment | Reputation + geo data + associated pulse campaigns; free with API key; covers IP, domain, URL, hash | MEDIUM | 100k+ contributors; pulse-based context links IOC to threat campaigns |
-| GreyNoise enrichment for IPs | Reduces false positives by labeling "internet background noise" scanners; community API: 50 lookups/week free | LOW | IP-only; noise/riot/classification fields tell analyst if IP is mass-scanner vs. targeted |
-| Parallel enrichment execution | All API calls fire concurrently per IOC; results appear as they arrive | MEDIUM | Critical for speed; sequential lookups per IOC would be unusably slow |
-| Result freshness display (first_seen / last_seen) | IOC age matters — an IP active 2 years ago may be irrelevant today | LOW | Surface provider timestamps, not just lookup timestamps |
-| Raw verdict passthrough (no score blending) | Analysts distrust opaque combined scores; showing "VT: 34/72 engines" is more useful than "Risk: HIGH" | LOW | Deliberate design choice; per-PROJECT.md requirement |
-| IOC count summary before enrichment | Analyst confirmation that extraction found what they expect before firing API calls | LOW | Prevents unnecessary API quota usage on bad paste |
-| Copy-to-clipboard per IOC (refanged) | Analysts frequently need to paste IOCs into other tools | LOW | Browser clipboard API |
-| API result caching with TTL | Prevents quota exhaustion when same IOC appears multiple times in a session; reduces latency on repeat lookups | MEDIUM | In-memory only; reasonable TTL varies by provider (1–24h); must not persist raw input |
-| Pulsedive enrichment | Aggregates OSINT feeds; free tier covers IP, domain, URL; provides risk factors and feed-based context | MEDIUM | Rate limits unverified at time of research; confirm before shipping |
+| Verdict stat cards with large number display | Vercel/Stripe-style KPI cards: the count is the hero element (`2rem+ monospace`) with the label below in small caps. Currently the verdict dashboard uses inline badge pills — no visual hierarchy between the number and label. | MEDIUM | Replace inline pills with 4 individual stat cards in a horizontal row. Each card: colored top border, large mono number, small label. Malicious = red-tinted border + red number; Clean = green; etc. Active/clickable filter state: card gets tinted background. |
+| Card hover elevation effect | Linear cards use `translateY(-1px)` + `border-color` shift on hover to suggest liftability. The analyst scans dozens of IOC cards — hover feedback helps orient which card they're about to interact with. | LOW | Add `transform: translateY(-1px)` + `border-color: var(--border-hover)` + `box-shadow: 0 4px 12px rgba(0,0,0,0.3)` on `.ioc-card:hover`. Transition: `150ms ease`. No hover on verdict-colored border — that stays fixed to avoid confusion with state. |
+| Shimmer skeleton for enrichment-pending state | Current: spinner + "Pending enrichment..." text. Premium pattern: a skeleton `<div>` with animated shimmer gradient that mirrors the shape of the enrichment result rows. Matches what Linear, GitHub, and Vercel use while loading content. | MEDIUM | Replace `.spinner-wrapper` with 2-3 skeleton lines per card. CSS: `background: linear-gradient(90deg, var(--bg-tertiary), var(--bg-secondary), var(--bg-tertiary))` animated `background-position` from left to right via `@keyframes shimmer`. Width: full card width. Lines: narrow (1 row badge-height) + wider (detail row height). |
+| Progress bar with gradient fill and completion state | Current progress bar exists (`enrich-progress-fill`) with a blue→cyan gradient. The differentiator is a completion animation: when 100% is reached, transition the gradient from blue→cyan to green→emerald and briefly `scale-x` the bar to 102% then back. | LOW | Extend existing `.enrich-progress.complete` class with a `@keyframes complete-pulse` animation. Completion: CSS class swap triggered by JS when count matches total. |
+| IOC type pill with dot indicator (not just text) | Linear and Vercel use small colored dot indicators alongside labels to convey category at a glance without relying entirely on text. Current `.ioc-type-badge` is text-only. | LOW | Add a 6px circle `::before` pseudo-element to each `.ioc-type-badge--{type}` rule, colored to match the accent. The dot precedes the type text. Increases scannability on hash-heavy result sets. |
+| Search input with search icon prefix | The current `filter-search-input` is a plain text input. Premium pattern (Vercel, Linear, GitHub): a magnifying glass icon positioned absolutely in the left padding of the input, with `padding-left: 2.25rem` to avoid overlap. | LOW | Add a `<span>` or SVG icon wrapper absolutely positioned inside the `.filter-search` container. SVG can be inline or a CSS `background-image: url()` data URI — no image file needed. |
+| Verdict badge with colored dot + text (not background fill) | Current `.verdict-label--suspicious` uses `background-color: #f59e0b; color: #000` — a filled badge on a dark background creates harsh contrast and breaks the design language. Premium pattern (Stripe badges): `background: rgba(color, 0.12); border: 1px solid rgba(color, 0.3); color: var(--verdict-color)` — tinted background, colored border, colored text. | LOW | Standardize all verdict badges to the tinted-background pattern. Fix `--suspicious` to use `rgba(245, 158, 11, 0.15)` background + amber text (not solid amber + black text). This aligns all 4 verdict states to the same visual system. |
+| Empty state with icon and actionable message | Current `.no-results` is 2 lines of gray text centered in a card. Linear/Vercel empty states: a simple SVG icon (not illustration) at 32-40px, a bold headline, a secondary explanation sentence, and optionally a CTA link. For SentinelX: a magnifying glass or shield icon, "No IOCs detected" headline, "Try pasting a threat report, SIEM alert, or email header" secondary line. | LOW | Replace content inside `.no-results` with a 3-part structure: icon + heading + body. Use a simple SVG path (no external dependency). Centered layout, icon color = `var(--text-secondary)`. |
+| Settings section card with descriptive header row | Vercel/Linear settings pages use a pattern: each section is a card with a top-row showing section name (bold, left) + action button (right), then a divider, then the form fields below. Creates clear section boundaries and scannability. Current settings page uses `<h2>` headings with no visual card structure. | MEDIUM | Wrap each settings section in a card with: header row (`display: flex; justify-content: space-between`), a `1px solid var(--border)` divider, then the form content. For the VT API key section: header reads "VirusTotal API" with a "Save" button aligned right. |
+| Paste feedback with success animation | Current `.paste-feedback` is plain italic text that appears on paste. Premium pattern: brief appearance with a `transform: translateY(-4px)` + opacity fade in animation. Disappears after 2.5s. Vercel uses similar micro-animation for clipboard confirmations. | LOW | Add `@keyframes feedback-appear { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: translateY(0); } }` to `.paste-feedback`. JS already shows/hides it — just add the CSS animation class on show. |
+| Contextual submit button with mode indicator | Already exists (contextual label changes). The differentiator: when Online mode is active, the submit button gets a green/emerald background instead of the default green. When Offline, a subtle blue-tinted variant. This reinforces the mode state without redundancy. | LOW | Add `.btn-primary--online` and `.btn-primary--offline` modifier classes. JS toggles the class when mode changes. Colors: online = `var(--accent-domain)` (#4aff9e) tint; offline = `var(--accent-ipv4)` (#4a9eff) tint. |
 
 ### Anti-Features (Commonly Requested, Often Problematic)
 
-Features that seem helpful but are wrong for this tool's purpose and constraints.
+Features that seem like obvious improvements but undermine the tool's design goals or create technical debt.
 
 | Feature | Why Requested | Why Problematic | Alternative |
 |---------|---------------|-----------------|-------------|
-| Combined "threat score" or "risk rating" | Analysts want a quick green/red judgment | Hides which providers agree/disagree; forces analyst to trust tool's weighting; creates false confidence on split verdicts | Show raw per-provider verdicts; let analyst read the room |
-| Fetching/crawling the target URL | "Can it check if the URL is live?" | Sending HTTP requests to potentially malicious URLs from analyst's machine is a serious security risk; explicitly prohibited in PROJECT.md | Never crawl; rely on URLhaus online/offline status from their API |
-| Following HTTP redirects on outbound API calls | Some API endpoints redirect | Redirect chains can exfiltrate IOC data to unintended hosts; obscures actual endpoint | Disable redirect following; fail on redirect with clear error |
-| Persistent storage of raw pasted text | "Save my sessions for review" | Raw paste blobs contain sensitive IOCs and potentially sensitive alert text; persistent storage creates data exposure risk | Cache API results with TTL only; never store raw input to disk |
-| Email sending of results | "Share results with my team" | Tool is local/single-user; email requires SMTP config and creates data exfiltration path | Copy-to-clipboard or export-to-JSON for sharing |
-| Automated blocking/response actions | "Auto-block the bad IP" | Read-only enrichment is the safe scope; write actions require auth, audit logs, rollback — entirely different security model | Document: this tool informs decisions, does not take actions |
-| User authentication / multi-user support | "We have a team of analysts" | Multi-user requires auth system, RBAC, session management — major complexity with no benefit for local-use tool | One instance per analyst on their own machine |
-| Real-time IOC monitoring / scheduled lookups | "Watch this IP over time" | Requires persistence, scheduler, alerting — out of scope; also creates ongoing API quota drain | Single-shot triage is the design; analysts re-paste when needed |
-| Whois / RDAP enrichment | "Show domain registration" | High implementation complexity for limited signal; Whois data is often privacy-redacted; SecurityTrails free tier is 50/month | Defer to v2; OTX already includes some WHOIS-adjacent data |
-| Malware sandbox detonation | "Can it run the sample?" | Fundamentally different capability; requires containerization, sandboxing, file storage | Link to Triage.io or ANY.RUN when hash is found in results |
-| Mobile / responsive UI | "I want to use it on my phone" | Tool is for desktop analyst workflow; responsive design adds complexity without real-world benefit for a local tool | Out of scope; desktop browser only |
-| Dark mode theming | Common request | UI polish is not the value proposition; every hour on theming is an hour not on enrichment accuracy | Use system prefers-color-scheme CSS if trivial; never as a feature |
+| Glassmorphism / frosted-glass cards | Trendy, looks premium in mockups | `backdrop-filter: blur()` on content cards creates constant GPU compositing overhead. On a results page with 50+ cards this causes scroll jank. Also creates accessibility issues with low contrast over blurred backgrounds. | Use backdrop-filter only on the sticky filter bar (one element, not repeated). Cards use solid backgrounds. |
+| Pure black `#000000` background | Maximum contrast, dramatic look | High contrast between pure black and light text causes "halation" (text appears to bleed) for users with astigmatism. OWASP and Nielsen Norman Group both document this as a usability issue for extended reading. | Stay on dark zinc/slate grays: `#0d1117` is correct. Never go below `#0a0a0a` for body background. |
+| Animation-heavy micro-interactions | Delightful, premium feel | SOC analysts use this tool under time pressure. Animations that play every time a result card appears (if not respecting `prefers-reduced-motion`) add cognitive load and frustration for power users who run the tool dozens of times per shift. | All animations must be gated by `@media (prefers-reduced-motion: no-preference)`. Durations: 100-200ms max for state changes, never longer. No entrance animations on card grid load. |
+| Custom scrollbar styling | Polish signal, frequently requested | Webkit scrollbar CSS is non-standard and not supported in Firefox without `scrollbar-color` CSS. Cross-browser scrollbar styling requires two separate CSS approaches and still looks different per OS. Return on investment is very low. | Leave scrollbars at OS default. If requested, use `scrollbar-color: var(--border) var(--bg-primary)` (Firefox) + `-webkit-scrollbar` (Chrome) as a single low-risk addition, never as a priority. |
+| Sidebar navigation | More surface area for features | The tool has 3 pages (input, results, settings). A sidebar would consume 220px of horizontal space on a tool that needs that width for IOC values (hashes are 64 chars). The current top-bar header with Settings nav-link is the correct information architecture for this scope. | Keep flat header. If navigation grows beyond 4 items, consider a `<nav>` with horizontal tabs — never a vertical sidebar for this tool. |
+| Dark/light mode toggle | Universal user preference | Adding a light mode doubles the CSS maintenance burden for every new component. This is a security tool used in SOC environments (low-light) — light mode is not a real use case for the user base. | Respond to `prefers-color-scheme: light` with a simple variable swap if demanded, but do not build a toggle UI. Never a priority item. |
+| Inline charts / sparklines for verdict trends | Dashboard feel, context about IOC history | Single-shot triage tool — there is no history to chart within a session. Verdict dashboard counts are the correct scope. Charts would require a charting library (adds ~50KB to page weight) for zero functional value. | The 4 verdict stat cards with counts are the correct data visualization. No charts. |
+| Tooltip-based information architecture | Detailed provider metadata on hover | Tooltips are inaccessible (keyboard, touch) and create invisible information architecture. Analysts may not discover that provider details live in tooltips. | Use `<details>/<summary>` collapsible sections (already in use for `enrichment-nodata-section`) — visible structure, accessible, no JS required. |
+| Infinite scroll for IOC cards | Modern list pattern | A paste of 10 URLs is not a pagination problem — it is a layout problem. The current 2-column grid is the correct approach. Infinite scroll adds JS complexity for a problem that doesn't exist. | Keep current grid. If card count exceeds 100 (rare), address with a "Showing first 100" message and "Show all" reveal — not infinite scroll. |
 
 ---
 
 ## Feature Dependencies
 
 ```
-IOC Extraction (text parsing + defanging)
-    └──requires──> IOC Classification (type detection)
-                       └──requires──> IOC Deduplication
-                                          └──enables──> Enrichment (online mode)
-                                                            └──requires──> API key config (per provider)
+Verdict Stat Cards (differentiator)
+    └──requires──> Verdict color system (already exists in --verdict-* variables)
+    └──enhances──> Filter bar verdict buttons (clicking stat card = filter)
 
-Offline Mode
-    └──subset of──> IOC Extraction + Classification (no enrichment step)
+Card Hover Elevation Effect
+    └──requires──> Card border system (already exists)
+    └──conflicts with──> Border-left verdict color (don't move the verdict border on hover — it creates state confusion)
 
-Parallel enrichment
-    └──requires──> IOC Classification (must know type to route to correct API)
-    └──requires──> API key config
-    └──enhances──> Result freshness (faster total time means results still relevant)
+Shimmer Skeleton for Enrichment Pending
+    └──replaces──> Current spinner-wrapper + enrichment-pending-text
+    └──requires──> Same slot dimensions as eventual result rows (must mirror height)
+    └──enhances──> Enrichment result arrival (content "replaces" skeleton — no layout shift)
 
-API result caching
-    └──requires──> IOC Classification (cache key includes type + value)
-    └──enhances──> Parallel enrichment (cache hit avoids network call)
+Search Input with Icon Prefix
+    └──requires──> Layout adjustment: padding-left on filter-search-input
+    └──enhances──> Filter bar visual hierarchy (icon differentiates from verdict/type filters)
 
-Source attribution display
-    └──requires──> Enrichment (data must arrive from providers)
-    └──conflicts with──> Combined threat score (attribution forces per-source display)
+Progress Bar Completion Animation
+    └──requires──> Existing enrich-progress and .complete CSS class (already exists)
+    └──requires──> No new JS — class already toggled by enrichment polling
+    └──enhances──> Online mode results page perceived completeness signal
 
-Result grouping by IOC type
-    └──requires──> IOC Classification
-    └──enhances──> Parallel enrichment display (results slot into correct group as they arrive)
+Settings Section Card Pattern
+    └──requires──> New .settings-section-card component CSS
+    └──conflicts with──> Current plain .settings-section h2 structure (requires HTML refactor)
 ```
 
 ### Dependency Notes
 
-- **Enrichment requires Classification:** The wrong API gets called if type is wrong (e.g., sending a domain to IP-only AbuseIPDB). Classification gates enrichment routing.
-- **Offline mode is a strict subset:** Everything in offline mode must work without the enrichment path. Test independently.
-- **Combined score conflicts with attribution:** These are architecturally incompatible. Picking one eliminates the other. PROJECT.md mandates attribution; never build the score.
-- **Caching complicates TTL management:** Each provider has different data freshness. VT data ages faster than Shodan InternetDB (weekly updates). Cache TTL should be per-provider, not global.
+- **Verdict stat cards conflict with current verdict-dashboard-badge pills:** The new stat card pattern replaces the current inline badges. The HTML structure of `results.html` and the verdict-counting JS in `main.js` must both change, but the data attributes (`data-verdict-count`) can be preserved on the new elements.
+- **Shimmer skeleton requires known card slot dimensions:** The skeleton must be the same height as the enriched result. If the enrichment slot expands when results arrive, there will be layout shift. Pre-set `min-height` on `.enrichment-slot` to the typical result height (~60px for 2 provider rows).
+- **Backdrop-filter on sticky filter bar requires isolation:** The filter bar parent must have `isolation: isolate` to avoid compositing issues with the card grid behind it.
 
 ---
 
 ## MVP Definition
 
-### Launch With (v1)
+### v1.2 Launch With (High Visual Impact, Low Complexity)
 
-Minimum viable product that delivers value to a SOC analyst on day one.
+The minimum set that produces a measurably premium feel. Prioritized by impact-to-effort ratio.
 
-- [ ] Free-form text paste with extraction (iocextract or iocsearcher as backend) — without this the tool does nothing
-- [ ] Defanging normalization across all standard patterns — analysts paste defanged text; un-defanged extraction is worthless
-- [ ] IOC classification: IPv4, IPv6, domain, URL, MD5, SHA1, SHA256, CVE — the eight types that appear in SOC work
-- [ ] Deduplication before enrichment — prevents wasted API quota
-- [ ] Offline mode: extract + classify only — zero network calls; required for air-gapped or restricted environments
-- [ ] VirusTotal enrichment (IP, domain, URL, hash) — the universal baseline; if you only have one provider, have VT
-- [ ] AbuseIPDB enrichment (IP only) — 1,000 free/day; best IP reputation signal not in VT
-- [ ] Shodan InternetDB enrichment (IP only) — no API key needed; open ports + CVEs; unique data VT doesn't provide
-- [ ] MalwareBazaar enrichment (hash only) — deepest file hash context of any free provider
-- [ ] ThreatFox enrichment (hash, domain, IP, URL) — C2 and malware family context from abuse.ch
-- [ ] Parallel enrichment execution — sequential would be unusably slow with 5+ providers
-- [ ] Results grouped by IOC type — standard analyst expectation
-- [ ] Source attribution on every result (provider name + timestamp + raw verdict) — non-negotiable per PROJECT.md
-- [ ] No combined threat score — deliberate omission; show raw verdicts only
-- [ ] Visual in-progress indicator during lookups
-- [ ] Localhost-only binding, API keys from environment variables only
+- [x] Fix verdict badge visual system — standardize all 5 verdict states to tinted-bg + colored-border + colored-text (no more solid amber on black) — **highest consistency fix**
+- [x] Card hover elevation effect — `translateY(-1px)` + shadow on `.ioc-card:hover` — **1 CSS block, immediate premium feel**
+- [x] Typography weight differentiation — add intermediate heading size, tighten caption text — **3 CSS rule changes**
+- [x] Focus ring standardization — uniform `0 0 0 3px rgba(accent, 0.25)` across all interactive elements — **accessibility + quality signal**
+- [x] Sticky filter bar backdrop-blur — `backdrop-filter: blur(8px)` on `.filter-bar-wrapper` — **1 CSS property**
+- [x] Paste feedback animation — `@keyframes` appear animation on `.paste-feedback` — **5 CSS lines**
+- [x] IOC type badge dot indicator — `::before` colored dot on `.ioc-type-badge--*` — **8 CSS rules (1 per type)**
+- [x] Empty state icon + headline — replace 2 lines of text with icon + bold heading + body — **HTML + 4 CSS rules**
+- [x] Search input icon prefix — SVG magnifying glass in `.filter-search` — **1 SVG + 2 CSS rules**
 
-### Add After Validation (v1.x)
+### v1.2 Add After Core Is Solid
 
-Add when core flow is working and analyst feedback identifies gaps.
+- [ ] Verdict stat cards — replace dashboard pill badges with 4 individual KPI cards — **requires HTML refactor + CSS**
+- [ ] Shimmer skeleton loading — replace spinner with animated skeleton rows — **new CSS @keyframes + JS class swap**
+- [ ] Settings section card pattern — wrap settings in bordered card with header row — **HTML refactor + CSS**
+- [ ] Progress bar completion animation — completion pulse on enrichment finish — **2 CSS additions**
+- [ ] Mode-aware submit button variant — color shifts when online/offline — **2 CSS modifier classes + 2 JS lines**
 
-- [ ] AlienVault OTX enrichment — campaign/pulse context; useful when analysts need "what threat actor used this?" but adds registration friction
-- [ ] GreyNoise enrichment — valuable for reducing false positives on IP alerts; add when analysts report VT+AbuseIPDB combination is still noisy; 50 lookups/week free limit is constraining
-- [ ] URLhaus enrichment for URLs — supplements VT for malware distribution URL context; low complexity to add
-- [ ] API result caching with per-provider TTL — add when repeated same-session lookups become a pain point
-- [ ] IOC count confirmation step — add if analysts report wasted API quota on large pastes with unexpected IOC counts
-- [ ] Copy-to-clipboard per IOC (refanged) — quality of life; add when analysts report copy-paste friction
+### v1.2 Future Consideration
 
-### Future Consideration (v2+)
-
-Defer until product-market fit is established and v1 feedback drives priorities.
-
-- [ ] Pulsedive enrichment — useful aggregator but rate limits unverified; validate free tier practicality first
-- [ ] Export to JSON — useful for piping into other tools; low priority since tool is manual-use
-- [ ] WHOIS / RDAP enrichment — limited signal for effort; SecurityTrails free tier too restrictive (50/month)
-- [ ] CVE enrichment (NVD/CVSS lookup) — analysts want CVSS scores for CVEs in alert text; moderate complexity
-- [ ] IOC history across sessions — store past results for "have I seen this before?"; requires persistence design decision
+- [ ] Contextual copy button tooltip on hover — "Copy IOC" text appears on hover, auto-fades — defer, complexity vs value unclear
+- [ ] Search result highlighting — highlight matched text in IOC value when filter is active — HIGH complexity (requires DOM text manipulation)
+- [ ] Header breadcrumb trail — show "Results > 12 IOCs > Online Mode" — LOW value for 2-page nav structure
 
 ---
 
 ## Feature Prioritization Matrix
 
-| Feature | User Value | Implementation Cost | Priority |
-|---------|------------|---------------------|----------|
-| IOC extraction + defanging | HIGH | MEDIUM | P1 |
-| IOC classification | HIGH | LOW | P1 |
-| VirusTotal enrichment | HIGH | MEDIUM | P1 |
-| Offline mode | HIGH | LOW | P1 |
-| Parallel enrichment | HIGH | MEDIUM | P1 |
-| Source attribution display | HIGH | LOW | P1 |
-| AbuseIPDB enrichment | HIGH | LOW | P1 |
-| Shodan InternetDB enrichment | HIGH | LOW | P1 |
-| MalwareBazaar enrichment | HIGH | LOW | P1 |
-| ThreatFox enrichment | HIGH | LOW | P1 |
-| Results grouped by IOC type | MEDIUM | LOW | P1 |
-| Deduplication | MEDIUM | LOW | P1 |
-| Visual loading indicator | MEDIUM | LOW | P1 |
-| AlienVault OTX enrichment | MEDIUM | MEDIUM | P2 |
-| GreyNoise enrichment | MEDIUM | LOW | P2 |
-| URLhaus enrichment | MEDIUM | LOW | P2 |
-| API result caching | MEDIUM | MEDIUM | P2 |
-| Copy-to-clipboard | LOW | LOW | P2 |
-| IOC count confirmation | LOW | LOW | P2 |
-| Pulsedive enrichment | LOW | MEDIUM | P3 |
-| JSON export | LOW | LOW | P3 |
-| WHOIS enrichment | LOW | HIGH | P3 |
-| CVE CVSS lookup | MEDIUM | MEDIUM | P3 |
+| UI Feature | Analyst Value | Implementation Cost | Priority |
+|------------|---------------|---------------------|----------|
+| Verdict badge visual fix | HIGH (consistency, clarity) | LOW (CSS only) | P1 |
+| Card hover elevation | HIGH (premium feel, orientation) | LOW (CSS only) | P1 |
+| Focus ring standardization | HIGH (accessibility) | LOW (CSS audit) | P1 |
+| Typography differentiation | HIGH (hierarchy, readability) | LOW (CSS only) | P1 |
+| Sticky filter backdrop-blur | MEDIUM (polish) | LOW (1 CSS property) | P1 |
+| Empty state icon + message | MEDIUM (completeness, UX) | LOW (HTML + CSS) | P1 |
+| Search input icon | MEDIUM (discoverability) | LOW (SVG + CSS) | P1 |
+| Paste feedback animation | MEDIUM (micro-delight) | LOW (CSS keyframes) | P1 |
+| IOC type badge dot | MEDIUM (scannability) | LOW (CSS ::before) | P1 |
+| Verdict stat cards (KPI) | HIGH (information hierarchy) | MEDIUM (HTML + JS refactor) | P2 |
+| Shimmer skeleton | HIGH (perceived performance) | MEDIUM (new CSS pattern) | P2 |
+| Progress bar completion anim | MEDIUM (feedback clarity) | LOW (CSS class extension) | P2 |
+| Settings section card | MEDIUM (page completeness) | MEDIUM (HTML refactor) | P2 |
+| Mode-aware submit button | LOW (redundant with toggle label) | LOW (CSS modifier) | P2 |
+| Custom scrollbar | LOW (cross-browser inconsistent) | MEDIUM (dual CSS) | P3 |
+| Copy button tooltip | LOW | MEDIUM | P3 |
+| Search result highlighting | MEDIUM | HIGH | P3 |
 
 **Priority key:**
-- P1: Must have for launch
-- P2: Should have, add when possible
-- P3: Nice to have, future consideration
+- P1: Must have for v1.2 launch — high impact, low cost
+- P2: Should have — significant improvement, moderate cost
+- P3: Nice to have — defer to v1.3 or later
 
 ---
 
-## Competitor Feature Analysis
+## Pattern Reference by Component
 
-| Feature | CyberChef | IntelOwl | VirusTotal Web UI | sentinelx Approach |
-|---------|-----------|----------|-------------------|--------------------|
-| Multi-IOC extraction from paste | Manual per-recipe setup | No — requires structured input | No — one IOC at a time | Automatic from free-form text |
-| Defanging normalization | Manual recipe chain | Partial | No | Automatic, all standard patterns |
-| Multiple provider enrichment | No enrichment | Yes, 40+ providers | VT only | Curated 5–6 best free providers |
-| Offline extraction mode | Yes (local app) | No (Docker service) | No | Yes, explicit offline toggle |
-| Source attribution per result | N/A | Yes (per analyzer) | Yes (per AV engine) | Yes, required design constraint |
-| Combined threat score | No | No | Partial (community score) | No — deliberate omission |
-| Setup complexity | Minimal | High (Docker stack) | Zero (web service) | Minimal (Python + env vars) |
-| API key management | N/A | Config file | Account-based | Environment variables only |
-| Data sent to third parties | None | To analyzers | To VT | To analyst-chosen providers only |
+### 1. Card Component Pattern (IOC Cards)
+
+**Reference products:** Linear (issue cards), Vercel (deployment cards), GitHub (PR cards)
+
+**What these products do:**
+- Background is 2 levels above page background (not 1)
+- 1px border with `rgba(white, 0.08)` to `rgba(white, 0.12)` opacity — not a solid hex color
+- On hover: border opacity rises to 0.2, `box-shadow: 0 4px 16px rgba(0,0,0,0.4)`, `translateY(-1px)`
+- Left accent border: 3-4px, solid verdict color, does NOT change on hover (state indicator is static)
+- Card header: `background` is one step lighter than card body (Linear uses this for the "row header" in issue lists)
+- Content density: tight padding (0.75rem) but with enough breathing room in the header row
+- Transition: `150ms ease` on transform + border — not `all` (too broad, catches unwanted props)
+
+**What SentinelX currently does vs. what to change:**
+- Current: flat `#161b22` card on `#0d1117` page — difference is too subtle
+- Change: add a card-header `background: var(--bg-tertiary)` strip for the `.ioc-card-header`
+- Current: `border: 1px solid #30363d` (solid hex) — works but not premium
+- Change: `border: 1px solid rgba(255,255,255,0.08)` — more luminous feel on dark
+- Add: hover elevation as described above
+
+**Tailwind equivalent (if refactoring to utility classes):**
+```
+border border-white/8 hover:border-white/15 hover:shadow-lg hover:-translate-y-px transition-[border-color,box-shadow,transform] duration-150
+```
+
+### 2. Form/Input Pattern (Textarea, Text Inputs)
+
+**Reference products:** Linear (issue description editor), Vercel (env var inputs), Stripe (form fields)
+
+**What these products do:**
+- Background: 1 level below card background (deepest surface) — inputs feel "inset"
+- Border: `rgba(white, 0.1)` resting, transitions to `rgba(accent, 0.6)` on focus
+- Focus ring: `box-shadow: 0 0 0 3px rgba(accent, 0.2)` — not just border change
+- Placeholder: `rgba(text, 0.35)` — notably dimmer than body text
+- Font: monospace for code-like inputs (IOC textarea), system-ui for label inputs
+- No border-radius above 6-8px — rounded corners > 8px feel consumer, not professional
+- Transition: `border-color 0.15s ease, box-shadow 0.15s ease` specifically (not `all`)
+
+**What SentinelX currently does vs. what to change:**
+- Focus ring uses `rgba(74, 158, 255, 0.1)` — too low opacity, barely visible
+- Change to `rgba(74, 158, 255, 0.25)` for the focus ring alpha
+- Placeholder is `opacity: 0.6` on `var(--text-secondary)` — effectively near-invisible
+- Change placeholder to `color: rgba(var(--text-secondary-rgb), 0.5)` or a fixed mid-gray
+
+### 3. Dashboard/KPI Pattern (Verdict Dashboard)
+
+**Reference products:** Vercel (deployment statistics), Stripe (payment summary), Linear (issue metrics)
+
+**What these products do:**
+- 4 stat cards in a horizontal row, each with equal width
+- Card structure: top-border in category color (4px), large number in monospace (`2rem`/`700`), label in small-caps (`0.7rem`/`500`/`letter-spacing: 0.08em`)
+- Background: the card gets `rgba(category-color, 0.05)` tint when active (filter applied)
+- Hover: `rgba(category-color, 0.08)` tint + border color brightens
+- The number is the visual anchor — everything else is secondary
+- Interactive: clicking a stat card applies a filter (already how current verdict-dashboard works)
+
+**Example markup structure (pseudocode):**
+```html
+<div class="verdict-stat-card verdict-stat-card--malicious" data-verdict="malicious" tabindex="0">
+    <span class="verdict-stat-count" data-verdict-count="malicious">0</span>
+    <span class="verdict-stat-label">Malicious</span>
+</div>
+```
+
+**What SentinelX currently does vs. what to change:**
+- Current: inline pills (`.verdict-dashboard-badge`) — all same height as filter buttons
+- Change: give verdict stats their own visual level, separate from filter controls
+- Current: counts at `0.8rem font-size` in inline pill — hard to scan across multiple cards
+- Change: counts to `1.75rem` monospace, labels to `0.7rem` small-caps beneath
+
+### 4. Filter/Search Pattern
+
+**Reference products:** Linear (priority/status filters), Vercel (deployment filter), GitHub (PR filters)
+
+**What these products do:**
+- Filter chips are segmented into groups with a subtle separator (`1px border` or `|` glyph) between groups
+- Active chip: background tint (not inversion) + colored border + colored text — same approach as verdict badges
+- "All" chip: always first, neutral styling (border-only, no tint), gets border highlight when active
+- Search input: lives in the same visual row as filter chips, separated by a `margin-left: auto` push
+- Search icon: SVG magnifying glass, `14x14px`, positioned with absolute/padding technique
+- Typing in search: filter chips don't disappear — both filter and search apply simultaneously (AND logic)
+- Clear search: `×` button appears inside the input when non-empty (not a separate button)
+
+**What SentinelX currently does vs. what to change:**
+- Current: verdict buttons in row 1, type pills in row 2, search in row 3 — 3 separate rows
+- Consider: collapse to 2 rows — verdict+type on row 1, search on row 2. Or even 1 row on desktop.
+- Missing: search icon prefix
+- Missing: clear (×) button when search has content
+
+### 5. Status/Verdict Indicator Pattern
+
+**Reference products:** Stripe (payment status badges), Linear (issue priority indicators), VMRay (threat verdict system)
+
+**What these products do:**
+- 4 verdict states (Malicious, Suspicious, Clean, No Data/Record) use a consistent visual system:
+  - Malicious: `rgba(239, 68, 68, 0.15)` bg + `rgba(239, 68, 68, 0.4)` border + `rgb(239, 68, 68)` text
+  - Suspicious: `rgba(245, 158, 11, 0.15)` bg + `rgba(245, 158, 11, 0.4)` border + `rgb(245, 158, 11)` text
+  - Clean: `rgba(34, 197, 94, 0.15)` bg + `rgba(34, 197, 94, 0.4)` border + `rgb(34, 197, 94)` text
+  - No Data: `rgba(148, 163, 184, 0.1)` bg + `rgba(148, 163, 184, 0.25)` border + `rgb(148, 163, 184)` text
+- All are the same visual structure: the only difference is the hue — no filled/inverted variants mixed in
+- Colored dot (`6px circle`) precedes the text label — provides a second non-color signal (size)
+- Font: monospace, all-caps, tight letter-spacing
+- No icons beyond the dot — icons add complexity without analyst value
+
+**Critical fix for SentinelX:**
+- `verdict-label--suspicious` uses solid `#f59e0b` background with black text — this is an outlier that breaks the system
+- Fix: `background-color: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.4)` — matches the other 3 states
+
+### 6. Loading States and Micro-interactions
+
+**Reference products:** GitHub (PR checks), Linear (issue loading), Vercel (deployment progress)
+
+**What these products do:**
+- Skeleton screens: 2-3 gray rounded rectangles that mirror the shape of the eventual content
+  - Short rectangle (badge-height, 60% width) = where the verdict badge will appear
+  - Full-width rectangle (body-height, 100% width) = where the detail row will appear
+  - Both have an animated shimmer: `background: linear-gradient(90deg, #1c2128, #21262d, #1c2128)` shifted via `background-position` animation
+- Duration: shimmer cycle = 1.5s, linear, infinite
+- Completion: no fanfare — content simply replaces skeleton via DOM swap (no crossfade needed)
+- Progress bars: linear, thin (4-6px), rounded ends, gradient fill
+  - Active: accent gradient (blue→cyan for loading)
+  - Complete: success gradient (green→emerald), brief brightness pulse `@keyframes`, then stable
+- Micro-interaction timing budget (from Linear's design team): 100-200ms for state changes, 300ms max for entrance/exit, never above 500ms
+- All animations must respect `prefers-reduced-motion: reduce` — disable or use `opacity`-only fallback
+
+**What SentinelX currently does vs. what to change:**
+- Current: spinner (`enrichment-spinner`) + italic text — functional but not premium
+- Change: swap for skeleton rectangles with shimmer (CSS-only, no library)
+- Current: progress bar completion changes gradient color (already good) — add brief pulse
+- Add: `@media (prefers-reduced-motion: no-preference)` wrapper around all animation CSS
+
+### 7. Typography Hierarchy
+
+**Reference products:** Linear (issue titles), Vercel (dashboard labels), Stripe (settings pages)
+
+**What these products do:**
+- 5-level type system: Display (rare) / Heading / Subheading / Body / Caption
+- Inter or system-ui at all sizes — no decorative fonts in the tool UI itself
+- Headings: `600` weight minimum, `letter-spacing: -0.02em` for tight feel on large text
+- Body: `400` weight, `1.5` line-height for readability
+- Captions/labels: `500` weight (slightly heavier than body), `0.7-0.75rem`, often uppercase with `letter-spacing: 0.06em`
+- Data values (IOC strings, counts, hashes): always monospace — never system-ui for values
+- Color: primary text `#e6edf3` (high contrast), secondary `#8b949e` (metadata), caution to use tertiary
+
+**Recommended scale for SentinelX:**
+- `--text-display`: `1.75rem / 700 / letter-spacing: -0.03em` — page titles (rarely used)
+- `--text-heading`: `1.25rem / 600 / letter-spacing: -0.02em` — section headers, input-title
+- `--text-subheading`: `1rem / 600 / letter-spacing: -0.01em` — card section headers
+- `--text-body`: `0.875rem / 400 / line-height: 1.5` — body text, descriptions
+- `--text-caption`: `0.75rem / 500 / letter-spacing: 0.05em / uppercase` — labels, badges
+- `--text-mono`: `0.8125rem / 400 / font-family: var(--font-mono)` — IOC values, hashes
+
+### 8. Empty States
+
+**Reference products:** Linear ("No issues found"), GitHub ("No pull requests"), Vercel ("No deployments")
+
+**What these products do:**
+- Simple SVG icon: 32-40px, `var(--text-secondary)` color, stroke-based (not filled)
+- Headline: 1 line, `1rem / 600`, `var(--text-primary)` — describes what's empty, not an error
+  - "No IOCs detected" not "Error: empty input"
+- Body: 1-2 sentences, `0.875rem / 400`, `var(--text-secondary)` — explains what to do next
+- Optional CTA: small secondary button, linked back to input
+- Layout: centered in a card, `padding: 3rem 2rem`, vertical stack with `gap: 1rem`
+- No illustrations — they're for onboarding, not error states. Simple icons only for a tool.
+
+**For SentinelX specifically:**
+- Icon: shield with magnifying glass, or simple magnifying glass — communicates "search" not "error"
+- Headline: "No IOCs detected"
+- Body: "No indicators were found in the pasted text. Supported types: IPv4, IPv6, domain, URL, MD5, SHA1, SHA256, CVE."
+- CTA: "← Paste again" linked to input page (already exists as `.back-link`)
+
+### 9. Settings Page Pattern
+
+**Reference products:** Vercel (project settings), Linear (workspace settings), Stripe (API settings)
+
+**What these products do:**
+- Page structure: `max-width: 640px`, single column, vertically stacked section cards
+- Each section card: `border: 1px solid var(--border)`, `border-radius: 8px`, `overflow: hidden`
+- Section card header row: `padding: 1rem 1.5rem`, `background: var(--bg-secondary)`, flex row with:
+  - Left: section name (`0.9375rem / 600`) + optional description (`0.8125rem / 400 / var(--text-secondary)`)
+  - Right: action button (visible, not hidden in a menu)
+- Section divider: `1px solid var(--border)` between header and body
+- Section card body: `padding: 1.25rem 1.5rem`, form fields in single column
+- Danger zone (if applicable): final card with `border-color: rgba(var(--verdict-malicious-rgb), 0.4)` — red-tinted
+- Flash messages: appear above the card stack, auto-dismiss after 4s with `opacity` transition
+
+**For SentinelX settings page:**
+- The VT API key section becomes a single card with header row: "VirusTotal API Key" / "Save" button right-aligned
+- Below divider: info text + password input + show/hide toggle
+- No sidebar, no tabs — single column is correct for 1 setting
 
 ---
 
-## Threat Intelligence API Reference
+## Competitor Visual Analysis
 
-Recommended providers for v1, ordered by implementation priority:
-
-### Tier 1: Build First (v1 core)
-
-| Provider | IOC Types | Free Tier | Key Data Points | Requires Key |
-|----------|-----------|-----------|-----------------|--------------|
-| **VirusTotal** | IPv4, IPv6, domain, URL, MD5, SHA1, SHA256 | 500 req/day, 4 req/min | Detection count (X/72 engines), category, last analysis date | Yes (free registration) |
-| **AbuseIPDB** | IPv4, IPv6 | 1,000 checks/day | Abuse confidence score (0-100%), total reports, ISP, country, usage type | Yes (free registration) |
-| **Shodan InternetDB** | IPv4 | No documented limit (weekly data) | Open ports, CPEs, CVEs, hostnames, tags | No — completely free, no key |
-| **MalwareBazaar** | MD5, SHA1, SHA256 | Fair use (no stated limit) | File type, malware family, first/last seen, tags, imphash, TLSH, ssdeep | Yes (free registration) |
-| **ThreatFox** | MD5, SHA256, domain, URL, IP:port | Fair use (no stated limit) | Threat type, malware family, confidence level, first seen, C2 indicator | Yes (free registration) |
-
-### Tier 2: Add in v1.x
-
-| Provider | IOC Types | Free Tier | Key Data Points | Requires Key |
-|----------|-----------|-----------|-----------------|--------------|
-| **AlienVault OTX** | IPv4, IPv6, domain, URL, MD5, SHA1, SHA256 | Unlimited (fair use) | Associated pulses/campaigns, geo data, malware samples, passive DNS | Yes (free registration) |
-| **GreyNoise** | IPv4 | 50 lookups/week | Noise (mass scanner), RIOT (benign service), classification, last seen | Yes (free community registration) |
-| **URLhaus** | URL, MD5, SHA256 | Fair use (175M API req/month community-wide) | URL status (online/offline), tags, payload hashes, reporter | Yes (free registration) |
-
-### Tier 3: Evaluate Later
-
-| Provider | IOC Types | Free Tier | Concern |
-|----------|-----------|-----------|---------|
-| **Pulsedive** | IP, domain, URL | Free plan exists; rate limits unverified | Confirm rate limits before committing |
-| **SecurityTrails** | Domain, IP | 50 queries/month | Too restrictive for regular use |
-| **Shodan full API** | IP, domain | Very limited without paid plan | Use InternetDB instead for free tier |
-
----
-
-## IOC Extraction Pattern Reference
-
-Standard defanging patterns that must be handled (MEDIUM confidence — from iocextract docs and IETF draft):
-
-| Pattern Type | Examples | Normalization |
-|-------------|----------|---------------|
-| Protocol obfuscation | `hxxp://`, `hxxps://` | Replace with `http://`, `https://` |
-| Dot replacement (brackets) | `example[.]com`, `1.2[.]3.4` | Replace `[.]` with `.` |
-| Dot replacement (parens) | `example(.)com` | Replace `(.)` with `.` |
-| Dot replacement (curly) | `example{.}com` | Replace `{.}` with `.` |
-| Dot replacement (text) | `example[dot]com`, `example_dot_com`, `example DOT com` | Case-insensitive text replacement |
-| At replacement | `user[@]example.com`, `user(@)domain.com`, `user[at]domain.com` | Restore `@` |
-| Slash/colon replacement | `hxxp[://]`, `hxxp[:/]` | Restore `://` |
-| Cisco ESA encoding | Spaces inserted into URLs | Strip injected whitespace |
-| Hex/Base64 encoding | `%68%74%74%70`, base64 URL | Decode before extraction |
-
-**Advanced patterns (LOW confidence — edge cases seen in practice):**
-
-- Capital letter substitution: `HXXPS://` — must be case-insensitive
-- Mixed bracket styles in same IOC: `hxxp[://]example[.]com` — multiple simultaneous replacements
-- Custom analyst shorthand: `h__p://`, `ht*ps://` — cannot enumerate all; flag as unrecognized
+| Component | GitHub Dark | Linear | Vercel Dashboard | SentinelX Current | SentinelX v1.2 Target |
+|-----------|------------|--------|-----------------|-------------------|----------------------|
+| Card surface | `#161b22` on `#0d1117` | `#1e2024` on `#141518` | `#0a0a0a` on `#111111` | `#161b22` on `#0d1117` | Same + card-header strip |
+| Card border | `#30363d` solid | `rgba(255,255,255,0.08)` | `rgba(255,255,255,0.1)` | `#30363d` solid | Switch to rgba white |
+| Card hover | Border brightens | TranslateY(-1px) + shadow | Border brightens + shadow | No hover state | TranslateY(-1px) + shadow |
+| Verdict badges | Filled for states | Tinted bg + colored text | Tinted bg + colored text | 4/5 states tinted, suspicious solid | All 5 states tinted |
+| Filter chips | Active = filled bg | Active = tinted bg + colored border | Active = white bg (light mode) | Active = `var(--bg-tertiary)` + white text | Colored-border active state |
+| Search input | Icon prefix | Icon prefix | Icon prefix | No icon | Icon prefix |
+| Loading | Skeleton shimmer | Skeleton shimmer | Skeleton shimmer | Spinner + text | Skeleton shimmer |
+| Progress bar | N/A | Thin gradient | Thin gradient | 6px gradient (good) | Add completion pulse |
+| Empty state | Icon + headline + body | Icon + headline | Icon + headline + CTA | 2 gray text lines | Icon + headline + body |
+| Settings | Card per section | Card per section | Card per section | Bare h2 + form | Card per section |
 
 ---
 
 ## Sources
 
-- [VirusTotal Public vs Premium API](https://docs.virustotal.com/reference/public-vs-premium-api) — MEDIUM confidence (official docs, verified rate limits)
-- [AbuseIPDB Pricing/API](https://www.abuseipdb.com/pricing) — MEDIUM confidence (official site, 1,000/day free tier)
-- [Shodan InternetDB API](https://internetdb.shodan.io/) — HIGH confidence (official, no-key endpoint verified)
-- [MalwareBazaar Community API](https://bazaar.abuse.ch/api/) — MEDIUM confidence (official, rate limits unspecified "fair use")
-- [ThreatFox Community API](https://threatfox.abuse.ch/api/) — MEDIUM confidence (official, fair use, IOC expiry since 2025-05-01)
-- [URLhaus Community API](https://urlhaus.abuse.ch/api/) — MEDIUM confidence (official, fair use)
-- [AlienVault OTX External API](https://otx.alienvault.com/assets/static/external_api.html) — MEDIUM confidence (official docs)
-- [GreyNoise Community API](https://docs.greynoise.io/docs/using-the-greynoise-community-api) — HIGH confidence (official docs, 50 lookups/week verified)
-- [iocextract GitHub](https://github.com/InQuest/iocextract) — HIGH confidence (maintained library, docs verified)
-- [iocsearcher GitHub](https://github.com/malicialab/iocsearcher) — HIGH confidence (maintained library, 30+ IOC types verified)
-- [ANY.RUN SOC Triage Guide](https://any.run/cybersecurity-blog/triage-analyst-guide/) — MEDIUM confidence (practitioner perspective)
-- [Free Cybersecurity APIs for IOC Lookups](https://upskilld.com/article/free-cybersecurity-apis/) — LOW confidence (third-party aggregation, verify rate limits independently)
+- [Linear UI Redesign Post](https://linear.app/now/how-we-redesigned-the-linear-ui) — MEDIUM confidence (official Linear blog, design decisions documented)
+- [Linear Design Style Reference](https://linear.style/) — HIGH confidence (official Linear design system reference site)
+- [shadcn/ui Dark Mode Tokens](https://ui.shadcn.com/docs/theming) — HIGH confidence (official shadcn/ui docs, OKLCH values verified)
+- [LogRocket: Linear Design Aesthetic](https://blog.logrocket.com/ux-design/linear-design/) — MEDIUM confidence (analysis article, patterns extrapolated from product)
+- [Stripe Accessible Color System](https://stripe.com/blog/accessible-color-systems) — HIGH confidence (official Stripe engineering blog, badge design decisions)
+- [Aufait UX: Cybersecurity Dashboard Patterns](https://www.aufaitux.com/blog/cybersecurity-dashboard-ui-ux-design/) — MEDIUM confidence (practitioner analysis)
+- [VMRay Verdict System](https://www.vmray.com/explained-the-vmray-threat-identifier-vti-scoring-system/) — HIGH confidence (official VMRay docs — confirms 4-state Malicious/Suspicious/Clean/No Data system)
+- [Tailwind CSS Hover/Focus States](https://tailwindcss.com/docs/hover-focus-and-other-states) — HIGH confidence (official Tailwind docs)
+- [Carbon Design System: Loading Pattern](https://carbondesignsystem.com/patterns/loading-pattern/) — HIGH confidence (IBM design system, skeleton screen specification)
+- [Eleken: Filter UI Patterns for SaaS](https://www.eleken.co/blog-posts/filter-ux-and-ui-for-saas) — MEDIUM confidence (UX consultancy analysis, patterns observed across products)
+- Existing SentinelX CSS (`app/static/src/input.css`) — HIGH confidence (source of truth for current implementation)
 
 ---
 
-*Feature research for: IOC triage and enrichment tool (sentinelx / oneshot-ioc)*
-*Researched: 2026-02-21*
+*Feature research for: SentinelX v1.2 UI pattern redesign (dark-first premium SaaS)*
+*Researched: 2026-02-25*
+*Confidence: HIGH (pattern analysis and implementation specifics), MEDIUM (competitor implementation details without source inspection)*

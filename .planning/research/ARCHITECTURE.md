@@ -1,420 +1,681 @@
 # Architecture Research
 
-**Domain:** Security-focused local IOC triage web application (Flask/Python)
-**Researched:** 2026-02-21
-**Confidence:** HIGH — patterns verified against Flask official docs, Python stdlib docs, and security tool community references
+**Domain:** Dark-first design system for Flask/Jinja2 security tool (SentinelX v1.2)
+**Researched:** 2026-02-25
+**Confidence:** HIGH — patterns verified against Tailwind CSS official docs, Jinja2 templating docs, and production design system references (Vercel Geist, Linear, GitHub Primer)
 
-## Standard Architecture
+---
 
-### System Overview
+## System Overview
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        Browser (localhost only)                      │
-│  ┌────────────────────────────────────────────────────────────────┐  │
-│  │  Paste Input + Mode Toggle (offline/online) + Submit Button   │  │
-│  └─────────────────────────────┬──────────────────────────────────┘  │
-│                                │ POST /analyze                        │
-└────────────────────────────────┼─────────────────────────────────────┘
-                                 ↓
-┌─────────────────────────────────────────────────────────────────────┐
-│                     Flask Application Layer                          │
-│  ┌──────────────┐  ┌──────────────────────────────────────────────┐  │
-│  │  Route:      │  │           IOC Pipeline                        │  │
-│  │  GET  /      │  │                                               │  │
-│  │  POST /      │  │  Input → Extractor → Normalizer → Classifier  │  │
-│  │    analyze   │  │                          ↓                    │  │
-│  └──────────────┘  │                    [offline stops here]       │  │
-│                    │                          ↓                    │  │
-│                    │                    Enricher (online only)     │  │
-│                    │                          ↓                    │  │
-│                    │                    Result Renderer            │  │
-│                    └──────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────────┘
-                                 ↓ (online mode only)
-┌─────────────────────────────────────────────────────────────────────┐
-│                     External API Layer                               │
-│  ┌───────────────┐  ┌───────────────┐  ┌───────────────┐            │
-│  │  VirusTotal   │  │  AbuseIPDB    │  │  Shodan / N   │            │
-│  │  Adapter      │  │  Adapter      │  │  Adapter      │            │
-│  └───────────────┘  └───────────────┘  └───────────────┘            │
-│  (All calls: strict timeouts, max response size, no redirects)       │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
-### Component Responsibilities
-
-| Component | Responsibility | Typical Implementation |
-|-----------|----------------|------------------------|
-| Flask Routes | Receive POST, validate input length/content-type, dispatch to pipeline | Single Blueprint, `routes.py` |
-| IOC Extractor | Find candidate IOC strings in free-form text using regex patterns | `iocextract` library + custom patterns |
-| Normalizer | Refang defanged IOCs (hxxp, [.], {.}, etc.) to canonical form | `iocextract` refang + custom defang patterns |
-| Classifier | Deterministically assign type label (IPv4, IPv6, domain, URL, hash, CVE) | Regex with precedence ordering |
-| Enricher Orchestrator | Fan-out parallel API calls for each IOC; collect results with timeouts | `concurrent.futures.ThreadPoolExecutor` |
-| Provider Adapters | One class per API provider: construct request, parse response, return typed result | Per-provider module in `enrichers/` |
-| Config Reader | Read API keys from environment; validate presence at startup; expose read-only | `os.environ` + startup checks |
-| HTML Renderer | Render Jinja2 templates; never use `|safe` on untrusted data | Jinja2 autoescaping (default on) |
-| Security Headers | Add CSP, X-Content-Type-Options, X-Frame-Options to all responses | Flask `after_request` hook or Flask-Talisman |
-
-## Recommended Project Structure
+The v1.2 design system sits entirely in the frontend layer. No backend changes. The architecture has three sub-layers:
 
 ```
-sentinelx/
-├── app/
-│   ├── __init__.py          # Application factory: create_app()
-│   ├── routes.py            # Single blueprint: GET /, POST /analyze
-│   ├── config.py            # Config class: reads env vars, validates at startup
-│   ├── pipeline/
-│   │   ├── __init__.py
-│   │   ├── extractor.py     # IOC string extraction from free-form text
-│   │   ├── normalizer.py    # Defang reversal, canonical form
-│   │   ├── classifier.py    # Type assignment: IPv4/domain/hash/CVE etc.
-│   │   └── models.py        # IOC dataclass: type, value, raw_match
-│   ├── enrichers/
-│   │   ├── __init__.py      # EnricherResult dataclass; run_all() orchestrator
-│   │   ├── base.py          # Abstract BaseEnricher: lookup(ioc) → EnricherResult
-│   │   ├── virustotal.py    # VirusTotal adapter
-│   │   ├── abuseipdb.py     # AbuseIPDB adapter (if selected)
-│   │   └── [provider].py   # Additional provider adapters
-│   └── templates/
-│       ├── base.html        # Layout: CSP meta tag, no inline JS
-│       ├── index.html       # Paste form + mode toggle
-│       └── results.html     # Results grouped by IOC type, source-attributed
-├── tests/
-│   ├── test_extractor.py
-│   ├── test_normalizer.py
-│   ├── test_classifier.py
-│   ├── test_enrichers.py    # Mocked HTTP — never call real APIs in tests
-│   └── test_routes.py
-├── run.py                   # Entry point: create_app() + app.run(host='127.0.0.1')
-├── requirements.txt
-└── .env.example             # Document required env vars; never commit .env
+┌─────────────────────────────────────────────────────────────┐
+│                     Design Token Layer                       │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │  CSS Custom Properties in :root (input.css)          │   │
+│  │  Semantic tokens: --color-surface, --color-accent,   │   │
+│  │  --color-text-primary, --color-border, etc.          │   │
+│  └──────────────────────────────────────────────────────┘   │
+│                                                              │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │  Tailwind Config (tailwind.config.js)                │   │
+│  │  theme.extend.colors references CSS vars → generates │   │
+│  │  utility classes: bg-surface, text-muted, etc.       │   │
+│  └──────────────────────────────────────────────────────┘   │
+├─────────────────────────────────────────────────────────────┤
+│                     Component Layer                          │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
+│  │  @layer base │  │ @layer comp. │  │ @layer util  │      │
+│  │  (reset/html)│  │ (BEM classes)│  │ (Tailwind)   │      │
+│  └──────────────┘  └──────────────┘  └──────────────┘      │
+├─────────────────────────────────────────────────────────────┤
+│                     Template Layer                           │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
+│  │  base.html   │  │  partials/   │  │  macros/     │      │
+│  │  (shell)     │  │  (include)   │  │  (reusable)  │      │
+│  └──────────────┘  └──────────────┘  └──────────────┘      │
+├─────────────────────────────────────────────────────────────┤
+│                     Build Layer                              │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │  Tailwind CLI: input.css → dist/style.css            │   │
+│  │  (standalone binary, no Node.js required)            │   │
+│  │  Font files: app/static/fonts/ → @font-face in CSS   │   │
+│  └──────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-### Structure Rationale
+## Design Token Architecture
 
-- **`app/pipeline/`:** The extraction pipeline is independent of Flask — it can be tested without a request context. Isolating it here enforces that boundary.
-- **`app/enrichers/`:** Each provider is its own file. Adding or removing a provider means adding or deleting one file and registering it in `__init__.py`. No changes elsewhere.
-- **`app/config.py`:** Centralizes all environment variable reads. If a key is missing, fail loudly at startup — not during a request. Analysts get a clear error, not a silent enrichment gap.
-- **`tests/`:** Flat, one file per module. Enricher tests use mocked HTTP responses — real API calls are forbidden in the test suite.
+### Decision: CSS Custom Properties at :root, Referenced in Tailwind Config
 
-## Architectural Patterns
+The existing codebase already uses CSS custom properties (CSS vars) in `:root` for design tokens. This is the correct pattern and should be extended, not replaced.
 
-### Pattern 1: Application Factory
+**The two-layer pattern (verified against Tailwind v3 docs and production systems):**
 
-**What:** `create_app()` function creates and configures the Flask instance rather than creating it at module level. Blueprint registration, config loading, and security header hooks all happen inside the factory.
+**Layer 1 — CSS custom properties in `input.css`:** Define the raw semantic values. These are the ground truth. They can be overridden at any selector scope without touching component markup.
 
-**When to use:** Always — even for small apps. Enables proper testing (create test app with different config), and prevents circular import problems.
+**Layer 2 — Tailwind config maps names to CSS vars:** This generates utility classes (`bg-surface`, `text-muted`) that resolve at runtime via the CSS var. Components written with `bg-surface` automatically adopt theme changes.
 
-**Trade-offs:** Slightly more boilerplate than a single-file app; worth it for testability and maintainability.
+**Why this over Tailwind `dark:` variants:** The `dark:` variant pattern doubles every color utility in the markup and requires toggling a `dark` class on `<html>`. For a tool that is always dark — no light mode — this adds zero value and creates double the markup. CSS vars at `:root` are simpler: define once, everything inherits.
 
-**Example:**
-```python
-# app/__init__.py
-def create_app(config_override=None):
-    app = Flask(__name__)
-    app.config.from_object(Config())  # reads env vars, validates at init
-    if config_override:
-        app.config.update(config_override)
+**Confidence: HIGH** — verified against official Tailwind v3 docs, Vercel Geist system, and the nareshbhatia/tailwindcss-dark-mode-semantic-colors reference implementation.
 
-    from .routes import bp
-    app.register_blueprint(bp)
+### Semantic Color Token Vocabulary
 
-    @app.after_request
-    def set_security_headers(response):
-        response.headers['X-Content-Type-Options'] = 'nosniff'
-        response.headers['X-Frame-Options'] = 'SAMEORIGIN'
-        response.headers['Content-Security-Policy'] = "default-src 'self'"
-        return response
-
-    return app
-```
-
-### Pattern 2: Pipeline as Pure Functions
-
-**What:** The IOC extraction pipeline (extract → normalize → classify) is implemented as pure functions that take strings and return dataclasses. No Flask context, no side effects, no HTTP calls.
-
-**When to use:** Always — this is the core safety invariant. Pure functions are trivially testable and cannot accidentally make network calls.
-
-**Trade-offs:** Requires passing data explicitly (no global state), which is the correct behavior anyway.
-
-**Example:**
-```python
-# app/pipeline/models.py
-from dataclasses import dataclass
-from enum import Enum
-
-class IOCType(Enum):
-    IPV4 = "ipv4"
-    IPV6 = "ipv6"
-    DOMAIN = "domain"
-    URL = "url"
-    MD5 = "md5"
-    SHA1 = "sha1"
-    SHA256 = "sha256"
-    CVE = "cve"
-
-@dataclass(frozen=True)
-class IOC:
-    type: IOCType
-    value: str        # canonical (refanged) form
-    raw_match: str    # original string from input, for display
-```
-
-### Pattern 3: Provider Adapter with Abstract Base
-
-**What:** Each threat intelligence provider implements a `BaseEnricher` abstract class with a single `lookup(ioc: IOC) -> EnricherResult` method. The orchestrator treats all providers uniformly.
-
-**When to use:** Whenever you have multiple external providers that return similar data. New providers require only a new file implementing the interface.
-
-**Trade-offs:** Minor abstraction overhead; pays off when adding the second or third provider.
-
-**Example:**
-```python
-# app/enrichers/base.py
-from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from datetime import datetime
-from typing import Optional
-from ..pipeline.models import IOC
-
-@dataclass(frozen=True)
-class EnricherResult:
-    provider: str
-    ioc_value: str
-    verdict: str           # raw provider verdict, no interpretation
-    raw_response: dict     # sanitized subset of API response
-    queried_at: datetime
-    error: Optional[str] = None  # set if lookup failed
-
-class BaseEnricher(ABC):
-    @abstractmethod
-    def lookup(self, ioc: IOC) -> EnricherResult:
-        ...
-
-    def supports(self, ioc_type) -> bool:
-        """Override to restrict which IOC types this enricher handles."""
-        return True
-```
-
-### Pattern 4: Parallel Enrichment with ThreadPoolExecutor
-
-**What:** Fan out all enricher lookups for all IOCs concurrently using `concurrent.futures.ThreadPoolExecutor`. Each future has an independent timeout. Results are collected as they complete; failures are captured as error results, not exceptions.
-
-**When to use:** Parallel API enrichment where each call is I/O-bound and independent. ThreadPoolExecutor is preferred over asyncio here because Flask routes are synchronous, and the `requests`/`httpx` synchronous clients are simpler to reason about than async variants in a sync Flask context.
-
-**Trade-offs:** Threads carry overhead vs. asyncio; for ~5-10 concurrent API calls per triage request, thread overhead is negligible. Asyncio would require Flask async support or a different event loop model that adds complexity for minimal gain at this scale.
-
-**Example:**
-```python
-# app/enrichers/__init__.py
-from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
-import logging
-
-MAX_ENRICHER_WORKERS = 10
-PER_ENRICHER_TIMEOUT_SECONDS = 10
-
-def run_all(iocs, enrichers, mode):
-    if mode == "offline":
-        return []
-
-    results = []
-    with ThreadPoolExecutor(max_workers=MAX_ENRICHER_WORKERS) as executor:
-        futures = {
-            executor.submit(enricher.lookup, ioc): (enricher, ioc)
-            for ioc in iocs
-            for enricher in enrichers
-            if enricher.supports(ioc.type)
-        }
-        for future in as_completed(futures, timeout=30):
-            enricher, ioc = futures[future]
-            try:
-                results.append(future.result(timeout=PER_ENRICHER_TIMEOUT_SECONDS))
-            except TimeoutError:
-                results.append(EnricherResult(
-                    provider=type(enricher).__name__,
-                    ioc_value=ioc.value,
-                    verdict="timeout",
-                    raw_response={},
-                    queried_at=datetime.utcnow(),
-                    error="Request timed out"
-                ))
-            except Exception as exc:
-                logging.error("Enricher failed: %s", exc)
-                results.append(EnricherResult(..., error=str(exc)))
-    return results
-```
-
-### Pattern 5: Defense-in-Depth HTML Rendering
-
-**What:** Jinja2 autoescaping (enabled by default for `.html` templates) is the first layer. A second layer is never using `|safe` on any data that passed through user input or API responses. A third layer is setting CSP headers that prevent inline script execution.
-
-**When to use:** All templates that display IOC values or API response data.
-
-**Trade-offs:** Slightly more template discipline required (can't shortcut with `|safe`); eliminates an entire class of XSS vulnerabilities.
-
-**Key rule:** The only values that may be passed through `markupsafe.Markup()` or `|safe` are strings constructed entirely by application code, never strings that touched user input or external API responses.
-
-## Data Flow
-
-### Request Flow
+The existing tokens in `input.css` are GitHub-flavored dark theme (good foundation). The v1.2 redesign refines the naming toward a more systematic semantic vocabulary aligned with Linear/Vercel quality:
 
 ```
-Analyst pastes text → POST /analyze
-        ↓
-    [Route] validate input (max length, content-type)
-        ↓
-    [Extractor] regex scan → raw IOC candidate strings
-        ↓
-    [Normalizer] refang → canonical value strings
-        ↓
-    [Classifier] regex precedence → IOC(type, value, raw_match) list
-        ↓
-    [offline?] ──YES──→ render results without enrichment data
-        ↓ NO
-    [Enricher Orchestrator] fan-out parallel lookups
-        ↓
-    [Provider Adapters] HTTP calls (strict timeout, max size, no redirect)
-        ↓
-    [Enricher Orchestrator] collect results + errors
-        ↓
-    [Route] render results.html with IOC list + EnricherResult list
-        ↓
-    Browser receives HTML — Jinja2 autoescaping applied throughout
+Surface hierarchy (background layers):
+  --color-bg-base         — body background (deepest, darkest)
+  --color-bg-surface      — card/panel surfaces (one level up from base)
+  --color-bg-raised       — elevated elements (dropdowns, tooltips, modals)
+  --color-bg-overlay      — overlay/scrim backgrounds
+
+Text:
+  --color-text-primary    — body text, headings (high contrast)
+  --color-text-secondary  — labels, captions, supporting text (muted)
+  --color-text-disabled   — placeholder, explicitly disabled content
+  --color-text-inverse    — text on colored/accent backgrounds
+
+Borders:
+  --color-border-default  — default borders, dividers
+  --color-border-strong   — hover/focus borders, emphasized separators
+  --color-border-subtle   — extremely subtle separators
+
+Accent (emerald/teal brand color):
+  --color-accent          — primary accent (emerald-500 range)
+  --color-accent-muted    — accent at low opacity for backgrounds
+  --color-accent-strong   — accent hover state
+
+Status colors (security-specific, high importance):
+  --color-danger          — malicious verdicts
+  --color-danger-muted    — malicious backgrounds (low opacity)
+  --color-warning         — suspicious verdicts
+  --color-warning-muted   — suspicious backgrounds
+  --color-success         — clean verdicts
+  --color-success-muted   — clean backgrounds
+  --color-neutral         — no-data / unknown verdicts
+  --color-neutral-muted   — no-data backgrounds
+
+IOC type accents (existing — keep, just rename for consistency):
+  --color-ioc-ip          — IPv4/IPv6 type accent
+  --color-ioc-domain      — domain type accent
+  --color-ioc-url         — URL type accent
+  --color-ioc-hash        — hash type accent (MD5/SHA1/SHA256)
+  --color-ioc-cve         — CVE type accent
+
+Interactive:
+  --color-interactive-bg         — button/interactive element background
+  --color-interactive-bg-hover   — hover state
+  --color-interactive-fg         — text on interactive elements
 ```
 
-### Key Data Flow Rules
+### Tailwind Config Pattern for Semantic Tokens
 
-1. **Input crosses the trust boundary exactly once** — at the route handler. After extraction and classification, all data flows as typed dataclasses, not raw strings.
-2. **Enrichment results are never trusted** — API response fields are treated as untrusted strings and rendered through Jinja2 autoescaping, never marked safe.
-3. **No data persists** — the pipeline is stateless per request. No database writes, no session storage of raw text blobs.
-4. **Offline/online is a pre-enrichment fork** — the pipeline always runs extraction + classification. The enrichment step is conditionally skipped, not removed from the flow.
+```javascript
+// tailwind.config.js
+module.exports = {
+  content: [
+    "./app/templates/**/*.html",
+    "./app/static/**/*.js",
+  ],
+  safelist: [
+    // ... (existing dynamic class safelist — keep unchanged)
+  ],
+  theme: {
+    extend: {
+      colors: {
+        // Surface hierarchy
+        "bg-base":     "var(--color-bg-base)",
+        "bg-surface":  "var(--color-bg-surface)",
+        "bg-raised":   "var(--color-bg-raised)",
+        "bg-overlay":  "var(--color-bg-overlay)",
 
-### Security Boundaries
+        // Text
+        "text-primary":   "var(--color-text-primary)",
+        "text-secondary": "var(--color-text-secondary)",
+        "text-disabled":  "var(--color-text-disabled)",
+        "text-inverse":   "var(--color-text-inverse)",
+
+        // Borders
+        "border-default": "var(--color-border-default)",
+        "border-strong":  "var(--color-border-strong)",
+        "border-subtle":  "var(--color-border-subtle)",
+
+        // Accent
+        "accent":         "var(--color-accent)",
+        "accent-muted":   "var(--color-accent-muted)",
+        "accent-strong":  "var(--color-accent-strong)",
+
+        // Status
+        "danger":          "var(--color-danger)",
+        "danger-muted":    "var(--color-danger-muted)",
+        "warning":         "var(--color-warning)",
+        "warning-muted":   "var(--color-warning-muted)",
+        "success":         "var(--color-success)",
+        "success-muted":   "var(--color-success-muted)",
+        "neutral-verdict": "var(--color-neutral)",
+        "neutral-muted":   "var(--color-neutral-muted)",
+      },
+      fontFamily: {
+        "ui":   ["Inter", "system-ui", "-apple-system", "sans-serif"],
+        "mono": ["'JetBrains Mono'", "'Fira Code'", "Consolas", "monospace"],
+      },
+      borderRadius: {
+        "sm":  "4px",
+        "md":  "6px",
+        "lg":  "8px",
+        "xl":  "12px",
+        "pill": "9999px",
+      },
+    },
+  },
+  plugins: [],
+};
+```
+
+This gives utility classes like `bg-bg-surface`, `text-text-primary`, `border-border-default`. These are intentionally explicit — `bg-surface` would conflict with Tailwind's default `surface` if it existed, but the `bg-bg-*` and `text-text-*` pattern is unambiguous. Alternatively, use the existing pattern of referencing CSS vars directly in component classes.
+
+**Simpler alternative (matches existing codebase pattern better):** Keep CSS vars referenced only in `@layer components` via `@apply` or direct `var()` references, and only extend Tailwind config for colors that need utility-class access in Jinja2 templates. This avoids the `bg-bg-surface` naming awkwardness and preserves the existing architecture.
+
+**Recommendation:** Keep semantic tokens as CSS custom properties, used directly in `@layer components`. Only register colors in `tailwind.config.js` when a utility class needs to be applied in Jinja2 HTML markup (as opposed to CSS component classes). This matches the existing pattern and avoids verbose naming.
+
+## Component Organization
+
+### Decision: @apply-Based Component Classes in @layer components
+
+The existing codebase already uses `@layer components` with BEM-style class names (`.ioc-card`, `.filter-btn`, `.btn-primary`). This is the correct approach for a Jinja2 app.
+
+**Why `@apply` component classes instead of utility-first in templates:**
+
+1. **Jinja2 templates are not components.** There is no component encapsulation in Jinja2 — the same `.ioc-card` markup appears in a loop, potentially 50+ times per page. Putting 15 utility classes inline on each card iteration makes templates illegible and creates a diff nightmare for every style change.
+
+2. **Tailwind's own guidance:** Tailwind recommends extracting repeated patterns to `@apply` classes when using a templating language (as opposed to a JS component framework where the component file is the encapsulation boundary). This is directly the Jinja2 case.
+
+3. **Existing test coverage assumes class names.** The Playwright E2E tests target CSS class names like `.ioc-card`, `.filter-btn`, `.verdict-label`. Utility-first would break these selectors or require `data-testid` sprawl.
+
+**The mixed approach (what the codebase already does, which is correct):**
+
+- `@layer components` — Named BEM classes for repeating structural patterns (cards, buttons, badges, filter pills, form elements)
+- Tailwind utilities — Used directly in templates for one-off layout, spacing, and display helpers where a named class would be overkill
+
+**Confidence: HIGH** — Tailwind's official docs on "Reusing Styles" explicitly recommend template partials and `@apply` for templating languages.
+
+### Component Class Organization in input.css
+
+Group component classes by page/feature, not by element type. The current organization is already correct. For v1.2:
 
 ```
-┌─────────────────────────────────────────────────┐
-│  UNTRUSTED ZONE                                  │
-│  - Raw paste text (user input)                   │
-│  - API response bodies (external provider data)  │
-│  - IOC values (could be crafted adversarially)   │
-└──────────────────┬──────────────────────────────┘
-                   │ crosses boundary via
-                   │ [validation + typed dataclasses]
-┌──────────────────▼──────────────────────────────┐
-│  TRUSTED ZONE                                    │
-│  - IOC(type, value) after classification         │
-│  - EnricherResult fields (but rendered escaped)  │
-│  - Application-generated template literals       │
-└─────────────────────────────────────────────────┘
+@layer base {
+  /* Reset, html, body, @font-face declarations */
+}
+
+@layer components {
+  /* 1. Layout shells */
+  .site-header, .site-main, .site-footer
+  .header-inner, .site-nav
+
+  /* 2. Shared UI primitives */
+  .btn (base), .btn-primary, .btn-secondary, .btn-ghost
+  .badge (base)
+  .alert, .alert-error, .alert-warning, .alert-success
+
+  /* 3. Form elements */
+  .form-field, .form-label, .form-input
+  .ioc-textarea
+  .mode-toggle-* family
+
+  /* 4. Input page */
+  .page-index, .input-card
+  .input-title, .input-subtitle
+
+  /* 5. Results page */
+  .page-results
+  .results-header, .results-summary
+  .verdict-dashboard, .verdict-dashboard-badge
+  .filter-bar-*, .filter-btn, .filter-pill
+  .ioc-cards-grid, .ioc-card, .ioc-card-header
+  .ioc-value, .ioc-type-badge, .verdict-label
+  .enrichment-* family
+
+  /* 6. Settings page */
+  .page-settings, .settings-card, .settings-section
+  .input-group (for side-by-side input + button)
+
+  /* 7. IOC type variants */
+  .ioc-type-badge--{type} family
+  .filter-pill--{type} family
+
+  /* 8. Verdict variants */
+  .verdict-label--{verdict} family
+  .verdict-{verdict} family (enrichment badges)
+  .filter-btn--{verdict}.filter-btn--active family
+}
 ```
 
-**Sanitization happens at two points:**
-1. Input length/format validation in the route handler before pipeline entry
-2. Jinja2 autoescaping at HTML render time for all displayed values
+## Template Structure
 
-## Anti-Patterns
+### Current Structure (4 files, flat)
 
-### Anti-Pattern 1: Monolithic Route Handler
+```
+app/templates/
+├── base.html      — shell (head, header, main, footer)
+├── index.html     — input page
+├── results.html   — results page (756 lines, complex)
+└── settings.html  — settings page
+```
 
-**What people do:** Put extraction, classification, enrichment, and rendering all inside the route function in a single file.
+### Recommended v1.2 Structure (partials for complex pages)
 
-**Why it's wrong:** Untestable without a live Flask server. Makes offline/online mode a conditional inside business logic. Cannot unit-test extraction without HTTP setup.
+```
+app/templates/
+├── base.html                      — shell (MODIFIED: font preload, new header structure)
+├── index.html                     — input page (MODIFIED: redesigned card layout)
+├── results.html                   — results page (MODIFIED: new visual design)
+├── settings.html                  — settings page (MODIFIED: new card design)
+└── partials/
+    ├── _ioc_card.html             — single IOC card (extracted from results.html loop)
+    ├── _verdict_dashboard.html    — the malicious/suspicious/clean/no-data badges row
+    ├── _filter_bar.html           — filter verdict + type pills + search input
+    └── _enrichment_slot.html      — spinner + provider results (inside card)
+```
 
-**Do this instead:** Route handlers call pipeline functions. Pipeline functions know nothing about Flask. Enrichers know nothing about the pipeline internals. Each layer is independently testable.
+**Rationale for partials:**
 
-### Anti-Pattern 2: `|safe` on IOC Strings
+The results page is already 156 lines and growing. The `{% for ioc_type, iocs in grouped.items() %}{% for ioc in iocs %}` loop currently contains 30+ lines of HTML per card. Extracting `_ioc_card.html` as a partial via `{% include %}` does three things:
 
-**What people do:** Use `{{ ioc.value | safe }}` in templates to avoid encoding IOC values that contain characters like `<`, `>`, or `&`.
+1. Makes `results.html` readable (the loop body is a single include line)
+2. Gives the card a single source of truth for future style changes
+3. Enables independent testing of the card structure
 
-**Why it's wrong:** IOC values are untrusted user input. An adversary who can craft the pasted text can inject script tags. IOC values also include domains/URLs that may contain characters that Jinja2 needs to escape for safe display.
+**Jinja2 include syntax (CSP-safe, no changes to backend):**
 
-**Do this instead:** Always render IOC values through Jinja2's default autoescaping (`{{ ioc.value }}`). The escaped output is correct for display in HTML.
+```jinja
+{# In results.html — replace the inner loop body #}
+{% for ioc in iocs %}
+  {% include "partials/_ioc_card.html" %}
+{% endfor %}
+```
 
-### Anti-Pattern 3: Blocking the Route Thread on Sequential API Calls
+The included template has access to the same context as the parent (including `ioc`, `mode`, `job_id`).
 
-**What people do:** Call enrichers one-at-a-time in a for-loop within the Flask route handler.
+**When not to use Jinja2 macros:** Macros add import boilerplate and are harder to read for simple includes. Use `{% include %}` for structural partials. Use macros only when the same pattern needs to render with different parameters passed explicitly (not from context) — which is rare in this codebase.
 
-**Why it's wrong:** If each provider takes 2-3 seconds and there are 5 providers, triage of a single IOC takes 10-15 seconds. For a block of 20 IOCs, this becomes unbearable.
+### base.html Changes for v1.2
 
-**Do this instead:** `concurrent.futures.ThreadPoolExecutor` with all enricher+IOC combinations submitted at once. The total enrichment time approaches the slowest single call, not the sum of all calls.
+The `base.html` shell needs these modifications:
 
-### Anti-Pattern 4: Trusting API Response Structure
+1. **Font preload:** Add `<link rel="preload">` for Inter WOFF2 before the stylesheet link
+2. **Class on `<html>`:** Consider adding `class="dark"` for future compatibility — not needed now since the tool is always dark, but harmless
+3. **Block structure:** Add `{% block head_extra %}{% endblock %}` after the stylesheet link for page-specific meta/preload needs
+4. **Header redesign:** The header will change structure significantly (logo, nav, possibly tagline position) — keep `{% block content %}` stable
 
-**What people do:** Access `response.json()['data']['attributes']['last_analysis_stats']` directly without checking if keys exist.
+```html
+<!-- base.html sketch -->
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}SentinelX{% endblock %}</title>
 
-**Why it's wrong:** API schemas change, providers return errors in unexpected shapes, and network issues can produce partial responses. Uncaught `KeyError` crashes the enricher and can surface internal details in the UI.
+    <!-- Font preload: must precede stylesheet to avoid FOUC -->
+    <link rel="preload"
+          href="{{ url_for('static', filename='fonts/inter-variable.woff2') }}"
+          as="font" type="font/woff2" crossorigin>
 
-**Do this instead:** Each provider adapter uses `.get()` with safe defaults, wraps the entire call in try/except, and returns an `EnricherResult` with `error` set on failure. The orchestrator never fails due to a single provider's misbehavior.
+    <link rel="stylesheet" href="{{ url_for('static', filename='dist/style.css') }}">
+    {% block head_extra %}{% endblock %}
+</head>
+<body>
+    <header class="site-header">
+        <div class="header-inner">
+            <!-- header content — redesigned in v1.2 -->
+        </div>
+    </header>
 
-### Anti-Pattern 5: Global HTTP Client Configuration
+    <main class="site-main">
+        {% block content %}{% endblock %}
+    </main>
 
-**What people do:** Create a global `requests.Session` or `httpx.Client` without timeouts and reuse it across enrichers.
+    <footer class="site-footer">
+        <!-- footer content -->
+    </footer>
 
-**Why it's wrong:** Without explicit timeouts, a hung provider can block a thread indefinitely. Without max response size limits, a malformed API response can exhaust memory.
+    <script src="{{ url_for('static', filename='vendor/alpine.csp.min.js') }}" defer></script>
+    <script src="{{ url_for('static', filename='main.js') }}" defer></script>
+    {% block scripts_extra %}{% endblock %}
+</body>
+</html>
+```
 
-**Do this instead:** Each enricher creates its client with explicit `timeout=httpx.Timeout(10.0)`. For response size, stream the response and abort if `content-length` exceeds the limit or if bytes read exceed the limit during streaming.
+**CSP compatibility:** The `crossorigin` attribute on the font preload is mandatory for CORS compliance (browsers treat font requests as CORS). Flask serves from `'self'`, so no CSP changes are needed for self-hosted fonts — `font-src 'self'` is implied by `default-src 'self'`.
+
+## Font Loading Strategy
+
+### Decision: Self-Host Inter Variable Font
+
+Inter is the standard choice for Linear/Vercel-quality SaaS UI. Inter Variable provides the full weight range (100-900) in a single ~260KB WOFF2 file, avoiding multiple font requests.
+
+**File placement:**
+
+```
+app/static/
+├── fonts/
+│   ├── inter-variable.woff2       — UI font (full variable weight range)
+│   └── jetbrains-mono-variable.woff2  — monospace font for IOC values
+├── vendor/
+│   └── alpine.csp.min.js
+├── dist/
+│   └── style.css
+└── main.js
+```
+
+**@font-face declaration in input.css:**
+
+```css
+@layer base {
+    @font-face {
+        font-family: 'Inter';
+        src: url('/static/fonts/inter-variable.woff2') format('woff2-variations');
+        font-weight: 100 900;
+        font-style: normal;
+        font-display: swap;
+    }
+
+    @font-face {
+        font-family: 'JetBrains Mono';
+        src: url('/static/fonts/jetbrains-mono-variable.woff2') format('woff2-variations');
+        font-weight: 100 800;
+        font-style: normal;
+        font-display: swap;
+    }
+}
+```
+
+**Why `font-display: swap`:** Prevents render-blocking. The browser shows system font immediately, then swaps to Inter when loaded. For a local tool, the font is cached after the first load — no meaningful flash.
+
+**Why not Google Fonts CDN:** CSP `default-src 'self'` blocks external font URLs. Even if the CSP were relaxed, loading from an external CDN violates the security posture for a tool that intentionally makes no external calls in offline mode. Self-hosted fonts are consistent with the existing vendor/ pattern for Alpine.js.
+
+**Font sources (download once, commit to repo):**
+
+- Inter Variable: https://github.com/rsms/inter/releases (SIL OFL license, free)
+- JetBrains Mono Variable: https://www.jetbrains.com/legalnotice/fonts/ (SIL OFL license, free)
+
+**Confidence: HIGH** — WOFF2 variable fonts + `font-display: swap` is established best practice; CSP font-src behavior verified against MDN.
+
+## Responsive Design Approach
+
+### Decision: Desktop-First, Minimal Mobile Accommodations
+
+PROJECT.md explicitly states: "Mobile or responsive design — desktop browser on analyst workstation" is out of scope. The tool runs on a local machine. However, the existing CSS already includes a `@media (max-width: 640px)` block with minor adjustments (padding reduction, stack form options vertically).
+
+**v1.2 approach:**
+
+- Design at 1280px minimum viewport width
+- Keep the existing `@media (max-width: 640px)` fallbacks for stack form elements — they prevent horizontal scroll at smaller sizes without adding complexity
+- Do not add new breakpoints or mobile-specific layouts
+- The `max-width: 960px` layout container can expand to `max-width: 1200px` for v1.2 to make better use of analyst desktop screens
+
+**Why not mobile-first:** The tool's use case (analyst workstation, jump box) means the design decisions should optimize for a wide desktop viewport. Mobile-first would mean designing the worst-case viewport first and scaling up — the opposite of what this tool needs.
+
+## Migration Strategy: Light to Dark Transition
+
+### The Existing Situation
+
+The existing code is already dark theme. Every color value in `:root` is a dark palette value. The CSS vars infrastructure is in place. The v1.2 migration is a **refinement and elevation** of the existing dark theme, not a light-to-dark conversion.
+
+**What actually needs to change:**
+
+1. **Color palette update:** Replace GitHub-dark inspired values with Linear/Vercel-quality emerald/teal-accented palette. The variable names stay similar, the hex values change.
+
+2. **Tailwind config extension:** Add semantic color names to `theme.extend.colors` so Jinja2 templates can use `bg-surface` utilities where needed (currently the CSS vars are only used in `@layer components`, not directly in templates).
+
+3. **Typography upgrade:** Replace the system font stack with self-hosted Inter. Swap `Fira Code` / `JetBrains Mono` priority.
+
+4. **Visual refinements:** Spacing, border radius, shadow depth, glassmorphism/blur effects where appropriate (CSS only, no JS).
+
+5. **Template restructuring:** Extraction of partials, header/footer redesign, card component elevation.
+
+### Migration Build Order
+
+This order respects dependencies and allows validation at each step:
+
+**Step 1 — Font infrastructure (no visible change yet)**
+- Download Inter + JetBrains Mono WOFF2 variable fonts
+- Add to `app/static/fonts/`
+- Add `@font-face` to `@layer base` in `input.css`
+- Add preload links to `base.html`
+- Verify: fonts load, no CSP errors in browser console
+- Files: `input.css`, `base.html`, `app/static/fonts/`
+
+**Step 2 — Color token redesign (visible change, no structural changes)**
+- Update CSS custom property values in `:root` (change hex values, rename for consistency)
+- Update `tailwind.config.js` to extend colors with semantic token names
+- Run `make css` to regenerate `dist/style.css`
+- Verify: existing component classes still apply (they now reference updated vars), all pages render correctly
+- Files: `input.css`, `tailwind.config.js`
+
+**Step 3 — Base component style elevation (visible refinements)**
+- Update `@layer components` classes to use refined spacing, radius, shadows
+- Update the existing component styles to reference new token names
+- No template changes yet — class names stay the same
+- Run `make css` → verify
+- Files: `input.css`
+
+**Step 4 — Template partials extraction (structural, no visual change)**
+- Extract `_ioc_card.html`, `_verdict_dashboard.html`, `_filter_bar.html`, `_enrichment_slot.html`
+- Update `results.html` to use `{% include %}` for extracted partials
+- Verify: results page renders identically to before (E2E tests should pass)
+- Files: new `app/templates/partials/` directory + updated `results.html`
+
+**Step 5 — Header/footer redesign**
+- Redesign `base.html` header (new logo treatment, nav positioning)
+- Update `.site-header`, `.header-inner`, `.site-nav` component styles
+- Files: `base.html`, `input.css`
+
+**Step 6 — Input page redesign**
+- Redesign input card to Linear/Vercel quality (refined spacing, typography, improved mode toggle)
+- Update `index.html` and relevant component classes
+- Files: `index.html`, `input.css`
+
+**Step 7 — Results page redesign**
+- Redesign IOC cards, filter bar, verdict dashboard
+- Work with partials extracted in Step 4
+- Files: `results.html`, partials, `input.css`
+
+**Step 8 — Settings page redesign**
+- Redesign settings card, form input, save button
+- Files: `settings.html`, `input.css`
+
+**Step 9 — Tailwind config safelist validation**
+- Verify all dynamically-applied classes (verdict colors, IOC type badges) remain in the safelist
+- Run full E2E test suite
+- Files: `tailwind.config.js`
+
+## Build Pipeline
+
+### Current Pipeline (no changes required)
+
+```makefile
+# Current Makefile — no changes needed for v1.2
+css:
+    $(TAILWIND) -i app/static/src/input.css -o app/static/dist/style.css --minify
+
+css-watch:
+    $(TAILWIND) -i app/static/src/input.css -o app/static/dist/style.css --watch
+
+build: css
+```
+
+The Tailwind standalone CLI v3.4.17 handles everything needed:
+
+- CSS custom properties: pass through as-is (no processing required)
+- `@font-face` in `@layer base`: supported
+- `@apply` in `@layer components`: supported
+- Content scanning of templates and JS for utility class extraction: configured via `content` in `tailwind.config.js`
+
+**Tailwind v3 vs v4 consideration:** The project uses Tailwind v3 (standalone CLI v3.4.17). The semantic token approach described here works in v3. Tailwind v4 (released January 2025) uses `@theme` in CSS instead of `tailwind.config.js` — but migrating to v4 is out of scope for this milestone. The v3 approach is stable and compatible.
+
+**One optional addition for development:** Add a `fonts` Makefile target documenting the font download process:
+
+```makefile
+## Document font source (run once, files committed to repo)
+fonts-info:
+    @echo "Download Inter Variable from: https://github.com/rsms/inter/releases"
+    @echo "Download JetBrains Mono from: https://www.jetbrains.com/legalnotice/fonts/"
+    @echo "Place .woff2 files in: app/static/fonts/"
+```
 
 ## Integration Points
 
-### External Services
+### New Files Required
 
-| Service | Integration Pattern | Key Constraints |
-|---------|---------------------|-----------------|
-| VirusTotal API v3 | REST/JSON via httpx with API key header | 10s timeout, 1MB max response, no redirects |
-| AbuseIPDB API v2 | REST/JSON via httpx with API key header | 10s timeout, 512KB max response, no redirects |
-| Additional providers | Same adapter pattern, same constraints | Must implement `BaseEnricher.lookup()` |
+| File | Purpose | Notes |
+|------|---------|-------|
+| `app/static/fonts/inter-variable.woff2` | Inter variable font | Download from rsms/inter GitHub |
+| `app/static/fonts/jetbrains-mono-variable.woff2` | JetBrains Mono | Download from JetBrains |
+| `app/templates/partials/_ioc_card.html` | IOC card partial | Extracted from results.html loop |
+| `app/templates/partials/_verdict_dashboard.html` | Verdict dashboard partial | Extracted from results.html |
+| `app/templates/partials/_filter_bar.html` | Filter bar partial | Extracted from results.html |
+| `app/templates/partials/_enrichment_slot.html` | Enrichment slot partial | Extracted from results.html |
 
-### Internal Boundaries
+### Modified Files
 
-| Boundary | Communication | Notes |
-|----------|---------------|-------|
-| Route → Pipeline | Function call, raw string in, `list[IOC]` out | No Flask context crosses this boundary |
-| Pipeline → Enrichers | Function call, `list[IOC]` in, `list[EnricherResult]` out | Enrichers may not call pipeline functions |
-| Enrichers → External APIs | HTTP via httpx, structured response parsing | All failures must be caught, never propagate as exceptions to route |
-| Route → Templates | Jinja2 `render_template()` with typed context dict | Never pass raw strings that came from user input as `|safe` |
-| Config → All | `current_app.config` inside request context | Keys validated at startup; missing key = startup failure, not runtime error |
+| File | Change Type | Notes |
+|------|------------|-------|
+| `app/static/src/input.css` | Major update | New color tokens, @font-face, component style elevation |
+| `tailwind.config.js` | Extend | Add semantic colors to theme.extend.colors |
+| `app/templates/base.html` | Significant | Font preload, head_extra block, header redesign |
+| `app/templates/index.html` | Major redesign | Input card elevation |
+| `app/templates/results.html` | Partial extraction + redesign | Card loop replaced with include |
+| `app/templates/settings.html` | Moderate redesign | Card, form, input-group |
+| `Makefile` | Optional | fonts-info target (documentation only) |
+| `app/static/dist/style.css` | Regenerated | Build artifact, committed after each css build |
 
-## Scaling Considerations
+### CSP Compatibility Matrix
 
-This is a localhost-only single-analyst tool. Scaling is not a design goal. However, for completeness:
+| Resource | CSP Directive | Status |
+|----------|--------------|--------|
+| `dist/style.css` | `style-src 'self'` | OK — same-origin |
+| `fonts/*.woff2` | `font-src 'self'` | OK — same-origin (font-src falls back to default-src) |
+| `main.js` | `script-src 'self'` | OK — unchanged |
+| `vendor/alpine.csp.min.js` | `script-src 'self'` | OK — unchanged |
+| Inline `font-display` CSS | n/a | In external stylesheet, not inline |
+| No external CDN fonts | — | Required: CSP blocks external font URLs |
 
-| Scale | Architecture Adjustment |
-|-------|--------------------------|
-| 1 analyst (target) | Flask dev server, localhost binding — correct design |
-| Small team (internal jump box) | Gunicorn with 2-4 workers; add rate limiting per-IP |
-| Multi-user (out of scope) | Would require authentication, per-session isolation, async task queue (Celery) — not this project |
+**No CSP header changes are needed.** The existing `default-src 'self'` policy covers self-hosted fonts because `font-src` defaults to `default-src` when not explicitly set.
 
-**First bottleneck if misused:** Thread pool saturation under concurrent analyst sessions. Default `ThreadPoolExecutor` workers of `min(32, cpu_count + 4)` handles small team use. Rate limiting prevents abuse.
+### Existing Test Compatibility
 
-## Build Order Implications
+The Playwright E2E tests target:
 
-Based on component dependencies, the correct build sequence is:
+- CSS class names (`.ioc-card`, `.filter-btn`, `.verdict-label`, etc.)
+- `data-*` attributes (`data-verdict`, `data-ioc-type`, `data-filter-verdict`)
+- Element IDs (`#filter-root`, `#ioc-cards-grid`, `#mode-toggle-widget`)
 
-1. **Config + models** — foundational types and config validation used by everything else
-2. **Extractor + Normalizer** — core pipeline, pure functions, no external dependencies
-3. **Classifier** — depends on extractor output types
-4. **Routes (offline)** — wire pipeline to Flask, establish full request flow without enrichment
-5. **BaseEnricher + one provider adapter (VirusTotal)** — enrichment layer
-6. **Parallel orchestrator** — fan-out; must have at least one working adapter to test
-7. **Additional provider adapters** — additive, each independently testable
-8. **Security hardening** — CSP headers, response size limits, input length caps; validate the whole system
+**Migration rule:** Class names, IDs, and data attributes must not change during v1.2. Only CSS _styles_ change. All existing Playwright selectors will continue to work without modification. New or renamed classes should have their selectors updated in `tests/e2e/` if any are added.
 
-This ordering means offline mode is fully functional and testable before any network code is written. The enrichment layer can be developed and tested against mock HTTP responses without needing live API keys.
+## Anti-Patterns
+
+### Anti-Pattern 1: Utility-First in Jinja2 Loops
+
+**What people do:** Apply 12+ Tailwind utility classes directly in Jinja2 template markup for repeating elements.
+
+```jinja
+{# BAD: utility classes on a component repeated 50 times #}
+<div class="bg-gray-800 border border-gray-700 rounded-lg p-3 border-l-4 transition-all">
+```
+
+**Why it's wrong:** When the design needs to change (border radius, padding, background shade), every template file must be edited. The Tailwind JIT scanner must index 50 copies of the same class string. Template diffs are huge and noisy.
+
+**Do this instead:** Define `.ioc-card` in `@layer components` with `@apply` or CSS var references. Use one meaningful class name in the template:
+
+```jinja
+{# GOOD: single semantic class name #}
+<div class="ioc-card" data-verdict="{{ ioc.verdict }}">
+```
+
+### Anti-Pattern 2: Hardcoded Hex Values in Component Classes
+
+**What people do:** Write `color: #f85149` directly in component class definitions instead of using the design token.
+
+**Why it's wrong:** When the palette changes (e.g., shifting from GitHub-red to a slightly different red), every hardcoded hex must be found and updated. Two hex values that look similar may diverge.
+
+**Do this instead:** Always reference CSS custom properties:
+
+```css
+/* BAD */
+.verdict-label--malicious { color: #f85149; }
+
+/* GOOD */
+.verdict-label--malicious { color: var(--color-danger); }
+```
+
+### Anti-Pattern 3: Duplicating Verdict Color Logic
+
+**What people do:** Define verdict colors in CSS, then redefine equivalent values in JavaScript for dynamic DOM updates (enrichment rendering in `main.js`).
+
+**Why it's wrong:** The two definitions will inevitably drift. CSS shows one shade of red, JS renders a slightly different shade.
+
+**Do this instead:** In `main.js`, when building verdict badge elements dynamically, apply the same CSS class names used in Jinja2 templates (`.verdict-malicious`, `.verdict-label--malicious`). The CSS vars do the color work. JS only adds the class, never sets colors directly via `element.style.color`.
+
+### Anti-Pattern 4: Loading Fonts from Google Fonts CDN
+
+**What people do:** Add `<link href="https://fonts.googleapis.com/css2?family=Inter">` to the template head.
+
+**Why it's wrong:**
+1. CSP `default-src 'self'` blocks the external stylesheet request entirely — no font loads
+2. Fixes require relaxing CSP with `style-src` and `font-src` additions, weakening the security posture
+3. In offline mode, the tool should have zero dependency on external network
+
+**Do this instead:** Self-host font files in `app/static/fonts/`. This is the only CSP-compatible approach.
+
+### Anti-Pattern 5: Omitting `crossorigin` on Font Preload
+
+**What people do:** Add a `<link rel="preload">` for the font file without the `crossorigin` attribute.
+
+**Why it's wrong:** Browsers treat font requests as CORS even for same-origin fonts. Without `crossorigin` on the preload, the browser makes two requests: the preload (discarded) and the actual fetch triggered by `@font-face`. The preload provides no benefit.
+
+**Do this instead:**
+
+```html
+<!-- WRONG: crossorigin missing, preload is wasted -->
+<link rel="preload" href="/static/fonts/inter-variable.woff2" as="font" type="font/woff2">
+
+<!-- CORRECT: crossorigin required for font preloads -->
+<link rel="preload" href="..." as="font" type="font/woff2" crossorigin>
+```
+
+### Anti-Pattern 6: Upgrading to Tailwind v4 Mid-Milestone
+
+**What people do:** See that Tailwind v4 exists and decide to upgrade as part of the design refresh.
+
+**Why it's wrong:** Tailwind v4 has a completely different configuration model (`@theme` CSS directive replaces `tailwind.config.js`), a new CLI binary, and breaking changes to how utilities are generated. This upgrade is a separate project, not a v1.2 task.
+
+**Do this instead:** Complete v1.2 on Tailwind v3 (the existing, stable CLI). The v3 configuration approach described in this document produces full-quality output. Migrate to v4 in a dedicated milestone after v1.2 is stable.
 
 ## Sources
 
-- Flask Application Factory pattern: https://flask.palletsprojects.com/en/stable/patterns/appfactories/ (HIGH confidence — official Flask 3.1 docs)
-- Flask Blueprints: https://flask.palletsprojects.com/en/stable/blueprints/ (HIGH confidence — official Flask 3.1 docs)
-- Flask XSS/Security guidance: https://flask.palletsprojects.com/en/stable/web-security/ (HIGH confidence — official Flask 3.1 docs)
-- bleach.clean() documentation: https://bleach.readthedocs.io/en/latest/clean.html (HIGH confidence — official bleach docs, version 6.3.0)
-- httpx resource limits: https://www.python-httpx.org/advanced/resource-limits/ (HIGH confidence — official httpx docs)
-- httpx timeouts: https://www.python-httpx.org/advanced/timeouts/ (HIGH confidence — official httpx docs)
-- iocextract library: https://github.com/InQuest/iocextract (MEDIUM confidence — GitHub README, widely used in security tooling)
-- concurrent.futures documentation: https://docs.python.org/3/library/concurrent.futures.html (HIGH confidence — Python 3.14 stdlib docs)
-- Jinja2 autoescaping/XSS prevention: https://semgrep.dev/docs/cheat-sheets/flask-xss (MEDIUM confidence — verified against Flask official docs)
-- python-dotenv: https://pypi.org/project/python-dotenv/ (HIGH confidence — PyPI official page)
+- Tailwind CSS v3 — Dark Mode configuration: https://v3.tailwindcss.com/docs/dark-mode (HIGH confidence — official v3 docs)
+- Tailwind CSS — Reusing Styles (when to use @apply): https://tailwindcss.com/docs/reusing-styles (HIGH confidence — official docs)
+- Tailwind CSS — Adding Custom Styles: https://tailwindcss.com/docs/adding-custom-styles (HIGH confidence — official docs)
+- Tailwind CSS — Theme configuration: https://tailwindcss.com/docs/theme (HIGH confidence — official docs)
+- Dark Mode with Design Tokens in Tailwind CSS: https://www.richinfante.com/2024/10/21/tailwind-dark-mode-design-tokens-themes-css (MEDIUM confidence — verified against official Tailwind docs)
+- Semantic color tokens (nareshbhatia demo): https://github.com/nareshbhatia/tailwindcss-dark-mode-semantic-colors (MEDIUM confidence — reference implementation, community-sourced)
+- Vercel Geist color token naming: https://vercel.com/geist/colors (HIGH confidence — official Vercel design system)
+- Flask Templates (Jinja2 includes and macros): https://flask.palletsprojects.com/en/stable/templating/ (HIGH confidence — official Flask 3.1 docs)
+- Jinja2 Template Inheritance and Includes: https://jinja.palletsprojects.com/en/stable/templates/ (HIGH confidence — official Jinja2 docs)
+- Self-hosting web fonts guide: https://tristanguest.hashnode.dev/a-practical-guide-to-self-hosting-web-fonts (MEDIUM confidence — practical guide, verified against MDN font-display)
+- Inter Variable font: https://github.com/rsms/inter/releases (HIGH confidence — official Inter font repo)
+- JetBrains Mono: https://www.jetbrains.com/legalnotice/fonts/ (HIGH confidence — official JetBrains page)
+- Font preload crossorigin requirement: https://developer.mozilla.org/en-US/docs/Web/HTML/Attributes/rel/preload#cors-enabled_fetches (HIGH confidence — MDN official)
+- How we redesigned the Linear UI: https://linear.app/now/how-we-redesigned-the-linear-ui (MEDIUM confidence — product blog, design reference)
+- Tailwind CSS v4.0 release (context only, not adopting): https://tailwindcss.com/blog/tailwindcss-v4 (HIGH confidence — official Tailwind blog)
+- Semantic Tailwind color setup: https://www.subframe.com/blog/how-to-setup-semantic-tailwind-colors (MEDIUM confidence — community blog, pattern verified against Tailwind docs)
 
 ---
-*Architecture research for: Security-focused local IOC triage Flask application*
-*Researched: 2026-02-21*
+*Architecture research for: Dark-first design system — SentinelX v1.2 Modern UI Redesign*
+*Researched: 2026-02-25*
