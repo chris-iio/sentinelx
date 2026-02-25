@@ -32,33 +32,20 @@ Safe, correct, and transparent IOC extraction and enrichment — never invent sc
 - ✓ CSP: default-src 'self'; script-src 'self' — v1.0
 - ✓ No subprocess calls, no shell execution, no dynamic code execution — v1.0
 - ✓ No persistent storage of raw pasted blobs — v1.0
+- ✓ Card-based results layout with severity borders and summary dashboard — v1.1
+- ✓ Verdict/type/text filtering with sticky filter bar — v1.1
+- ✓ Toggle switch, paste feedback, contextual submit button — v1.1
+- ✓ Tailwind CSS standalone CLI build integration — v1.1
 
-### Active (v1.1 UX Overhaul)
+### Active (v1.2 Modern UI Redesign)
 
-- **LAYOUT-01**: Card-based IOC display replacing table rows
-- **LAYOUT-02**: Summary dashboard with verdict counts
-- **LAYOUT-03**: Cards sorted by verdict severity (malicious first)
-- **LAYOUT-04**: Responsive card grid with colored severity borders
-- **FILTER-01**: Verdict filter bar (All | Malicious | Suspicious | Clean | No Data)
-- **FILTER-02**: IOC type filter pills (only types present in results)
-- **FILTER-03**: Text search across IOC values
-- **FILTER-04**: Sticky filter bar, dashboard cards clickable as filters
-- **INPUT-01**: Toggle switch replacing mode dropdown
-- **INPUT-02**: Paste feedback ("N characters pasted")
-- **INPUT-03**: Contextual submit button ("Extract IOCs" / "Extract & Enrich")
-- **EXPORT-01**: Export dropdown (clipboard text, JSON download, CSV download)
-- **EXPORT-02**: Structured clipboard format with headers/sections
-- **EXPORT-03**: Bulk selection with checkboxes
-- **EXPORT-04**: "Copy Selected" / "Select All" buttons
-- **POLISH-01**: "Test Connection" button for VT API key in settings
-- **POLISH-02**: Accessibility audit (keyboard nav, ARIA labels, focus management)
-- **POLISH-03**: Performance verification with 100+ IOCs
-
-Full requirements: `.planning/REQUIREMENTS.md`
+Requirements being defined — see `.planning/REQUIREMENTS.md` when complete.
 
 ### Out of Scope
 
-- New threat intelligence providers (v1.1 is frontend-only)
+- Export/copy features (EXPORT-01 through EXPORT-04) — dropped from v1.1, superseded by v1.2 redesign
+- Settings test connection / accessibility / perf verification (POLISH-01 through POLISH-03) — dropped from v1.1, folded into v1.2
+- New threat intelligence providers — frontend-only milestones
 - Backend route changes or new API endpoints
 - Public internet exposure — this is a local/jump-box tool only
 - User authentication — single-user, local access assumed
@@ -111,4 +98,4 @@ Full requirements: `.planning/REQUIREMENTS.md`
 | Zero backend changes in v1.1 | All v1.1 is frontend-only — same routes, same data models | Pending — v1.1 |
 
 ---
-*Last updated: 2026-02-24 after v1.1 milestone setup*
+*Last updated: 2026-02-25 after v1.1 shipped, v1.2 milestone started*

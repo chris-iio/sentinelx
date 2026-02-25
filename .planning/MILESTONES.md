@@ -27,24 +27,25 @@
 
 ---
 
-## v1.1 UX Overhaul (In Progress)
+## v1.1 UX Overhaul (Shipped: 2026-02-25 — Reduced Scope)
 
-**Phases:** 5 (6, 7, 8, 9, 10) | **Plans:** TBD | **Requirements:** 19
-**Started:** 2026-02-24
-**Stack:** Tailwind CSS standalone CLI + Alpine.js CSP build + vanilla JS
+**Phases:** 3 completed of 5 planned (6, 7, 8) | **Plans:** 6 | **Requirements:** 12/19 (7 dropped)
+**Timeline:** 2 days (2026-02-24 to 2026-02-25)
+**Stack:** Tailwind CSS standalone CLI + vanilla JS
 **Scope:** Frontend-only — zero backend changes
 
-**Goal:** Make SentinelX's results page the one place a SOC analyst looks — better visual hierarchy, filtering, and export. No new providers; make existing data shine.
+**Delivered:** Card-based results layout with Tailwind CSS, filtering & search (verdict/type/text), input page polish (toggle switch, paste feedback, reactive submit label). Foundation for modern UI.
 
-**Phases:**
-1. Phase 6: Foundation — Tailwind + Alpine + Card Layout (LAYOUT-01 through LAYOUT-05)
-2. Phase 7: Filtering & Search (FILTER-01 through FILTER-04)
-3. Phase 8: Input Page Polish (INPUT-01 through INPUT-03)
-4. Phase 9: Export & Copy Enhancements (EXPORT-01 through EXPORT-04)
-5. Phase 10: Settings & Polish (POLISH-01 through POLISH-03)
+**Key accomplishments:**
+1. Tailwind CSS standalone CLI integration with Makefile build
+2. Card layout replacing table rows with severity-sorted display and summary dashboard
+3. Filter bar with verdict buttons, IOC type pills, text search, and sticky positioning
+4. Toggle switch replacing dropdown, paste feedback, contextual submit button
+
+**Dropped to out-of-scope:** EXPORT-01 through EXPORT-04, POLISH-01 through POLISH-03 (superseded by v1.2 full redesign)
 
 **Archives:**
 - `milestones/v1.1-ROADMAP.md`
-- `milestones/v1.1-phases/` (when complete)
+- `milestones/v1.1-REQUIREMENTS.md` (when archived)
 
 ---
