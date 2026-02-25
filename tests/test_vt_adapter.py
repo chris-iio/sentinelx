@@ -9,15 +9,14 @@ from __future__ import annotations
 
 import base64
 import json
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
-import pytest
 import requests
 
 from app.pipeline.models import IOC, IOCType
 from app.enrichment.models import EnrichmentError, EnrichmentResult
-from app.enrichment.adapters.virustotal import VTAdapter, VT_BASE
-from app.enrichment.http_safety import MAX_RESPONSE_BYTES, TIMEOUT
+from app.enrichment.adapters.virustotal import VTAdapter
+from app.enrichment.http_safety import MAX_RESPONSE_BYTES
 
 
 ALLOWED_HOSTS = ["www.virustotal.com"]

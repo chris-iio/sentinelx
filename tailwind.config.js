@@ -26,7 +26,7 @@ module.exports = {
     "verdict-clean",
     "verdict-no_data",
     "verdict-error",
-    // Dynamic Alpine filter classes (Phase 7)
+    // Dynamic JS filter classes (Phase 7)
     "filter-btn--active",
     "filter-pill--active",
     "filter-pill--ipv4",

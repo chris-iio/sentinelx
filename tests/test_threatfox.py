@@ -10,12 +10,11 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock, patch
 
-import pytest
 import requests
 
 from app.pipeline.models import IOC, IOCType
 from app.enrichment.models import EnrichmentError, EnrichmentResult
-from app.enrichment.adapters.threatfox import TFAdapter, CONFIDENCE_THRESHOLD
+from app.enrichment.adapters.threatfox import TFAdapter
 from app.enrichment.http_safety import MAX_RESPONSE_BYTES
 
 

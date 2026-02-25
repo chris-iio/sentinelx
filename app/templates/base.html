@@ -25,9 +25,6 @@
         <p>SentinelX — Phase 1 Offline Pipeline</p>
     </footer>
 
-    {# main.js must load before alpine.csp.min.js so the alpine:init listener
-       is registered before Alpine initialises and starts processing the DOM. #}
     <script src="{{ url_for('static', filename='main.js') }}" defer></script>
-    <script src="{{ url_for('static', filename='vendor/alpine.csp.min.js') }}" defer></script>
 </body>
 </html>

@@ -13,8 +13,7 @@
         <div class="alert alert-error" role="alert">{{ error }}</div>
         {% endif %}
 
-        <form method="post" action="{{ url_for('main.analyze') }}" id="analyze-form"
-              data-settings-url="{{ url_for('main.settings_get') }}">
+        <form method="post" action="{{ url_for('main.analyze') }}" id="analyze-form">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
 
             <div class="form-field">
