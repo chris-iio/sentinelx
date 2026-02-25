@@ -46,3 +46,6 @@ bandit-report.json
 
 # Build tools (downloaded binaries)
 tools/
+
+# Node.js (not used — Tailwind standalone CLI only)
+node_modules/
