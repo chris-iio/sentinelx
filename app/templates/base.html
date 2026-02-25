@@ -4,11 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SentinelX — IOC Extractor</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='images/logo.svg') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='dist/style.css') }}">
 </head>
 <body>
     <header class="site-header">
         <div class="header-inner">
+            <img src="{{ url_for('static', filename='images/logo.svg') }}" alt="" class="site-logo-icon" width="28" height="28">
             <span class="site-logo">SentinelX</span>
             <span class="site-tagline">Offline IOC Extractor</span>
             <nav class="site-nav">

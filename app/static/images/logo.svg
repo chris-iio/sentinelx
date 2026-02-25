@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="#e6edf3">
+  <!-- Helmet silhouette — angular crusader great helm -->
+  <path d="M16 1L12 3L7 7L5 13L5 21L8 26L16 30L24 26L27 21L27 13L25 7L20 3Z"/>
+  <!-- Cross visor: horizontal eye slit -->
+  <rect x="6" y="13.5" width="20" height="3" fill="#0d1117"/>
+  <!-- Cross visor: vertical nose guard -->
+  <rect x="14.5" y="8.5" width="3" height="13" fill="#0d1117"/>
+</svg>
