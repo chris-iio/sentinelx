@@ -8,8 +8,8 @@ See: .planning/PROJECT.md
 
 **Milestone:** v1.1 UX Overhaul
 **Current phase:** Phase 7 of 10 — Filtering & Search
-**Current Plan:** Plan 2 of 2 complete
-**Status:** Phase 7 COMPLETE — Filter bar implemented (Plan 01), E2E tests added + Alpine CSP bug fixed (Plan 02), human-verified in browser
+**Current Plan:** Not started
+**Status:** Milestone complete
 
 ## Progress
 
