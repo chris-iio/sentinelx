@@ -8,8 +8,8 @@ See: .planning/PROJECT.md
 
 **Milestone:** v1.1 UX Overhaul
 **Current phase:** Phase 7 of 10 — Filtering & Search
-**Current Plan:** Plan 2 of 2 complete (pending human checkpoint)
-**Status:** Phase 7 Plan 02 complete — E2E filter tests added, Alpine CSP bug fixed, awaiting human visual verification
+**Current Plan:** Plan 2 of 2 complete
+**Status:** Phase 7 COMPLETE — Filter bar implemented (Plan 01), E2E tests added + Alpine CSP bug fixed (Plan 02), human-verified in browser
 
 ## Progress
 
@@ -28,6 +28,8 @@ Phases 8-10: Not started
 - Filter bar renders in both online and offline modes — type pills and search are useful in offline mode
 - ioc_type.value must be used in Jinja2 when iterating grouped.keys() because group_by_type returns IOCType enums as keys
 - Dashboard verdict badges made clickable with toggle pattern (click once to filter, click again to reset to all)
+- Alpine CSP vendor file removed — no longer needed since Phase 7 switched to pure vanilla JS initFilterBar()
+- Human visual verification confirmed filter bar works: verdict buttons, type pills, text search, sticky positioning all functional in browser
 
 ## Pending Todos
 
@@ -40,4 +42,4 @@ None
 ## Session Continuity
 
 Last session: 2026-02-25
-Stopped at: 07-02-PLAN.md Task 1 complete — E2E filter tests added, waiting at checkpoint Task 2 for human visual verification
+Stopped at: Completed 07-02-PLAN.md — Phase 7 Filtering & Search fully complete (human checkpoint approved)

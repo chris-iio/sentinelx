@@ -125,3 +125,16 @@ None - no external service configuration required.
 ---
 *Phase: 07-filtering-search*
 *Completed: 2026-02-25*
+
+## Self-Check: PASSED
+
+All created/modified files verified present. All commits verified in git log.
+
+- `app/templates/results.html` — FOUND
+- `app/static/src/input.css` — FOUND
+- `app/static/dist/style.css` — FOUND
+- `tailwind.config.js` — FOUND
+- `.planning/phases/07-filtering-search/07-01-SUMMARY.md` — FOUND
+- `bb5d5a3` (Task 1 commit) — FOUND
+- `71f39a8` (Task 2 commit) — FOUND
+- `b810bac` (metadata commit) — FOUND

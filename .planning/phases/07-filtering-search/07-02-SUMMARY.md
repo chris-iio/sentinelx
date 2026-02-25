@@ -58,11 +58,11 @@ completed: 2026-02-25
 
 ## Performance
 
-- **Duration:** ~16 min
+- **Duration:** ~90 min (including checkpoint and user-initiated dead code cleanup)
 - **Started:** 2026-02-25T07:44:18Z
-- **Completed:** 2026-02-25T07:59:58Z
-- **Tasks:** 1 complete (Task 2 awaiting human verification)
-- **Files modified:** 5
+- **Completed:** 2026-02-25T08:42:00Z
+- **Tasks:** 2 complete (Task 1 auto + Task 2 human-verify checkpoint, approved)
+- **Files modified:** 14 (5 in Task 1 + 9 in user-initiated cleanup)
 
 ## Accomplishments
 - Added `initFilterBar()` to `main.js`: pure vanilla JS filter state machine that reads `data-filter-verdict` / `data-filter-type` attributes from buttons and toggles `filter-btn--active` / `filter-pill--active` classes
@@ -74,6 +74,9 @@ completed: 2026-02-25
 ## Task Commits
 
 1. **Task 1: Add E2E tests for filter bar + fix Alpine CSP incompatibility** - `533b4b8` (feat)
+2. **Task 2: Visual verification of filter bar in browser** - checkpoint approved, no commit (human-verify gate)
+
+**User-initiated cleanup (between checkpoint and approval):** `dd166be` (refactor: remove dead code — Alpine.js vendor, unused imports, stale CSS)
 
 ## Files Created/Modified
 - `tests/e2e/test_results_page.py` - New file: 13 E2E filter tests using ResultsPage POM
@@ -85,7 +88,8 @@ completed: 2026-02-25
 ## Decisions Made
 - Replaced Alpine-based filtering with pure vanilla JS because the Alpine CSP build doesn't support any of the expression types needed: `x-data` inline objects fail, `:class` with function calls fail, `@click` with args fails, `$el` and `$event` magic properties are not supported
 - `card.style.display = "none"` via JavaScript DOM is NOT blocked by CSP `style-src 'self'` (CSP only blocks inline `style=""` HTML attributes and `<style>` blocks, not JS DOM property writes)
-- Kept Alpine loaded in base.html for potential future CSP-safe uses, but it's dormant on results page
+- Alpine vendor file removed (dd166be) — no longer needed since Phase 7 switched to vanilla JS; keeping it would be dead weight (45KB)
+- Human visual verification (Task 2 checkpoint) confirmed approved — all filter interactions work correctly in browser
 
 ## Deviations from Plan
 
@@ -101,8 +105,17 @@ completed: 2026-02-25
 
 ---
 
-**Total deviations:** 1 auto-fixed (Rule 1 - bug)
-**Impact on plan:** The filter bar would have appeared to work in development (plain `alpine.min.js` supports eval) but was completely non-functional with the CSP build. The fix was necessary for correctness. No scope creep — the E2E tests were the planned deliverable, and fixing the underlying bug was required to make the tests pass.
+**2. [External] User-initiated dead code cleanup after Task 1 checkpoint**
+- **Found during:** Between Task 1 commit and Task 2 checkpoint approval
+- **Issue:** Alpine.js CSP vendor file (45KB) remained in vendor/ despite Phase 7 switching to vanilla JS. Unused imports accumulated across 3 test files. Stale CSS (.filter-no-results) and a stale comment in tailwind.config.js.
+- **Fix:** User committed `dd166be` (refactor: remove dead code) — deleted alpine.csp.min.js, removed Alpine script tag from base.html, removed unused imports, removed .filter-no-results CSS, fixed stale comment, regenerated dist/style.css
+- **Files modified:** `app/static/vendor/alpine.csp.min.js` (deleted), `app/templates/base.html`, `app/static/src/input.css`, `app/static/dist/style.css`, `tailwind.config.js`, `app/templates/index.html`, `tests/test_orchestrator.py`, `tests/test_threatfox.py`, `tests/test_vt_adapter.py`
+- **Committed in:** `dd166be` (separate refactor commit, user-initiated)
+
+---
+
+**Total deviations:** 1 auto-fixed (Rule 1 - bug) + 1 user-initiated cleanup
+**Impact on plan:** The filter bar would have appeared to work in development (plain `alpine.min.js` supports eval) but was completely non-functional with the CSP build. The fix was necessary for correctness. No scope creep — the E2E tests were the planned deliverable, and fixing the underlying bug was required to make the tests pass. User-initiated cleanup left codebase cleaner with no dead vendor weight.
 
 ## Issues Encountered
 - Test assertion had wrong assumption: `test_combined_type_and_search_filters` initially searched "8" expecting 2 results (8.8.8.8 and 1.1.1.1), but 1.1.1.1 contains no "8". Fixed test to search "1.1" and "8.8" instead.
@@ -112,11 +125,11 @@ completed: 2026-02-25
 None - no external service configuration required.
 
 ## Next Phase Readiness
-- Filter bar is fully functional in both online and offline modes
-- All 4 FILTER requirements verified by E2E tests
+- Filter bar is fully functional in both online and offline modes — human-verified
+- All 4 FILTER requirements (FILTER-01 through FILTER-04) verified by E2E tests
 - Vanilla JS approach is CSP-compatible and doesn't require Alpine for filtering
-- Alpine is still loaded but dormant — available for future CSP-safe directive use
-- Awaiting human visual verification (Task 2 checkpoint)
+- Alpine vendor removed — codebase is clean of dead weight
+- Phase 7 complete; ready for Phase 8
 
 ---
 *Phase: 07-filtering-search*
@@ -124,7 +137,7 @@ None - no external service configuration required.
 
 ## Self-Check: PASSED
 
-All created/modified files verified present. Commit verified in git log.
+All created/modified files verified present. Commits verified in git log.
 
 - `tests/e2e/test_results_page.py` — FOUND
 - `tests/e2e/pages/results_page.py` — FOUND
@@ -133,3 +146,5 @@ All created/modified files verified present. Commit verified in git log.
 - `app/templates/base.html` — FOUND
 - `.planning/phases/07-filtering-search/07-02-SUMMARY.md` — FOUND
 - `533b4b8` (Task 1 commit) — FOUND
+- `dd166be` (user-initiated cleanup) — FOUND
+- Task 2 checkpoint: human-verify approved by user
