@@ -23,7 +23,7 @@ Full details: `milestones/v1.0-ROADMAP.md`
 ### v1.1 UX Overhaul (Phases 6-10)
 
 - [ ] **Phase 6: Foundation — Tailwind + Alpine + Card Layout** - Set up Tailwind CLI and Alpine.js, rewrite results page from table to card layout with summary dashboard
-- [ ] **Phase 7: Filtering & Search** - Verdict filter bar, IOC type pills, text search, sticky filters, grouped-by-type toggle
+- [x] **Phase 7: Filtering & Search** - Verdict filter bar, IOC type pills, text search, sticky filters, grouped-by-type toggle (completed 2026-02-25)
 - [ ] **Phase 8: Input Page Polish** - Toggle switch, paste feedback, contextual submit button, larger textarea
 - [ ] **Phase 9: Export & Copy Enhancements** - Export dropdown (text/JSON/CSV), structured clipboard, bulk selection, copy selected
 - [ ] **Phase 10: Settings & Polish** - Test connection button, accessibility audit, performance verification, final E2E pass
@@ -53,7 +53,7 @@ Plans:
   3. Typing in the search box filters cards in real-time (<100ms response) by IOC value substring match
   4. Filter bar remains visible (sticky) when scrolling through 50+ cards
   5. Dashboard verdict badges act as filter shortcuts — clicking one applies the corresponding verdict filter
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 Plans:
 - [ ] 07-01-PLAN.md — Alpine filter component + filter bar HTML + CSS + safelist
 - [ ] 07-02-PLAN.md — E2E tests for filter interactions + visual verification
@@ -105,7 +105,7 @@ Phases execute in numeric order: 6 → 7 → 8 → 9 → 10
 | 3.1. Integration Fixes and Git Hygiene | v1.0 | 1/1 | Complete | 2026-02-22 |
 | 4. UX Polish and Security Verification | v1.0 | 2/2 | Complete | 2026-02-24 |
 | 6. Foundation — Tailwind + Alpine + Card Layout | v1.1 | 0/? | Pending | — |
-| 7. Filtering & Search | 1/2 | In Progress|  | — |
+| 7. Filtering & Search | 2/2 | Complete   | 2026-02-25 | — |
 | 8. Input Page Polish | v1.1 | 0/? | Pending | — |
 | 9. Export & Copy Enhancements | v1.1 | 0/? | Pending | — |
 | 10. Settings & Polish | v1.1 | 0/? | Pending | — |
