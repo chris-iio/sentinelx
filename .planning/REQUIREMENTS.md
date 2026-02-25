@@ -1,62 +1,85 @@
-# Requirements: v1.1 UX Overhaul
+# Requirements: v1.2 Modern UI Redesign
 
-**Defined:** 2026-02-24
-**Core Value:** Make SentinelX's results page the one place a SOC analyst looks — better visual hierarchy, filtering, and export. No new providers; make existing data shine.
+**Defined:** 2026-02-25
+**Core Value:** Elevate SentinelX from functional dark prototype to premium Linear/GreyNoise-quality security tool — dark-first zinc/emerald/teal design system, Inter + JetBrains Mono typography, WCAG AA verified.
 **Scope:** Frontend-only. Zero backend changes. Same routes, same data models.
 
 ## Stack
 
-- **Tailwind CSS** standalone CLI — no Node.js, generates CSS from utility classes. Existing CSS custom properties become Tailwind theme extensions.
-- **Alpine.js CSP build** (~15KB) — declarative reactivity for filtering, toggles, search. CSP-compatible (no eval). Served from `/static/`.
-- **Vanilla JS** retained — enrichment polling and clipboard code unchanged.
+- **Tailwind CSS** standalone CLI v3.4.x — existing build pipeline, `darkMode: 'selector'` added
+- **Inter Variable** (~70KB woff2, self-hosted) — UI typeface for all chrome
+- **JetBrains Mono Variable** (~60KB woff2, self-hosted) — monospace for IOC values
+- **Heroicons v2** (inline SVG, zero install) — UI icons via Jinja2 macros
+- **`@tailwindcss/forms`** (bundled in standalone CLI) — form element reset
+- **Vanilla JS** retained — enrichment polling and clipboard unchanged
 
-## v1.1 Requirements
+## v1.2 Requirements
 
-### Layout & Card Display
+### Foundation — Design Tokens & Base CSS
 
-- [ ] **LAYOUT-01**: Results page displays IOCs as cards instead of table rows, with each card showing IOC value, type badge, verdict label, and provider details
-- [ ] **LAYOUT-02**: Summary dashboard at the top of results shows verdict counts (malicious, suspicious, clean, no data) with colored count badges
-- [ ] **LAYOUT-03**: IOC cards are sorted by verdict severity — malicious first, then suspicious, clean, and no data last
-- [ ] **LAYOUT-04**: Each card has a colored left border indicating verdict severity (red=malicious, amber=suspicious, green=clean, gray=no data)
-- [ ] **LAYOUT-05**: Card layout is responsive — single column on narrow viewports, multi-column on wide screens
+- [ ] **FOUND-01**: Design token system defined as CSS custom properties at `:root` — zinc-based surface hierarchy (950/900/800/700), emerald/teal accent system, four-state verdict color triples (text/bg/border per verdict)
+- [ ] **FOUND-02**: Inter Variable font self-hosted in `app/static/fonts/` with `@font-face` declaration and `crossorigin` preload link in `base.html`
+- [ ] **FOUND-03**: JetBrains Mono Variable font self-hosted in `app/static/fonts/` with `@font-face` declaration, applied to all IOC value displays
+- [ ] **FOUND-04**: `<meta name="color-scheme" content="dark">` added to `base.html` and `:root { color-scheme: dark; }` in CSS, fixing native form controls and scrollbar rendering
+- [ ] **FOUND-05**: All text/background token pairs pass WCAG AA contrast — 4.5:1 for normal text, 3:1 for UI components — verified before any component work begins
+- [ ] **FOUND-06**: Browser autofill override CSS prevents yellow flash on dark input fields (settings page API key field)
+- [ ] **FOUND-07**: `tailwind.config.js` updated with `darkMode: 'selector'`, extended theme colors mapping to CSS tokens, and `@tailwindcss/forms` plugin activated
+- [ ] **FOUND-08**: Typography scale defined — 3-tier weight system (headings, body, captions) with -0.02em tracking on headings, consistent line-height ratios
 
-### Filtering & Search
+### Shared Components
 
-- [x] **FILTER-01**: Verdict filter bar with buttons: All | Malicious | Suspicious | Clean | No Data — clicking a button shows only IOCs with that verdict
-- [x] **FILTER-02**: IOC type filter pills displayed only for types present in current results (e.g., if no CVEs extracted, no CVE pill shown)
-- [x] **FILTER-03**: Text search input filters IOC cards in real-time by matching against the IOC value string
-- [x] **FILTER-04**: Filter bar is sticky (stays visible when scrolling) and dashboard verdict badges are clickable as filter shortcuts
+- [ ] **COMP-01**: Verdict badges unified — all five states (malicious, suspicious, clean, no record, pending) use tinted-background + colored-border + colored-text pattern (eliminate solid amber outlier)
+- [ ] **COMP-02**: Focus rings standardized on all interactive elements — `outline: 2px solid var(--accent); outline-offset: 2px` on `:focus-visible`, replacing all low-opacity box-shadow focus indicators
+- [ ] **COMP-03**: Button component styles — primary (emerald), secondary (zinc), and ghost variants with hover/active/disabled states and 150ms transitions
+- [ ] **COMP-04**: Form element styling via `@tailwindcss/forms` — textarea, text inputs, and select elements reset with dark-theme-appropriate borders and focus states
+- [ ] **COMP-05**: Sticky filter bar uses `backdrop-filter: blur(12px)` with semi-transparent zinc-950 background
+- [ ] **COMP-06**: Heroicons icon macro created (`templates/macros/icons.html`) for reusable inline SVG icons across all pages
+- [ ] **COMP-07**: Header/footer redesigned with updated typography, spacing, and emerald accent treatment
 
-### Input Page
+### Results Page
 
-- [x] **INPUT-01**: Mode selector is a toggle switch (not a dropdown) clearly labeled "Offline" / "Online" with visual state indicator
-- [x] **INPUT-02**: Paste event shows character count feedback ("N characters pasted") near the textarea
-- [x] **INPUT-03**: Submit button label changes based on mode — "Extract IOCs" in offline mode, "Extract & Enrich" in online mode
+- [ ] **RESULTS-01**: Jinja2 template partials extracted — `_ioc_card.html`, `_verdict_dashboard.html`, `_filter_bar.html`, `_enrichment_slot.html` — with E2E tests passing after extraction before any visual changes
+- [ ] **RESULTS-02**: IOC card hover elevation — `translateY(-1px)` + subtle shadow + border-color shift on hover with 150ms ease transition
+- [ ] **RESULTS-03**: IOC type badge dot indicator — `::before` 6px colored circle on each type badge for quick visual scanning
+- [ ] **RESULTS-04**: Search input has inline SVG magnifying glass icon prefix
+- [ ] **RESULTS-05**: Empty state displays shield/search icon with "No IOCs detected" headline and body text listing supported IOC types
+- [ ] **RESULTS-06**: Verdict stat dashboard upgraded to KPI-style cards — large monospace number, colored top border, small-caps label
+- [ ] **RESULTS-07**: Shimmer skeleton loader replaces spinner during enrichment-pending state — 2-3 animated skeleton rectangles per card placeholder
+- [ ] **RESULTS-08**: 3px left-border accent on IOC cards in verdict color for instant visual scanning of severity
 
-### Export & Copy
+### Input & Settings Pages
 
-- [ ] **EXPORT-01**: Export dropdown menu with three options: Copy to clipboard (text), Download JSON, Download CSV
-- [ ] **EXPORT-02**: Clipboard copy produces structured text with headers and sections (IOC value, type, verdict, provider details) instead of raw dump
-- [ ] **EXPORT-03**: Each IOC card has a selection checkbox for bulk operations
-- [ ] **EXPORT-04**: "Select All" / "Copy Selected" buttons appear when any checkbox is checked, operating on the filtered view
+- [ ] **PAGE-01**: Input page textarea refined — dark zinc-800 background, teal focus ring, Inter Variable typography, improved sizing
+- [ ] **PAGE-02**: Submit button uses emerald variant for Online mode, secondary variant for Offline mode — updates reactively on toggle
+- [ ] **PAGE-03**: Mode toggle visual upgrade — improved styling consistent with new design system
+- [ ] **PAGE-04**: Paste feedback animation — `@keyframes` appear/fade effect on character count notification
+- [ ] **PAGE-05**: Settings page uses Vercel-style section cards — bordered card per section with header row (section name left, action button right)
+- [ ] **PAGE-06**: Settings API key input styled as monospace field with show/hide toggle and configured/unconfigured status badge
 
-### Settings & Polish
-
-- [ ] **POLISH-01**: "Test Connection" button on settings/API key configuration that validates the VT API key with a lightweight API call
-- [ ] **POLISH-02**: Accessibility audit — all interactive elements keyboard-navigable, ARIA labels on cards/filters/buttons, visible focus indicators
-- [ ] **POLISH-03**: Performance verified — results page renders and filters smoothly with 100+ IOC cards (no jank, <100ms filter response)
-
-## Out of Scope (v1.1)
+## Deferred to v1.3+
 
 | Feature | Reason |
 |---------|--------|
-| New threat intelligence providers | v1.1 is frontend-only; new providers require backend adapter work |
-| Backend route changes | Same Flask routes, same data models — all changes in templates/static |
-| Dark mode / theming | Defer to v1.2; v1.1 focuses on layout and interaction |
-| Real-time WebSocket updates | Polling works; WebSocket adds backend complexity |
-| Saved searches / history | Requires persistence; out of scope for v1.1 |
-| PDF export | Low priority; JSON/CSV cover analyst needs |
-| Provider status indicators | Moved to POLISH-01 (test connection); full provider dashboard deferred |
+| Custom scrollbar styling | Low cross-browser ROI, `color-scheme: dark` handles the worst case |
+| Search result text highlighting | High complexity (DOM text manipulation), low priority |
+| Copy-button contextual tooltip | Complexity vs value unclear |
+| Dark/light mode toggle | Doubles CSS maintenance, not a real SOC use case |
+| Export dropdown (clipboard/JSON/CSV) | Deferred from v1.1, revisit after redesign settles |
+| Bulk selection with checkboxes | Deferred from v1.1, revisit after redesign settles |
+| Test Connection button | Deferred from v1.1, may fold into settings redesign |
+| Accessibility audit (full) | Partial coverage in FOUND-05 + COMP-02; full audit deferred |
+| Performance verification (100+ IOCs) | Address if issues arise during implementation |
+
+## Out of Scope (v1.2)
+
+| Feature | Reason |
+|---------|--------|
+| Sidebar navigation | Consumes 220px needed for IOC hash display |
+| Glassmorphism on content cards | GPU jank at 50+ cards during scroll |
+| Inline charts/sparklines | Single-shot tool, no history to chart |
+| New threat intelligence providers | Frontend-only milestone |
+| Backend route changes | Same Flask routes, same data models |
+| Real-time WebSocket updates | Polling works, WebSocket adds backend complexity |
 
 ## Traceability
 
@@ -64,31 +87,41 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| LAYOUT-01 | Phase 6 | Pending |
-| LAYOUT-02 | Phase 6 | Pending |
-| LAYOUT-03 | Phase 6 | Pending |
-| LAYOUT-04 | Phase 6 | Pending |
-| LAYOUT-05 | Phase 6 | Pending |
-| FILTER-01 | Phase 7 | Complete |
-| FILTER-02 | Phase 7 | Complete |
-| FILTER-03 | Phase 7 | Complete |
-| FILTER-04 | Phase 7 | Complete |
-| INPUT-01 | Phase 8 | Complete |
-| INPUT-02 | Phase 8 | Complete |
-| INPUT-03 | Phase 8 | Complete |
-| EXPORT-01 | Phase 9 | Pending |
-| EXPORT-02 | Phase 9 | Pending |
-| EXPORT-03 | Phase 9 | Pending |
-| EXPORT-04 | Phase 9 | Pending |
-| POLISH-01 | Phase 10 | Pending |
-| POLISH-02 | Phase 10 | Pending |
-| POLISH-03 | Phase 10 | Pending |
+| FOUND-01 | Phase 11 | Pending |
+| FOUND-02 | Phase 11 | Pending |
+| FOUND-03 | Phase 11 | Pending |
+| FOUND-04 | Phase 11 | Pending |
+| FOUND-05 | Phase 11 | Pending |
+| FOUND-06 | Phase 11 | Pending |
+| FOUND-07 | Phase 11 | Pending |
+| FOUND-08 | Phase 11 | Pending |
+| COMP-01 | Phase 12 | Pending |
+| COMP-02 | Phase 12 | Pending |
+| COMP-03 | Phase 12 | Pending |
+| COMP-04 | Phase 12 | Pending |
+| COMP-05 | Phase 12 | Pending |
+| COMP-06 | Phase 12 | Pending |
+| COMP-07 | Phase 12 | Pending |
+| RESULTS-01 | Phase 13 | Pending |
+| RESULTS-02 | Phase 13 | Pending |
+| RESULTS-03 | Phase 13 | Pending |
+| RESULTS-04 | Phase 13 | Pending |
+| RESULTS-05 | Phase 13 | Pending |
+| RESULTS-06 | Phase 13 | Pending |
+| RESULTS-07 | Phase 13 | Pending |
+| RESULTS-08 | Phase 13 | Pending |
+| PAGE-01 | Phase 14 | Pending |
+| PAGE-02 | Phase 14 | Pending |
+| PAGE-03 | Phase 14 | Pending |
+| PAGE-04 | Phase 14 | Pending |
+| PAGE-05 | Phase 14 | Pending |
+| PAGE-06 | Phase 14 | Pending |
 
 **Coverage:**
-- v1.1 requirements: 19 total
-- Mapped to phases: 19
+- v1.2 requirements: 29 total
+- Mapped to phases: 29
 - Unmapped: 0
 
 ---
-*Requirements defined: 2026-02-24*
-*Last updated: 2026-02-24 after roadmap creation*
+*Requirements defined: 2026-02-25*
+*Last updated: 2026-02-25 after initial definition*
