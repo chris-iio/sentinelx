@@ -22,10 +22,10 @@
 
 ### Filtering & Search
 
-- [ ] **FILTER-01**: Verdict filter bar with buttons: All | Malicious | Suspicious | Clean | No Data — clicking a button shows only IOCs with that verdict
-- [ ] **FILTER-02**: IOC type filter pills displayed only for types present in current results (e.g., if no CVEs extracted, no CVE pill shown)
-- [ ] **FILTER-03**: Text search input filters IOC cards in real-time by matching against the IOC value string
-- [ ] **FILTER-04**: Filter bar is sticky (stays visible when scrolling) and dashboard verdict badges are clickable as filter shortcuts
+- [x] **FILTER-01**: Verdict filter bar with buttons: All | Malicious | Suspicious | Clean | No Data — clicking a button shows only IOCs with that verdict
+- [x] **FILTER-02**: IOC type filter pills displayed only for types present in current results (e.g., if no CVEs extracted, no CVE pill shown)
+- [x] **FILTER-03**: Text search input filters IOC cards in real-time by matching against the IOC value string
+- [x] **FILTER-04**: Filter bar is sticky (stays visible when scrolling) and dashboard verdict badges are clickable as filter shortcuts
 
 ### Input Page
 
@@ -69,10 +69,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | LAYOUT-03 | Phase 6 | Pending |
 | LAYOUT-04 | Phase 6 | Pending |
 | LAYOUT-05 | Phase 6 | Pending |
-| FILTER-01 | Phase 7 | Pending |
-| FILTER-02 | Phase 7 | Pending |
-| FILTER-03 | Phase 7 | Pending |
-| FILTER-04 | Phase 7 | Pending |
+| FILTER-01 | Phase 7 | Complete |
+| FILTER-02 | Phase 7 | Complete |
+| FILTER-03 | Phase 7 | Complete |
+| FILTER-04 | Phase 7 | Complete |
 | INPUT-01 | Phase 8 | Pending |
 | INPUT-02 | Phase 8 | Pending |
 | INPUT-03 | Phase 8 | Pending |
