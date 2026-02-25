@@ -8,15 +8,15 @@ See: .planning/PROJECT.md
 
 **Milestone:** v1.1 UX Overhaul
 **Current phase:** Phase 8 of 10 — Input Page Polish
-**Current Plan:** Plan 01 complete (1/2)
-**Status:** In progress
+**Current Plan:** Plan 02 at checkpoint — Task 1 complete, awaiting human-verify (2/2)
+**Status:** In progress — awaiting human verification
 
 ## Progress
 
 Phases 1-4: v1.0 MVP ✓
 Phase 6: Foundation — Tailwind + Alpine + Card Layout ✓ (commit 148b15b)
 Phase 7: Filtering & Search — Plan 01 complete ✓ (commit 71f39a8), Plan 02 complete ✓ (commit 533b4b8)
-Phase 8: Input Page Polish — Plan 01 complete ✓ (commits 020e192, e128086)
+Phase 8: Input Page Polish — Plan 01 complete ✓ (commits 020e192, e128086), Plan 02 Task 1 complete ✓ (commit c11c976)
 Phases 9-10: Not started
 
 ## Recent Decisions
@@ -46,4 +46,4 @@ None
 ## Session Continuity
 
 Last session: 2026-02-25
-Stopped at: Completed 08-01-PLAN.md — Input Page Polish Plan 01 complete (toggle switch, paste feedback, reactive submit label)
+Stopped at: 08-02-PLAN.md Task 2 checkpoint (human-verify) — E2E tests updated, awaiting visual verification of toggle switch, paste feedback, and reactive label in browser
