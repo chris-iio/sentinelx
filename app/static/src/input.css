@@ -26,15 +26,29 @@
 /* --- Design tokens (CSS custom properties) --- */
 
 :root {
-    --bg-primary:    #0d1117;
-    --bg-secondary:  #161b22;
-    --bg-tertiary:   #1c2128;
-    --text-primary:  #e6edf3;
-    --text-secondary: #8b949e;
-    --border:        #30363d;
-    --border-hover:  #484f58;
+    /* Surfaces — zinc hierarchy */
+    --bg-primary:    #09090b;   /* zinc-950 — page base */
+    --bg-secondary:  #18181b;   /* zinc-900 — card surface */
+    --bg-tertiary:   #27272a;   /* zinc-800 — inputs, nested */
+    --bg-hover:      #3f3f46;   /* zinc-700 — hover state */
 
-    /* IOC type accent colors */
+    /* Borders — opacity-based white */
+    --border:        rgba(255, 255, 255, 0.06);   /* subtle */
+    --border-default: rgba(255, 255, 255, 0.10);  /* default */
+    --border-hover:  rgba(255, 255, 255, 0.18);   /* emphasis */
+
+    /* Text — zinc scale */
+    --text-primary:   #f4f4f5;  /* zinc-100 — headings */
+    --text-secondary: #a1a1aa;  /* zinc-400 — labels, metadata */
+    --text-muted:     #71717a;  /* zinc-500 — placeholder, footnotes */
+
+    /* Accent — emerald/teal */
+    --accent:            #10b981;  /* emerald-500 — primary actions */
+    --accent-hover:      #34d399;  /* emerald-400 — hover */
+    --accent-subtle:     #022c22;  /* emerald-950 — tinted bg */
+    --accent-interactive: #14b8a6; /* teal-500 — focus rings */
+
+    /* IOC type accent colors — keep existing high-luminance values, verified against zinc-900 */
     --accent-ipv4:   #4a9eff;
     --accent-ipv6:   #4a9eff;
     --accent-domain: #4aff9e;
@@ -44,24 +58,50 @@
     --accent-sha256: #ff9e4a;
     --accent-cve:    #ff4a4a;
 
-    /* Verdict colors */
-    --verdict-malicious:  #f85149;
-    --verdict-suspicious: #f59e0b;
-    --verdict-clean:      #3fb950;
-    --verdict-no-data:    #8b949e;
-    --verdict-error:      #d29922;
+    /* Verdict color triples (text / bg / border) */
+    --verdict-malicious-text:   #f87171;   /* red-400 */
+    --verdict-malicious-bg:     #450a0a;   /* red-950 */
+    --verdict-malicious-border: #ef4444;   /* red-500 */
 
-    /* Interactive */
-    --btn-primary-bg:   #238636;
-    --btn-primary-hover: #2ea043;
-    --btn-secondary-bg:  #21262d;
-    --btn-secondary-hover: #30363d;
+    --verdict-suspicious-text:   #fbbf24;  /* amber-400 */
+    --verdict-suspicious-bg:     #451a03;  /* amber-950 */
+    --verdict-suspicious-border: #f59e0b;  /* amber-500 */
 
-    --font-mono: 'Fira Code', 'Cascadia Code', 'JetBrains Mono', 'Consolas', monospace;
-    --font-ui:   -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    --verdict-clean-text:   #34d399;       /* emerald-400 */
+    --verdict-clean-bg:     #022c22;       /* emerald-950 */
+    --verdict-clean-border: #10b981;       /* emerald-500 */
 
-    --radius: 6px;
+    --verdict-no-data-text:   #a1a1aa;     /* zinc-400 */
+    --verdict-no-data-bg:     #27272a;     /* zinc-800 */
+    --verdict-no-data-border: #3f3f46;     /* zinc-700 */
+
+    --verdict-error-text:   #fbbf24;       /* reuse amber */
+    --verdict-error-bg:     #451a03;
+    --verdict-error-border: #f59e0b;
+
+    /* Interactive — now emerald-based */
+    --btn-primary-bg:     #10b981;   /* emerald-500 */
+    --btn-primary-hover:  #059669;   /* emerald-600 */
+    --btn-secondary-bg:   #27272a;   /* zinc-800 */
+    --btn-secondary-hover: #3f3f46;  /* zinc-700 */
+
+    /* Typography */
+    --font-ui:   'Inter Variable', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', monospace;
+
+    /* Typography scale */
+    --weight-heading: 600;
+    --weight-body:    400;
+    --weight-caption: 500;
+    --tracking-heading: -0.02em;
+    --line-height-body: 1.6;
+
+    /* Shape */
+    --radius:    6px;
     --radius-sm: 4px;
+
+    /* Dark mode signal */
+    color-scheme: dark;
 }
 
 /* --- Reset & base --- */
