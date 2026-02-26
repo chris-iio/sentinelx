@@ -9,7 +9,7 @@ progress:
   total_phases: 4
   completed_phases: 0
   total_plans: 3
-  completed_plans: 1
+  completed_plans: 2
 ---
 
 # Session State
@@ -22,12 +22,12 @@ See: .planning/PROJECT.md
 
 **Milestone:** v1.2 Modern UI Redesign
 **Current phase:** Phase 11 — Foundation: Design Tokens & Base CSS
-**Plan:** 1 of 3 complete
+**Plan:** 2 of 3 complete
 **Status:** In progress
 
 ## Progress
 
-Phase 11: ███░░░░░░░ 33%
+Phase 11: ██████░░░░ 66%
 v1.2:     ░░░░░░░░░░ 0% (0/4 phases)
 
 ## Recent Decisions
@@ -40,6 +40,10 @@ v1.2:     ░░░░░░░░░░ 0% (0/4 phases)
 - Inter Variable v4.1 URL requires zip download (no direct woff2 download) — extracted from Inter-4.1.zip web/ subdirectory
 - darkMode: selector used (Tailwind v3.3+ default, supports both .dark class and [data-theme=dark])
 - @font-face declarations placed before @tailwind base; (global cascade, not inside Tailwind layer)
+- Verdict triple token naming: --verdict-{state}-{text|bg|border} — state names use hyphen in CSS (no-data) matching CSS conventions
+- Borders switched to opacity-based white rgba for correct layering across all zinc surfaces
+- Suspicious badge was solid #f59e0b/black-text outlier — now follows tinted-bg pattern (amber-950/amber-400/amber-500)
+- Autofill override uses box-shadow inset 100px trick — only reliable cross-browser method for dark input fields
 
 ## Blockers/Concerns
 
@@ -48,8 +52,8 @@ v1.2:     ░░░░░░░░░░ 0% (0/4 phases)
 ## Session Continuity
 
 Last session: 2026-02-26
-Stopped at: Phase 11 Plan 01 complete — font infrastructure and Tailwind config foundation done
-Resume file: .planning/phases/11-foundation-design-tokens-base-css/.continue-here.md
+Stopped at: Phase 11 Plan 02 complete — design token system fully rewritten, component rules updated, autofill override added
+Resume file: .planning/phases/11-foundation-design-tokens-base-css/11-02-SUMMARY.md
 
 ## Session Log
 
@@ -57,3 +61,4 @@ Resume file: .planning/phases/11-foundation-design-tokens-base-css/.continue-her
 - 2026-02-25: Phase 11 researched, planned (3 plans, 3 waves), verified
 - 2026-02-26: Session resumed, proceeding to execute Phase 11
 - 2026-02-26: Plan 11-01 complete — fonts downloaded, @font-face added, base.html updated, Tailwind config updated
+- 2026-02-26: Plan 11-02 complete — zinc/emerald/teal design token system, verdict triples, typography scale, autofill override
