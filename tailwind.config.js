@@ -4,6 +4,7 @@ module.exports = {
     "./app/templates/**/*.html",
     "./app/static/**/*.js",
   ],
+  darkMode: 'selector',
   safelist: [
     // Dynamic Jinja2 classes: ioc-type-badge--{{ ioc.type.value }}
     "ioc-type-badge--ipv4",
@@ -41,5 +42,7 @@ module.exports = {
   theme: {
     extend: {},
   },
-  plugins: [],
+  plugins: [
+    require('@tailwindcss/forms'),
+  ],
 };

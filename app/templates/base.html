@@ -3,8 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="dark">
     <title>SentinelX — IOC Extractor</title>
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='images/logo.svg') }}">
+    <link rel="preload"
+          href="{{ url_for('static', filename='fonts/InterVariable.woff2') }}"
+          as="font"
+          type="font/woff2"
+          crossorigin>
+    <link rel="preload"
+          href="{{ url_for('static', filename='fonts/JetBrainsMonoVariable.woff2') }}"
+          as="font"
+          type="font/woff2"
+          crossorigin>
     <link rel="stylesheet" href="{{ url_for('static', filename='dist/style.css') }}">
 </head>
 <body>
