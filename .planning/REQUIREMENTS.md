@@ -18,12 +18,12 @@
 ### Foundation — Design Tokens & Base CSS
 
 - [ ] **FOUND-01**: Design token system defined as CSS custom properties at `:root` — zinc-based surface hierarchy (950/900/800/700), emerald/teal accent system, four-state verdict color triples (text/bg/border per verdict)
-- [ ] **FOUND-02**: Inter Variable font self-hosted in `app/static/fonts/` with `@font-face` declaration and `crossorigin` preload link in `base.html`
-- [ ] **FOUND-03**: JetBrains Mono Variable font self-hosted in `app/static/fonts/` with `@font-face` declaration, applied to all IOC value displays
-- [ ] **FOUND-04**: `<meta name="color-scheme" content="dark">` added to `base.html` and `:root { color-scheme: dark; }` in CSS, fixing native form controls and scrollbar rendering
+- [x] **FOUND-02**: Inter Variable font self-hosted in `app/static/fonts/` with `@font-face` declaration and `crossorigin` preload link in `base.html`
+- [x] **FOUND-03**: JetBrains Mono Variable font self-hosted in `app/static/fonts/` with `@font-face` declaration, applied to all IOC value displays
+- [x] **FOUND-04**: `<meta name="color-scheme" content="dark">` added to `base.html` and `:root { color-scheme: dark; }` in CSS, fixing native form controls and scrollbar rendering
 - [ ] **FOUND-05**: All text/background token pairs pass WCAG AA contrast — 4.5:1 for normal text, 3:1 for UI components — verified before any component work begins
 - [ ] **FOUND-06**: Browser autofill override CSS prevents yellow flash on dark input fields (settings page API key field)
-- [ ] **FOUND-07**: `tailwind.config.js` updated with `darkMode: 'selector'`, extended theme colors mapping to CSS tokens, and `@tailwindcss/forms` plugin activated
+- [x] **FOUND-07**: `tailwind.config.js` updated with `darkMode: 'selector'`, extended theme colors mapping to CSS tokens, and `@tailwindcss/forms` plugin activated
 - [ ] **FOUND-08**: Typography scale defined — 3-tier weight system (headings, body, captions) with -0.02em tracking on headings, consistent line-height ratios
 
 ### Shared Components
@@ -88,12 +88,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | FOUND-01 | Phase 11 | Pending |
-| FOUND-02 | Phase 11 | Pending |
-| FOUND-03 | Phase 11 | Pending |
-| FOUND-04 | Phase 11 | Pending |
+| FOUND-02 | Phase 11 | Complete |
+| FOUND-03 | Phase 11 | Complete |
+| FOUND-04 | Phase 11 | Complete |
 | FOUND-05 | Phase 11 | Pending |
 | FOUND-06 | Phase 11 | Pending |
-| FOUND-07 | Phase 11 | Pending |
+| FOUND-07 | Phase 11 | Complete |
 | FOUND-08 | Phase 11 | Pending |
 | COMP-01 | Phase 12 | Pending |
 | COMP-02 | Phase 12 | Pending |
