@@ -275,8 +275,8 @@
     }
 
     .ioc-textarea::placeholder {
-        color: var(--text-secondary);
-        opacity: 0.6;
+        color: var(--text-muted);
+        opacity: 1;
     }
 
     .form-options {
@@ -536,27 +536,27 @@
     }
 
     .verdict-dashboard-badge[data-verdict="malicious"] {
-        background-color: rgba(248, 81, 73, 0.15);
-        border-color: rgba(248, 81, 73, 0.3);
-        color: var(--verdict-malicious);
+        background-color: var(--verdict-malicious-bg);
+        border-color: var(--verdict-malicious-border);
+        color: var(--verdict-malicious-text);
     }
 
     .verdict-dashboard-badge[data-verdict="suspicious"] {
-        background-color: rgba(245, 158, 11, 0.15);
-        border-color: rgba(245, 158, 11, 0.3);
-        color: var(--verdict-suspicious);
+        background-color: var(--verdict-suspicious-bg);
+        border-color: var(--verdict-suspicious-border);
+        color: var(--verdict-suspicious-text);
     }
 
     .verdict-dashboard-badge[data-verdict="clean"] {
-        background-color: rgba(63, 185, 80, 0.15);
-        border-color: rgba(63, 185, 80, 0.3);
-        color: var(--verdict-clean);
+        background-color: var(--verdict-clean-bg);
+        border-color: var(--verdict-clean-border);
+        color: var(--verdict-clean-text);
     }
 
     .verdict-dashboard-badge[data-verdict="no_data"] {
-        background-color: rgba(139, 148, 158, 0.15);
-        border-color: rgba(139, 148, 158, 0.3);
-        color: var(--verdict-no-data);
+        background-color: var(--verdict-no-data-bg);
+        border-color: var(--verdict-no-data-border);
+        color: var(--verdict-no-data-text);
     }
 
     .verdict-dashboard-count {
@@ -617,27 +617,27 @@
 
     /* Verdict-colored active states for filter buttons */
     .filter-btn--malicious.filter-btn--active {
-        border-color: var(--verdict-malicious);
-        color: var(--verdict-malicious);
-        background-color: rgba(248, 81, 73, 0.15);
+        border-color: var(--verdict-malicious-border);
+        color: var(--verdict-malicious-text);
+        background-color: var(--verdict-malicious-bg);
     }
 
     .filter-btn--suspicious.filter-btn--active {
-        border-color: var(--verdict-suspicious);
-        color: var(--verdict-suspicious);
-        background-color: rgba(245, 158, 11, 0.15);
+        border-color: var(--verdict-suspicious-border);
+        color: var(--verdict-suspicious-text);
+        background-color: var(--verdict-suspicious-bg);
     }
 
     .filter-btn--clean.filter-btn--active {
-        border-color: var(--verdict-clean);
-        color: var(--verdict-clean);
-        background-color: rgba(63, 185, 80, 0.15);
+        border-color: var(--verdict-clean-border);
+        color: var(--verdict-clean-text);
+        background-color: var(--verdict-clean-bg);
     }
 
     .filter-btn--no_data.filter-btn--active {
-        border-color: var(--verdict-no-data);
-        color: var(--verdict-no-data);
-        background-color: rgba(139, 148, 158, 0.15);
+        border-color: var(--verdict-no-data-border);
+        color: var(--verdict-no-data-text);
+        background-color: var(--verdict-no-data-bg);
     }
 
     /* ---- IOC Type Filter Pills ---- */
@@ -711,8 +711,8 @@
     }
 
     .filter-search-input::placeholder {
-        color: var(--text-secondary);
-        opacity: 0.6;
+        color: var(--text-muted);
+        opacity: 1;
     }
 
     /* ---- IOC Cards Grid ---- */
@@ -739,21 +739,11 @@
     }
 
     /* Verdict-colored left border */
-    .ioc-card[data-verdict="malicious"] {
-        border-left-color: var(--verdict-malicious);
-    }
-    .ioc-card[data-verdict="suspicious"] {
-        border-left-color: var(--verdict-suspicious);
-    }
-    .ioc-card[data-verdict="clean"] {
-        border-left-color: var(--verdict-clean);
-    }
-    .ioc-card[data-verdict="no_data"] {
-        border-left-color: var(--verdict-no-data);
-    }
-    .ioc-card[data-verdict="error"] {
-        border-left-color: var(--verdict-error);
-    }
+    .ioc-card[data-verdict="malicious"]  { border-left-color: var(--verdict-malicious-border); }
+    .ioc-card[data-verdict="suspicious"] { border-left-color: var(--verdict-suspicious-border); }
+    .ioc-card[data-verdict="clean"]      { border-left-color: var(--verdict-clean-border); }
+    .ioc-card[data-verdict="no_data"]    { border-left-color: var(--verdict-no-data-border); }
+    .ioc-card[data-verdict="error"]      { border-left-color: var(--verdict-error-border); }
 
     .ioc-card-header {
         display: flex;
@@ -805,11 +795,11 @@
         flex-shrink: 0;
     }
 
-    .verdict-label--malicious  { background-color: rgba(215, 58, 74, 0.2);  color: var(--verdict-malicious); }
-    .verdict-label--suspicious { background-color: #f59e0b; color: #000; }
-    .verdict-label--clean      { background-color: rgba(40, 167, 69, 0.2);  color: var(--verdict-clean); }
-    .verdict-label--no_data    { background-color: rgba(108, 117, 125, 0.2); color: var(--verdict-no-data); }
-    .verdict-label--error      { background-color: rgba(227, 98, 9, 0.2);   color: var(--verdict-error); }
+    .verdict-label--malicious  { background-color: var(--verdict-malicious-bg);  color: var(--verdict-malicious-text); border: 1px solid var(--verdict-malicious-border); }
+    .verdict-label--suspicious { background-color: var(--verdict-suspicious-bg); color: var(--verdict-suspicious-text); border: 1px solid var(--verdict-suspicious-border); }
+    .verdict-label--clean      { background-color: var(--verdict-clean-bg);      color: var(--verdict-clean-text); border: 1px solid var(--verdict-clean-border); }
+    .verdict-label--no_data    { background-color: var(--verdict-no-data-bg);    color: var(--verdict-no-data-text); border: 1px solid var(--verdict-no-data-border); }
+    .verdict-label--error      { background-color: var(--verdict-error-bg);      color: var(--verdict-error-text); border: 1px solid var(--verdict-error-border); }
 
     .ioc-card-actions {
         display: flex;
@@ -923,30 +913,11 @@
         text-transform: uppercase;
     }
 
-    .verdict-malicious {
-        background-color: rgba(215, 58, 74, 0.2);
-        color: #f85149;
-    }
-
-    .verdict-clean {
-        background-color: rgba(40, 167, 69, 0.2);
-        color: #3fb950;
-    }
-
-    .verdict-no_data {
-        background-color: rgba(108, 117, 125, 0.2);
-        color: #8b949e;
-    }
-
-    .verdict-error {
-        background-color: rgba(227, 98, 9, 0.2);
-        color: #d29922;
-    }
-
-    .verdict-suspicious {
-        background-color: #f59e0b;
-        color: #000;
-    }
+    .verdict-malicious  { background-color: var(--verdict-malicious-bg);  color: var(--verdict-malicious-text); }
+    .verdict-suspicious { background-color: var(--verdict-suspicious-bg); color: var(--verdict-suspicious-text); }
+    .verdict-clean      { background-color: var(--verdict-clean-bg);      color: var(--verdict-clean-text); }
+    .verdict-no_data    { background-color: var(--verdict-no-data-bg);    color: var(--verdict-no-data-text); }
+    .verdict-error      { background-color: var(--verdict-error-bg);      color: var(--verdict-error-text); }
 
     .enrichment-detail {
         font-size: 0.78rem;
@@ -1031,5 +1002,17 @@
         .filter-search-input {
             max-width: 100%;
         }
+    }
+
+    /* ---- Autofill override for dark inputs ---- */
+
+    input:-webkit-autofill,
+    input:-webkit-autofill:hover,
+    input:-webkit-autofill:focus,
+    input:-webkit-autofill:active {
+        -webkit-box-shadow: 0 0 0 100px var(--bg-tertiary) inset !important;
+        box-shadow:         0 0 0 100px var(--bg-tertiary) inset !important;
+        -webkit-text-fill-color: var(--text-primary) !important;
+        transition: background-color 5000s ease-in-out 0s;
     }
 }
