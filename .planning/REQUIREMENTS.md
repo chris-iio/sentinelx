@@ -33,8 +33,8 @@
 - [x] **COMP-03**: Button component styles — primary (emerald), secondary (zinc), and ghost variants with hover/active/disabled states and 150ms transitions
 - [x] **COMP-04**: Form element styling via `@tailwindcss/forms` — textarea, text inputs, and select elements reset with dark-theme-appropriate borders and focus states
 - [x] **COMP-05**: Sticky filter bar uses `backdrop-filter: blur(12px)` with semi-transparent zinc-950 background
-- [ ] **COMP-06**: Heroicons icon macro created (`templates/macros/icons.html`) for reusable inline SVG icons across all pages
-- [ ] **COMP-07**: Header/footer redesigned with updated typography, spacing, and emerald accent treatment
+- [x] **COMP-06**: Heroicons icon macro created (`templates/macros/icons.html`) for reusable inline SVG icons across all pages
+- [x] **COMP-07**: Header/footer redesigned with updated typography, spacing, and emerald accent treatment
 
 ### Results Page
 
@@ -100,8 +100,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | COMP-03 | Phase 12 | Complete |
 | COMP-04 | Phase 12 | Complete |
 | COMP-05 | Phase 12 | Complete |
-| COMP-06 | Phase 12 | Pending |
-| COMP-07 | Phase 12 | Pending |
+| COMP-06 | Phase 12 | Complete |
+| COMP-07 | Phase 12 | Complete |
 | RESULTS-01 | Phase 13 | Pending |
 | RESULTS-02 | Phase 13 | Pending |
 | RESULTS-03 | Phase 13 | Pending |

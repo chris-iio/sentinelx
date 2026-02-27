@@ -4,12 +4,12 @@ milestone: v1.2
 milestone_name: Modern UI Redesign
 current_phase: 12-shared-component-elevation
 status: In progress
-last_updated: "2026-02-27T17:22:00Z"
+last_updated: "2026-02-27T17:41:00Z"
 progress:
   total_phases: 4
-  completed_phases: 1
-  total_plans: 4
-  completed_plans: 4
+  completed_phases: 2
+  total_plans: 7
+  completed_plans: 7
 ---
 
 # Session State
@@ -21,15 +21,15 @@ See: .planning/PROJECT.md
 ## Position
 
 **Milestone:** v1.2 Modern UI Redesign
-**Current phase:** Phase 12 — Shared Component Elevation
-**Plan:** 2 of ? (12-02 complete)
-**Status:** In progress
+**Current phase:** Phase 12 — Shared Component Elevation (COMPLETE)
+**Plan:** 3 of 3 (12-03 complete)
+**Status:** Phase 12 complete — ready for Phase 13
 
 ## Progress
 
 Phase 11: ██████████ 100% ✓
-Phase 12: ████░░░░░░ ~66% (plans 01-02 complete)
-v1.2:     ██░░░░░░░░ 25% (1/4 phases)
+Phase 12: ██████████ 100% ✓ (plans 01-03 complete)
+v1.2:     ████░░░░░░ 50% (2/4 phases)
 
 ## Recent Decisions
 
@@ -45,6 +45,11 @@ v1.2:     ██░░░░░░░░ 25% (1/4 phases)
 - var(--bg-tertiary) zinc-800 for .form-input vs var(--bg-primary) for .ioc-textarea — depth on card surfaces
 - rgba(9, 9, 11, 0.85) hardcoded in filter bar (not CSS custom property) — alpha required for backdrop-filter to work
 - -webkit-backdrop-filter included alongside backdrop-filter for Safari 15.x compatibility
+- Heroicons v2 SVG paths embedded in Jinja2 macro — avoids CDN, enables CSS currentColor inheritance
+- brand-accent wraps only "Sentinel" in site-logo span — minimal markup for visual accent
+- Tagline changed from "Offline IOC Extractor" to "IOC Triage Tool" — reflects dual online/offline capability
+- .nav-icon uses vertical-align: -3px for optical baseline alignment with inline SVG next to text
+- .site-logo font-family changed from var(--font-mono) to var(--font-ui) — brand in Inter, not JetBrains Mono
 
 ## Blockers/Concerns
 
@@ -53,7 +58,7 @@ v1.2:     ██░░░░░░░░ 25% (1/4 phases)
 ## Session Continuity
 
 Last session: 2026-02-27
-Stopped at: Phase 12 Plan 02 complete — .form-input dark-theme class, frosted-glass filter bar
+Stopped at: Phase 12 Plan 03 complete — Heroicons Jinja2 macro, emerald header brand accent, Phase 12 fully complete
 Resume file: none
 
 ## Session Log
@@ -67,3 +72,4 @@ Resume file: none
 - 2026-02-28: Plan 11-03 task 2 — human checkpoint approved, Phase 11 complete
 - 2026-02-27: Plan 12-01 complete — verdict badge borders unified, global :focus-visible, ghost button variant
 - 2026-02-27: Plan 12-02 complete — .form-input dark-theme class (COMP-04), frosted-glass filter bar (COMP-05)
+- 2026-02-27: Plan 12-03 complete — Heroicons Jinja2 macro (COMP-06), emerald header brand accent + Inter typography (COMP-07), Phase 12 fully complete

@@ -37,7 +37,7 @@ Full details: `milestones/v1.1-ROADMAP.md`
 ### v1.2 Modern UI Redesign (Phases 11-14)
 
 - [x] **Phase 11: Foundation — Design Tokens & Base CSS** - Establish verified zinc/emerald/teal token system, self-host Inter Variable and JetBrains Mono fonts, configure dark-first CSS infrastructure with WCAG AA verified contrast
-- [ ] **Phase 12: Shared Component Elevation** - Unify verdict badges, standardize focus rings, elevate buttons and form elements, create icon macro, redesign header/footer
+- [x] **Phase 12: Shared Component Elevation** - Unify verdict badges, standardize focus rings, elevate buttons and form elements, create icon macro, redesign header/footer (completed 2026-02-27)
 - [ ] **Phase 13: Results Page Redesign** - Extract Jinja2 template partials, add card hover elevation, dot indicators, shimmer skeleton loader, KPI dashboard, empty state, and search icon
 - [ ] **Phase 14: Input & Settings Page Redesign** - Refine textarea and submit button, upgrade mode toggle, animate paste feedback, redesign settings with section cards and monospace API key field
 
@@ -121,6 +121,6 @@ Phases execute in numeric order: 11 → 12 → 13 → 14
 | 7. Filtering & Search | v1.1 | 2/2 | Complete | 2026-02-25 |
 | 8. Input Page Polish | v1.1 | 2/2 | Complete | 2026-02-25 |
 | 11. Foundation — Design Tokens & Base CSS | v1.2 | 3/3 | Complete | 2026-02-28 |
-| 12. Shared Component Elevation | 2/3 | In Progress|  | — |
+| 12. Shared Component Elevation | 3/3 | Complete   | 2026-02-27 | — |
 | 13. Results Page Redesign | v1.2 | 0/? | Not started | — |
 | 14. Input & Settings Page Redesign | v1.2 | 0/? | Not started | — |
