@@ -3,7 +3,6 @@
 Tests the full pipeline: extract -> normalize -> classify -> deduplicate.
 Verifies that run_pipeline() returns correctly typed, deduplicated IOC objects.
 """
-import pytest
 
 from app.pipeline.extractor import run_pipeline
 from app.pipeline.models import IOC, IOCType

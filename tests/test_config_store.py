@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
 
 from app.enrichment.config_store import ConfigStore
 

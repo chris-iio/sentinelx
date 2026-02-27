@@ -141,7 +141,6 @@ def test_csrf_token_required(app):
 
     Uses a fresh app with CSRF enabled (not the test fixture which disables it).
     """
-    csrf_app = app  # The conftest fixture has CSRF disabled
     # Create a separate app with CSRF enabled
     from app import create_app
 
@@ -313,7 +312,6 @@ def test_analyze_online_creates_all_three_adapters(client):
 
 def test_enrichable_count_multi_provider(client):
     """SHA256 hash IOC yields enrichable_count=3 (VT + MB + TF all support hashes)."""
-    from app.pipeline.models import IOCType
 
     with (
         patch("app.routes.ConfigStore") as MockStore,

@@ -16,7 +16,6 @@ mode and a VT API key, so those tests are skipped by default.
 
 from __future__ import annotations
 
-import pytest
 from playwright.sync_api import Page, expect
 
 from tests.e2e.pages import IndexPage, ResultsPage

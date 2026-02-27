@@ -2,7 +2,6 @@
 
 Covers 30+ defanging variants documented in the plan spec.
 """
-import pytest
 
 from app.pipeline.normalizer import normalize
 

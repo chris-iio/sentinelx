@@ -2,7 +2,6 @@
 
 Covers all 8 IOC types with positive cases, negative cases, and precedence.
 """
-import pytest
 
 from app.pipeline.classifier import classify
 from app.pipeline.models import IOC, IOCType

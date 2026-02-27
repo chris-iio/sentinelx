@@ -3,7 +3,6 @@
 Uses both iocextract and iocsearcher under the hood.
 Tests cover all required IOC types and edge cases.
 """
-import pytest
 
 from app.pipeline.extractor import extract_iocs
 
