@@ -381,7 +381,7 @@
         font-size: 0.875rem;
         font-weight: 500;
         cursor: pointer;
-        transition: background-color 0.15s ease, border-color 0.15s ease;
+        transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
         white-space: nowrap;
         text-decoration: none;
         line-height: 1;
@@ -411,6 +411,28 @@
     .btn-secondary:hover {
         background-color: var(--btn-secondary-hover);
         border-color: var(--border-hover);
+    }
+
+    .btn-secondary:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+    }
+
+    .btn-ghost {
+        background-color: transparent;
+        color: var(--text-secondary);
+        border-color: var(--border-default);
+    }
+
+    .btn-ghost:hover:not(:disabled) {
+        background-color: var(--bg-hover);
+        border-color: var(--border-hover);
+        color: var(--text-primary);
+    }
+
+    .btn-ghost:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
     }
 
     .btn-copy {
