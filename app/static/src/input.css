@@ -258,6 +258,34 @@
         margin-bottom: 0.4rem;
     }
 
+    .form-input {
+        width: 100%;
+        background-color: var(--bg-tertiary);
+        color: var(--text-primary);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-sm);
+        padding: 0.5rem 0.75rem;
+        font-family: var(--font-ui);
+        font-size: 0.875rem;
+        line-height: 1.5;
+        transition: border-color 0.15s ease;
+    }
+
+    .form-input:focus-visible {
+        border-color: var(--accent-interactive);
+        box-shadow: none;
+    }
+
+    .form-input::placeholder {
+        color: var(--text-muted);
+        opacity: 1;
+    }
+
+    .form-input:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
     .ioc-textarea {
         width: 100%;
         background-color: var(--bg-primary);
