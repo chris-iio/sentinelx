@@ -4,7 +4,7 @@ milestone: v1.2
 milestone_name: Modern UI Redesign
 current_phase: 12-shared-component-elevation
 status: In progress
-last_updated: "2026-02-27T17:18:42Z"
+last_updated: "2026-02-27T17:22:00Z"
 progress:
   total_phases: 4
   completed_phases: 1
@@ -22,13 +22,13 @@ See: .planning/PROJECT.md
 
 **Milestone:** v1.2 Modern UI Redesign
 **Current phase:** Phase 12 — Shared Component Elevation
-**Plan:** 1 of ? (12-01 complete)
+**Plan:** 2 of ? (12-02 complete)
 **Status:** In progress
 
 ## Progress
 
 Phase 11: ██████████ 100% ✓
-Phase 12: ██░░░░░░░░ ~33% (plan 01 complete)
+Phase 12: ████░░░░░░ ~66% (plans 01-02 complete)
 v1.2:     ██░░░░░░░░ 25% (1/4 phases)
 
 ## Recent Decisions
@@ -42,6 +42,9 @@ v1.2:     ██░░░░░░░░ 25% (1/4 phases)
 - Global :focus-visible in @layer base replaces three per-component outline: none + box-shadow patterns
 - border: 1px solid transparent on .verdict-badge base ensures layout stability before JS applies verdict class
 - .btn-ghost uses var(--border-default) not var(--border) — more prominent 10% opacity white border
+- var(--bg-tertiary) zinc-800 for .form-input vs var(--bg-primary) for .ioc-textarea — depth on card surfaces
+- rgba(9, 9, 11, 0.85) hardcoded in filter bar (not CSS custom property) — alpha required for backdrop-filter to work
+- -webkit-backdrop-filter included alongside backdrop-filter for Safari 15.x compatibility
 
 ## Blockers/Concerns
 
@@ -50,7 +53,7 @@ v1.2:     ██░░░░░░░░ 25% (1/4 phases)
 ## Session Continuity
 
 Last session: 2026-02-27
-Stopped at: Phase 12 Plan 01 complete — verdict badges, focus rings, ghost button done
+Stopped at: Phase 12 Plan 02 complete — .form-input dark-theme class, frosted-glass filter bar
 Resume file: none
 
 ## Session Log
@@ -63,3 +66,4 @@ Resume file: none
 - 2026-02-26: Plan 11-03 task 1 complete — automated WCAG AA contrast audit passed (all 16 pairs)
 - 2026-02-28: Plan 11-03 task 2 — human checkpoint approved, Phase 11 complete
 - 2026-02-27: Plan 12-01 complete — verdict badge borders unified, global :focus-visible, ghost button variant
+- 2026-02-27: Plan 12-02 complete — .form-input dark-theme class (COMP-04), frosted-glass filter bar (COMP-05)

@@ -31,8 +31,8 @@
 - [x] **COMP-01**: Verdict badges unified — all five states (malicious, suspicious, clean, no record, pending) use tinted-background + colored-border + colored-text pattern (eliminate solid amber outlier)
 - [x] **COMP-02**: Focus rings standardized on all interactive elements — `outline: 2px solid var(--accent); outline-offset: 2px` on `:focus-visible`, replacing all low-opacity box-shadow focus indicators
 - [x] **COMP-03**: Button component styles — primary (emerald), secondary (zinc), and ghost variants with hover/active/disabled states and 150ms transitions
-- [ ] **COMP-04**: Form element styling via `@tailwindcss/forms` — textarea, text inputs, and select elements reset with dark-theme-appropriate borders and focus states
-- [ ] **COMP-05**: Sticky filter bar uses `backdrop-filter: blur(12px)` with semi-transparent zinc-950 background
+- [x] **COMP-04**: Form element styling via `@tailwindcss/forms` — textarea, text inputs, and select elements reset with dark-theme-appropriate borders and focus states
+- [x] **COMP-05**: Sticky filter bar uses `backdrop-filter: blur(12px)` with semi-transparent zinc-950 background
 - [ ] **COMP-06**: Heroicons icon macro created (`templates/macros/icons.html`) for reusable inline SVG icons across all pages
 - [ ] **COMP-07**: Header/footer redesigned with updated typography, spacing, and emerald accent treatment
 
@@ -98,8 +98,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | COMP-01 | Phase 12 | Complete |
 | COMP-02 | Phase 12 | Complete |
 | COMP-03 | Phase 12 | Complete |
-| COMP-04 | Phase 12 | Pending |
-| COMP-05 | Phase 12 | Pending |
+| COMP-04 | Phase 12 | Complete |
+| COMP-05 | Phase 12 | Complete |
 | COMP-06 | Phase 12 | Pending |
 | COMP-07 | Phase 12 | Pending |
 | RESULTS-01 | Phase 13 | Pending |
