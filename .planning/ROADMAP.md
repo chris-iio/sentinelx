@@ -70,9 +70,12 @@ Plans:
   3. Primary (emerald), secondary (zinc), and ghost button variants are visually distinct with hover and disabled states that are observable without DevTools
   4. The sticky filter bar has a frosted-glass blur effect visible when scrolling past cards (content visible through the blurred bar background)
   5. Header and footer use Inter Variable at the correct weight hierarchy with emerald accent treatment on the brand name
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
+- [ ] 12-01-PLAN.md — Core CSS component elevation: verdict badge borders, global focus-visible ring, ghost button variant
+- [ ] 12-02-PLAN.md — Form element dark-theme styling and frosted-glass filter bar backdrop
+- [ ] 12-03-PLAN.md — Heroicons Jinja2 macro, header/footer redesign, visual verification checkpoint
 
 ### Phase 13: Results Page Redesign
 **Goal**: The results page is refactored into Jinja2 template partials and elevated to the target visual design — card hover elevation, dot type indicators, shimmer skeleton, KPI dashboard, empty state, and search icon prefix all in place
