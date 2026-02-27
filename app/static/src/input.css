@@ -154,11 +154,15 @@
     }
 
     .site-logo {
-        font-family: var(--font-mono);
+        font-family: var(--font-ui);
         font-size: 1.1rem;
-        font-weight: 700;
+        font-weight: var(--weight-heading);
         color: var(--text-primary);
         letter-spacing: -0.02em;
+    }
+
+    .brand-accent {
+        color: var(--accent);
     }
 
     .site-logo-icon {
@@ -172,7 +176,13 @@
         color: var(--text-secondary);
     }
 
+    .site-nav {
+        margin-left: auto;
+    }
+
     .site-nav .nav-link {
+        display: inline-flex;
+        align-items: center;
         color: var(--text-secondary);
         text-decoration: none;
         font-size: 0.85rem;
@@ -180,6 +190,14 @@
     }
     .site-nav .nav-link:hover {
         color: var(--text-primary);
+    }
+
+    .nav-icon {
+        width: 16px;
+        height: 16px;
+        display: inline-block;
+        vertical-align: -3px;
+        margin-right: 4px;
     }
 
     .site-main {
@@ -197,6 +215,7 @@
         text-align: center;
         font-size: 0.75rem;
         color: var(--text-secondary);
+        font-family: var(--font-ui);
     }
 
     /* ---- Input page ---- */
