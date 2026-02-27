@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Modern UI Redesign
 current_phase: 12-shared-component-elevation
-status: Ready to plan
-last_updated: "2026-02-28T00:00:00.000Z"
+status: In progress
+last_updated: "2026-02-27T17:18:42Z"
 progress:
   total_phases: 4
   completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
+  total_plans: 4
+  completed_plans: 4
 ---
 
 # Session State
@@ -22,13 +22,13 @@ See: .planning/PROJECT.md
 
 **Milestone:** v1.2 Modern UI Redesign
 **Current phase:** Phase 12 — Shared Component Elevation
-**Plan:** 0 of ? (not yet planned)
-**Status:** Ready to plan
+**Plan:** 1 of ? (12-01 complete)
+**Status:** In progress
 
 ## Progress
 
 Phase 11: ██████████ 100% ✓
-Phase 12: ░░░░░░░░░░ 0%
+Phase 12: ██░░░░░░░░ ~33% (plan 01 complete)
 v1.2:     ██░░░░░░░░ 25% (1/4 phases)
 
 ## Recent Decisions
@@ -39,6 +39,9 @@ v1.2:     ██░░░░░░░░ 25% (1/4 phases)
 - Autofill override uses box-shadow inset trick
 - JetBrains Mono required TTF→woff2 conversion (fonttools+brotli)
 - Inter Variable extracted from v4.1 zip (web/ subdirectory)
+- Global :focus-visible in @layer base replaces three per-component outline: none + box-shadow patterns
+- border: 1px solid transparent on .verdict-badge base ensures layout stability before JS applies verdict class
+- .btn-ghost uses var(--border-default) not var(--border) — more prominent 10% opacity white border
 
 ## Blockers/Concerns
 
@@ -46,8 +49,8 @@ v1.2:     ██░░░░░░░░ 25% (1/4 phases)
 
 ## Session Continuity
 
-Last session: 2026-02-28
-Stopped at: Phase 11 complete, Phase 12 ready to plan
+Last session: 2026-02-27
+Stopped at: Phase 12 Plan 01 complete — verdict badges, focus rings, ghost button done
 Resume file: none
 
 ## Session Log
@@ -59,3 +62,4 @@ Resume file: none
 - 2026-02-26: Plan 11-02 complete — zinc/emerald/teal design token system, verdict triples, typography scale, autofill override
 - 2026-02-26: Plan 11-03 task 1 complete — automated WCAG AA contrast audit passed (all 16 pairs)
 - 2026-02-28: Plan 11-03 task 2 — human checkpoint approved, Phase 11 complete
+- 2026-02-27: Plan 12-01 complete — verdict badge borders unified, global :focus-visible, ghost button variant
