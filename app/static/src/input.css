@@ -911,13 +911,14 @@
         font-weight: 600;
         letter-spacing: 0.03em;
         text-transform: uppercase;
+        border: 1px solid transparent;
     }
 
-    .verdict-malicious  { background-color: var(--verdict-malicious-bg);  color: var(--verdict-malicious-text); }
-    .verdict-suspicious { background-color: var(--verdict-suspicious-bg); color: var(--verdict-suspicious-text); }
-    .verdict-clean      { background-color: var(--verdict-clean-bg);      color: var(--verdict-clean-text); }
-    .verdict-no_data    { background-color: var(--verdict-no-data-bg);    color: var(--verdict-no-data-text); }
-    .verdict-error      { background-color: var(--verdict-error-bg);      color: var(--verdict-error-text); }
+    .verdict-malicious  { background-color: var(--verdict-malicious-bg);  color: var(--verdict-malicious-text);  border-color: var(--verdict-malicious-border); }
+    .verdict-suspicious { background-color: var(--verdict-suspicious-bg); color: var(--verdict-suspicious-text); border-color: var(--verdict-suspicious-border); }
+    .verdict-clean      { background-color: var(--verdict-clean-bg);      color: var(--verdict-clean-text);      border-color: var(--verdict-clean-border); }
+    .verdict-no_data    { background-color: var(--verdict-no-data-bg);    color: var(--verdict-no-data-text);    border-color: var(--verdict-no-data-border); }
+    .verdict-error      { background-color: var(--verdict-error-bg);      color: var(--verdict-error-text);      border-color: var(--verdict-error-border); }
 
     .enrichment-detail {
         font-size: 0.78rem;
