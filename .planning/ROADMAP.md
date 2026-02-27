@@ -36,7 +36,7 @@ Full details: `milestones/v1.1-ROADMAP.md`
 
 ### v1.2 Modern UI Redesign (Phases 11-14)
 
-- [ ] **Phase 11: Foundation — Design Tokens & Base CSS** - Establish verified zinc/emerald/teal token system, self-host Inter Variable and JetBrains Mono fonts, configure dark-first CSS infrastructure with WCAG AA verified contrast
+- [x] **Phase 11: Foundation — Design Tokens & Base CSS** - Establish verified zinc/emerald/teal token system, self-host Inter Variable and JetBrains Mono fonts, configure dark-first CSS infrastructure with WCAG AA verified contrast
 - [ ] **Phase 12: Shared Component Elevation** - Unify verdict badges, standardize focus rings, elevate buttons and form elements, create icon macro, redesign header/footer
 - [ ] **Phase 13: Results Page Redesign** - Extract Jinja2 template partials, add card hover elevation, dot indicators, shimmer skeleton loader, KPI dashboard, empty state, and search icon
 - [ ] **Phase 14: Input & Settings Page Redesign** - Refine textarea and submit button, upgrade mode toggle, animate paste feedback, redesign settings with section cards and monospace API key field
@@ -56,9 +56,9 @@ Full details: `milestones/v1.1-ROADMAP.md`
 **Plans**: 3 plans
 
 Plans:
-- [ ] 11-01-PLAN.md — Font infrastructure (download + @font-face + preload), base.html dark-mode meta, Tailwind config (darkMode + forms plugin)
-- [ ] 11-02-PLAN.md — Design token rewrite (zinc/emerald/teal :root), component rule migration to verdict triples, autofill override, typography scale
-- [ ] 11-03-PLAN.md — WCAG AA contrast verification (automated + human visual checkpoint)
+- [x] 11-01-PLAN.md — Font infrastructure (download + @font-face + preload), base.html dark-mode meta, Tailwind config (darkMode + forms plugin)
+- [x] 11-02-PLAN.md — Design token rewrite (zinc/emerald/teal :root), component rule migration to verdict triples, autofill override, typography scale
+- [x] 11-03-PLAN.md — WCAG AA contrast verification (automated + human visual checkpoint)
 
 ### Phase 12: Shared Component Elevation
 **Goal**: All shared UI primitives — verdict badges, buttons, focus rings, form elements, header/footer, icon macro — are elevated to the target design system so every subsequent page starts from a consistent premium baseline
@@ -117,7 +117,7 @@ Phases execute in numeric order: 11 → 12 → 13 → 14
 | 6. Foundation — Tailwind + Alpine + Card Layout | v1.1 | 0/? | Complete | 2026-02-24 |
 | 7. Filtering & Search | v1.1 | 2/2 | Complete | 2026-02-25 |
 | 8. Input Page Polish | v1.1 | 2/2 | Complete | 2026-02-25 |
-| 11. Foundation — Design Tokens & Base CSS | 2/3 | In Progress|  | — |
+| 11. Foundation — Design Tokens & Base CSS | v1.2 | 3/3 | Complete | 2026-02-28 |
 | 12. Shared Component Elevation | v1.2 | 0/? | Not started | — |
 | 13. Results Page Redesign | v1.2 | 0/? | Not started | — |
 | 14. Input & Settings Page Redesign | v1.2 | 0/? | Not started | — |
