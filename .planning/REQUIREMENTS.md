@@ -1,64 +1,104 @@
-# Requirements: v2.0 Home Page Modernization
+# Requirements: v3.0 TypeScript Migration
 
 **Defined:** 2026-02-28
-**Core Value:** Clean, minimal, contemporary home page that doesn't overwhelm — compact input, stripped header, simplified footer.
-**Scope:** Frontend-only. Zero backend changes. Focused on index page + base template (header/footer).
-**Foundation:** v1.2/v1.3 design tokens, self-hosted fonts, shared components — all in place.
+**Core Value:** Type-safe, modular frontend code with zero functional changes — same behavior, better tooling.
+**Scope:** Frontend build pipeline and JS→TS conversion only. Zero backend changes. Zero new features.
+**Foundation:** esbuild standalone binary (no Node.js), tsc for type-checking only, IIFE output format.
 
-## v2.0 Requirements
+## v3.0 Requirements
 
-### Layout
+### Build Pipeline
 
-- [x] **LAY-01**: Header displays only logo icon, "SentinelX" brand text, and a settings gear icon — no tagline text visible
-- [x] **LAY-02**: Header padding is reduced to create a thinner, less dominant top bar
-- [x] **LAY-03**: Footer is simplified with minimal text and reduced padding, matching the header's minimal tone
+- [ ] **BUILD-01**: esbuild is installed as a standalone binary (no Node.js/npm required) with a pinned version
+- [ ] **BUILD-02**: `make js` compiles TypeScript source to a single IIFE bundle at `app/static/dist/main.js`
+- [ ] **BUILD-03**: `make js-watch` runs esbuild in watch mode for development
+- [ ] **BUILD-04**: `make js-dev` produces a bundle with inline source maps for browser debugging
+- [ ] **BUILD-05**: `make typecheck` runs `tsc --noEmit` to validate types without producing output
+- [ ] **BUILD-06**: `make build` target runs both CSS and JS builds
 
-### Input
+### Type System
 
-- [x] **INP-01**: Textarea defaults to approximately 5 visible rows instead of 14
-- [x] **INP-02**: Textarea auto-grows vertically as content is pasted or typed (up to a max height)
-- [x] **INP-03**: Form controls row (mode toggle + buttons) uses tighter spacing for a compact, modern feel
+- [ ] **TYPE-01**: tsconfig.json uses `strict: true` with `isolatedModules`, `noUncheckedIndexedAccess`, and `"types": []`
+- [ ] **TYPE-02**: Domain types defined for Verdict, IocType, and verdict severity constants
+- [ ] **TYPE-03**: API response interfaces defined for enrichment polling endpoint (`/enrichment/status/{job_id}`)
+- [ ] **TYPE-04**: All DOM element access uses proper null-checking (no non-null assertions)
+
+### Module Structure
+
+- [ ] **MOD-01**: Entry point `main.ts` imports and initializes all feature modules
+- [ ] **MOD-02**: Form controls module (submit button, clear, auto-grow textarea, mode toggle, paste feedback)
+- [ ] **MOD-03**: Clipboard module (copy IOC values, copy-with-enrichment, fallback copy)
+- [ ] **MOD-04**: Enrichment polling module (fetch loop, progress bar, result rendering, warning banner)
+- [ ] **MOD-05**: Card management module (verdict updates, dashboard counts, severity sorting)
+- [ ] **MOD-06**: Filter bar module (verdict/type/search filtering, dashboard badge click)
+- [ ] **MOD-07**: Settings module (API key show/hide toggle)
+- [ ] **MOD-08**: UI utilities module (scroll-aware filter bar, card stagger animation)
+
+### Migration Safety
+
+- [ ] **SAFE-01**: All existing Playwright E2E tests pass without modification
+- [ ] **SAFE-02**: CSP regression test (`test_security_audit.py`) passes against the new bundle
+- [ ] **SAFE-03**: Original `main.js` is deleted after migration is verified complete
+- [ ] **SAFE-04**: `base.html` script tag updated to reference `dist/main.js`
 
 ## Future Requirements
 
-### Export & Clipboard
+### Code Quality
 
-- **EXP-01**: User can copy all IOC results to clipboard in structured format
-- **EXP-02**: User can export results as CSV file download
-- **EXP-03**: User can export results as JSON file download
+- **QUAL-01**: ES5 patterns modernized to ES2022 (`var` → `const/let`, arrow functions, for-of loops)
+- **QUAL-02**: Linting with typescript-eslint for style enforcement
 
-### Accessibility
+### Testing
 
-- **A11Y-01**: All interactive elements fully keyboard navigable with visible focus indicators
-- **A11Y-02**: Screen reader announcements for dynamic content updates
+- **TEST-01**: Unit tests for pure TypeScript utility functions (verdict severity, date formatting)
+- **TEST-02**: Pre-commit hook runs `make typecheck` before allowing commits
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| Backend changes | v2.0 is frontend-only — same routes, same data models |
-| Results page redesign | Already polished in v1.2/v1.3 |
-| Settings page redesign | Already polished in v1.3 |
-| New threat intelligence providers | Backend feature, not visual |
-| Light mode / theme switching | Dark-first design, not a theming milestone |
-| Mobile responsive redesign | Desktop-focused analyst workstation tool |
+| New user-facing features | v3.0 is infrastructure-only — same behavior, better tooling |
+| Backend changes | TypeScript is frontend-only |
+| Node.js / npm dependency | Project constraint — esbuild + tsc installed as binaries |
+| Framework adoption (React, Vue, etc.) | Vanilla TS is sufficient for this app's complexity |
+| ES module `<script type="module">` | IIFE preserves existing CSP and template compatibility |
+| Webpack / Vite / Rollup | esbuild is simpler, faster, and has standalone binary |
+| Runtime type validation (Zod, io-ts) | API responses are from trusted internal Flask routes |
+| `.d.ts` declaration files | Not a library — no consumers need type declarations |
+| Jest / Vitest JS test framework | Existing Playwright E2E suite covers all behavior |
 
 ## Traceability
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| LAY-01 | Phase 18 | Complete |
-| LAY-02 | Phase 18 | Complete |
-| LAY-03 | Phase 18 | Complete |
-| INP-01 | Phase 18 | Complete |
-| INP-02 | Phase 18 | Complete |
-| INP-03 | Phase 18 | Complete |
+| BUILD-01 | TBD | Pending |
+| BUILD-02 | TBD | Pending |
+| BUILD-03 | TBD | Pending |
+| BUILD-04 | TBD | Pending |
+| BUILD-05 | TBD | Pending |
+| BUILD-06 | TBD | Pending |
+| TYPE-01 | TBD | Pending |
+| TYPE-02 | TBD | Pending |
+| TYPE-03 | TBD | Pending |
+| TYPE-04 | TBD | Pending |
+| MOD-01 | TBD | Pending |
+| MOD-02 | TBD | Pending |
+| MOD-03 | TBD | Pending |
+| MOD-04 | TBD | Pending |
+| MOD-05 | TBD | Pending |
+| MOD-06 | TBD | Pending |
+| MOD-07 | TBD | Pending |
+| MOD-08 | TBD | Pending |
+| SAFE-01 | TBD | Pending |
+| SAFE-02 | TBD | Pending |
+| SAFE-03 | TBD | Pending |
+| SAFE-04 | TBD | Pending |
 
 **Coverage:**
-- v2.0 requirements: 6 total
-- Mapped to phases: 6
-- Unmapped: 0 ✓
+- v3.0 requirements: 22 total
+- Mapped to phases: 0
+- Unmapped: 22 ⚠️
 
 ---
 *Requirements defined: 2026-02-28*
-*Last updated: 2026-02-28 — Phase 18 assigned, traceability complete*
+*Last updated: 2026-02-28 after initial definition*
