@@ -31,8 +31,8 @@
 - [ ] **MOD-04**: Enrichment polling module (fetch loop, progress bar, result rendering, warning banner)
 - [ ] **MOD-05**: Card management module (verdict updates, dashboard counts, severity sorting)
 - [ ] **MOD-06**: Filter bar module (verdict/type/search filtering, dashboard badge click)
-- [ ] **MOD-07**: Settings module (API key show/hide toggle)
-- [ ] **MOD-08**: UI utilities module (scroll-aware filter bar, card stagger animation)
+- [x] **MOD-07**: Settings module (API key show/hide toggle)
+- [x] **MOD-08**: UI utilities module (scroll-aware filter bar, card stagger animation)
 
 ### Migration Safety
 
@@ -85,8 +85,8 @@
 | MOD-03 | Phase 21 | Pending |
 | MOD-05 | Phase 21 | Pending |
 | MOD-06 | Phase 21 | Pending |
-| MOD-07 | Phase 21 | Pending |
-| MOD-08 | Phase 21 | Pending |
+| MOD-07 | Phase 21 | Complete |
+| MOD-08 | Phase 21 | Complete |
 | MOD-01 | Phase 22 | Pending |
 | MOD-04 | Phase 22 | Pending |
 | SAFE-03 | Phase 22 | Pending |
@@ -101,4 +101,4 @@
 
 ---
 *Requirements defined: 2026-02-28*
-*Last updated: 2026-02-28 — traceability updated after roadmap creation (phases 19-23)*
+*Last updated: 2026-02-28 — MOD-07 and MOD-08 completed in Phase 21 Plan 01*

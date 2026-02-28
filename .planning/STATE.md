@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: TypeScript Migration
 status: unknown
-last_updated: "2026-02-28T15:11:43.340Z"
+last_updated: "2026-02-28T15:36:00Z"
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 16
-  completed_plans: 15
+  completed_plans: 16
 ---
 
 # Session State
@@ -18,23 +18,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-02-28)
 
 **Core value:** Safe, correct, and transparent IOC extraction and enrichment
-**Current focus:** v3.0 TypeScript Migration — Phase 20: Type Definitions Foundation
+**Current focus:** v3.0 TypeScript Migration — Phase 21: Simple Module Extraction
 
 ## Current Position
 
-Phase: 20 of 23 (Type Definitions Foundation)
-Plan: 1 of 1 in current phase (complete)
-Status: Phase 20 complete — ready for Phase 21
-Last activity: 2026-03-01 — Completed 20-01: Type Definitions Foundation (ioc.ts + api.ts)
+Phase: 21 of 23 (Simple Module Extraction)
+Plan: 1 of 3 in current phase (complete)
+Status: Plan 21-01 complete — ready for 21-02
+Last activity: 2026-02-28 — Completed 21-01: DOM utility, settings module, UI module
 
-Progress: v3.0 ███░░░░░░░ 27%
+Progress: v3.0 ████░░░░░░ 33%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 3 (v3.0)
-- Average duration: 1.7 min
-- Total execution time: 5 min
+- Total plans completed: 4 (v3.0)
+- Average duration: 2.0 min
+- Total execution time: 8 min
 
 *Updated after each plan completion*
 
@@ -58,6 +58,9 @@ Progress: v3.0 ███░░░░░░░ 27%
 - raw_stats typed as Record<string, unknown> not object/any — forces downstream narrowing
 - VerdictKey applied to verdict field in EnrichmentResultItem — compile-time guard against invalid strings
 - as const satisfies readonly VerdictKey[] on VERDICT_SEVERITY — preserves tuple type while validating members
+- settings.ts casts getElementById("api-key") to HTMLInputElement|null — required for typed .type access, avoids non-null assertion
+- ui.ts uses classList.toggle(class, bool) — cleaner than if/else add/remove, identical behavior
+- ui.ts uses forEach() not indexed for-loop — avoids noUncheckedIndexedAccess compile error on NodeListOf<HTMLElement>
 
 ### Blockers/Concerns
 
@@ -65,6 +68,6 @@ Progress: v3.0 ███░░░░░░░ 27%
 
 ## Session Continuity
 
-Last session: 2026-03-01
-Stopped at: Completed 20-01-PLAN.md (Type Definitions Foundation — ioc.ts + api.ts)
+Last session: 2026-02-28
+Stopped at: Completed 21-01-PLAN.md (DOM utility attr(), settings init(), ui init())
 Resume file: none
