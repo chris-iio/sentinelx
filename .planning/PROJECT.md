@@ -42,8 +42,11 @@ Safe, correct, and transparent IOC extraction and enrichment — never invent sc
 - ✓ Shared component elevation (verdict badges, focus rings, buttons, form elements) — v1.2
 - ✓ Heroicons v2 Jinja2 macro for inline SVG icons — v1.2
 - ✓ Header/footer redesign with emerald brand accent — v1.2
+- ✓ Minimal header bar (logo icon + brand + gear icon only, no tagline) — v2.0
+- ✓ Compact auto-growing textarea (5 rows default, expands on paste) — v2.0
+- ✓ Tighter inline controls and simplified footer — v2.0
 
-### Active (v2.0 Home Page Modernization)
+### Active (v3.0 TypeScript Migration)
 
 Requirements being defined — see `.planning/REQUIREMENTS.md` when complete.
 
@@ -103,15 +106,16 @@ Requirements being defined — see `.planning/REQUIREMENTS.md` when complete.
 | Keep vanilla JS for enrichment | Polling and clipboard code works well, no reason to rewrite into Alpine | Pending — v1.1 Phase 6 |
 | Zero backend changes in v1.1 | All v1.1 is frontend-only — same routes, same data models | Pending — v1.1 |
 
-## Current Milestone: v2.0 Home Page Modernization
+## Current Milestone: v3.0 TypeScript Migration
 
-**Goal:** Modernize the home page into a clean, minimal, contemporary experience — compact auto-growing textarea, stripped-down header, and simplified footer.
+**Goal:** Replace all vanilla JavaScript with TypeScript — proper build pipeline, type safety, ES module structure, and source maps.
 
 **Target features:**
-- Minimal header bar (logo icon + "SentinelX" + settings gear icon, no tagline, thinner)
-- Compact auto-growing textarea (~5 rows default, expands on paste)
-- Cleaner inline controls (toggle + buttons with tighter spacing)
-- Simplified footer matching the minimal header aesthetic
+- TypeScript build pipeline (esbuild or tsc) integrated into Makefile
+- Convert 856-line main.js IIFE into typed ES modules
+- Type definitions for DOM interactions, API responses, verdicts, and IOC types
+- Source maps for browser debugging
+- All existing behavior preserved — zero functional changes
 
 ---
-*Last updated: 2026-02-28 after v1.3 work landed, v2.0 milestone started*
+*Last updated: 2026-02-28 after v2.0 completed, v3.0 milestone started*
