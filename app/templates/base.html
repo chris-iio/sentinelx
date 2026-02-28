@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="color-scheme" content="dark">
-    <title>SentinelX — IOC Extractor</title>
+    <title>sentinelx</title>
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='images/logo.svg') }}">
     <link rel="preload"
           href="{{ url_for('static', filename='fonts/InterVariable.woff2') }}"
@@ -20,26 +20,19 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='dist/style.css') }}">
 </head>
 <body>
-    <header class="site-header">
-        <div class="header-inner">
-            <a href="{{ url_for('main.index') }}" class="site-brand-link" aria-label="SentinelX home">
-                <img src="{{ url_for('static', filename='images/logo.svg') }}" alt="" class="site-logo-icon" width="24" height="24">
-                <span class="site-logo"><span class="brand-accent">Sentinel</span>X</span>
-            </a>
-            <nav class="site-nav">
-                <a href="{{ url_for('main.settings_get') }}" class="nav-link nav-link--icon" aria-label="Settings">{{ icon("cog-6-tooth", class="nav-icon nav-icon--lg") }}</a>
-            </nav>
-        </div>
-    </header>
+    <nav class="floating-settings">
+        <a href="{{ url_for('main.settings_get') }}" class="nav-link nav-link--icon" aria-label="Settings">{{ icon("cog-6-tooth", class="nav-icon nav-icon--lg") }}</a>
+    </nav>
 
     <main class="site-main">
         {% block content %}{% endblock %}
     </main>
 
     <footer class="site-footer">
-        <p>SentinelX</p>
+        <p>sentinelx</p>
     </footer>
 
+    <script src="{{ url_for('static', filename='dist/main.js') }}" defer></script>
     <script src="{{ url_for('static', filename='main.js') }}" defer></script>
 </body>
 </html>
