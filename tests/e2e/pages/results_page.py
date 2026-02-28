@@ -15,8 +15,8 @@ class ResultsPage:
         self.mode_indicator = page.locator(".mode-indicator")
         self.ioc_count = page.locator(".results-summary .ioc-count")
         self.back_link = page.locator("a.back-link")
-        self.no_results_box = page.locator(".no-results")
-        self.no_results_hint = page.locator(".no-results-hint")
+        self.no_results_box = page.locator(".empty-state")
+        self.no_results_hint = page.locator(".empty-state-body")
 
     # ---- IOC Cards ----
 

@@ -551,23 +551,37 @@
         margin-left: auto;
     }
 
-    /* ---- No results state ---- */
+    /* ---- Empty state ---- */
 
-    .no-results {
-        background-color: var(--bg-secondary);
-        border: 1px solid var(--border);
-        border-radius: var(--radius);
-        padding: 2rem;
+    .empty-state {
         text-align: center;
+        padding: 4rem 2rem;
         color: var(--text-secondary);
     }
 
-    .no-results p {
+    .empty-state-icon {
+        display: flex;
+        justify-content: center;
+        margin-bottom: 1.5rem;
+    }
+
+    .empty-state-svg {
+        width: 48px;
+        height: 48px;
+        color: var(--text-muted);
+        opacity: 0.6;
+    }
+
+    .empty-state-headline {
+        font-size: 1.125rem;
+        font-weight: var(--weight-heading);
+        color: var(--text-primary);
         margin-bottom: 0.5rem;
     }
 
-    .no-results-hint {
-        font-size: 0.8rem;
+    .empty-state-body {
+        font-size: 0.85rem;
+        color: var(--text-secondary);
     }
 
     /* ---- Verdict Dashboard ---- */
@@ -749,10 +763,28 @@
         display: flex;
     }
 
-    .filter-search-input {
+    .filter-search-wrapper {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
         width: 100%;
         max-width: 300px;
-        padding: 0.35rem 0.75rem;
+    }
+
+    .filter-search-icon {
+        position: absolute;
+        left: 0.6rem;
+        width: 14px;
+        height: 14px;
+        color: var(--text-muted);
+        pointer-events: none;
+        flex-shrink: 0;
+    }
+
+    .filter-search-input {
+        width: 100%;
+        max-width: none;
+        padding: 0.35rem 0.75rem 0.35rem 2rem;
         background-color: var(--bg-secondary);
         color: var(--text-primary);
         border: 1px solid var(--border);
@@ -792,7 +824,13 @@
         border-radius: var(--radius);
         padding: 0.75rem 1rem;
         border-left: 3px solid var(--border);
-        transition: border-left-color 0.2s ease;
+        transition: border-left-color 0.2s ease, transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+    }
+
+    .ioc-card:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        border-color: var(--border-hover);
     }
 
     /* Verdict-colored left border */
@@ -820,7 +858,8 @@
     }
 
     .ioc-type-badge {
-        display: inline-block;
+        display: inline-flex;
+        align-items: center;
         font-family: var(--font-mono);
         font-size: 0.65rem;
         font-weight: 700;
@@ -829,6 +868,17 @@
         padding: 0.1rem 0.4rem;
         border-radius: 2rem;
         border: 1px solid;
+        flex-shrink: 0;
+    }
+
+    .ioc-type-badge::before {
+        content: "";
+        display: inline-block;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background-color: currentColor;
+        margin-right: 4px;
         flex-shrink: 0;
     }
 
@@ -1057,7 +1107,7 @@
             padding: 0.5rem 0;
         }
 
-        .filter-search-input {
+        .filter-search-wrapper {
             max-width: 100%;
         }
     }

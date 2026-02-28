@@ -1,6 +1,10 @@
-<div class="no-results">
-    <p>No IOCs detected in the pasted text.</p>
-    <p class="no-results-hint">
-        Supported types: IPv4, IPv6, domain, URL, MD5, SHA1, SHA256, CVE.
+{% from "macros/icons.html" import icon %}
+<div class="empty-state">
+    <div class="empty-state-icon">
+        {{ icon("shield-check", class="empty-state-svg", aria_label="No IOCs detected") }}
+    </div>
+    <h2 class="empty-state-headline">No IOCs detected</h2>
+    <p class="empty-state-body">
+        Supported types: IPv4, IPv6, domain, URL, MD5, SHA1, SHA256, CVE
     </p>
 </div>
