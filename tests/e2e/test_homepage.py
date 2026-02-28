@@ -15,12 +15,58 @@ def test_page_title(page: Page, index_url: str) -> None:
 
 
 def test_header_branding(page: Page, index_url: str) -> None:
-    """Header shows logo and tagline."""
+    """Header shows logo, brand text, and settings icon — no tagline."""
     idx = IndexPage(page, index_url.rstrip("/"))
     idx.goto()
 
     expect(idx.site_logo).to_have_text("SentinelX")
-    expect(idx.site_tagline).to_have_text("IOC Triage Tool")
+    # Tagline removed in Phase 18 — header is minimal
+    expect(page.locator(".site-tagline")).to_have_count(0)
+
+
+def test_header_no_tagline(page: Page, index_url: str) -> None:
+    """Header contains no tagline or descriptive text — only logo, brand, settings icon."""
+    page.goto(index_url)
+    # .site-tagline element must not exist
+    expect(page.locator(".site-tagline")).to_have_count(0)
+    # Settings link must be icon-only (aria-label present, no visible text label)
+    settings_link = page.locator("nav a[aria-label='Settings']")
+    expect(settings_link).to_be_visible()
+
+
+def test_textarea_default_rows(page: Page, index_url: str) -> None:
+    """Textarea defaults to approximately 5 visible rows on first load."""
+    idx = IndexPage(page, index_url.rstrip("/"))
+    idx.goto()
+
+    # rows attribute should be 5
+    rows_attr = idx.textarea.get_attribute("rows")
+    assert rows_attr == "5", f"Expected rows=5, got rows={rows_attr}"
+
+
+def test_textarea_auto_grow(page: Page, index_url: str) -> None:
+    """Textarea grows taller as content is typed, up to max height."""
+    idx = IndexPage(page, index_url.rstrip("/"))
+    idx.goto()
+
+    # Record initial height
+    initial_box = idx.textarea.bounding_box()
+    assert initial_box is not None
+    initial_height = initial_box["height"]
+
+    # Type enough content to cause multiple lines
+    many_lines = "\n".join([f"192.168.1.{i}" for i in range(20)])
+    idx.textarea.fill(many_lines)
+    # Trigger input event so auto-grow JS fires
+    idx.textarea.dispatch_event("input")
+
+    grown_box = idx.textarea.bounding_box()
+    assert grown_box is not None
+    grown_height = grown_box["height"]
+
+    assert grown_height > initial_height, (
+        f"Textarea did not grow: initial={initial_height}px, after fill={grown_height}px"
+    )
 
 
 def test_form_elements_present(page: Page, index_url: str) -> None:
