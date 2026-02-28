@@ -1,0 +1,24 @@
+<div class="ioc-card" data-ioc-value="{{ ioc.value }}" data-ioc-type="{{ ioc.type.value }}" data-verdict="no_data">
+    <div class="ioc-card-header">
+        <code class="ioc-value">{{ ioc.value }}</code>
+        <span class="ioc-type-badge ioc-type-badge--{{ ioc.type.value }}">{{ ioc.type.value | upper }}</span>
+        <span class="verdict-label verdict-label--no_data">NO DATA</span>
+        <div class="ioc-card-actions">
+            <button
+                class="btn btn-copy copy-btn"
+                data-value="{{ ioc.value }}"
+                data-ioc-type="{{ ioc.type.value }}"
+                type="button"
+                aria-label="Copy {{ ioc.value }}"
+            >Copy</button>
+        </div>
+    </div>
+
+    {% if ioc.raw_match != ioc.value %}
+    <div class="ioc-original">Original: {{ ioc.raw_match }}</div>
+    {% endif %}
+
+    {% if mode == "online" and job_id %}
+    {% include "partials/_enrichment_slot.html" %}
+    {% endif %}
+</div>

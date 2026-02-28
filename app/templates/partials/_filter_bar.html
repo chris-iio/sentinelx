@@ -1,0 +1,26 @@
+<div class="filter-bar-wrapper">
+  <div class="filter-bar">
+    {# Verdict filter buttons (FILTER-01) — data-filter-value read by JS click handler #}
+    <div class="filter-verdict-buttons">
+      <button type="button" class="filter-btn filter-btn--active" data-filter-verdict="all">All</button>
+      <button type="button" class="filter-btn filter-btn--malicious" data-filter-verdict="malicious">Malicious</button>
+      <button type="button" class="filter-btn filter-btn--suspicious" data-filter-verdict="suspicious">Suspicious</button>
+      <button type="button" class="filter-btn filter-btn--clean" data-filter-verdict="clean">Clean</button>
+      <button type="button" class="filter-btn filter-btn--no_data" data-filter-verdict="no_data">No Data</button>
+    </div>
+
+    {# IOC type pills — only rendered for types present in results (FILTER-02) #}
+    {# data-filter-type read by JS click handler #}
+    <div class="filter-type-pills">
+      <button type="button" class="filter-pill filter-pill--active" data-filter-type="all">All Types</button>
+      {% for ioc_type in grouped.keys() %}
+      <button type="button" class="filter-pill filter-pill--{{ ioc_type.value }}" data-filter-type="{{ ioc_type.value }}">{{ ioc_type.value | upper }}</button>
+      {% endfor %}
+    </div>
+
+    {# Text search (FILTER-03) — id="filter-search-input" used by JS #}
+    <div class="filter-search">
+      <input type="search" id="filter-search-input" placeholder="Search IOCs..." class="filter-search-input" autocomplete="off" />
+    </div>
+  </div>
+</div>
