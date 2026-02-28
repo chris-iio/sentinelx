@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Home Page Modernization
 current_phase: 18
-status: ready_to_plan
+status: in_progress
 last_updated: "2026-02-28"
 progress:
   total_phases: 1
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_plans: 3
+  completed_plans: 1
 ---
 
 # Session State
@@ -19,19 +19,19 @@ progress:
 See: .planning/PROJECT.md (updated 2026-02-28)
 
 **Core value:** Safe, correct, and transparent IOC extraction and enrichment
-**Current focus:** v2.0 Home Page Modernization — Phase 18 ready to plan
+**Current focus:** v2.0 Home Page Modernization — Phase 18, Plan 01 complete
 
 ## Position
 
 **Milestone:** v2.0 Home Page Modernization
 **Current phase:** 18 of 1 (Home Page Modernization)
-**Plan:** — (not yet planned)
-**Status:** Ready to plan
-**Last activity:** 2026-02-28 — Roadmap created, Phase 18 defined
+**Plan:** 1 of 3 complete
+**Status:** In progress
+**Last activity:** 2026-02-28 — Plan 18-01 complete (header/footer modernization)
 
 ## Progress
 
-v2.0: ░░░░░░░░░░ 0%
+v2.0: ███░░░░░░░ 33% (1/3 plans)
 
 ## Recent Decisions
 
@@ -41,6 +41,10 @@ v2.0: ░░░░░░░░░░ 0%
 - Compact auto-growing textarea (~5 rows default, max-height cap)
 - Controls stay inline below textarea with tighter spacing
 - Footer simplified to match minimal header
+- Logo icon + brand text wrapped in site-brand-link anchor to url_for('main.index') for home navigation
+- Settings nav is icon-only (nav-link--icon) with aria-label=Settings for accessibility
+- Gear icon uses nav-icon--lg (20px) since there is no label text — icon must be legible standalone
+- Header and footer padding matched at 0.4rem for visual symmetry (bookend pattern)
 
 ## Blockers/Concerns
 
@@ -49,7 +53,7 @@ v2.0: ░░░░░░░░░░ 0%
 ## Session Continuity
 
 Last session: 2026-02-28
-Stopped at: Roadmap created — run `/gsd:plan-phase 18` to begin
+Stopped at: Plan 18-01 complete — run `/gsd:execute-phase 18` plan 02 next
 Resume file: none
 
 ## Accumulated Context

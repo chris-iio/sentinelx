@@ -9,9 +9,9 @@
 
 ### Layout
 
-- [ ] **LAY-01**: Header displays only logo icon, "SentinelX" brand text, and a settings gear icon — no tagline text visible
-- [ ] **LAY-02**: Header padding is reduced to create a thinner, less dominant top bar
-- [ ] **LAY-03**: Footer is simplified with minimal text and reduced padding, matching the header's minimal tone
+- [x] **LAY-01**: Header displays only logo icon, "SentinelX" brand text, and a settings gear icon — no tagline text visible
+- [x] **LAY-02**: Header padding is reduced to create a thinner, less dominant top bar
+- [x] **LAY-03**: Footer is simplified with minimal text and reduced padding, matching the header's minimal tone
 
 ### Input
 
@@ -47,9 +47,9 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| LAY-01 | Phase 18 | Pending |
-| LAY-02 | Phase 18 | Pending |
-| LAY-03 | Phase 18 | Pending |
+| LAY-01 | Phase 18 | Complete |
+| LAY-02 | Phase 18 | Complete |
+| LAY-03 | Phase 18 | Complete |
 | INP-01 | Phase 18 | Pending |
 | INP-02 | Phase 18 | Pending |
 | INP-03 | Phase 18 | Pending |
