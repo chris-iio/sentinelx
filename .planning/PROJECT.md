@@ -36,8 +36,14 @@ Safe, correct, and transparent IOC extraction and enrichment — never invent sc
 - ✓ Verdict/type/text filtering with sticky filter bar — v1.1
 - ✓ Toggle switch, paste feedback, contextual submit button — v1.1
 - ✓ Tailwind CSS standalone CLI build integration — v1.1
+- ✓ Dark-first design token system (zinc/emerald/teal CSS custom properties) — v1.2
+- ✓ Self-hosted Inter Variable + JetBrains Mono Variable fonts — v1.2
+- ✓ WCAG AA verified contrast for all token pairs — v1.2
+- ✓ Shared component elevation (verdict badges, focus rings, buttons, form elements) — v1.2
+- ✓ Heroicons v2 Jinja2 macro for inline SVG icons — v1.2
+- ✓ Header/footer redesign with emerald brand accent — v1.2
 
-### Active (v1.2 Modern UI Redesign)
+### Active (v1.3 Visual Experience Overhaul)
 
 Requirements being defined — see `.planning/REQUIREMENTS.md` when complete.
 
@@ -62,7 +68,7 @@ Requirements being defined — see `.planning/REQUIREMENTS.md` when complete.
 - **Users:** SOC analysts performing initial triage of alerts, emails, and threat reports
 - **Environment:** Runs on analyst's local machine or an internal jump box (not internet-facing)
 - **Tech stack:** Python 3.10 + Flask 3.1, iocextract + iocsearcher for extraction, requests for HTTP
-- **Frontend stack (v1.1):** Tailwind CSS (standalone CLI) + Alpine.js CSP build (~15KB) + vanilla JS for enrichment/clipboard
+- **Frontend stack (v1.2):** Tailwind CSS (standalone CLI) + vanilla JS, Inter Variable + JetBrains Mono Variable self-hosted, dark-first zinc/emerald/teal design tokens, Heroicons v2 inline SVG via Jinja2 macro
 - **Codebase:** ~1,674 LOC app Python, ~1,534 LOC frontend (HTML/CSS/JS), ~3,893 LOC tests
 - **Test suite:** 224 tests, 97% coverage
 - **Threat intel providers:** VirusTotal (API key required), MalwareBazaar (public), ThreatFox (public)
@@ -97,5 +103,17 @@ Requirements being defined — see `.planning/REQUIREMENTS.md` when complete.
 | Keep vanilla JS for enrichment | Polling and clipboard code works well, no reason to rewrite into Alpine | Pending — v1.1 Phase 6 |
 | Zero backend changes in v1.1 | All v1.1 is frontend-only — same routes, same data models | Pending — v1.1 |
 
+## Current Milestone: v1.3 Visual Experience Overhaul
+
+**Goal:** Transform every page from functional-but-bare-bones into a polished, animated, premium dark UI — leveraging the v1.2 design token and component foundation.
+
+**Target features:**
+- Results page redesign with card animations, shimmer loaders, KPI dashboard, empty state
+- Input page refinement with textarea glow, animated paste feedback, mode-aware submit
+- Settings page upgrade with section cards, monospace API key field, status badges
+- Global motion design (staggered reveals, smooth transitions, scroll-aware effects)
+- Visual depth (subtle gradients, border glow, refined shadows, frosted glass)
+- Template architecture (Jinja2 partial extraction for maintainability)
+
 ---
-*Last updated: 2026-02-25 after v1.1 shipped, v1.2 milestone started*
+*Last updated: 2026-02-28 after v1.2 phases 11-12 shipped, v1.3 milestone started*
