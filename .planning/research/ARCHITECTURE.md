@@ -1,681 +1,789 @@
 # Architecture Research
 
-**Domain:** Dark-first design system for Flask/Jinja2 security tool (SentinelX v1.2)
-**Researched:** 2026-02-25
-**Confidence:** HIGH — patterns verified against Tailwind CSS official docs, Jinja2 templating docs, and production design system references (Vercel Geist, Linear, GitHub Primer)
+**Domain:** TypeScript build pipeline integration into Flask static file architecture (SentinelX v3.0)
+**Researched:** 2026-02-28
+**Confidence:** HIGH — esbuild official docs verified via WebFetch, binary download mechanism confirmed, script tag options confirmed against browser CSP specs
+
+---
+
+## Context: What This Research Covers
+
+This is a SUBSEQUENT MILESTONE research document. The backend (Python + Flask), CSS pipeline (Tailwind standalone CLI via `make css`), and runtime architecture are locked in. This document covers ONLY how a TypeScript build pipeline slots into the existing Flask static file serving architecture.
+
+**Existing pipeline (do not change):**
+
+```
+app/static/src/input.css  →  [Tailwind CLI standalone binary]  →  app/static/dist/style.css
+```
+
+**Target pipeline (new, parallel to CSS):**
+
+```
+app/static/src/ts/main.ts  →  [esbuild standalone binary]  →  app/static/dist/main.js
+```
 
 ---
 
 ## System Overview
 
-The v1.2 design system sits entirely in the frontend layer. No backend changes. The architecture has three sub-layers:
-
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                     Design Token Layer                       │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │  CSS Custom Properties in :root (input.css)          │   │
-│  │  Semantic tokens: --color-surface, --color-accent,   │   │
-│  │  --color-text-primary, --color-border, etc.          │   │
-│  └──────────────────────────────────────────────────────┘   │
-│                                                              │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │  Tailwind Config (tailwind.config.js)                │   │
-│  │  theme.extend.colors references CSS vars → generates │   │
-│  │  utility classes: bg-surface, text-muted, etc.       │   │
-│  └──────────────────────────────────────────────────────┘   │
-├─────────────────────────────────────────────────────────────┤
-│                     Component Layer                          │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │  @layer base │  │ @layer comp. │  │ @layer util  │      │
-│  │  (reset/html)│  │ (BEM classes)│  │ (Tailwind)   │      │
-│  └──────────────┘  └──────────────┘  └──────────────┘      │
-├─────────────────────────────────────────────────────────────┤
-│                     Template Layer                           │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │  base.html   │  │  partials/   │  │  macros/     │      │
-│  │  (shell)     │  │  (include)   │  │  (reusable)  │      │
-│  └──────────────┘  └──────────────┘  └──────────────┘      │
-├─────────────────────────────────────────────────────────────┤
-│                     Build Layer                              │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │  Tailwind CLI: input.css → dist/style.css            │   │
-│  │  (standalone binary, no Node.js required)            │   │
-│  │  Font files: app/static/fonts/ → @font-face in CSS   │   │
-│  └──────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────┘
-```
-
-## Design Token Architecture
-
-### Decision: CSS Custom Properties at :root, Referenced in Tailwind Config
-
-The existing codebase already uses CSS custom properties (CSS vars) in `:root` for design tokens. This is the correct pattern and should be extended, not replaced.
-
-**The two-layer pattern (verified against Tailwind v3 docs and production systems):**
-
-**Layer 1 — CSS custom properties in `input.css`:** Define the raw semantic values. These are the ground truth. They can be overridden at any selector scope without touching component markup.
-
-**Layer 2 — Tailwind config maps names to CSS vars:** This generates utility classes (`bg-surface`, `text-muted`) that resolve at runtime via the CSS var. Components written with `bg-surface` automatically adopt theme changes.
-
-**Why this over Tailwind `dark:` variants:** The `dark:` variant pattern doubles every color utility in the markup and requires toggling a `dark` class on `<html>`. For a tool that is always dark — no light mode — this adds zero value and creates double the markup. CSS vars at `:root` are simpler: define once, everything inherits.
-
-**Confidence: HIGH** — verified against official Tailwind v3 docs, Vercel Geist system, and the nareshbhatia/tailwindcss-dark-mode-semantic-colors reference implementation.
-
-### Semantic Color Token Vocabulary
-
-The existing tokens in `input.css` are GitHub-flavored dark theme (good foundation). The v1.2 redesign refines the naming toward a more systematic semantic vocabulary aligned with Linear/Vercel quality:
-
-```
-Surface hierarchy (background layers):
-  --color-bg-base         — body background (deepest, darkest)
-  --color-bg-surface      — card/panel surfaces (one level up from base)
-  --color-bg-raised       — elevated elements (dropdowns, tooltips, modals)
-  --color-bg-overlay      — overlay/scrim backgrounds
-
-Text:
-  --color-text-primary    — body text, headings (high contrast)
-  --color-text-secondary  — labels, captions, supporting text (muted)
-  --color-text-disabled   — placeholder, explicitly disabled content
-  --color-text-inverse    — text on colored/accent backgrounds
-
-Borders:
-  --color-border-default  — default borders, dividers
-  --color-border-strong   — hover/focus borders, emphasized separators
-  --color-border-subtle   — extremely subtle separators
-
-Accent (emerald/teal brand color):
-  --color-accent          — primary accent (emerald-500 range)
-  --color-accent-muted    — accent at low opacity for backgrounds
-  --color-accent-strong   — accent hover state
-
-Status colors (security-specific, high importance):
-  --color-danger          — malicious verdicts
-  --color-danger-muted    — malicious backgrounds (low opacity)
-  --color-warning         — suspicious verdicts
-  --color-warning-muted   — suspicious backgrounds
-  --color-success         — clean verdicts
-  --color-success-muted   — clean backgrounds
-  --color-neutral         — no-data / unknown verdicts
-  --color-neutral-muted   — no-data backgrounds
-
-IOC type accents (existing — keep, just rename for consistency):
-  --color-ioc-ip          — IPv4/IPv6 type accent
-  --color-ioc-domain      — domain type accent
-  --color-ioc-url         — URL type accent
-  --color-ioc-hash        — hash type accent (MD5/SHA1/SHA256)
-  --color-ioc-cve         — CVE type accent
-
-Interactive:
-  --color-interactive-bg         — button/interactive element background
-  --color-interactive-bg-hover   — hover state
-  --color-interactive-fg         — text on interactive elements
+┌─────────────────────────────────────────────────────────────────────┐
+│                         Source Layer                                 │
+│  ┌──────────────────────────┐  ┌──────────────────────────────┐     │
+│  │  app/static/src/ts/      │  │  app/static/src/input.css    │     │
+│  │  ├── main.ts             │  │  (Tailwind source)            │     │
+│  │  ├── modules/            │  └──────────────────────────────┘     │
+│  │  │   ├── form.ts         │                                        │
+│  │  │   ├── enrichment.ts   │                                        │
+│  │  │   ├── filter.ts       │                                        │
+│  │  │   └── clipboard.ts    │                                        │
+│  │  └── types/              │                                        │
+│  │      ├── ioc.ts          │                                        │
+│  │      └── api.ts          │                                        │
+│  └──────────────────────────┘                                        │
+├─────────────────────────────────────────────────────────────────────┤
+│                         Build Layer                                  │
+│  ┌──────────────────────────┐  ┌──────────────────────────────┐     │
+│  │  tools/esbuild           │  │  tools/tailwindcss           │     │
+│  │  (standalone binary,     │  │  (standalone binary,         │     │
+│  │   no Node.js)            │  │   no Node.js)                │     │
+│  │                          │  │                              │     │
+│  │  make js                 │  │  make css                    │     │
+│  │  make js-watch           │  │  make css-watch              │     │
+│  └──────────────────────────┘  └──────────────────────────────┘     │
+├─────────────────────────────────────────────────────────────────────┤
+│                        Distribution Layer                            │
+│  ┌──────────────────────────────────────────────────────────┐       │
+│  │  app/static/dist/                                         │       │
+│  │  ├── style.css        ← Tailwind output (committed)       │       │
+│  │  ├── main.js          ← esbuild output (committed)        │       │
+│  │  └── main.js.map      ← source map (dev builds only)      │       │
+│  └──────────────────────────────────────────────────────────┘       │
+├─────────────────────────────────────────────────────────────────────┤
+│                         Flask Runtime                                │
+│  ┌──────────────────────────────────────────────────────────┐       │
+│  │  Flask static file serving (url_for('static', ...))      │       │
+│  │  app/templates/base.html:                                 │       │
+│  │    <script src="{{ url_for('static',                      │       │
+│  │      filename='dist/main.js') }}" defer></script>         │       │
+│  └──────────────────────────────────────────────────────────┘       │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
-### Tailwind Config Pattern for Semantic Tokens
+---
 
-```javascript
-// tailwind.config.js
-module.exports = {
-  content: [
-    "./app/templates/**/*.html",
-    "./app/static/**/*.js",
-  ],
-  safelist: [
-    // ... (existing dynamic class safelist — keep unchanged)
-  ],
-  theme: {
-    extend: {
-      colors: {
-        // Surface hierarchy
-        "bg-base":     "var(--color-bg-base)",
-        "bg-surface":  "var(--color-bg-surface)",
-        "bg-raised":   "var(--color-bg-raised)",
-        "bg-overlay":  "var(--color-bg-overlay)",
+## Core Decision: esbuild as Standalone Binary
 
-        // Text
-        "text-primary":   "var(--color-text-primary)",
-        "text-secondary": "var(--color-text-secondary)",
-        "text-disabled":  "var(--color-text-disabled)",
-        "text-inverse":   "var(--color-text-inverse)",
+### Recommendation: esbuild, IIFE output, single bundle, committed dist
 
-        // Borders
-        "border-default": "var(--color-border-default)",
-        "border-strong":  "var(--color-border-strong)",
-        "border-subtle":  "var(--color-border-subtle)",
+esbuild is the right choice because it mirrors the exact pattern already used by Tailwind CSS in this project:
 
-        // Accent
-        "accent":         "var(--color-accent)",
-        "accent-muted":   "var(--color-accent-muted)",
-        "accent-strong":  "var(--color-accent-strong)",
+| Dimension | Tailwind Standalone CLI | esbuild Standalone Binary |
+|-----------|------------------------|--------------------------|
+| Node.js required | No | No |
+| Download method | GitHub releases binary | `curl https://esbuild.github.io/dl/v0.27.3 \| sh` |
+| Install location | `tools/tailwindcss` | `tools/esbuild` |
+| Makefile invocation | `$(TAILWIND) -i ... -o ...` | `$(ESBUILD) app/static/src/ts/main.ts ...` |
+| Output committed | Yes (`dist/style.css`) | Yes (`dist/main.js`) |
+| Watch mode | `--watch` | `--watch` |
 
-        // Status
-        "danger":          "var(--color-danger)",
-        "danger-muted":    "var(--color-danger-muted)",
-        "warning":         "var(--color-warning)",
-        "warning-muted":   "var(--color-warning-muted)",
-        "success":         "var(--color-success)",
-        "success-muted":   "var(--color-success-muted)",
-        "neutral-verdict": "var(--color-neutral)",
-        "neutral-muted":   "var(--color-neutral-muted)",
-      },
-      fontFamily: {
-        "ui":   ["Inter", "system-ui", "-apple-system", "sans-serif"],
-        "mono": ["'JetBrains Mono'", "'Fira Code'", "Consolas", "monospace"],
-      },
-      borderRadius: {
-        "sm":  "4px",
-        "md":  "6px",
-        "lg":  "8px",
-        "xl":  "12px",
-        "pill": "9999px",
-      },
-    },
-  },
-  plugins: [],
-};
-```
+**No npm. No node_modules. No package.json.** The project stays Node-free. esbuild is distributed as a precompiled Go binary for every platform. The download script at `https://esbuild.github.io/dl/v0.27.3` (or `latest`) is identical in concept to how a developer would `curl` the Tailwind binary from GitHub releases.
 
-This gives utility classes like `bg-bg-surface`, `text-text-primary`, `border-border-default`. These are intentionally explicit — `bg-surface` would conflict with Tailwind's default `surface` if it existed, but the `bg-bg-*` and `text-text-*` pattern is unambiguous. Alternatively, use the existing pattern of referencing CSS vars directly in component classes.
+**Confidence: HIGH** — esbuild official docs confirm standalone binary installation via curl, version 0.27.3 is current (as of 2026-02-28). Source: [esbuild Getting Started](https://esbuild.github.io/getting-started/)
 
-**Simpler alternative (matches existing codebase pattern better):** Keep CSS vars referenced only in `@layer components` via `@apply` or direct `var()` references, and only extend Tailwind config for colors that need utility-class access in Jinja2 templates. This avoids the `bg-bg-surface` naming awkwardness and preserves the existing architecture.
+---
 
-**Recommendation:** Keep semantic tokens as CSS custom properties, used directly in `@layer components`. Only register colors in `tailwind.config.js` when a utility class needs to be applied in Jinja2 HTML markup (as opposed to CSS component classes). This matches the existing pattern and avoids verbose naming.
+## Output Format Decision: IIFE vs ESM
 
-## Component Organization
+### Recommendation: IIFE format (preserve existing script tag pattern)
 
-### Decision: @apply-Based Component Classes in @layer components
-
-The existing codebase already uses `@layer components` with BEM-style class names (`.ioc-card`, `.filter-btn`, `.btn-primary`). This is the correct approach for a Jinja2 app.
-
-**Why `@apply` component classes instead of utility-first in templates:**
-
-1. **Jinja2 templates are not components.** There is no component encapsulation in Jinja2 — the same `.ioc-card` markup appears in a loop, potentially 50+ times per page. Putting 15 utility classes inline on each card iteration makes templates illegible and creates a diff nightmare for every style change.
-
-2. **Tailwind's own guidance:** Tailwind recommends extracting repeated patterns to `@apply` classes when using a templating language (as opposed to a JS component framework where the component file is the encapsulation boundary). This is directly the Jinja2 case.
-
-3. **Existing test coverage assumes class names.** The Playwright E2E tests target CSS class names like `.ioc-card`, `.filter-btn`, `.verdict-label`. Utility-first would break these selectors or require `data-testid` sprawl.
-
-**The mixed approach (what the codebase already does, which is correct):**
-
-- `@layer components` — Named BEM classes for repeating structural patterns (cards, buttons, badges, filter pills, form elements)
-- Tailwind utilities — Used directly in templates for one-off layout, spacing, and display helpers where a named class would be overkill
-
-**Confidence: HIGH** — Tailwind's official docs on "Reusing Styles" explicitly recommend template partials and `@apply` for templating languages.
-
-### Component Class Organization in input.css
-
-Group component classes by page/feature, not by element type. The current organization is already correct. For v1.2:
-
-```
-@layer base {
-  /* Reset, html, body, @font-face declarations */
-}
-
-@layer components {
-  /* 1. Layout shells */
-  .site-header, .site-main, .site-footer
-  .header-inner, .site-nav
-
-  /* 2. Shared UI primitives */
-  .btn (base), .btn-primary, .btn-secondary, .btn-ghost
-  .badge (base)
-  .alert, .alert-error, .alert-warning, .alert-success
-
-  /* 3. Form elements */
-  .form-field, .form-label, .form-input
-  .ioc-textarea
-  .mode-toggle-* family
-
-  /* 4. Input page */
-  .page-index, .input-card
-  .input-title, .input-subtitle
-
-  /* 5. Results page */
-  .page-results
-  .results-header, .results-summary
-  .verdict-dashboard, .verdict-dashboard-badge
-  .filter-bar-*, .filter-btn, .filter-pill
-  .ioc-cards-grid, .ioc-card, .ioc-card-header
-  .ioc-value, .ioc-type-badge, .verdict-label
-  .enrichment-* family
-
-  /* 6. Settings page */
-  .page-settings, .settings-card, .settings-section
-  .input-group (for side-by-side input + button)
-
-  /* 7. IOC type variants */
-  .ioc-type-badge--{type} family
-  .filter-pill--{type} family
-
-  /* 8. Verdict variants */
-  .verdict-label--{verdict} family
-  .verdict-{verdict} family (enrichment badges)
-  .filter-btn--{verdict}.filter-btn--active family
-}
-```
-
-## Template Structure
-
-### Current Structure (4 files, flat)
-
-```
-app/templates/
-├── base.html      — shell (head, header, main, footer)
-├── index.html     — input page
-├── results.html   — results page (756 lines, complex)
-└── settings.html  — settings page
-```
-
-### Recommended v1.2 Structure (partials for complex pages)
-
-```
-app/templates/
-├── base.html                      — shell (MODIFIED: font preload, new header structure)
-├── index.html                     — input page (MODIFIED: redesigned card layout)
-├── results.html                   — results page (MODIFIED: new visual design)
-├── settings.html                  — settings page (MODIFIED: new card design)
-└── partials/
-    ├── _ioc_card.html             — single IOC card (extracted from results.html loop)
-    ├── _verdict_dashboard.html    — the malicious/suspicious/clean/no-data badges row
-    ├── _filter_bar.html           — filter verdict + type pills + search input
-    └── _enrichment_slot.html      — spinner + provider results (inside card)
-```
-
-**Rationale for partials:**
-
-The results page is already 156 lines and growing. The `{% for ioc_type, iocs in grouped.items() %}{% for ioc in iocs %}` loop currently contains 30+ lines of HTML per card. Extracting `_ioc_card.html` as a partial via `{% include %}` does three things:
-
-1. Makes `results.html` readable (the loop body is a single include line)
-2. Gives the card a single source of truth for future style changes
-3. Enables independent testing of the card structure
-
-**Jinja2 include syntax (CSP-safe, no changes to backend):**
-
-```jinja
-{# In results.html — replace the inner loop body #}
-{% for ioc in iocs %}
-  {% include "partials/_ioc_card.html" %}
-{% endfor %}
-```
-
-The included template has access to the same context as the parent (including `ioc`, `mode`, `job_id`).
-
-**When not to use Jinja2 macros:** Macros add import boilerplate and are harder to read for simple includes. Use `{% include %}` for structural partials. Use macros only when the same pattern needs to render with different parameters passed explicitly (not from context) — which is rare in this codebase.
-
-### base.html Changes for v1.2
-
-The `base.html` shell needs these modifications:
-
-1. **Font preload:** Add `<link rel="preload">` for Inter WOFF2 before the stylesheet link
-2. **Class on `<html>`:** Consider adding `class="dark"` for future compatibility — not needed now since the tool is always dark, but harmless
-3. **Block structure:** Add `{% block head_extra %}{% endblock %}` after the stylesheet link for page-specific meta/preload needs
-4. **Header redesign:** The header will change structure significantly (logo, nav, possibly tagline position) — keep `{% block content %}` stable
+The current `base.html` has:
 
 ```html
-<!-- base.html sketch -->
-<!DOCTYPE html>
-<html lang="en" class="dark">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}SentinelX{% endblock %}</title>
-
-    <!-- Font preload: must precede stylesheet to avoid FOUC -->
-    <link rel="preload"
-          href="{{ url_for('static', filename='fonts/inter-variable.woff2') }}"
-          as="font" type="font/woff2" crossorigin>
-
-    <link rel="stylesheet" href="{{ url_for('static', filename='dist/style.css') }}">
-    {% block head_extra %}{% endblock %}
-</head>
-<body>
-    <header class="site-header">
-        <div class="header-inner">
-            <!-- header content — redesigned in v1.2 -->
-        </div>
-    </header>
-
-    <main class="site-main">
-        {% block content %}{% endblock %}
-    </main>
-
-    <footer class="site-footer">
-        <!-- footer content -->
-    </footer>
-
-    <script src="{{ url_for('static', filename='vendor/alpine.csp.min.js') }}" defer></script>
-    <script src="{{ url_for('static', filename='main.js') }}" defer></script>
-    {% block scripts_extra %}{% endblock %}
-</body>
-</html>
+<script src="{{ url_for('static', filename='main.js') }}" defer></script>
 ```
 
-**CSP compatibility:** The `crossorigin` attribute on the font preload is mandatory for CORS compliance (browsers treat font requests as CORS). Flask serves from `'self'`, so no CSP changes are needed for self-hosted fonts — `font-src 'self'` is implied by `default-src 'self'`.
+**IIFE keeps this tag unchanged.** ESM would require `<script type="module" src="...">` which has different loading semantics (`defer` is implicit with modules but `async` behavior differs from `defer`).
 
-## Font Loading Strategy
+| Criterion | IIFE (`--format=iife`) | ESM (`--format=esm`) |
+|-----------|----------------------|---------------------|
+| Script tag | `<script src="..." defer>` — unchanged | `<script type="module" src="...">` — changes template |
+| CSP compatibility | `script-src 'self'` — OK (external file) | `script-src 'self'` — OK (external file) |
+| Browser support | All modern browsers | Chrome 61+, Firefox 60+, Safari 11+ (fine for this tool) |
+| Scope isolation | Implicit (IIFE wraps) | Implicit (module scope) |
+| DOMContentLoaded | Keep existing guard in `main.ts` | `defer` is implicit |
+| Code splitting | Not supported in IIFE | Supported (requires multiple `<script>` tags) |
+| Flask template change | None | Must update `base.html` |
 
-### Decision: Self-Host Inter Variable Font
+**IIFE is the right call** for this migration because:
 
-Inter is the standard choice for Linear/Vercel-quality SaaS UI. Inter Variable provides the full weight range (100-900) in a single ~260KB WOFF2 file, avoiding multiple font requests.
+1. The `base.html` script tag does not change — zero risk of breaking anything.
+2. The existing code already uses an IIFE wrapper `(function() { ... }())`. The TypeScript source can drop that wrapper and let esbuild produce it.
+3. Code splitting is unnecessary for 856 lines. A single bundle is the simplest correct answer.
+4. CSP constraint is `script-src 'self'` — both formats are compatible since both are external files. This is not a differentiator.
 
-**File placement:**
+**esbuild CLI flags for IIFE:**
+
+```bash
+tools/esbuild \
+  app/static/src/ts/main.ts \
+  --bundle \
+  --format=iife \
+  --outfile=app/static/dist/main.js \
+  --platform=browser \
+  --target=es2020
+```
+
+**Confidence: HIGH** — esbuild API docs confirm `--format=iife` is the browser default when bundling, and that it wraps output in an IIFE. Source: [esbuild API](https://esbuild.github.io/api/)
+
+---
+
+## Source File Location
+
+### Recommendation: `app/static/src/ts/` — parallel to existing CSS source
 
 ```
 app/static/
-├── fonts/
-│   ├── inter-variable.woff2       — UI font (full variable weight range)
-│   └── jetbrains-mono-variable.woff2  — monospace font for IOC values
-├── vendor/
-│   └── alpine.csp.min.js
+├── src/
+│   ├── input.css              ← existing Tailwind source
+│   └── ts/                    ← NEW: TypeScript source root
+│       ├── main.ts            ← entry point (replaces main.js)
+│       ├── modules/           ← split by feature
+│       │   ├── form.ts        ← initSubmitButton, initAutoGrow, initModeToggle
+│       │   ├── enrichment.ts  ← initEnrichmentPolling, renderEnrichmentResult, etc.
+│       │   ├── filter.ts      ← initFilterBar, initScrollAwareFilterBar
+│       │   ├── clipboard.ts   ← initCopyButtons, writeToClipboard, fallbackCopy
+│       │   └── export.ts      ← initExportButton
+│       └── types/             ← shared TypeScript interfaces
+│           ├── ioc.ts         ← IocType, IocVerdict, IocCard types
+│           └── api.ts         ← EnrichmentResult, EnrichmentStatus API shapes
 ├── dist/
-│   └── style.css
-└── main.js
+│   ├── style.css              ← Tailwind output (existing)
+│   ├── main.js                ← esbuild output (replaces root main.js)
+│   └── main.js.map            ← source map (dev builds)
+├── fonts/                     ← existing
+├── images/                    ← existing
+├── vendor/                    ← existing (if any)
+└── main.js                    ← DELETED after migration (moved to dist/)
 ```
 
-**@font-face declaration in input.css:**
+**Rationale for `src/ts/` placement:**
 
-```css
-@layer base {
-    @font-face {
-        font-family: 'Inter';
-        src: url('/static/fonts/inter-variable.woff2') format('woff2-variations');
-        font-weight: 100 900;
-        font-style: normal;
-        font-display: swap;
-    }
+- Consistent with `src/input.css` — all build sources live under `src/`
+- TypeScript files are never served directly by Flask (no accidental exposure)
+- esbuild has a clear `src/ts/main.ts → dist/main.js` boundary that matches the CSS `src/input.css → dist/style.css` boundary
 
-    @font-face {
-        font-family: 'JetBrains Mono';
-        src: url('/static/fonts/jetbrains-mono-variable.woff2') format('woff2-variations');
-        font-weight: 100 800;
-        font-style: normal;
-        font-display: swap;
-    }
+**Critical: the template script tag path must update** when moving from `main.js` to `dist/main.js`:
+
+```html
+<!-- BEFORE (base.html) -->
+<script src="{{ url_for('static', filename='main.js') }}" defer></script>
+
+<!-- AFTER (base.html) -->
+<script src="{{ url_for('static', filename='dist/main.js') }}" defer></script>
+```
+
+This is the only template change required. The `defer` attribute stays. Flask serves `app/static/dist/main.js` from `url_for('static', filename='dist/main.js')` because `app/static/` is Flask's static folder root. No Flask configuration changes needed.
+
+---
+
+## Module Splitting Strategy
+
+### Recommendation: Multiple source modules, single output bundle
+
+The 856-line IIFE has 10 logical feature groups. Split them into TypeScript modules at the source level, but let esbuild bundle them into a single `dist/main.js` output. This provides:
+
+- Maintainability: each module has one responsibility
+- Type safety: shared interfaces imported explicitly (no global variable leakage)
+- No template changes: single `<script>` tag in `base.html` remains
+
+**Module boundaries (by functional group):**
+
+| Module | Functions | Lines (~) |
+|--------|-----------|-----------|
+| `types/ioc.ts` | IocType, IocVerdict, VerdictLabel, ProviderCount types | ~30 |
+| `types/api.ts` | EnrichmentResult, EnrichmentStatus API response shapes | ~20 |
+| `modules/form.ts` | initSubmitButton, initAutoGrow, initModeToggle, updateSubmitLabel | ~120 |
+| `modules/clipboard.ts` | initCopyButtons, writeToClipboard, fallbackCopy, showCopiedFeedback | ~70 |
+| `modules/enrichment.ts` | initEnrichmentPolling, renderEnrichmentResult, updateCardVerdict, updateDashboardCounts, sortCardsBySeverity, all helpers | ~350 |
+| `modules/filter.ts` | initFilterBar, initScrollAwareFilterBar | ~130 |
+| `modules/export.ts` | initExportButton | ~40 |
+| `modules/settings.ts` | initSettingsPage | ~20 |
+| `modules/stagger.ts` | initCardStagger | ~10 |
+| `main.ts` | init(), DOMContentLoaded guard | ~20 |
+
+**`main.ts` entry point pattern:**
+
+```typescript
+import { initSubmitButton, initAutoGrow, initModeToggle } from './modules/form';
+import { initCopyButtons } from './modules/clipboard';
+import { initEnrichmentPolling } from './modules/enrichment';
+import { initFilterBar, initScrollAwareFilterBar } from './modules/filter';
+import { initExportButton } from './modules/export';
+import { initSettingsPage } from './modules/settings';
+import { initCardStagger } from './modules/stagger';
+
+function init(): void {
+    initSubmitButton();
+    initModeToggle();
+    initAutoGrow();
+    initCopyButtons();
+    initFilterBar();
+    initEnrichmentPolling();
+    initExportButton();
+    initSettingsPage();
+    initScrollAwareFilterBar();
+    initCardStagger();
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+} else {
+    init();
 }
 ```
 
-**Why `font-display: swap`:** Prevents render-blocking. The browser shows system font immediately, then swaps to Inter when loaded. For a local tool, the font is cached after the first load — no meaningful flash.
+esbuild bundles all imports into a single `dist/main.js` IIFE. No module loader runs in the browser. No `import` statements appear in the output.
 
-**Why not Google Fonts CDN:** CSP `default-src 'self'` blocks external font URLs. Even if the CSP were relaxed, loading from an external CDN violates the security posture for a tool that intentionally makes no external calls in offline mode. Self-hosted fonts are consistent with the existing vendor/ pattern for Alpine.js.
+---
 
-**Font sources (download once, commit to repo):**
+## IIFE to ESM Transition Inside TypeScript Source
 
-- Inter Variable: https://github.com/rsms/inter/releases (SIL OFL license, free)
-- JetBrains Mono Variable: https://www.jetbrains.com/legalnotice/fonts/ (SIL OFL license, free)
+### Pattern: ES module syntax in source, IIFE in output
 
-**Confidence: HIGH** — WOFF2 variable fonts + `font-display: swap` is established best practice; CSP font-src behavior verified against MDN.
+The current `main.js` uses a single-file IIFE. TypeScript source uses ES module syntax (`import`/`export`) because:
 
-## Responsive Design Approach
+1. TypeScript's module system works with `import`/`export`
+2. esbuild converts ES module imports into inlined bundle code at build time
+3. The browser receives a single IIFE — it never sees `import` statements
 
-### Decision: Desktop-First, Minimal Mobile Accommodations
+**What changes in the TypeScript source vs the current JS IIFE:**
 
-PROJECT.md explicitly states: "Mobile or responsive design — desktop browser on analyst workstation" is out of scope. The tool runs on a local machine. However, the existing CSS already includes a `@media (max-width: 640px)` block with minor adjustments (padding reduction, stack form options vertically).
+```typescript
+// BEFORE (main.js — old IIFE pattern)
+(function () {
+  "use strict";
+  var VERDICT_SEVERITY = [...];
+  function verdictSeverity(verdict) { ... }
+  function initSubmitButton() { ... }
+  // ... 856 lines ...
+  function init() { ... }
+  if (document.readyState === "loading") { ... }
+}());
 
-**v1.2 approach:**
+// AFTER (modules/enrichment.ts — ES module)
+import type { EnrichmentResult, IocVerdictEntry } from '../types/api';
 
-- Design at 1280px minimum viewport width
-- Keep the existing `@media (max-width: 640px)` fallbacks for stack form elements — they prevent horizontal scroll at smaller sizes without adding complexity
-- Do not add new breakpoints or mobile-specific layouts
-- The `max-width: 960px` layout container can expand to `max-width: 1200px` for v1.2 to make better use of analyst desktop screens
+const VERDICT_SEVERITY: string[] = ['error', 'no_data', 'clean', 'suspicious', 'malicious'];
 
-**Why not mobile-first:** The tool's use case (analyst workstation, jump box) means the design decisions should optimize for a wide desktop viewport. Mobile-first would mean designing the worst-case viewport first and scaling up — the opposite of what this tool needs.
+export function verdictSeverity(verdict: string): number {
+    const idx = VERDICT_SEVERITY.indexOf(verdict);
+    return idx === -1 ? -1 : idx;
+}
 
-## Migration Strategy: Light to Dark Transition
+export function initEnrichmentPolling(): void {
+    // ...
+}
+```
 
-### The Existing Situation
+The IIFE wrapper is gone from source — esbuild adds it at bundle time via `--format=iife`.
 
-The existing code is already dark theme. Every color value in `:root` is a dark palette value. The CSS vars infrastructure is in place. The v1.2 migration is a **refinement and elevation** of the existing dark theme, not a light-to-dark conversion.
+**Shared constants across modules** — move to `types/` or a `constants.ts` file and import:
 
-**What actually needs to change:**
+```typescript
+// types/ioc.ts
+export const VERDICT_SEVERITY = ['error', 'no_data', 'clean', 'suspicious', 'malicious'] as const;
+export type VerdictSeverity = typeof VERDICT_SEVERITY[number];
 
-1. **Color palette update:** Replace GitHub-dark inspired values with Linear/Vercel-quality emerald/teal-accented palette. The variable names stay similar, the hex values change.
+export const VERDICT_LABELS: Record<string, string> = {
+    malicious:  'MALICIOUS',
+    suspicious: 'SUSPICIOUS',
+    clean:      'CLEAN',
+    no_data:    'NO DATA',
+    error:      'ERROR',
+};
 
-2. **Tailwind config extension:** Add semantic color names to `theme.extend.colors` so Jinja2 templates can use `bg-surface` utilities where needed (currently the CSS vars are only used in `@layer components`, not directly in templates).
+export const IOC_PROVIDER_COUNTS: Record<string, number> = {
+    ipv4: 2, ipv6: 2, domain: 2, url: 2,
+    md5: 3, sha1: 3, sha256: 3,
+};
+```
 
-3. **Typography upgrade:** Replace the system font stack with self-hosted Inter. Swap `Fira Code` / `JetBrains Mono` priority.
+---
 
-4. **Visual refinements:** Spacing, border radius, shadow depth, glassmorphism/blur effects where appropriate (CSS only, no JS).
+## Makefile Integration
 
-5. **Template restructuring:** Extraction of partials, header/footer redesign, card component elevation.
-
-### Migration Build Order
-
-This order respects dependencies and allows validation at each step:
-
-**Step 1 — Font infrastructure (no visible change yet)**
-- Download Inter + JetBrains Mono WOFF2 variable fonts
-- Add to `app/static/fonts/`
-- Add `@font-face` to `@layer base` in `input.css`
-- Add preload links to `base.html`
-- Verify: fonts load, no CSP errors in browser console
-- Files: `input.css`, `base.html`, `app/static/fonts/`
-
-**Step 2 — Color token redesign (visible change, no structural changes)**
-- Update CSS custom property values in `:root` (change hex values, rename for consistency)
-- Update `tailwind.config.js` to extend colors with semantic token names
-- Run `make css` to regenerate `dist/style.css`
-- Verify: existing component classes still apply (they now reference updated vars), all pages render correctly
-- Files: `input.css`, `tailwind.config.js`
-
-**Step 3 — Base component style elevation (visible refinements)**
-- Update `@layer components` classes to use refined spacing, radius, shadows
-- Update the existing component styles to reference new token names
-- No template changes yet — class names stay the same
-- Run `make css` → verify
-- Files: `input.css`
-
-**Step 4 — Template partials extraction (structural, no visual change)**
-- Extract `_ioc_card.html`, `_verdict_dashboard.html`, `_filter_bar.html`, `_enrichment_slot.html`
-- Update `results.html` to use `{% include %}` for extracted partials
-- Verify: results page renders identically to before (E2E tests should pass)
-- Files: new `app/templates/partials/` directory + updated `results.html`
-
-**Step 5 — Header/footer redesign**
-- Redesign `base.html` header (new logo treatment, nav positioning)
-- Update `.site-header`, `.header-inner`, `.site-nav` component styles
-- Files: `base.html`, `input.css`
-
-**Step 6 — Input page redesign**
-- Redesign input card to Linear/Vercel quality (refined spacing, typography, improved mode toggle)
-- Update `index.html` and relevant component classes
-- Files: `index.html`, `input.css`
-
-**Step 7 — Results page redesign**
-- Redesign IOC cards, filter bar, verdict dashboard
-- Work with partials extracted in Step 4
-- Files: `results.html`, partials, `input.css`
-
-**Step 8 — Settings page redesign**
-- Redesign settings card, form input, save button
-- Files: `settings.html`, `input.css`
-
-**Step 9 — Tailwind config safelist validation**
-- Verify all dynamically-applied classes (verdict colors, IOC type badges) remain in the safelist
-- Run full E2E test suite
-- Files: `tailwind.config.js`
-
-## Build Pipeline
-
-### Current Pipeline (no changes required)
+### Recommendation: Add `js` and `js-watch` targets parallel to `css` and `css-watch`
 
 ```makefile
-# Current Makefile — no changes needed for v1.2
+# SentinelX — Build Tooling
+TAILWIND := ./tools/tailwindcss
+ESBUILD  := ./tools/esbuild
+
+INPUT_CSS := app/static/src/input.css
+OUTPUT_CSS := app/static/dist/style.css
+
+INPUT_TS  := app/static/src/ts/main.ts
+OUTPUT_JS := app/static/dist/main.js
+
+PLATFORM := linux-x64
+
+.PHONY: tailwind-install esbuild-install css css-watch js js-watch js-dev build typecheck
+
+## Download Tailwind standalone CLI binary
+tailwind-install:
+	@mkdir -p tools
+	curl -sLo $(TAILWIND) \
+		https://github.com/tailwindlabs/tailwindcss/releases/download/v3.4.17/tailwindcss-$(PLATFORM)
+	chmod +x $(TAILWIND)
+	@echo "Tailwind CLI installed at $(TAILWIND)"
+
+## Download esbuild standalone binary
+esbuild-install:
+	@mkdir -p tools
+	curl -fsSL https://esbuild.github.io/dl/v0.27.3 | sh
+	mv esbuild $(ESBUILD)
+	@echo "esbuild installed at $(ESBUILD)"
+
+## Build CSS (one-shot, minified)
 css:
-    $(TAILWIND) -i app/static/src/input.css -o app/static/dist/style.css --minify
+	$(TAILWIND) -i $(INPUT_CSS) -o $(OUTPUT_CSS) --minify
 
+## Build CSS (watch mode)
 css-watch:
-    $(TAILWIND) -i app/static/src/input.css -o app/static/dist/style.css --watch
+	$(TAILWIND) -i $(INPUT_CSS) -o $(OUTPUT_CSS) --watch
 
-build: css
+## Build JS (one-shot, minified, no source map — production)
+js:
+	$(ESBUILD) $(INPUT_TS) \
+		--bundle \
+		--format=iife \
+		--platform=browser \
+		--target=es2020 \
+		--minify \
+		--outfile=$(OUTPUT_JS)
+
+## Build JS (dev mode: source map, no minify)
+js-dev:
+	$(ESBUILD) $(INPUT_TS) \
+		--bundle \
+		--format=iife \
+		--platform=browser \
+		--target=es2020 \
+		--sourcemap \
+		--outfile=$(OUTPUT_JS)
+
+## Build JS (watch mode, with source map)
+js-watch:
+	$(ESBUILD) $(INPUT_TS) \
+		--bundle \
+		--format=iife \
+		--platform=browser \
+		--target=es2020 \
+		--sourcemap \
+		--watch \
+		--outfile=$(OUTPUT_JS)
+
+## TypeScript type checking (requires tsc — run separately from esbuild)
+typecheck:
+	tsc --noEmit
+
+## Full production build
+build: css js
 ```
 
-The Tailwind standalone CLI v3.4.17 handles everything needed:
+**Note on esbuild-install:** The `curl | sh` script auto-detects the platform and writes `esbuild` to the current directory. The `mv esbuild $(ESBUILD)` line moves it to `tools/`. This is equivalent to the Tailwind installation pattern. Alternatively, download the npm tarball directly:
 
-- CSS custom properties: pass through as-is (no processing required)
-- `@font-face` in `@layer base`: supported
-- `@apply` in `@layer components`: supported
-- Content scanning of templates and JS for utility class extraction: configured via `content` in `tailwind.config.js`
-
-**Tailwind v3 vs v4 consideration:** The project uses Tailwind v3 (standalone CLI v3.4.17). The semantic token approach described here works in v3. Tailwind v4 (released January 2025) uses `@theme` in CSS instead of `tailwind.config.js` — but migrating to v4 is out of scope for this milestone. The v3 approach is stable and compatible.
-
-**One optional addition for development:** Add a `fonts` Makefile target documenting the font download process:
-
-```makefile
-## Document font source (run once, files committed to repo)
-fonts-info:
-    @echo "Download Inter Variable from: https://github.com/rsms/inter/releases"
-    @echo "Download JetBrains Mono from: https://www.jetbrains.com/legalnotice/fonts/"
-    @echo "Place .woff2 files in: app/static/fonts/"
+```bash
+# Platform-specific npm tarball (no npm required — it's just a .tgz)
+curl -sLo /tmp/esbuild.tgz \
+  https://registry.npmjs.org/@esbuild/linux-x64/-/linux-x64-0.27.3.tgz
+tar -xzf /tmp/esbuild.tgz --strip-components=2 -C tools/ package/bin/esbuild
+chmod +x tools/esbuild
 ```
+
+The tarball approach is more explicit and version-pinned, matching the existing Tailwind install pattern exactly.
+
+---
+
+## tsconfig.json
+
+### Recommendation: Strict, browser-targeted, esbuild-compatible
+
+Place `tsconfig.json` at the project root (alongside `tailwind.config.js`):
+
+```json
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "outDir": "app/static/dist",
+    "rootDir": "app/static/src/ts"
+  },
+  "include": ["app/static/src/ts/**/*"],
+  "exclude": ["node_modules"]
+}
+```
+
+**Key settings explained:**
+
+- `"target": "ES2020"` — esbuild respects this for syntax lowering. Covers all modern browsers including Chrome 80+, Firefox 78+, Safari 14+. Appropriate for analyst workstations.
+- `"lib": ["ES2020", "DOM", "DOM.Iterable"]` — includes `document`, `querySelectorAll`, `NodeList` iteration types. Required because the code is heavily DOM-manipulating.
+- `"module": "ESNext"` + `"moduleResolution": "Bundler"` — tells TypeScript the module format for source files. esbuild handles the actual bundling; this tells `tsc --noEmit` how to resolve imports.
+- `"strict": true` — enables `strictNullChecks`, `noImplicitAny`, etc. This is the primary value of the migration.
+- `"isolatedModules": true` — required by esbuild. esbuild processes each file independently (no cross-file type inference), so TypeScript must be configured to match. This catches patterns that would fail in esbuild (e.g., `export type` vs `export`).
+- `"outDir"` — only used by `tsc --noEmit` / IDE tooling, not esbuild. esbuild's `--outfile` flag takes precedence.
+
+**Confidence: HIGH** — tsconfig settings verified against TypeScript official docs and esbuild content-types docs confirming `isolatedModules` requirement.
+
+---
+
+## Source Map Strategy
+
+### Recommendation: Source maps in dev builds, omitted from production
+
+esbuild generates external source maps with `--sourcemap`, placing `main.js.map` alongside `main.js` in `app/static/dist/`.
+
+```
+app/static/dist/
+├── main.js          ← contains `//# sourceMappingURL=main.js.map` comment
+└── main.js.map      ← source map referencing app/static/src/ts/...
+```
+
+**Flask serves source maps automatically** — no configuration required. Flask's static file handler serves any file under `app/static/` at `url_for('static', filename=...)`. When the browser's DevTools loads `main.js`, it follows the `sourceMappingURL` comment and fetches `main.js.map` from `app/static/dist/main.js.map`. Flask serves this transparently.
+
+**CSP impact:** Source map files are fetched by DevTools, not by the page itself. They are not constrained by `script-src`. No CSP changes needed.
+
+**Workflow:**
+
+- `make js-dev` — builds with `--sourcemap` for local debugging (no minification, readable output)
+- `make js` — builds minified, no source map (committed to repo for production)
+- `make js-watch` — watch mode with source maps for active development
+
+**Whether to commit source maps:** Do NOT commit `main.js.map` to the repository. Source maps belong in dev builds only. Add to `.gitignore`:
+
+```gitignore
+app/static/dist/main.js.map
+```
+
+The committed `dist/main.js` is the minified production build. Source maps are regenerated locally during development via `make js-dev` or `make js-watch`.
+
+---
 
 ## Integration Points
 
-### New Files Required
+### New Files
 
 | File | Purpose | Notes |
 |------|---------|-------|
-| `app/static/fonts/inter-variable.woff2` | Inter variable font | Download from rsms/inter GitHub |
-| `app/static/fonts/jetbrains-mono-variable.woff2` | JetBrains Mono | Download from JetBrains |
-| `app/templates/partials/_ioc_card.html` | IOC card partial | Extracted from results.html loop |
-| `app/templates/partials/_verdict_dashboard.html` | Verdict dashboard partial | Extracted from results.html |
-| `app/templates/partials/_filter_bar.html` | Filter bar partial | Extracted from results.html |
-| `app/templates/partials/_enrichment_slot.html` | Enrichment slot partial | Extracted from results.html |
+| `app/static/src/ts/main.ts` | TypeScript entry point | Replaces root `main.js` as source of truth |
+| `app/static/src/ts/modules/form.ts` | Form/textarea/toggle init functions | |
+| `app/static/src/ts/modules/enrichment.ts` | Polling loop, result rendering | Largest module (~350 lines) |
+| `app/static/src/ts/modules/filter.ts` | Filter bar, scroll-aware bar | |
+| `app/static/src/ts/modules/clipboard.ts` | Copy buttons, clipboard API | |
+| `app/static/src/ts/modules/export.ts` | Export button handler | |
+| `app/static/src/ts/modules/settings.ts` | Settings page API key toggle | |
+| `app/static/src/ts/modules/stagger.ts` | Card stagger animation index | |
+| `app/static/src/ts/types/ioc.ts` | IocType, VerdictSeverity, VERDICT_LABELS, IOC_PROVIDER_COUNTS | Shared constants and types |
+| `app/static/src/ts/types/api.ts` | EnrichmentResult, EnrichmentStatus API shapes | Typed API response interfaces |
+| `tsconfig.json` | TypeScript compiler config for type checking | At project root |
+| `tools/esbuild` | esbuild standalone binary | Parallel to `tools/tailwindcss` |
+| `app/static/dist/main.js` | esbuild output (new location) | Committed; replaces root `main.js` |
 
 ### Modified Files
 
-| File | Change Type | Notes |
-|------|------------|-------|
-| `app/static/src/input.css` | Major update | New color tokens, @font-face, component style elevation |
-| `tailwind.config.js` | Extend | Add semantic colors to theme.extend.colors |
-| `app/templates/base.html` | Significant | Font preload, head_extra block, header redesign |
-| `app/templates/index.html` | Major redesign | Input card elevation |
-| `app/templates/results.html` | Partial extraction + redesign | Card loop replaced with include |
-| `app/templates/settings.html` | Moderate redesign | Card, form, input-group |
-| `Makefile` | Optional | fonts-info target (documentation only) |
-| `app/static/dist/style.css` | Regenerated | Build artifact, committed after each css build |
+| File | Change | Risk |
+|------|--------|------|
+| `app/templates/base.html` | Script tag: `'main.js'` → `'dist/main.js'` | Low — single line change |
+| `Makefile` | Add `esbuild-install`, `js`, `js-dev`, `js-watch`, `typecheck` targets; update `build` to include `js` | Low — additive |
+| `tailwind.config.js` | Update `content` to include `.ts` files in addition to `.js` | Low — Tailwind scans for utility classes |
+| `.gitignore` | Add `app/static/dist/main.js.map` | Low |
 
-### CSP Compatibility Matrix
+### Deleted Files
 
-| Resource | CSP Directive | Status |
-|----------|--------------|--------|
-| `dist/style.css` | `style-src 'self'` | OK — same-origin |
-| `fonts/*.woff2` | `font-src 'self'` | OK — same-origin (font-src falls back to default-src) |
-| `main.js` | `script-src 'self'` | OK — unchanged |
-| `vendor/alpine.csp.min.js` | `script-src 'self'` | OK — unchanged |
-| Inline `font-display` CSS | n/a | In external stylesheet, not inline |
-| No external CDN fonts | — | Required: CSP blocks external font URLs |
+| File | Reason |
+|------|--------|
+| `app/static/main.js` | Replaced by compiled `app/static/dist/main.js`; TypeScript source becomes the canonical file |
 
-**No CSP header changes are needed.** The existing `default-src 'self'` policy covers self-hosted fonts because `font-src` defaults to `default-src` when not explicitly set.
+### Tailwind config: scan TypeScript source
 
-### Existing Test Compatibility
+The existing `tailwind.config.js` content scan includes `app/static/**/*.js`. After migration, TypeScript source files must also be scanned so Tailwind can extract any utility classes referenced in TypeScript strings:
 
-The Playwright E2E tests target:
+```javascript
+content: [
+  "./app/templates/**/*.html",
+  "./app/static/src/ts/**/*.ts",  // NEW: scan TypeScript source
+  // Remove: "./app/static/**/*.js" (or keep for backward compat)
+  "./app/static/dist/main.js",    // scan compiled output for dynamic classes
+],
+```
 
-- CSS class names (`.ioc-card`, `.filter-btn`, `.verdict-label`, etc.)
-- `data-*` attributes (`data-verdict`, `data-ioc-type`, `data-filter-verdict`)
-- Element IDs (`#filter-root`, `#ioc-cards-grid`, `#mode-toggle-widget`)
+**Important:** The Tailwind safelist in `tailwind.config.js` (verdict/type/filter dynamic class names) must remain unchanged. These dynamic classes are applied by JavaScript at runtime; they are not statically analyzable. The safelist already handles this correctly.
 
-**Migration rule:** Class names, IDs, and data attributes must not change during v1.2. Only CSS _styles_ change. All existing Playwright selectors will continue to work without modification. New or renamed classes should have their selectors updated in `tests/e2e/` if any are added.
+---
+
+## Data Flow: TypeScript Module to Browser
+
+```
+Developer edits app/static/src/ts/modules/enrichment.ts
+    ↓
+make js-watch detects change
+    ↓
+tools/esbuild bundles all modules → app/static/dist/main.js (IIFE)
+    ↓
+Browser requests page → Flask serves base.html
+    ↓
+base.html: <script src=".../dist/main.js" defer></script>
+    ↓
+Browser downloads and executes dist/main.js
+    ↓
+IIFE self-executes → calls init() on DOMContentLoaded
+    ↓
+init() calls all module init functions
+```
+
+**Type checking (separate from build):**
+
+```
+Developer runs: make typecheck
+    ↓
+tsc --noEmit reads tsconfig.json
+    ↓
+Checks all .ts files for type errors
+    ↓
+Reports errors (does NOT produce output files)
+    ↓
+Errors fixed in TypeScript source
+    ↓
+make js (or make js-watch) rebuilds the bundle
+```
+
+---
+
+## Architectural Patterns
+
+### Pattern 1: Module-per-Feature with Shared Types
+
+**What:** Each logical feature area (enrichment polling, filter bar, clipboard) gets its own TypeScript module. Shared data structures and constants live in `types/`.
+
+**When to use:** Always for this migration. The existing IIFE has 10 clear functional groupings — these become modules.
+
+**Trade-offs:** Slightly more files to navigate, but each file has one purpose and is independently testable. esbuild bundles them with zero overhead.
+
+**Example:**
+
+```typescript
+// types/api.ts — shared API response shapes
+export interface EnrichmentResult {
+    type: 'result' | 'error';
+    ioc_value: string;
+    provider: string;
+    verdict?: string;
+    detection_count?: number;
+    total_engines?: number;
+    scan_date?: string;
+    error?: string;
+}
+
+export interface EnrichmentStatus {
+    complete: boolean;
+    done: number;
+    total: number;
+    results: EnrichmentResult[];
+}
+```
+
+```typescript
+// modules/enrichment.ts — imports the shared types
+import type { EnrichmentResult, EnrichmentStatus } from '../types/api';
+import { VERDICT_SEVERITY, VERDICT_LABELS, IOC_PROVIDER_COUNTS } from '../types/ioc';
+```
+
+### Pattern 2: Null-Safe DOM Element Access
+
+**What:** Every `document.getElementById()` call returns `HTMLElement | null`. TypeScript enforces checking before use.
+
+**When to use:** Always — this is the primary safety improvement over the current JS where `if (!form) return;` is a manual convention.
+
+**Example:**
+
+```typescript
+// Pattern: early return with null guard (mirrors existing JS convention, now enforced by compiler)
+function initSubmitButton(): void {
+    const form = document.getElementById('analyze-form') as HTMLFormElement | null;
+    if (!form) return;
+
+    const textarea = document.getElementById('ioc-text') as HTMLTextAreaElement | null;
+    const submitBtn = document.getElementById('submit-btn') as HTMLButtonElement | null;
+    if (!textarea || !submitBtn) return;
+
+    // TypeScript now knows textarea and submitBtn are non-null here
+    textarea.addEventListener('input', () => {
+        submitBtn.disabled = textarea.value.trim().length === 0;
+    });
+}
+```
+
+### Pattern 3: Typed Fetch with Interface Assertions
+
+**What:** The enrichment polling `fetch('/enrichment/status/' + jobId)` currently uses `data.results` with no type check. TypeScript interfaces enforce the expected API shape.
+
+**When to use:** Any fetch() call that parses JSON.
+
+**Trade-offs:** Does not validate at runtime — TypeScript types are erased. The existing pattern of checking `if (!data) return` is preserved. For a local tool, full runtime validation (zod) is overkill.
+
+**Example:**
+
+```typescript
+import type { EnrichmentStatus } from '../types/api';
+
+async function pollStatus(jobId: string): Promise<EnrichmentStatus | null> {
+    const resp = await fetch(`/enrichment/status/${jobId}`);
+    if (!resp.ok) return null;
+    return resp.json() as Promise<EnrichmentStatus>;
+}
+```
+
+---
 
 ## Anti-Patterns
 
-### Anti-Pattern 1: Utility-First in Jinja2 Loops
+### Anti-Pattern 1: ESM Output Format
 
-**What people do:** Apply 12+ Tailwind utility classes directly in Jinja2 template markup for repeating elements.
+**What people do:** Use `--format=esm` because "ES modules are modern."
 
-```jinja
-{# BAD: utility classes on a component repeated 50 times #}
-<div class="bg-gray-800 border border-gray-700 rounded-lg p-3 border-l-4 transition-all">
+**Why it's wrong for this project:** ESM requires `<script type="module">` in `base.html`, changing the loading behavior. `defer` is already implicit on modules, but `async` is not — the behavior difference is subtle and easy to get wrong. More importantly, ESM is unnecessary when there is a single bundle and no dynamic `import()` needed.
+
+**Do this instead:** `--format=iife`. Preserves the existing script tag. Matches browser behavior the current code relies on.
+
+### Anti-Pattern 2: Separate Output Files per Module
+
+**What people do:** Use `--outdir` with multiple entry points, generating `dist/form.js`, `dist/enrichment.js`, etc.
+
+**Why it's wrong:** Requires multiple `<script>` tags in `base.html` in the correct order. Load order errors become a runtime problem. Flask caching/fingerprinting becomes more complex.
+
+**Do this instead:** Single entry point (`main.ts`) that imports all modules. Single `--outfile=dist/main.js` output. esbuild inlines all imports — no network overhead.
+
+### Anti-Pattern 3: Type Assertions Replacing Guards
+
+**What people do:** Use `as HTMLElement` to silence null errors without guarding:
+
+```typescript
+// WRONG: crashes at runtime if element is absent
+const btn = document.getElementById('submit-btn') as HTMLButtonElement;
+btn.disabled = true; // TypeError: Cannot set property 'disabled' of null
 ```
 
-**Why it's wrong:** When the design needs to change (border radius, padding, background shade), every template file must be edited. The Tailwind JIT scanner must index 50 copies of the same class string. Template diffs are huge and noisy.
-
-**Do this instead:** Define `.ioc-card` in `@layer components` with `@apply` or CSS var references. Use one meaningful class name in the template:
-
-```jinja
-{# GOOD: single semantic class name #}
-<div class="ioc-card" data-verdict="{{ ioc.verdict }}">
-```
-
-### Anti-Pattern 2: Hardcoded Hex Values in Component Classes
-
-**What people do:** Write `color: #f85149` directly in component class definitions instead of using the design token.
-
-**Why it's wrong:** When the palette changes (e.g., shifting from GitHub-red to a slightly different red), every hardcoded hex must be found and updated. Two hex values that look similar may diverge.
-
-**Do this instead:** Always reference CSS custom properties:
-
-```css
-/* BAD */
-.verdict-label--malicious { color: #f85149; }
-
-/* GOOD */
-.verdict-label--malicious { color: var(--color-danger); }
-```
-
-### Anti-Pattern 3: Duplicating Verdict Color Logic
-
-**What people do:** Define verdict colors in CSS, then redefine equivalent values in JavaScript for dynamic DOM updates (enrichment rendering in `main.js`).
-
-**Why it's wrong:** The two definitions will inevitably drift. CSS shows one shade of red, JS renders a slightly different shade.
-
-**Do this instead:** In `main.js`, when building verdict badge elements dynamically, apply the same CSS class names used in Jinja2 templates (`.verdict-malicious`, `.verdict-label--malicious`). The CSS vars do the color work. JS only adds the class, never sets colors directly via `element.style.color`.
-
-### Anti-Pattern 4: Loading Fonts from Google Fonts CDN
-
-**What people do:** Add `<link href="https://fonts.googleapis.com/css2?family=Inter">` to the template head.
-
-**Why it's wrong:**
-1. CSP `default-src 'self'` blocks the external stylesheet request entirely — no font loads
-2. Fixes require relaxing CSP with `style-src` and `font-src` additions, weakening the security posture
-3. In offline mode, the tool should have zero dependency on external network
-
-**Do this instead:** Self-host font files in `app/static/fonts/`. This is the only CSP-compatible approach.
-
-### Anti-Pattern 5: Omitting `crossorigin` on Font Preload
-
-**What people do:** Add a `<link rel="preload">` for the font file without the `crossorigin` attribute.
-
-**Why it's wrong:** Browsers treat font requests as CORS even for same-origin fonts. Without `crossorigin` on the preload, the browser makes two requests: the preload (discarded) and the actual fetch triggered by `@font-face`. The preload provides no benefit.
+**Why it's wrong:** Type assertions bypass TypeScript's null safety. The existing JS already has `if (!submitBtn) return;` guards that prevent this — TypeScript should enforce them, not bypass them.
 
 **Do this instead:**
 
-```html
-<!-- WRONG: crossorigin missing, preload is wasted -->
-<link rel="preload" href="/static/fonts/inter-variable.woff2" as="font" type="font/woff2">
-
-<!-- CORRECT: crossorigin required for font preloads -->
-<link rel="preload" href="..." as="font" type="font/woff2" crossorigin>
+```typescript
+// CORRECT: guard + assertion only when known non-null
+const btn = document.getElementById('submit-btn') as HTMLButtonElement | null;
+if (!btn) return;
+btn.disabled = true; // safe
 ```
 
-### Anti-Pattern 6: Upgrading to Tailwind v4 Mid-Milestone
+### Anti-Pattern 4: Running `tsc` to Emit JS (Instead of esbuild)
 
-**What people do:** See that Tailwind v4 exists and decide to upgrade as part of the design refresh.
+**What people do:** Configure `tsc` to compile TypeScript to JavaScript (remove `"noEmit"`, set `"outDir"`).
 
-**Why it's wrong:** Tailwind v4 has a completely different configuration model (`@theme` CSS directive replaces `tailwind.config.js`), a new CLI binary, and breaking changes to how utilities are generated. This upgrade is a separate project, not a v1.2 task.
+**Why it's wrong:** `tsc` is 10-100x slower than esbuild. It cannot bundle. It produces one output file per input file, requiring a separate bundling step. esbuild handles both transpilation and bundling in one pass.
 
-**Do this instead:** Complete v1.2 on Tailwind v3 (the existing, stable CLI). The v3 configuration approach described in this document produces full-quality output. Migrate to v4 in a dedicated milestone after v1.2 is stable.
+**Do this instead:** Use `tsc --noEmit` for type checking ONLY. Use esbuild for transpilation and bundling.
+
+### Anti-Pattern 5: Committing Source Maps
+
+**What people do:** Commit `main.js.map` alongside `main.js`.
+
+**Why it's wrong for this project:** Source maps expose the TypeScript source structure in production. For a security tool, this is a minor information disclosure. More practically, source maps are large and change on every rebuild — they create noise in git history.
+
+**Do this instead:** Add `app/static/dist/main.js.map` to `.gitignore`. Generate source maps locally during development with `make js-dev` or `make js-watch`.
+
+---
+
+## Build Order for v3.0 Migration
+
+The TypeScript migration has a clear dependency chain that determines implementation order:
+
+```
+Phase 1: Infrastructure
+    ├── Download tools/esbuild binary
+    ├── Add tsconfig.json
+    ├── Update Makefile (js, js-dev, js-watch, typecheck, esbuild-install targets)
+    ├── Update .gitignore (main.js.map)
+    └── Verify: make js compiles an empty main.ts to dist/main.js without errors
+
+Phase 2: Type Definitions
+    ├── Create types/ioc.ts (VERDICT_SEVERITY, VERDICT_LABELS, IOC_PROVIDER_COUNTS, type aliases)
+    ├── Create types/api.ts (EnrichmentResult, EnrichmentStatus interfaces)
+    └── Verify: tsc --noEmit passes on types alone
+
+Phase 3: Module Extraction (one module at a time, inside-out order)
+    ├── types/ioc.ts and types/api.ts (no deps — do first)
+    ├── modules/clipboard.ts (depends only on DOM types)
+    ├── modules/stagger.ts (no cross-module deps)
+    ├── modules/settings.ts (no cross-module deps)
+    ├── modules/form.ts (no cross-module deps)
+    ├── modules/export.ts (depends on clipboard)
+    ├── modules/filter.ts (no cross-module deps)
+    └── modules/enrichment.ts (depends on types/ioc, types/api — do last, largest)
+
+Phase 4: Entry Point and Template Update
+    ├── Create main.ts importing all modules
+    ├── Update base.html script tag: 'main.js' → 'dist/main.js'
+    ├── Verify: make js succeeds
+    ├── Verify: browser loads page, all features work
+    ├── Delete app/static/main.js (old file)
+    └── Update tailwind.config.js content paths
+
+Phase 5: Type Hardening
+    ├── Run tsc --noEmit, fix all type errors
+    ├── Add strictest DOM type annotations
+    └── Verify: 0 TypeScript errors, all E2E tests pass
+```
+
+**Why this order:** Types before modules (modules depend on types). Simple modules before complex ones. Entry point last (it imports all modules — any module error blocks entry point). Template update after bundle is confirmed working.
+
+---
+
+## Scaling Considerations
+
+This is a local tool with one user. Scaling is not a concern. The architecture discussion is about maintainability, not performance.
+
+| Concern | Current (vanilla JS) | After TypeScript Migration |
+|---------|---------------------|--------------------------|
+| Adding a new feature | Edit single 856-line file | Add to relevant module, import in main.ts |
+| Finding a bug in enrichment | Grep 856 lines | Open modules/enrichment.ts directly |
+| API shape changes | Update JS, hope nothing breaks | Update types/api.ts, tsc catches all callers |
+| New developer onboarding | Read entire IIFE | Read module by module |
+| Build time | N/A (no build) | ~100ms for esbuild full rebuild |
+| Type errors caught | Only runtime | At development time via tsc |
+
+---
 
 ## Sources
 
-- Tailwind CSS v3 — Dark Mode configuration: https://v3.tailwindcss.com/docs/dark-mode (HIGH confidence — official v3 docs)
-- Tailwind CSS — Reusing Styles (when to use @apply): https://tailwindcss.com/docs/reusing-styles (HIGH confidence — official docs)
-- Tailwind CSS — Adding Custom Styles: https://tailwindcss.com/docs/adding-custom-styles (HIGH confidence — official docs)
-- Tailwind CSS — Theme configuration: https://tailwindcss.com/docs/theme (HIGH confidence — official docs)
-- Dark Mode with Design Tokens in Tailwind CSS: https://www.richinfante.com/2024/10/21/tailwind-dark-mode-design-tokens-themes-css (MEDIUM confidence — verified against official Tailwind docs)
-- Semantic color tokens (nareshbhatia demo): https://github.com/nareshbhatia/tailwindcss-dark-mode-semantic-colors (MEDIUM confidence — reference implementation, community-sourced)
-- Vercel Geist color token naming: https://vercel.com/geist/colors (HIGH confidence — official Vercel design system)
-- Flask Templates (Jinja2 includes and macros): https://flask.palletsprojects.com/en/stable/templating/ (HIGH confidence — official Flask 3.1 docs)
-- Jinja2 Template Inheritance and Includes: https://jinja.palletsprojects.com/en/stable/templates/ (HIGH confidence — official Jinja2 docs)
-- Self-hosting web fonts guide: https://tristanguest.hashnode.dev/a-practical-guide-to-self-hosting-web-fonts (MEDIUM confidence — practical guide, verified against MDN font-display)
-- Inter Variable font: https://github.com/rsms/inter/releases (HIGH confidence — official Inter font repo)
-- JetBrains Mono: https://www.jetbrains.com/legalnotice/fonts/ (HIGH confidence — official JetBrains page)
-- Font preload crossorigin requirement: https://developer.mozilla.org/en-US/docs/Web/HTML/Attributes/rel/preload#cors-enabled_fetches (HIGH confidence — MDN official)
-- How we redesigned the Linear UI: https://linear.app/now/how-we-redesigned-the-linear-ui (MEDIUM confidence — product blog, design reference)
-- Tailwind CSS v4.0 release (context only, not adopting): https://tailwindcss.com/blog/tailwindcss-v4 (HIGH confidence — official Tailwind blog)
-- Semantic Tailwind color setup: https://www.subframe.com/blog/how-to-setup-semantic-tailwind-colors (MEDIUM confidence — community blog, pattern verified against Tailwind docs)
+- [esbuild Getting Started](https://esbuild.github.io/getting-started/) — standalone binary download via curl, platform support, latest version 0.27.3 (HIGH confidence — official docs, WebFetch verified)
+- [esbuild API](https://esbuild.github.io/api/) — `--format=iife`, `--bundle`, `--outfile`, `--sourcemap`, `--platform`, `--target` flags (HIGH confidence — official docs, WebFetch verified)
+- [esbuild Content Types](https://esbuild.github.io/content-types/) — TypeScript loader behavior, `isolatedModules` requirement, no type checking by design (HIGH confidence — official docs, WebFetch verified)
+- [TypeScript TSConfig Reference](https://www.typescriptlang.org/tsconfig/) — `lib`, `target`, `moduleResolution: "Bundler"`, `isolatedModules` options (HIGH confidence — official docs)
+- [esbuild FAQ](https://esbuild.github.io/faq/) — why no type checking, `tsc --noEmit` as the recommended pattern (HIGH confidence — official docs)
+- esbuild IIFE format — `script-src 'self'` CSP compatibility: both IIFE and ESM work with `script-src 'self'` as external files; confirmed via MDN CSP docs (HIGH confidence)
+- WebSearch: esbuild 0.27.3 is latest version as of 2026-02-28 (MEDIUM confidence — multiple sources agree)
+- Flask static file serving — Flask automatically serves all files under `app/static/` at `/static/` URL prefix; `url_for('static', filename='dist/main.js')` works without configuration (HIGH confidence — Flask 3.1 docs, confirmed from existing project behavior)
 
 ---
-*Architecture research for: Dark-first design system — SentinelX v1.2 Modern UI Redesign*
-*Researched: 2026-02-25*
+
+*Architecture research for: TypeScript build pipeline integration — SentinelX v3.0*
+*Researched: 2026-02-28*

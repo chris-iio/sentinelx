@@ -1,408 +1,214 @@
-# Feature Research — UI Patterns for v1.2 Modern Redesign
+# Feature Research — TypeScript Migration (v3.0)
 
-**Domain:** Premium dark-first SaaS UI patterns for a security/analyst tool
-**Researched:** 2026-02-25
-**Confidence:** HIGH (pattern analysis from Linear, Vercel, Stripe, shadcn/ui), MEDIUM (specific implementation values), LOW (where noted)
+**Domain:** TypeScript migration of 856-line vanilla JS IIFE in an existing Python/Flask application
+**Researched:** 2026-02-28
+**Confidence:** HIGH (TypeScript official docs, esbuild official docs, verified patterns), MEDIUM (module splitting strategy — evidence-based but adapted to this specific file structure), LOW (where noted)
 
-> **Scope note:** This document supersedes the v1.0 functional feature research (which covered IOC extraction, enrichment providers, and API integrations). That document remains at `.planning/research/FEATURES.md.v1` for reference. This document covers **UI patterns only** — the visual and interaction design patterns that make the existing functional features feel premium. Zero new backend features are in scope.
+> **Scope note:** This document supersedes the v1.2 UI redesign FEATURES.md (which covered UI patterns for
+> SentinelX v1.2). The v1.2 document is preserved below this file's scope. This document covers **TypeScript
+> migration features only** — what capabilities a correct TS migration of `app/static/main.js` delivers,
+> categorized by necessity. Zero new functional behavior is in scope; behavioral parity with the existing IIFE
+> is the goal.
 
 ---
 
-## Context: What Already Exists
+## Context: What We Are Migrating
 
-The codebase has a functioning dark UI built on CSS custom properties + Tailwind CSS. The color system is GitHub-dark-inspired (zinc/slate backgrounds, green primary button). What it lacks is the premium SaaS treatment applied to each component category. The redesign is not a rewrite — it is a visual elevation of the existing structure.
+The subject is `app/static/main.js` — an 856-line IIFE (`(function() { "use strict"; ... }())`) containing:
 
-**Existing design tokens (from `app/static/src/input.css`):**
-- Background: `#0d1117` (primary), `#161b22` (secondary), `#1c2128` (tertiary)
-- Border: `#30363d` (default), `#484f58` (hover)
-- Verdict colors: red `#f85149`, amber `#f59e0b`, green `#3fb950`, gray `#8b949e`
-- IOC type accents: blue `#4a9eff`, green `#4aff9e`, cyan `#4aeeee`, orange `#ff9e4a`, red `#ff4a4a`
-- Font UI: system-ui stack; Font mono: Fira Code / JetBrains Mono
+- **10 init functions** called from a single `init()` entry point at DOMContentLoaded
+- **No module system** — all functions are local to the IIFE, no imports/exports
+- **Browser-only** — uses `document`, `window`, `navigator.clipboard`, `fetch`, `CSS.escape`
+- **3 mutable module-level variables** — `VERDICT_SEVERITY`, `VERDICT_LABELS`, `IOC_PROVIDER_COUNTS` (constants), plus `sortTimer` and `rendered`/`iocVerdicts`/`iocResultCounts` (polling state)
+- **One external API shape** — the `/enrichment/status/{job_id}` JSON response (the only data contract the JS depends on)
 
-**The gap:** Components exist structurally but lack the micro-detail that produces the premium feel — hover states are abrupt, borders are flat, the verdict dashboard has no visual weight, cards don't communicate state hierarchy, and the typography lacks the size differentiation of Linear/Vercel dashboards.
+The existing IIFE already has `"use strict"` and clean separation by named function. This is an ideal candidate for direct TypeScript migration: no prototype chain abuse, no closure-heavy state, no dynamic `eval`.
 
 ---
 
 ## Feature Landscape
 
-### Table Stakes (Users Expect These)
+### Table Stakes (What a TS Migration Must Deliver)
 
-Premium dark tool UI patterns that analysts will notice if missing. These are not optional polish — they are the foundation of "this feels like a real product."
+Features that any correct TypeScript migration is expected to provide. Missing these means the migration is incomplete or provides no value over the original JS.
 
 | Feature | Why Expected | Complexity | Notes |
 |---------|--------------|------------|-------|
-| Card border + background differentiation (elevation) | In dark UIs, shadows disappear — border + background contrast is how elevation is communicated. A card that looks identical to the page background feels broken. | LOW | Move from flat `var(--bg-secondary)` cards on `var(--bg-primary)` background to a 3-level system: page bg / card bg / card header bg. Current difference is too subtle. |
-| Verdict-colored card left border (thick, 3-4px) | Every security tool with severity levels uses colored left borders to convey verdict at a glance. Present in current code but underutilized — needs more visual weight. | LOW | Increase from 3px to 4px, add a `box-shadow: inset 3px 0 0 var(--verdict-X)` fallback for browsers that need it. |
-| Focus ring on all interactive elements | Accessibility requirement and quality signal — premium tools have clearly styled focus rings that match the accent color. Current implementation uses blue (#4a9eff) universally but inconsistently. | LOW | Standardize: all inputs get `0 0 0 3px rgba(accent, 0.25)` ring; emerald/teal for online-mode forms, blue for offline-mode. Remove outline:none-without-replacement entirely. |
-| Smooth hover transitions on all interactive elements | Click targets that respond instantly feel cheap; 150ms ease transitions signal quality. Current code has transitions on some elements but not all (missing on verdict-dashboard-badge, IOC cards, enrichment slots). | LOW | Audit all interactive elements, add `transition: all 0.15s ease` or per-property transitions everywhere. |
-| Typography weight differentiation | Primary/secondary text hierarchy is the single most effective way to create visual clarity. Current: 1.5rem titles, 0.85rem body, but intermediate levels are missing. | LOW | Add a 3-tier scale: `1.1rem/600` for section headers, `0.875rem/400` for body, `0.75rem/400` for captions/metadata. |
-| Monospace font for all IOC values | IOC values (IPs, hashes, domains) must render in monospace for analyst readability. Currently implemented but inconsistently — some enrichment detail rows fall through to system-ui. | LOW | Audit all `.enrichment-detail`, `.provider-result-row`, `.ioc-original` selectors. Confirm `var(--font-mono)` applied universally to IOC data. |
-| Accessible color contrast (WCAG AA minimum) | Dark themes routinely fail contrast. The current `#8b949e` secondary text on `#161b22` background is marginal at WCAG AA. | LOW | Test current palette with browser devtools contrast checker. Raise secondary text to `#9ca3af` minimum (Tailwind zinc-400) where needed. |
-| Sticky filter bar backdrop blur | A sticky element without background treatment causes text to overlap visually. Current sticky filter bar has `background-color: var(--bg-primary)` but no blur — looks abrupt on scroll. | LOW | Add `backdrop-filter: blur(8px)` with semi-transparent background fallback for the sticky filter bar. Standard pattern in Linear, Vercel, and GitHub's nav. |
+| **Strict mode enabled (`"strict": true`)** | The entire point of TS migration is catching the class of bugs that loose JS silently allows. `"strict": true` enables `noImplicitAny`, `strictNullChecks`, `strictFunctionTypes`, `strictBindCallApply`, `strictPropertyInitialization`, `alwaysStrict` in one flag. Without it, TS adds syntax noise with no safety gain. | LOW | Set in `tsconfig.json`. One flag, no code changes needed initially — the migration process will surface violations to fix. |
+| **DOM type narrowing for all `querySelector` calls** | The existing code does `document.getElementById("analyze-form")` — in TS strict mode, this returns `HTMLElement \| null`. Every subsequent property access (`.disabled`, `.value`, `.textContent`) is a type error without a null guard. The current code already has null guards (`if (!form) return;`), but they are untyped. | MEDIUM | Pattern: `const el = document.getElementById("submit-btn") as HTMLButtonElement \| null; if (!el) return;`. Use `as HTMLButtonElement` (not `as any`) after a null check — keeps type safety, narrows to the correct interface. Affects all 10 `initX` functions. |
+| **Type definitions for API response shape** | `renderEnrichmentResult(result, ...)` uses `result.ioc_value`, `result.provider`, `result.verdict`, `result.type`, `result.detection_count`, `result.total_engines`, `result.scan_date`, `result.error` — all accessed without type safety. A TS interface for the enrichment result shape catches typos in field names and documents the contract. | LOW | Define `interface EnrichmentResult` and `interface EnrichmentStatus` matching the Flask `/enrichment/status/{job_id}` JSON response. No runtime validation needed (internal tool, controlled API). |
+| **Timer variable types resolved** | The code uses `var sortTimer = null` and `clearTimeout(sortTimer)` — in TS with DOM lib, `clearTimeout` expects `number \| undefined`. Also `setTimeout` returns `number` in browser but `NodeJS.Timeout` if `@types/node` leaks in. | LOW | Use `ReturnType<typeof setTimeout>` for timer variables, or configure `tsconfig.json` with `"lib": ["DOM", "ES2020"]` and `"types": []` to exclude Node types entirely. The `"types": []` approach is cleanest for a browser-only file. |
+| **Source maps generated** | If TS is compiled to JS and the original TS source is not shipped, browser DevTools show compiled output. Analysts debugging issues see line numbers in minified JS, not in the original TypeScript. Source maps link the compiled JS back to TS source. | LOW | `esbuild --sourcemap` or `tsc` with `"sourceMap": true`. Choose `--sourcemap=linked` (external `.js.map` file, referenced by a comment in the `.js`) to avoid inlining the map in the production file. |
+| **Build pipeline integration into Makefile** | The project uses `make css` and `make css-watch` for the Tailwind build. The TS build needs equivalent `make js` and `make js-watch` targets. Without Makefile integration, developers must remember a separate command. | LOW | Add `js` and `js-watch` targets to the existing `Makefile`. Pattern: `esbuild src/main.ts --bundle --format=iife --outfile=app/static/main.js --sourcemap`. |
+| **Behavioral parity: all existing behavior preserved** | The migration is not a refactor. Every function must behave identically after migration: `initSubmitButton`, `initAutoGrow`, `initModeToggle`, `initCopyButtons`, `initEnrichmentPolling`, `initExportButton`, `initFilterBar`, `initSettingsPage`, `initScrollAwareFilterBar`, `initCardStagger`. | MEDIUM | Run the existing Playwright E2E test suite after migration to verify. No new features, no deleted features, no changed timing. |
+| **XSS safety maintained (SEC-08)** | The existing code explicitly avoids `.innerHTML` for untrusted data (uses `.textContent` and `.setAttribute` only). TypeScript does not prevent XSS — it is a developer discipline enforced by code review. The type definitions for API responses must not introduce patterns that tempt future developers to use `.innerHTML`. | LOW | Use `textContent` in all type-annotated rendering functions. Consider naming the `error` field in `EnrichmentResult` carefully (e.g., `errorMessage`) to clarify it is a string, not HTML. |
 
-### Differentiators (Competitive Advantage)
+### Differentiators (Nice-to-Have, but Valuable)
 
-These patterns make SentinelX feel like a purpose-built security product, not a generic dark dashboard. The reference products for these patterns are Linear (precision, minimal chrome), Vercel (developer-centric data display), and Stripe (status badge system).
+Features that go beyond minimum migration correctness and provide lasting benefit to the codebase.
 
 | Feature | Value Proposition | Complexity | Notes |
 |---------|-------------------|------------|-------|
-| Verdict stat cards with large number display | Vercel/Stripe-style KPI cards: the count is the hero element (`2rem+ monospace`) with the label below in small caps. Currently the verdict dashboard uses inline badge pills — no visual hierarchy between the number and label. | MEDIUM | Replace inline pills with 4 individual stat cards in a horizontal row. Each card: colored top border, large mono number, small label. Malicious = red-tinted border + red number; Clean = green; etc. Active/clickable filter state: card gets tinted background. |
-| Card hover elevation effect | Linear cards use `translateY(-1px)` + `border-color` shift on hover to suggest liftability. The analyst scans dozens of IOC cards — hover feedback helps orient which card they're about to interact with. | LOW | Add `transform: translateY(-1px)` + `border-color: var(--border-hover)` + `box-shadow: 0 4px 12px rgba(0,0,0,0.3)` on `.ioc-card:hover`. Transition: `150ms ease`. No hover on verdict-colored border — that stays fixed to avoid confusion with state. |
-| Shimmer skeleton for enrichment-pending state | Current: spinner + "Pending enrichment..." text. Premium pattern: a skeleton `<div>` with animated shimmer gradient that mirrors the shape of the enrichment result rows. Matches what Linear, GitHub, and Vercel use while loading content. | MEDIUM | Replace `.spinner-wrapper` with 2-3 skeleton lines per card. CSS: `background: linear-gradient(90deg, var(--bg-tertiary), var(--bg-secondary), var(--bg-tertiary))` animated `background-position` from left to right via `@keyframes shimmer`. Width: full card width. Lines: narrow (1 row badge-height) + wider (detail row height). |
-| Progress bar with gradient fill and completion state | Current progress bar exists (`enrich-progress-fill`) with a blue→cyan gradient. The differentiator is a completion animation: when 100% is reached, transition the gradient from blue→cyan to green→emerald and briefly `scale-x` the bar to 102% then back. | LOW | Extend existing `.enrich-progress.complete` class with a `@keyframes complete-pulse` animation. Completion: CSS class swap triggered by JS when count matches total. |
-| IOC type pill with dot indicator (not just text) | Linear and Vercel use small colored dot indicators alongside labels to convey category at a glance without relying entirely on text. Current `.ioc-type-badge` is text-only. | LOW | Add a 6px circle `::before` pseudo-element to each `.ioc-type-badge--{type}` rule, colored to match the accent. The dot precedes the type text. Increases scannability on hash-heavy result sets. |
-| Search input with search icon prefix | The current `filter-search-input` is a plain text input. Premium pattern (Vercel, Linear, GitHub): a magnifying glass icon positioned absolutely in the left padding of the input, with `padding-left: 2.25rem` to avoid overlap. | LOW | Add a `<span>` or SVG icon wrapper absolutely positioned inside the `.filter-search` container. SVG can be inline or a CSS `background-image: url()` data URI — no image file needed. |
-| Verdict badge with colored dot + text (not background fill) | Current `.verdict-label--suspicious` uses `background-color: #f59e0b; color: #000` — a filled badge on a dark background creates harsh contrast and breaks the design language. Premium pattern (Stripe badges): `background: rgba(color, 0.12); border: 1px solid rgba(color, 0.3); color: var(--verdict-color)` — tinted background, colored border, colored text. | LOW | Standardize all verdict badges to the tinted-background pattern. Fix `--suspicious` to use `rgba(245, 158, 11, 0.15)` background + amber text (not solid amber + black text). This aligns all 4 verdict states to the same visual system. |
-| Empty state with icon and actionable message | Current `.no-results` is 2 lines of gray text centered in a card. Linear/Vercel empty states: a simple SVG icon (not illustration) at 32-40px, a bold headline, a secondary explanation sentence, and optionally a CTA link. For SentinelX: a magnifying glass or shield icon, "No IOCs detected" headline, "Try pasting a threat report, SIEM alert, or email header" secondary line. | LOW | Replace content inside `.no-results` with a 3-part structure: icon + heading + body. Use a simple SVG path (no external dependency). Centered layout, icon color = `var(--text-secondary)`. |
-| Settings section card with descriptive header row | Vercel/Linear settings pages use a pattern: each section is a card with a top-row showing section name (bold, left) + action button (right), then a divider, then the form fields below. Creates clear section boundaries and scannability. Current settings page uses `<h2>` headings with no visual card structure. | MEDIUM | Wrap each settings section in a card with: header row (`display: flex; justify-content: space-between`), a `1px solid var(--border)` divider, then the form content. For the VT API key section: header reads "VirusTotal API" with a "Save" button aligned right. |
-| Paste feedback with success animation | Current `.paste-feedback` is plain italic text that appears on paste. Premium pattern: brief appearance with a `transform: translateY(-4px)` + opacity fade in animation. Disappears after 2.5s. Vercel uses similar micro-animation for clipboard confirmations. | LOW | Add `@keyframes feedback-appear { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: translateY(0); } }` to `.paste-feedback`. JS already shows/hides it — just add the CSS animation class on show. |
-| Contextual submit button with mode indicator | Already exists (contextual label changes). The differentiator: when Online mode is active, the submit button gets a green/emerald background instead of the default green. When Offline, a subtle blue-tinted variant. This reinforces the mode state without redundancy. | LOW | Add `.btn-primary--online` and `.btn-primary--offline` modifier classes. JS toggles the class when mode changes. Colors: online = `var(--accent-domain)` (#4aff9e) tint; offline = `var(--accent-ipv4)` (#4a9eff) tint. |
+| **Feature-based module splitting (10 init functions → 10 modules)** | Breaking the monolithic 856-line IIFE into one module per feature (e.g., `src/submit-button.ts`, `src/enrichment-polling.ts`, `src/filter-bar.ts`) makes future changes surgical. Editing `filter-bar.ts` doesn't risk accidentally breaking `initEnrichmentPolling`. Module boundaries also make unit testing individual features practical for the first time. | MEDIUM | Natural split: 1 module per `initX` function plus `src/types.ts` for shared interfaces and `src/constants.ts` for `VERDICT_SEVERITY`, `VERDICT_LABELS`, `IOC_PROVIDER_COUNTS`. esbuild bundles everything into a single `main.js` at build time — no runtime module loading overhead. |
+| **`src/types.ts` with all shared interfaces** | A single file exporting `EnrichmentResult`, `EnrichmentStatus`, `VerdictKey`, `FilterState`, `IocType`, and `ProviderVerdictEntry` creates a living documentation of the data contracts. When the Flask API response changes, the type error is surfaced immediately. | LOW | Depends on: DOM type narrowing (table stakes). The types file is the foundation the other modules import from. Define `type VerdictKey = "malicious" \| "suspicious" \| "clean" \| "no_data" \| "error"` as a union type — more valuable than `string` everywhere. |
+| **`src/constants.ts` with typed constant objects** | `VERDICT_SEVERITY`, `VERDICT_LABELS`, and `IOC_PROVIDER_COUNTS` are currently plain objects with no type safety. Typing `VERDICT_LABELS` as `Record<VerdictKey, string>` ensures a new verdict key cannot be added to the API without updating the label table — caught at compile time, not runtime. | LOW | Depends on: `VerdictKey` union type in `src/types.ts`. |
+| **Type-safe `querySelector` helper** | Instead of `document.getElementById("foo") as HTMLButtonElement \| null` scattered throughout 10 modules, a typed helper `function getEl<T extends HTMLElement>(id: string): T \| null` reduces duplication and keeps the cast logic in one place. | LOW | Optional but reduces repetition. Alternative: inline casts are fine if the codebase stays small. |
+| **`tsconfig.json` with `"lib": ["DOM", "ES2020"]` and `"types": []`** | Explicitly specifying `lib` ensures only browser APIs are available (no accidental Node.js global leakage). `"types": []` prevents `@types/node` from polluting the browser type space, which eliminates the `setTimeout` → `NodeJS.Timeout` confusion that occurs when any dev dependency brings in Node types. | LOW | Small configuration decision with a disproportionate benefit: timer types resolve to `number` (browser) not `NodeJS.Timeout` (Node), which is correct for this codebase. |
+| **esbuild over tsc for the build step** | esbuild compiles TypeScript 10-100x faster than `tsc` and requires zero configuration beyond CLI flags. For a single-file output, the build is essentially instantaneous. `tsc --noEmit` can then be used for type-checking without emitting (CI gate), while esbuild handles the actual build. This is the 2025 standard for browser-only TS projects. | LOW | Depends on: esbuild installation (single binary, no npm needed if using the standalone version). esbuild does NOT do type checking — a `make typecheck` target runs `tsc --noEmit` for CI. |
+| **Barrel export (`src/index.ts`) omitted intentionally** | A barrel export (`export * from './submit-button'`) is the standard pattern for npm packages. For an application bundled by esbuild with a single entry point (`src/main.ts`), barrel exports add indirection with no benefit. The entry point (`src/main.ts`) imports directly from each module and calls `init()`. Omitting barrels keeps the module graph simple. | LOW | Anti-pattern for this specific project type. See Anti-Features below for the full rationale. |
 
 ### Anti-Features (Commonly Requested, Often Problematic)
 
-Features that seem like obvious improvements but undermine the tool's design goals or create technical debt.
+Features that seem like natural extensions of a TypeScript migration but introduce complexity, risk, or maintenance burden without proportional value in this specific project.
 
 | Feature | Why Requested | Why Problematic | Alternative |
 |---------|---------------|-----------------|-------------|
-| Glassmorphism / frosted-glass cards | Trendy, looks premium in mockups | `backdrop-filter: blur()` on content cards creates constant GPU compositing overhead. On a results page with 50+ cards this causes scroll jank. Also creates accessibility issues with low contrast over blurred backgrounds. | Use backdrop-filter only on the sticky filter bar (one element, not repeated). Cards use solid backgrounds. |
-| Pure black `#000000` background | Maximum contrast, dramatic look | High contrast between pure black and light text causes "halation" (text appears to bleed) for users with astigmatism. OWASP and Nielsen Norman Group both document this as a usability issue for extended reading. | Stay on dark zinc/slate grays: `#0d1117` is correct. Never go below `#0a0a0a` for body background. |
-| Animation-heavy micro-interactions | Delightful, premium feel | SOC analysts use this tool under time pressure. Animations that play every time a result card appears (if not respecting `prefers-reduced-motion`) add cognitive load and frustration for power users who run the tool dozens of times per shift. | All animations must be gated by `@media (prefers-reduced-motion: no-preference)`. Durations: 100-200ms max for state changes, never longer. No entrance animations on card grid load. |
-| Custom scrollbar styling | Polish signal, frequently requested | Webkit scrollbar CSS is non-standard and not supported in Firefox without `scrollbar-color` CSS. Cross-browser scrollbar styling requires two separate CSS approaches and still looks different per OS. Return on investment is very low. | Leave scrollbars at OS default. If requested, use `scrollbar-color: var(--border) var(--bg-primary)` (Firefox) + `-webkit-scrollbar` (Chrome) as a single low-risk addition, never as a priority. |
-| Sidebar navigation | More surface area for features | The tool has 3 pages (input, results, settings). A sidebar would consume 220px of horizontal space on a tool that needs that width for IOC values (hashes are 64 chars). The current top-bar header with Settings nav-link is the correct information architecture for this scope. | Keep flat header. If navigation grows beyond 4 items, consider a `<nav>` with horizontal tabs — never a vertical sidebar for this tool. |
-| Dark/light mode toggle | Universal user preference | Adding a light mode doubles the CSS maintenance burden for every new component. This is a security tool used in SOC environments (low-light) — light mode is not a real use case for the user base. | Respond to `prefers-color-scheme: light` with a simple variable swap if demanded, but do not build a toggle UI. Never a priority item. |
-| Inline charts / sparklines for verdict trends | Dashboard feel, context about IOC history | Single-shot triage tool — there is no history to chart within a session. Verdict dashboard counts are the correct scope. Charts would require a charting library (adds ~50KB to page weight) for zero functional value. | The 4 verdict stat cards with counts are the correct data visualization. No charts. |
-| Tooltip-based information architecture | Detailed provider metadata on hover | Tooltips are inaccessible (keyboard, touch) and create invisible information architecture. Analysts may not discover that provider details live in tooltips. | Use `<details>/<summary>` collapsible sections (already in use for `enrichment-nodata-section`) — visible structure, accessible, no JS required. |
-| Infinite scroll for IOC cards | Modern list pattern | A paste of 10 URLs is not a pagination problem — it is a layout problem. The current 2-column grid is the correct approach. Infinite scroll adds JS complexity for a problem that doesn't exist. | Keep current grid. If card count exceeds 100 (rare), address with a "Showing first 100" message and "Show all" reveal — not infinite scroll. |
+| **Zod or io-ts runtime validation of API responses** | "TypeScript interfaces don't prevent bad data at runtime" is true. Runtime validation libraries like Zod parse API responses and throw on shape mismatch. | SentinelX is a local tool with a single controlled Python backend. The API is not public; no external party produces its JSON. Adding 14KB of Zod to validate an internal API introduces a dependency, adds parse overhead on every poll tick (every 750ms), and creates failure modes (poll silently stops if Zod throws) not present in the current code. The existing null-check pattern (`result.verdict || "no_data"`) already handles missing fields gracefully. | Define TypeScript interfaces for documentation and compile-time safety. Use the existing defensive `|| "no_data"` fallbacks for runtime robustness. |
+| **Declaration files (`.d.ts`) hand-authored for internal modules** | Declaration files are the standard TypeScript pattern for publishing typed packages. They document module shapes without shipping source. | This is an application, not a library. TypeScript compiles from `.ts` source directly — no hand-authored `.d.ts` needed. If `"declaration": true` is set in tsconfig, the compiler generates them automatically. But for an esbuild-bundled single-file browser app, generated `.d.ts` files are unused and clutter the build output. | Set `"declaration": false` in tsconfig. Types live in `.ts` source files. No `.d.ts` files needed. |
+| **Deeply typed CSS class manipulation** | Typed CSS class manipulation libraries (e.g., `clsx`, `classnames`) or custom types for BEM class names (`type BemBlock = "ioc-card" | "verdict-badge" | ...`) add type coverage to the CSS layer. | The existing code does `card.classList.add("filter-btn--active")` — a string. Typing CSS class names requires enumerating every class in the codebase as a union type, which becomes stale as CSS evolves. The maintenance burden exceeds the bug-prevention value. CSS class typos are found immediately by visual inspection, not weeks later in production. | Keep CSS class strings untyped. Type the data attributes (`data-verdict`, `data-ioc-type`) which carry domain logic, not presentation. |
+| **Namespaces instead of ES modules** | TypeScript namespaces (`namespace SentinelX { export function init() { ... } }`) were the pre-module TypeScript pattern. tsc compiles them to IIFEs, avoiding any module bundler requirement. | TypeScript's own codebase migrated away from namespaces to ES modules in 2024. Namespaces are a legacy pattern; ES modules with esbuild bundling is the current standard. Namespaces also do not provide the test isolation benefits that true ES modules offer. | Use ES modules (`export function`, `import { } from`). Let esbuild bundle them to an IIFE for browser delivery. |
+| **Separate `tsconfig.build.json` and `tsconfig.dev.json`** | Multi-tsconfig setups allow different strictness levels for development vs. production builds, or separate configs for tests. | This project has 856 lines of JS to migrate. A multi-config setup adds tooling complexity for a codebase where a single strict config is appropriate from day one. If the test framework (pytest + Playwright) needs Node types, those are Python-side tests, not TypeScript tests — so the browser tsconfig never needs Node types. | Single `tsconfig.json` with `"strict": true` and `"lib": ["DOM", "ES2020"]`. |
+| **Gradual migration with `allowJs: true`** | "Don't convert everything at once" is the official TypeScript migration guidance for large codebases. `allowJs: true` lets the project have mixed `.js` and `.ts` files during migration. | At 856 lines in a single file, this is not a large codebase. A gradual migration adds intermediate states that must be maintained: the file is valid JS but not yet typed, developers must track which parts are migrated, and the build output is uncertain during transition. A single-file project is better migrated in one pass with a clear before/after. | Migrate `main.js` to `main.ts` in a single commit. If the scope feels large, split it into the module files first (as JS), then type each module. But do not maintain a mixed JS/TS state. |
+| **CSS Modules or Tailwind class-name type generation** | Fully typed Tailwind (using `tailwind-ts` or code-generated class name types) ensures that Tailwind classes used in JS are valid. | SentinelX does not generate Tailwind class names in JavaScript — it uses static CSS class names from the Jinja2 templates. The JS manipulates data attributes (`data-verdict`, `data-mode`) and a handful of BEM classes. Tailwind type generation is for frameworks (React, Vue) where classes are composed in JS; not for server-rendered templates. | No action needed. The Tailwind build already catches unknown classes by generating CSS only for classes found in templates and JS files. |
+| **`as const` assertions on all object literals** | Using `as const` on `VERDICT_SEVERITY`, `VERDICT_LABELS`, `IOC_PROVIDER_COUNTS` creates readonly literal types (`"malicious"` instead of `string`). This is maximally strict. | `as const` on `VERDICT_LABELS` creates the type `{ readonly malicious: "MALICIOUS"; readonly suspicious: "SUSPICIOUS"; ... }`. While technically more precise, it makes the object harder to use as an index target (`VERDICT_LABELS[someStringVar]` fails without a cast). For this use case, `Record<VerdictKey, string>` is more ergonomic and equally safe. | Type the constants as `Record<VerdictKey, string>` or `Record<VerdictKey, number>` respectively, with `VerdictKey` as the union type. Use `as const` only if a downstream function needs to infer literal types from the constant, which is not the case here. |
+| **Jest or Vitest for unit tests of the TS modules** | TypeScript enables unit testing individual modules in isolation. Adding Jest or Vitest would allow testing `computeWorstVerdict`, `verdictSeverity`, and `updateDashboardCounts` without a browser. | The existing test suite is pytest (Python) + Playwright (E2E). Adding a JavaScript test framework introduces a second test runtime, second coverage tool, second CI job, and a `package.json` dependency that doesn't currently exist. The E2E tests already cover the observable behavior. For pure logic functions (`computeWorstVerdict`), the Python test suite's integration coverage is sufficient. | Extract pure logic functions (`computeWorstVerdict`, `verdictSeverity`, `formatDate`) to `src/verdict-utils.ts`. Their correctness is verified by the existing E2E tests. If unit tests are desired later, Vitest can be added independently — do not block the TS migration on it. |
 
 ---
 
 ## Feature Dependencies
 
 ```
-Verdict Stat Cards (differentiator)
-    └──requires──> Verdict color system (already exists in --verdict-* variables)
-    └──enhances──> Filter bar verdict buttons (clicking stat card = filter)
+[src/types.ts — EnrichmentResult, VerdictKey, FilterState]
+    └──required by──> src/enrichment-polling.ts
+    └──required by──> src/filter-bar.ts
+    └──required by──> src/verdict-utils.ts
 
-Card Hover Elevation Effect
-    └──requires──> Card border system (already exists)
-    └──conflicts with──> Border-left verdict color (don't move the verdict border on hover — it creates state confusion)
+[src/constants.ts — VERDICT_SEVERITY, VERDICT_LABELS, IOC_PROVIDER_COUNTS]
+    └──required by──> src/verdict-utils.ts
+    └──required by──> src/enrichment-polling.ts
 
-Shimmer Skeleton for Enrichment Pending
-    └──replaces──> Current spinner-wrapper + enrichment-pending-text
-    └──requires──> Same slot dimensions as eventual result rows (must mirror height)
-    └──enhances──> Enrichment result arrival (content "replaces" skeleton — no layout shift)
+[src/verdict-utils.ts — verdictSeverity(), computeWorstVerdict()]
+    └──required by──> src/enrichment-polling.ts (calls both)
+    └──required by──> src/card-management.ts (calls verdictSeverity for sort)
 
-Search Input with Icon Prefix
-    └──requires──> Layout adjustment: padding-left on filter-search-input
-    └──enhances──> Filter bar visual hierarchy (icon differentiates from verdict/type filters)
+[esbuild build pipeline]
+    └──required by──> All TS modules (bundles to single main.js)
+    └──enables──> source maps
 
-Progress Bar Completion Animation
-    └──requires──> Existing enrich-progress and .complete CSS class (already exists)
-    └──requires──> No new JS — class already toggled by enrichment polling
-    └──enhances──> Online mode results page perceived completeness signal
+[Strict mode + DOM types]
+    └──required by──> All modules (type errors surface only with strict: true)
 
-Settings Section Card Pattern
-    └──requires──> New .settings-section-card component CSS
-    └──conflicts with──> Current plain .settings-section h2 structure (requires HTML refactor)
+[src/main.ts entry point]
+    └──imports all init functions──> All feature modules
+    └──calls init() at DOMContentLoaded
 ```
 
 ### Dependency Notes
 
-- **Verdict stat cards conflict with current verdict-dashboard-badge pills:** The new stat card pattern replaces the current inline badges. The HTML structure of `results.html` and the verdict-counting JS in `main.js` must both change, but the data attributes (`data-verdict-count`) can be preserved on the new elements.
-- **Shimmer skeleton requires known card slot dimensions:** The skeleton must be the same height as the enriched result. If the enrichment slot expands when results arrive, there will be layout shift. Pre-set `min-height` on `.enrichment-slot` to the typical result height (~60px for 2 provider rows).
-- **Backdrop-filter on sticky filter bar requires isolation:** The filter bar parent must have `isolation: isolate` to avoid compositing issues with the card grid behind it.
+- **Types before modules:** `src/types.ts` must be created before any other module, because `EnrichmentResult` is the shared interface used by both the polling loop and the rendering code. If types come later, the intermediate state has `any` everywhere.
+- **Constants before utils:** `VERDICT_SEVERITY` is consumed by `verdictSeverity()`. If `constants.ts` is typed as `Record<VerdictKey, number>`, the function signature can be narrowed to accept `VerdictKey` instead of `string`.
+- **Build pipeline before migration:** Confirm esbuild compiles the TS file successfully before trying to add types. Establish the pipeline with a trivial `console.log("hello from TS")` first, then migrate the logic.
+- **No conflicts:** All modules communicate through the DOM (data attributes on elements), not through shared in-memory state. This means modules are genuinely independent at runtime even if they share type definitions.
 
 ---
 
 ## MVP Definition
 
-### v1.2 Launch With (High Visual Impact, Low Complexity)
+### Migration Launch With (v3.0 Phase 1)
 
-The minimum set that produces a measurably premium feel. Prioritized by impact-to-effort ratio.
+The minimum needed to ship a correct TypeScript migration with real type safety and a working build pipeline.
 
-- [x] Fix verdict badge visual system — standardize all 5 verdict states to tinted-bg + colored-border + colored-text (no more solid amber on black) — **highest consistency fix**
-- [x] Card hover elevation effect — `translateY(-1px)` + shadow on `.ioc-card:hover` — **1 CSS block, immediate premium feel**
-- [x] Typography weight differentiation — add intermediate heading size, tighten caption text — **3 CSS rule changes**
-- [x] Focus ring standardization — uniform `0 0 0 3px rgba(accent, 0.25)` across all interactive elements — **accessibility + quality signal**
-- [x] Sticky filter bar backdrop-blur — `backdrop-filter: blur(8px)` on `.filter-bar-wrapper` — **1 CSS property**
-- [x] Paste feedback animation — `@keyframes` appear animation on `.paste-feedback` — **5 CSS lines**
-- [x] IOC type badge dot indicator — `::before` colored dot on `.ioc-type-badge--*` — **8 CSS rules (1 per type)**
-- [x] Empty state icon + headline — replace 2 lines of text with icon + bold heading + body — **HTML + 4 CSS rules**
-- [x] Search input icon prefix — SVG magnifying glass in `.filter-search` — **1 SVG + 2 CSS rules**
+- [ ] `tsconfig.json` with `"strict": true`, `"lib": ["DOM", "ES2020"]`, `"types": []`, `"noEmit": true` — type checking config only
+- [ ] `src/types.ts` with `EnrichmentResult`, `EnrichmentStatus`, `VerdictKey`, `IocType`, `FilterState`, `ProviderVerdictEntry` interfaces
+- [ ] `src/constants.ts` with typed `VERDICT_SEVERITY`, `VERDICT_LABELS`, `IOC_PROVIDER_COUNTS`
+- [ ] esbuild build pipeline: `Makefile` targets `js` and `js-watch`, outputting `app/static/main.js` with source maps
+- [ ] `src/main.ts` entry point — imports all init functions, calls `init()` at DOMContentLoaded
+- [ ] All existing IIFE code migrated to typed ES modules with strict null checks resolved
+- [ ] All 10 `initX` functions typed with DOM element narrowing (`HTMLButtonElement | null`, etc.)
+- [ ] Behavioral parity verified: existing Playwright E2E suite passes
 
-### v1.2 Add After Core Is Solid
+### Add After Base Migration (v3.0 Phase 2)
 
-- [ ] Verdict stat cards — replace dashboard pill badges with 4 individual KPI cards — **requires HTML refactor + CSS**
-- [ ] Shimmer skeleton loading — replace spinner with animated skeleton rows — **new CSS @keyframes + JS class swap**
-- [ ] Settings section card pattern — wrap settings in bordered card with header row — **HTML refactor + CSS**
-- [ ] Progress bar completion animation — completion pulse on enrichment finish — **2 CSS additions**
-- [ ] Mode-aware submit button variant — color shifts when online/offline — **2 CSS modifier classes + 2 JS lines**
+Once the migration is working and the build pipeline is established:
 
-### v1.2 Future Consideration
+- [ ] Feature-based module splitting: one `.ts` file per `initX` function (10 modules + types + constants + main)
+- [ ] `src/verdict-utils.ts` for pure logic functions isolated for clarity
+- [ ] `make typecheck` CI target (`tsc --noEmit`)
 
-- [ ] Contextual copy button tooltip on hover — "Copy IOC" text appears on hover, auto-fades — defer, complexity vs value unclear
-- [ ] Search result highlighting — highlight matched text in IOC value when filter is active — HIGH complexity (requires DOM text manipulation)
-- [ ] Header breadcrumb trail — show "Results > 12 IOCs > Online Mode" — LOW value for 2-page nav structure
+### Future Consideration (v4.0+)
+
+- [ ] Vitest unit tests for pure logic functions in `src/verdict-utils.ts` — defer until a test author wants them; do not add a JS test runtime during the migration itself
+- [ ] Zod validation if the enrichment API becomes a public endpoint — not applicable for local tool
+- [ ] Upgrade to TypeScript 6.0 when released (strict mode will become the default per the TypeScript team's current trajectory)
 
 ---
 
 ## Feature Prioritization Matrix
 
-| UI Feature | Analyst Value | Implementation Cost | Priority |
-|------------|---------------|---------------------|----------|
-| Verdict badge visual fix | HIGH (consistency, clarity) | LOW (CSS only) | P1 |
-| Card hover elevation | HIGH (premium feel, orientation) | LOW (CSS only) | P1 |
-| Focus ring standardization | HIGH (accessibility) | LOW (CSS audit) | P1 |
-| Typography differentiation | HIGH (hierarchy, readability) | LOW (CSS only) | P1 |
-| Sticky filter backdrop-blur | MEDIUM (polish) | LOW (1 CSS property) | P1 |
-| Empty state icon + message | MEDIUM (completeness, UX) | LOW (HTML + CSS) | P1 |
-| Search input icon | MEDIUM (discoverability) | LOW (SVG + CSS) | P1 |
-| Paste feedback animation | MEDIUM (micro-delight) | LOW (CSS keyframes) | P1 |
-| IOC type badge dot | MEDIUM (scannability) | LOW (CSS ::before) | P1 |
-| Verdict stat cards (KPI) | HIGH (information hierarchy) | MEDIUM (HTML + JS refactor) | P2 |
-| Shimmer skeleton | HIGH (perceived performance) | MEDIUM (new CSS pattern) | P2 |
-| Progress bar completion anim | MEDIUM (feedback clarity) | LOW (CSS class extension) | P2 |
-| Settings section card | MEDIUM (page completeness) | MEDIUM (HTML refactor) | P2 |
-| Mode-aware submit button | LOW (redundant with toggle label) | LOW (CSS modifier) | P2 |
-| Custom scrollbar | LOW (cross-browser inconsistent) | MEDIUM (dual CSS) | P3 |
-| Copy button tooltip | LOW | MEDIUM | P3 |
-| Search result highlighting | MEDIUM | HIGH | P3 |
+| Feature | Developer Value | Implementation Cost | Priority |
+|---------|-----------------|---------------------|----------|
+| `tsconfig.json` with strict mode | HIGH — catches null dereferences, typos in field names | LOW — one file, standard config | P1 |
+| `src/types.ts` — API response interfaces | HIGH — documents data contract, catches field renames | LOW — ~50 lines of interface definitions | P1 |
+| `src/constants.ts` — typed constants | MEDIUM — prevents untyped verdict strings | LOW — 3 const declarations with types | P1 |
+| esbuild build pipeline (Makefile targets) | HIGH — useless without a way to build | LOW — 2 Makefile targets, esbuild CLI | P1 |
+| DOM type narrowing in all initX functions | HIGH — the core safety benefit of TS | MEDIUM — 10 functions, ~30 null checks to type | P1 |
+| Source maps | MEDIUM — debugging compiled output | LOW — one esbuild flag | P1 |
+| Behavioral parity (E2E tests pass) | CRITICAL — migration must not break anything | MEDIUM — test-driven verification | P1 |
+| Feature-based module splitting | MEDIUM — maintainability, testability | MEDIUM — 10 files instead of 1 | P2 |
+| `src/verdict-utils.ts` isolation | LOW — nice for readability | LOW — move 4 functions | P2 |
+| `make typecheck` CI target | MEDIUM — catches regressions in CI | LOW — one Makefile target | P2 |
+| Vitest unit tests | LOW — E2E already covers behavior | HIGH — new runtime, new config | P3 |
+| Zod runtime validation | LOW — internal API, no adversarial input | HIGH — 14KB dependency, poll-loop failure mode | P3 |
 
 **Priority key:**
-- P1: Must have for v1.2 launch — high impact, low cost
-- P2: Should have — significant improvement, moderate cost
-- P3: Nice to have — defer to v1.3 or later
+- P1: Required for the migration to be complete and correct
+- P2: Improves the migration outcome but can follow in the same milestone
+- P3: Deferred — not a TypeScript migration concern
 
 ---
 
-## Pattern Reference by Component
+## How Typing Should Go: Depth Guidance
 
-### 1. Card Component Pattern (IOC Cards)
+This is the most important judgment call in a TS migration. The principle: **type the domain, not the DOM API.**
 
-**Reference products:** Linear (issue cards), Vercel (deployment cards), GitHub (PR cards)
+### Type deeply (HIGH value):
 
-**What these products do:**
-- Background is 2 levels above page background (not 1)
-- 1px border with `rgba(white, 0.08)` to `rgba(white, 0.12)` opacity — not a solid hex color
-- On hover: border opacity rises to 0.2, `box-shadow: 0 4px 16px rgba(0,0,0,0.4)`, `translateY(-1px)`
-- Left accent border: 3-4px, solid verdict color, does NOT change on hover (state indicator is static)
-- Card header: `background` is one step lighter than card body (Linear uses this for the "row header" in issue lists)
-- Content density: tight padding (0.75rem) but with enough breathing room in the header row
-- Transition: `150ms ease` on transform + border — not `all` (too broad, catches unwanted props)
+- **API response shapes** — `EnrichmentResult`, `EnrichmentStatus` — these are the data contracts. A field name change in the Flask route that doesn't match the TypeScript interface is caught at compile time.
+- **Verdict values** — `type VerdictKey = "malicious" | "suspicious" | "clean" | "no_data" | "error"` — used in 6+ places. A union type catches unhandled verdict states.
+- **IOC types** — `type IocType = "ipv4" | "ipv6" | "domain" | "url" | "md5" | "sha1" | "sha256"` — used as keys in `IOC_PROVIDER_COUNTS`. A union type makes the provider count lookup type-safe.
+- **Function signatures** — all `initX()` functions should be `(): void`. Polling state objects (`iocVerdicts`, `iocResultCounts`) should be `Record<string, ...>` with typed value shapes.
 
-**What SentinelX currently does vs. what to change:**
-- Current: flat `#161b22` card on `#0d1117` page — difference is too subtle
-- Change: add a card-header `background: var(--bg-tertiary)` strip for the `.ioc-card-header`
-- Current: `border: 1px solid #30363d` (solid hex) — works but not premium
-- Change: `border: 1px solid rgba(255,255,255,0.08)` — more luminous feel on dark
-- Add: hover elevation as described above
+### Type minimally (LOW value — use `HTMLElement` casts only):
 
-**Tailwind equivalent (if refactoring to utility classes):**
-```
-border border-white/8 hover:border-white/15 hover:shadow-lg hover:-translate-y-px transition-[border-color,box-shadow,transform] duration-150
-```
+- **Specific DOM element subtypes** — `as HTMLButtonElement`, `as HTMLTextAreaElement`, `as HTMLInputElement` are appropriate where element-specific properties (`.disabled`, `.value`, `.type`) are accessed. Use the most specific type that fits.
+- **`NodeListOf<Element>` from querySelectorAll** — TypeScript returns `NodeListOf<Element>` for attribute selectors. Cast to `NodeListOf<HTMLElement>` when using `.style` or `.classList` — or use `Array.from()` with a type guard filter.
 
-### 2. Form/Input Pattern (Textarea, Text Inputs)
+### Do not type (ANTI-PATTERN — no value):
 
-**Reference products:** Linear (issue description editor), Vercel (env var inputs), Stripe (form fields)
-
-**What these products do:**
-- Background: 1 level below card background (deepest surface) — inputs feel "inset"
-- Border: `rgba(white, 0.1)` resting, transitions to `rgba(accent, 0.6)` on focus
-- Focus ring: `box-shadow: 0 0 0 3px rgba(accent, 0.2)` — not just border change
-- Placeholder: `rgba(text, 0.35)` — notably dimmer than body text
-- Font: monospace for code-like inputs (IOC textarea), system-ui for label inputs
-- No border-radius above 6-8px — rounded corners > 8px feel consumer, not professional
-- Transition: `border-color 0.15s ease, box-shadow 0.15s ease` specifically (not `all`)
-
-**What SentinelX currently does vs. what to change:**
-- Focus ring uses `rgba(74, 158, 255, 0.1)` — too low opacity, barely visible
-- Change to `rgba(74, 158, 255, 0.25)` for the focus ring alpha
-- Placeholder is `opacity: 0.6` on `var(--text-secondary)` — effectively near-invisible
-- Change placeholder to `color: rgba(var(--text-secondary-rgb), 0.5)` or a fixed mid-gray
-
-### 3. Dashboard/KPI Pattern (Verdict Dashboard)
-
-**Reference products:** Vercel (deployment statistics), Stripe (payment summary), Linear (issue metrics)
-
-**What these products do:**
-- 4 stat cards in a horizontal row, each with equal width
-- Card structure: top-border in category color (4px), large number in monospace (`2rem`/`700`), label in small-caps (`0.7rem`/`500`/`letter-spacing: 0.08em`)
-- Background: the card gets `rgba(category-color, 0.05)` tint when active (filter applied)
-- Hover: `rgba(category-color, 0.08)` tint + border color brightens
-- The number is the visual anchor — everything else is secondary
-- Interactive: clicking a stat card applies a filter (already how current verdict-dashboard works)
-
-**Example markup structure (pseudocode):**
-```html
-<div class="verdict-stat-card verdict-stat-card--malicious" data-verdict="malicious" tabindex="0">
-    <span class="verdict-stat-count" data-verdict-count="malicious">0</span>
-    <span class="verdict-stat-label">Malicious</span>
-</div>
-```
-
-**What SentinelX currently does vs. what to change:**
-- Current: inline pills (`.verdict-dashboard-badge`) — all same height as filter buttons
-- Change: give verdict stats their own visual level, separate from filter controls
-- Current: counts at `0.8rem font-size` in inline pill — hard to scan across multiple cards
-- Change: counts to `1.75rem` monospace, labels to `0.7rem` small-caps beneath
-
-### 4. Filter/Search Pattern
-
-**Reference products:** Linear (priority/status filters), Vercel (deployment filter), GitHub (PR filters)
-
-**What these products do:**
-- Filter chips are segmented into groups with a subtle separator (`1px border` or `|` glyph) between groups
-- Active chip: background tint (not inversion) + colored border + colored text — same approach as verdict badges
-- "All" chip: always first, neutral styling (border-only, no tint), gets border highlight when active
-- Search input: lives in the same visual row as filter chips, separated by a `margin-left: auto` push
-- Search icon: SVG magnifying glass, `14x14px`, positioned with absolute/padding technique
-- Typing in search: filter chips don't disappear — both filter and search apply simultaneously (AND logic)
-- Clear search: `×` button appears inside the input when non-empty (not a separate button)
-
-**What SentinelX currently does vs. what to change:**
-- Current: verdict buttons in row 1, type pills in row 2, search in row 3 — 3 separate rows
-- Consider: collapse to 2 rows — verdict+type on row 1, search on row 2. Or even 1 row on desktop.
-- Missing: search icon prefix
-- Missing: clear (×) button when search has content
-
-### 5. Status/Verdict Indicator Pattern
-
-**Reference products:** Stripe (payment status badges), Linear (issue priority indicators), VMRay (threat verdict system)
-
-**What these products do:**
-- 4 verdict states (Malicious, Suspicious, Clean, No Data/Record) use a consistent visual system:
-  - Malicious: `rgba(239, 68, 68, 0.15)` bg + `rgba(239, 68, 68, 0.4)` border + `rgb(239, 68, 68)` text
-  - Suspicious: `rgba(245, 158, 11, 0.15)` bg + `rgba(245, 158, 11, 0.4)` border + `rgb(245, 158, 11)` text
-  - Clean: `rgba(34, 197, 94, 0.15)` bg + `rgba(34, 197, 94, 0.4)` border + `rgb(34, 197, 94)` text
-  - No Data: `rgba(148, 163, 184, 0.1)` bg + `rgba(148, 163, 184, 0.25)` border + `rgb(148, 163, 184)` text
-- All are the same visual structure: the only difference is the hue — no filled/inverted variants mixed in
-- Colored dot (`6px circle`) precedes the text label — provides a second non-color signal (size)
-- Font: monospace, all-caps, tight letter-spacing
-- No icons beyond the dot — icons add complexity without analyst value
-
-**Critical fix for SentinelX:**
-- `verdict-label--suspicious` uses solid `#f59e0b` background with black text — this is an outlier that breaks the system
-- Fix: `background-color: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.4)` — matches the other 3 states
-
-### 6. Loading States and Micro-interactions
-
-**Reference products:** GitHub (PR checks), Linear (issue loading), Vercel (deployment progress)
-
-**What these products do:**
-- Skeleton screens: 2-3 gray rounded rectangles that mirror the shape of the eventual content
-  - Short rectangle (badge-height, 60% width) = where the verdict badge will appear
-  - Full-width rectangle (body-height, 100% width) = where the detail row will appear
-  - Both have an animated shimmer: `background: linear-gradient(90deg, #1c2128, #21262d, #1c2128)` shifted via `background-position` animation
-- Duration: shimmer cycle = 1.5s, linear, infinite
-- Completion: no fanfare — content simply replaces skeleton via DOM swap (no crossfade needed)
-- Progress bars: linear, thin (4-6px), rounded ends, gradient fill
-  - Active: accent gradient (blue→cyan for loading)
-  - Complete: success gradient (green→emerald), brief brightness pulse `@keyframes`, then stable
-- Micro-interaction timing budget (from Linear's design team): 100-200ms for state changes, 300ms max for entrance/exit, never above 500ms
-- All animations must respect `prefers-reduced-motion: reduce` — disable or use `opacity`-only fallback
-
-**What SentinelX currently does vs. what to change:**
-- Current: spinner (`enrichment-spinner`) + italic text — functional but not premium
-- Change: swap for skeleton rectangles with shimmer (CSS-only, no library)
-- Current: progress bar completion changes gradient color (already good) — add brief pulse
-- Add: `@media (prefers-reduced-motion: no-preference)` wrapper around all animation CSS
-
-### 7. Typography Hierarchy
-
-**Reference products:** Linear (issue titles), Vercel (dashboard labels), Stripe (settings pages)
-
-**What these products do:**
-- 5-level type system: Display (rare) / Heading / Subheading / Body / Caption
-- Inter or system-ui at all sizes — no decorative fonts in the tool UI itself
-- Headings: `600` weight minimum, `letter-spacing: -0.02em` for tight feel on large text
-- Body: `400` weight, `1.5` line-height for readability
-- Captions/labels: `500` weight (slightly heavier than body), `0.7-0.75rem`, often uppercase with `letter-spacing: 0.06em`
-- Data values (IOC strings, counts, hashes): always monospace — never system-ui for values
-- Color: primary text `#e6edf3` (high contrast), secondary `#8b949e` (metadata), caution to use tertiary
-
-**Recommended scale for SentinelX:**
-- `--text-display`: `1.75rem / 700 / letter-spacing: -0.03em` — page titles (rarely used)
-- `--text-heading`: `1.25rem / 600 / letter-spacing: -0.02em` — section headers, input-title
-- `--text-subheading`: `1rem / 600 / letter-spacing: -0.01em` — card section headers
-- `--text-body`: `0.875rem / 400 / line-height: 1.5` — body text, descriptions
-- `--text-caption`: `0.75rem / 500 / letter-spacing: 0.05em / uppercase` — labels, badges
-- `--text-mono`: `0.8125rem / 400 / font-family: var(--font-mono)` — IOC values, hashes
-
-### 8. Empty States
-
-**Reference products:** Linear ("No issues found"), GitHub ("No pull requests"), Vercel ("No deployments")
-
-**What these products do:**
-- Simple SVG icon: 32-40px, `var(--text-secondary)` color, stroke-based (not filled)
-- Headline: 1 line, `1rem / 600`, `var(--text-primary)` — describes what's empty, not an error
-  - "No IOCs detected" not "Error: empty input"
-- Body: 1-2 sentences, `0.875rem / 400`, `var(--text-secondary)` — explains what to do next
-- Optional CTA: small secondary button, linked back to input
-- Layout: centered in a card, `padding: 3rem 2rem`, vertical stack with `gap: 1rem`
-- No illustrations — they're for onboarding, not error states. Simple icons only for a tool.
-
-**For SentinelX specifically:**
-- Icon: shield with magnifying glass, or simple magnifying glass — communicates "search" not "error"
-- Headline: "No IOCs detected"
-- Body: "No indicators were found in the pasted text. Supported types: IPv4, IPv6, domain, URL, MD5, SHA1, SHA256, CVE."
-- CTA: "← Paste again" linked to input page (already exists as `.back-link`)
-
-### 9. Settings Page Pattern
-
-**Reference products:** Vercel (project settings), Linear (workspace settings), Stripe (API settings)
-
-**What these products do:**
-- Page structure: `max-width: 640px`, single column, vertically stacked section cards
-- Each section card: `border: 1px solid var(--border)`, `border-radius: 8px`, `overflow: hidden`
-- Section card header row: `padding: 1rem 1.5rem`, `background: var(--bg-secondary)`, flex row with:
-  - Left: section name (`0.9375rem / 600`) + optional description (`0.8125rem / 400 / var(--text-secondary)`)
-  - Right: action button (visible, not hidden in a menu)
-- Section divider: `1px solid var(--border)` between header and body
-- Section card body: `padding: 1.25rem 1.5rem`, form fields in single column
-- Danger zone (if applicable): final card with `border-color: rgba(var(--verdict-malicious-rgb), 0.4)` — red-tinted
-- Flash messages: appear above the card stack, auto-dismiss after 4s with `opacity` transition
-
-**For SentinelX settings page:**
-- The VT API key section becomes a single card with header row: "VirusTotal API Key" / "Save" button right-aligned
-- Below divider: info text + password input + show/hide toggle
-- No sidebar, no tabs — single column is correct for 1 setting
-
----
-
-## Competitor Visual Analysis
-
-| Component | GitHub Dark | Linear | Vercel Dashboard | SentinelX Current | SentinelX v1.2 Target |
-|-----------|------------|--------|-----------------|-------------------|----------------------|
-| Card surface | `#161b22` on `#0d1117` | `#1e2024` on `#141518` | `#0a0a0a` on `#111111` | `#161b22` on `#0d1117` | Same + card-header strip |
-| Card border | `#30363d` solid | `rgba(255,255,255,0.08)` | `rgba(255,255,255,0.1)` | `#30363d` solid | Switch to rgba white |
-| Card hover | Border brightens | TranslateY(-1px) + shadow | Border brightens + shadow | No hover state | TranslateY(-1px) + shadow |
-| Verdict badges | Filled for states | Tinted bg + colored text | Tinted bg + colored text | 4/5 states tinted, suspicious solid | All 5 states tinted |
-| Filter chips | Active = filled bg | Active = tinted bg + colored border | Active = white bg (light mode) | Active = `var(--bg-tertiary)` + white text | Colored-border active state |
-| Search input | Icon prefix | Icon prefix | Icon prefix | No icon | Icon prefix |
-| Loading | Skeleton shimmer | Skeleton shimmer | Skeleton shimmer | Spinner + text | Skeleton shimmer |
-| Progress bar | N/A | Thin gradient | Thin gradient | 6px gradient (good) | Add completion pulse |
-| Empty state | Icon + headline + body | Icon + headline | Icon + headline + CTA | 2 gray text lines | Icon + headline + body |
-| Settings | Card per section | Card per section | Card per section | Bare h2 + form | Card per section |
+- **CSS class name strings** — `card.classList.add("filter-btn--active")` — the string is correct by inspection
+- **Data attribute names** — `card.getAttribute("data-verdict")` — the attribute name is correct by inspection
+- **Timer return values beyond `ReturnType<typeof setTimeout>`** — No need for a custom `TimerId` type alias
 
 ---
 
 ## Sources
 
-- [Linear UI Redesign Post](https://linear.app/now/how-we-redesigned-the-linear-ui) — MEDIUM confidence (official Linear blog, design decisions documented)
-- [Linear Design Style Reference](https://linear.style/) — HIGH confidence (official Linear design system reference site)
-- [shadcn/ui Dark Mode Tokens](https://ui.shadcn.com/docs/theming) — HIGH confidence (official shadcn/ui docs, OKLCH values verified)
-- [LogRocket: Linear Design Aesthetic](https://blog.logrocket.com/ux-design/linear-design/) — MEDIUM confidence (analysis article, patterns extrapolated from product)
-- [Stripe Accessible Color System](https://stripe.com/blog/accessible-color-systems) — HIGH confidence (official Stripe engineering blog, badge design decisions)
-- [Aufait UX: Cybersecurity Dashboard Patterns](https://www.aufaitux.com/blog/cybersecurity-dashboard-ui-ux-design/) — MEDIUM confidence (practitioner analysis)
-- [VMRay Verdict System](https://www.vmray.com/explained-the-vmray-threat-identifier-vti-scoring-system/) — HIGH confidence (official VMRay docs — confirms 4-state Malicious/Suspicious/Clean/No Data system)
-- [Tailwind CSS Hover/Focus States](https://tailwindcss.com/docs/hover-focus-and-other-states) — HIGH confidence (official Tailwind docs)
-- [Carbon Design System: Loading Pattern](https://carbondesignsystem.com/patterns/loading-pattern/) — HIGH confidence (IBM design system, skeleton screen specification)
-- [Eleken: Filter UI Patterns for SaaS](https://www.eleken.co/blog-posts/filter-ux-and-ui-for-saas) — MEDIUM confidence (UX consultancy analysis, patterns observed across products)
-- Existing SentinelX CSS (`app/static/src/input.css`) — HIGH confidence (source of truth for current implementation)
+- [TypeScript: Migrating from JavaScript](https://www.typescriptlang.org/docs/handbook/migrating-from-javascript.html) — HIGH confidence (official TypeScript docs)
+- [TypeScript: DOM Manipulation](https://www.typescriptlang.org/docs/handbook/dom-manipulation.html) — HIGH confidence (official TypeScript docs, querySelector type hierarchy)
+- [TypeScript: TSConfig strictNullChecks](https://www.typescriptlang.org/tsconfig/strictNullChecks.html) — HIGH confidence (official TypeScript tsconfig reference)
+- [TypeScript: Modules](https://www.typescriptlang.org/docs/handbook/2/modules.html) — HIGH confidence (official TypeScript docs, ES module patterns)
+- [esbuild API reference](https://esbuild.github.io/api/) — HIGH confidence (official esbuild docs, IIFE format, source maps, tsconfig options)
+- [Timers in TypeScript and Node.js](https://evanshortiss.com/timers-in-typescript) — MEDIUM confidence (single authoritative post, verified against TypeScript issue tracker)
+- [Making setTimeout return number](https://guilhermesimoes.github.io/blog/making-settimeout-return-number-in-typescript) — MEDIUM confidence (community post, consistent with official tsconfig `types: []` docs)
+- [TypeScript anti-patterns — Tomasz Ducin](https://ducin.dev/typescript-anti-patterns) — MEDIUM confidence (expert practitioner, consistent with TypeScript team guidance)
+- [typed-query-selector npm](https://github.com/g-plane/typed-query-selector) — LOW confidence (library exists, mentioned as optional improvement only; not recommended for this project)
+- [TypeScript strict mode non-monotonicity](https://huonw.github.io/blog/2025/12/typescript-monotonic/) — MEDIUM confidence (documented interaction between `strictNullChecks` and `noImplicitAny`; recommendation: enable both together via `"strict": true`)
+- [TypeScript over-engineering trap — LogRocket](https://blog.logrocket.com/discussing-the-over-engineering-trap-in-typescript/) — MEDIUM confidence (informs anti-features section; consistent with TypeScript team's "type with intent" guidance)
+- [TypeScript's Migration to Modules — TypeScript blog](https://devblogs.microsoft.com/typescript/typescripts-migration-to-modules/) — HIGH confidence (official TypeScript team post on namespace → ES module migration; confirms namespaces are deprecated pattern)
+- Existing `app/static/main.js` — HIGH confidence (source of truth for behavior to preserve and type surfaces to cover)
 
 ---
 
-*Feature research for: SentinelX v1.2 UI pattern redesign (dark-first premium SaaS)*
-*Researched: 2026-02-25*
-*Confidence: HIGH (pattern analysis and implementation specifics), MEDIUM (competitor implementation details without source inspection)*
+*Feature research for: SentinelX v3.0 TypeScript Migration*
+*Researched: 2026-02-28*
+*Confidence: HIGH (core TypeScript and esbuild patterns), MEDIUM (module splitting strategy, depth-of-typing guidance)*
