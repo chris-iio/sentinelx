@@ -43,7 +43,7 @@ Safe, correct, and transparent IOC extraction and enrichment — never invent sc
 - ✓ Heroicons v2 Jinja2 macro for inline SVG icons — v1.2
 - ✓ Header/footer redesign with emerald brand accent — v1.2
 
-### Active (v1.3 Visual Experience Overhaul)
+### Active (v2.0 Home Page Modernization)
 
 Requirements being defined — see `.planning/REQUIREMENTS.md` when complete.
 
@@ -103,17 +103,15 @@ Requirements being defined — see `.planning/REQUIREMENTS.md` when complete.
 | Keep vanilla JS for enrichment | Polling and clipboard code works well, no reason to rewrite into Alpine | Pending — v1.1 Phase 6 |
 | Zero backend changes in v1.1 | All v1.1 is frontend-only — same routes, same data models | Pending — v1.1 |
 
-## Current Milestone: v1.3 Visual Experience Overhaul
+## Current Milestone: v2.0 Home Page Modernization
 
-**Goal:** Transform every page from functional-but-bare-bones into a polished, animated, premium dark UI — leveraging the v1.2 design token and component foundation.
+**Goal:** Modernize the home page into a clean, minimal, contemporary experience — compact auto-growing textarea, stripped-down header, and simplified footer.
 
 **Target features:**
-- Results page redesign with card animations, shimmer loaders, KPI dashboard, empty state
-- Input page refinement with textarea glow, animated paste feedback, mode-aware submit
-- Settings page upgrade with section cards, monospace API key field, status badges
-- Global motion design (staggered reveals, smooth transitions, scroll-aware effects)
-- Visual depth (subtle gradients, border glow, refined shadows, frosted glass)
-- Template architecture (Jinja2 partial extraction for maintainability)
+- Minimal header bar (logo icon + "SentinelX" + settings gear icon, no tagline, thinner)
+- Compact auto-growing textarea (~5 rows default, expands on paste)
+- Cleaner inline controls (toggle + buttons with tighter spacing)
+- Simplified footer matching the minimal header aesthetic
 
 ---
-*Last updated: 2026-02-28 after v1.2 phases 11-12 shipped, v1.3 milestone started*
+*Last updated: 2026-02-28 after v1.3 work landed, v2.0 milestone started*
