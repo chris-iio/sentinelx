@@ -12,10 +12,3 @@
   <img src="https://img.shields.io/badge/tests-224-brightgreen" alt="Tests 224">
   <img src="https://img.shields.io/badge/coverage-97%25-brightgreen" alt="Coverage 97%">
 </p>
-
-## How It Works
-
-1. **Extract** — Pulls IOCs out of messy, unstructured text (dual-library: iocextract + iocsearcher)
-2. **Normalize** — Handles defanged indicators (`hxxp://`, `[.]`, `{.}`, 20+ obfuscation patterns)
-3. **Classify** — Types each IOC: IPv4, IPv6, domain, URL, MD5, SHA1, SHA256, CVE
-4. **Enrich** (optional) — Hits VirusTotal, MalwareBazaar, and ThreatFox in parallel
