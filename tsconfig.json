@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "target": "es2022",
+    "lib": ["es2022", "dom", "dom.iterable"],
+    "module": "es2022",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noEmit": true,
+    "isolatedModules": true,
+    "noUncheckedIndexedAccess": true,
+    "types": [],
+    "skipLibCheck": false
+  },
+  "include": ["app/static/src/ts/**/*.ts"]
+}
