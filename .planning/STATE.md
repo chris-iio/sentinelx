@@ -63,8 +63,11 @@ Resume file: none
 - All 224 tests passing at 97% coverage
 - Partial naming convention: _snake_case.html in app/templates/partials/
 - CSS-only animations required — no new JS animation dependencies
+- v1.2 Phase 13-03 complete: empty state (.empty-state), KPI dashboard (.verdict-kpi-card grid), shimmer loader (shimmer-line pattern)
+- Dual class .spinner-wrapper.shimmer-wrapper pattern preserves JS contracts without JS changes
 
 ## Session Log
 
 - 2026-02-28: Milestone v1.3 started — supersedes remaining v1.2 phases 13-14
 - 2026-02-28: v1.3 roadmap created — 3 phases, 18/18 requirements mapped
+- 2026-02-28: v1.2 Phase 13-03 executed — empty state, KPI dashboard, shimmer loader (RESULTS-05/06/07 complete)
