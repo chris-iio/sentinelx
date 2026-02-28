@@ -192,9 +192,10 @@ Plans:
   2. `app/static/src/ts/types/api.ts` defines `EnrichmentResult` and `EnrichmentStatus` interfaces that match the Flask `/enrichment/status/{job_id}` response shape — a field name typo in a consuming module causes a type error at compile time
   3. Running `make typecheck` passes with zero errors on the type definition files — `tsc --noEmit` exits clean
   4. `tsconfig.json` at project root uses `strict: true`, `isolatedModules: true`, `noUncheckedIndexedAccess: true`, and `"types": []` — attempting to use a Node.js global like `process` produces a type error
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
+- [ ] 20-01-PLAN.md — Domain types (VerdictKey, IocType, typed constants) + API response interfaces (EnrichmentStatus, discriminated union) + tsconfig verification
 
 ### Phase 21: Simple Module Extraction
 **Goal**: Six TypeScript modules are extracted from `main.js` — form controls, clipboard, card management, filter bar, settings, and UI utilities — with proper null guards, typed DOM interactions, and established patterns (attr helper, timer types) that the enrichment module will reuse
