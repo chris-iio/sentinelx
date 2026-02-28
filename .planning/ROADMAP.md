@@ -264,6 +264,6 @@ v3.0 phases execute in numeric order: 19 → 20 → 21 → 22 → 23
 | 18. Home Page Modernization | v2.0 | 3/3 | Complete | 2026-02-28 |
 | 19. Build Pipeline Infrastructure | 2/2 | Complete    | 2026-02-28 | — |
 | 20. Type Definitions Foundation | 1/1 | Complete    | 2026-02-28 | — |
-| 21. Simple Module Extraction | v3.0 | 1/3 | In progress | — |
+| 21. Simple Module Extraction | 2/3 | In Progress|  | — |
 | 22. Enrichment Module and Entry Point | v3.0 | 0/? | Not started | — |
 | 23. Type Hardening and Verification | v3.0 | 0/? | Not started | — |

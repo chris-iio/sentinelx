@@ -29,8 +29,8 @@
 - [ ] **MOD-02**: Form controls module (submit button, clear, auto-grow textarea, mode toggle, paste feedback)
 - [ ] **MOD-03**: Clipboard module (copy IOC values, copy-with-enrichment, fallback copy)
 - [ ] **MOD-04**: Enrichment polling module (fetch loop, progress bar, result rendering, warning banner)
-- [ ] **MOD-05**: Card management module (verdict updates, dashboard counts, severity sorting)
-- [ ] **MOD-06**: Filter bar module (verdict/type/search filtering, dashboard badge click)
+- [x] **MOD-05**: Card management module (verdict updates, dashboard counts, severity sorting)
+- [x] **MOD-06**: Filter bar module (verdict/type/search filtering, dashboard badge click)
 - [x] **MOD-07**: Settings module (API key show/hide toggle)
 - [x] **MOD-08**: UI utilities module (scroll-aware filter bar, card stagger animation)
 
@@ -83,8 +83,8 @@
 | TYPE-04 | Phase 20 | Complete |
 | MOD-02 | Phase 21 | Pending |
 | MOD-03 | Phase 21 | Pending |
-| MOD-05 | Phase 21 | Pending |
-| MOD-06 | Phase 21 | Pending |
+| MOD-05 | Phase 21 | Complete |
+| MOD-06 | Phase 21 | Complete |
 | MOD-07 | Phase 21 | Complete |
 | MOD-08 | Phase 21 | Complete |
 | MOD-01 | Phase 22 | Pending |
