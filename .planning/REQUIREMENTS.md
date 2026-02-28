@@ -18,10 +18,10 @@
 
 ### Type System
 
-- [ ] **TYPE-01**: tsconfig.json uses `strict: true` with `isolatedModules`, `noUncheckedIndexedAccess`, and `"types": []`
-- [ ] **TYPE-02**: Domain types defined for Verdict, IocType, and verdict severity constants
-- [ ] **TYPE-03**: API response interfaces defined for enrichment polling endpoint (`/enrichment/status/{job_id}`)
-- [ ] **TYPE-04**: All DOM element access uses proper null-checking (no non-null assertions)
+- [x] **TYPE-01**: tsconfig.json uses `strict: true` with `isolatedModules`, `noUncheckedIndexedAccess`, and `"types": []`
+- [x] **TYPE-02**: Domain types defined for Verdict, IocType, and verdict severity constants
+- [x] **TYPE-03**: API response interfaces defined for enrichment polling endpoint (`/enrichment/status/{job_id}`)
+- [x] **TYPE-04**: All DOM element access uses proper null-checking (no non-null assertions)
 
 ### Module Structure
 
@@ -77,10 +77,10 @@
 | BUILD-04 | Phase 19 | Complete |
 | BUILD-05 | Phase 19 | Complete |
 | BUILD-06 | Phase 19 | Complete |
-| TYPE-01 | Phase 20 | Pending |
-| TYPE-02 | Phase 20 | Pending |
-| TYPE-03 | Phase 20 | Pending |
-| TYPE-04 | Phase 20 | Pending |
+| TYPE-01 | Phase 20 | Complete |
+| TYPE-02 | Phase 20 | Complete |
+| TYPE-03 | Phase 20 | Complete |
+| TYPE-04 | Phase 20 | Complete |
 | MOD-02 | Phase 21 | Pending |
 | MOD-03 | Phase 21 | Pending |
 | MOD-05 | Phase 21 | Pending |

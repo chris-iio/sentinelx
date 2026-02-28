@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: TypeScript Migration
 status: unknown
-last_updated: "2026-02-28T14:26:00.905Z"
+last_updated: "2026-03-01T15:07:50Z"
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 15
-  completed_plans: 14
+  completed_plans: 15
 ---
 
 # Session State
@@ -18,23 +18,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-02-28)
 
 **Core value:** Safe, correct, and transparent IOC extraction and enrichment
-**Current focus:** v3.0 TypeScript Migration — Phase 19: Build Pipeline Infrastructure
+**Current focus:** v3.0 TypeScript Migration — Phase 20: Type Definitions Foundation
 
 ## Current Position
 
-Phase: 19 of 23 (Build Pipeline Infrastructure)
-Plan: 2 of 2 in current phase (complete)
-Status: Phase 19 complete — ready for Phase 20
-Last activity: 2026-02-28 — Completed 19-02: Build Pipeline Integration (base.html wiring)
+Phase: 20 of 23 (Type Definitions Foundation)
+Plan: 1 of 1 in current phase (complete)
+Status: Phase 20 complete — ready for Phase 21
+Last activity: 2026-03-01 — Completed 20-01: Type Definitions Foundation (ioc.ts + api.ts)
 
-Progress: v3.0 ██░░░░░░░░ 20%
+Progress: v3.0 ███░░░░░░░ 27%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 2 (v3.0)
-- Average duration: 1.5 min
-- Total execution time: 3 min
+- Total plans completed: 3 (v3.0)
+- Average duration: 1.7 min
+- Total execution time: 5 min
 
 *Updated after each plan completion*
 
@@ -53,6 +53,11 @@ Progress: v3.0 ██░░░░░░░░ 20%
 - Source maps excluded from git — generated locally via `make js-dev` or `make js-watch`
 - Dual-script-tag migration pattern: dist/main.js (empty IIFE placeholder) + main.js (real code) until Phase 22 TypeScript conversion completes
 - Option A (dual tags) chosen over Option B (no template change): proves pipeline is wired to template while preserving all JS functionality
+- IocType excludes "cve" — CVEs are extracted but never enriched (IOC_PROVIDER_COUNTS has no cve entry)
+- scan_date typed as string | null (not ?: string) — field always present in JSON, may be null
+- raw_stats typed as Record<string, unknown> not object/any — forces downstream narrowing
+- VerdictKey applied to verdict field in EnrichmentResultItem — compile-time guard against invalid strings
+- as const satisfies readonly VerdictKey[] on VERDICT_SEVERITY — preserves tuple type while validating members
 
 ### Blockers/Concerns
 
@@ -60,6 +65,6 @@ Progress: v3.0 ██░░░░░░░░ 20%
 
 ## Session Continuity
 
-Last session: 2026-02-28
-Stopped at: Completed 19-02-PLAN.md (Build Pipeline Integration — base.html wiring)
+Last session: 2026-03-01
+Stopped at: Completed 20-01-PLAN.md (Type Definitions Foundation — ioc.ts + api.ts)
 Resume file: none
