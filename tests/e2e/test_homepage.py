@@ -20,7 +20,7 @@ def test_header_branding(page: Page, index_url: str) -> None:
     idx.goto()
 
     expect(idx.site_logo).to_have_text("SentinelX")
-    expect(idx.site_tagline).to_have_text("Offline IOC Extractor")
+    expect(idx.site_tagline).to_have_text("IOC Triage Tool")
 
 
 def test_form_elements_present(page: Page, index_url: str) -> None:
