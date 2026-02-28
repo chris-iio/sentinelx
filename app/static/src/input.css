@@ -584,54 +584,52 @@
         color: var(--text-secondary);
     }
 
-    /* ---- Verdict Dashboard ---- */
+    /* ---- Verdict Dashboard (KPI Cards) ---- */
 
     .verdict-dashboard {
-        display: flex;
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
         gap: 0.75rem;
         margin-bottom: 1.25rem;
-        flex-wrap: wrap;
     }
 
-    .verdict-dashboard-badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.4rem;
-        padding: 0.35rem 0.75rem;
-        border-radius: 2rem;
-        font-size: 0.8rem;
-        font-weight: 600;
-        border: 1px solid;
+    .verdict-kpi-card {
+        background-color: var(--bg-secondary);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        border-top: 3px solid var(--border);
+        padding: 0.75rem 1rem;
         cursor: pointer;
+        transition: background-color 0.15s ease, border-color 0.15s ease;
+        text-align: left;
     }
 
-    .verdict-dashboard-badge[data-verdict="malicious"] {
-        background-color: var(--verdict-malicious-bg);
-        border-color: var(--verdict-malicious-border);
-        color: var(--verdict-malicious-text);
+    .verdict-kpi-card:hover {
+        background-color: var(--bg-tertiary);
+        border-color: var(--border-hover);
     }
 
-    .verdict-dashboard-badge[data-verdict="suspicious"] {
-        background-color: var(--verdict-suspicious-bg);
-        border-color: var(--verdict-suspicious-border);
-        color: var(--verdict-suspicious-text);
-    }
+    .verdict-kpi-card--malicious  { border-top-color: var(--verdict-malicious-border); }
+    .verdict-kpi-card--suspicious { border-top-color: var(--verdict-suspicious-border); }
+    .verdict-kpi-card--clean      { border-top-color: var(--verdict-clean-border); }
+    .verdict-kpi-card--no_data    { border-top-color: var(--verdict-no-data-border); }
 
-    .verdict-dashboard-badge[data-verdict="clean"] {
-        background-color: var(--verdict-clean-bg);
-        border-color: var(--verdict-clean-border);
-        color: var(--verdict-clean-text);
-    }
-
-    .verdict-dashboard-badge[data-verdict="no_data"] {
-        background-color: var(--verdict-no-data-bg);
-        border-color: var(--verdict-no-data-border);
-        color: var(--verdict-no-data-text);
-    }
-
-    .verdict-dashboard-count {
+    .verdict-kpi-count {
         font-family: var(--font-mono);
+        font-size: 1.75rem;
         font-weight: 700;
+        line-height: 1;
+        display: block;
+        color: var(--text-primary);
+    }
+
+    .verdict-kpi-label {
+        font-size: 0.72rem;
+        font-variant: small-caps;
+        letter-spacing: 0.06em;
+        color: var(--text-secondary);
+        margin-top: 0.25rem;
+        display: block;
     }
 
     /* ---- Filter Bar ---- */
@@ -975,12 +973,6 @@
         border-top: 1px solid var(--border);
     }
 
-    .spinner-wrapper {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-    }
-
     .provider-result-row {
         display: flex;
         align-items: center;
@@ -988,26 +980,35 @@
         flex-wrap: wrap;
     }
 
-    .enrichment-pending-text {
-        font-size: 0.78rem;
-        color: var(--text-secondary);
-        font-style: italic;
+    /* ---- Shimmer Skeleton ---- */
+
+    @keyframes shimmer {
+        0%   { background-position: -468px 0; }
+        100% { background-position: 468px 0; }
     }
 
-    .enrichment-spinner {
-        display: inline-block;
-        width: 14px;
-        height: 14px;
-        border: 2px solid var(--bg-tertiary);
-        border-top-color: var(--text-secondary);
-        border-radius: 50%;
-        animation: spin 0.75s linear infinite;
-        flex-shrink: 0;
+    .shimmer-wrapper {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
     }
 
-    @keyframes spin {
-        to { transform: rotate(360deg); }
+    .shimmer-line {
+        background: linear-gradient(
+            to right,
+            var(--bg-tertiary) 8%,
+            var(--bg-hover)    18%,
+            var(--bg-tertiary) 33%
+        );
+        background-size: 936px 100%;
+        animation: shimmer 1.4s linear infinite;
+        border-radius: var(--radius-sm);
+        height: 12px;
     }
+
+    .shimmer-line--wide   { width: 85%; }
+    .shimmer-line--medium { width: 65%; }
+    .shimmer-line--narrow { width: 45%; }
 
     .verdict-badge {
         display: inline-block;
@@ -1109,6 +1110,10 @@
 
         .filter-search-wrapper {
             max-width: 100%;
+        }
+
+        .verdict-dashboard {
+            grid-template-columns: repeat(2, 1fr);
         }
     }
 

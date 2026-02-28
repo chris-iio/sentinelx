@@ -1,30 +1,22 @@
 <div class="verdict-dashboard" id="verdict-dashboard">
-    <span class="verdict-dashboard-badge"
-          data-verdict="malicious"
-          role="button"
-          tabindex="0"
-    >
-        <span class="verdict-dashboard-count" data-verdict-count="malicious">0</span> Malicious
-    </span>
-    <span class="verdict-dashboard-badge"
-          data-verdict="suspicious"
-          role="button"
-          tabindex="0"
-    >
-        <span class="verdict-dashboard-count" data-verdict-count="suspicious">0</span> Suspicious
-    </span>
-    <span class="verdict-dashboard-badge"
-          data-verdict="clean"
-          role="button"
-          tabindex="0"
-    >
-        <span class="verdict-dashboard-count" data-verdict-count="clean">0</span> Clean
-    </span>
-    <span class="verdict-dashboard-badge"
-          data-verdict="no_data"
-          role="button"
-          tabindex="0"
-    >
-        <span class="verdict-dashboard-count" data-verdict-count="no_data">0</span> No Data
-    </span>
+    <div class="verdict-kpi-card verdict-kpi-card--malicious" data-verdict="malicious"
+         role="button" tabindex="0">
+        <span class="verdict-kpi-count" data-verdict-count="malicious">0</span>
+        <span class="verdict-kpi-label">Malicious</span>
+    </div>
+    <div class="verdict-kpi-card verdict-kpi-card--suspicious" data-verdict="suspicious"
+         role="button" tabindex="0">
+        <span class="verdict-kpi-count" data-verdict-count="suspicious">0</span>
+        <span class="verdict-kpi-label">Suspicious</span>
+    </div>
+    <div class="verdict-kpi-card verdict-kpi-card--clean" data-verdict="clean"
+         role="button" tabindex="0">
+        <span class="verdict-kpi-count" data-verdict-count="clean">0</span>
+        <span class="verdict-kpi-label">Clean</span>
+    </div>
+    <div class="verdict-kpi-card verdict-kpi-card--no_data" data-verdict="no_data"
+         role="button" tabindex="0">
+        <span class="verdict-kpi-count" data-verdict-count="no_data">0</span>
+        <span class="verdict-kpi-label">No Data</span>
+    </div>
 </div>

@@ -722,7 +722,7 @@
         // Verdict dashboard badge click handler (toggle filter from dashboard)
         var dashboard = document.getElementById("verdict-dashboard");
         if (dashboard) {
-            var dashBadges = dashboard.querySelectorAll(".verdict-dashboard-badge[data-verdict]");
+            var dashBadges = dashboard.querySelectorAll(".verdict-kpi-card[data-verdict]");
             for (var k = 0; k < dashBadges.length; k++) {
                 (function (badge) {
                     badge.addEventListener("click", function () {

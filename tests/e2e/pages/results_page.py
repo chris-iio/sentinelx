@@ -137,8 +137,8 @@ class ResultsPage:
     @property
     def dashboard_badges(self) -> Locator:
         """All verdict dashboard badge elements."""
-        return self.page.locator(".verdict-dashboard-badge")
+        return self.page.locator(".verdict-kpi-card")
 
     def click_dashboard_badge(self, verdict: str) -> None:
         """Click the dashboard badge for the given verdict."""
-        self.page.locator(f".verdict-dashboard-badge[data-verdict='{verdict}']").click()
+        self.page.locator(f".verdict-kpi-card[data-verdict='{verdict}']").click()
