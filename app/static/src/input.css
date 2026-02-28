@@ -219,7 +219,7 @@
     .site-header {
         background-color: var(--bg-secondary);
         border-bottom: 1px solid var(--border);
-        padding: 0.75rem 1.5rem;
+        padding: 0.4rem 1.5rem;
         animation: fadeIn var(--duration-normal) var(--ease-out-expo) both;
     }
 
@@ -229,6 +229,17 @@
         display: flex;
         align-items: center;
         gap: 0.75rem;
+    }
+
+    .site-brand-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        text-decoration: none;
+        color: inherit;
+    }
+    .site-brand-link:hover .site-logo {
+        opacity: 0.85;
     }
 
     .site-logo {
@@ -244,14 +255,9 @@
     }
 
     .site-logo-icon {
-        width: 26px;
-        height: 26px;
+        width: 24px;
+        height: 24px;
         flex-shrink: 0;
-    }
-
-    .site-tagline {
-        font-size: 0.8rem;
-        color: var(--text-secondary);
     }
 
     .site-nav {
@@ -278,6 +284,20 @@
         margin-right: 4px;
     }
 
+    .nav-icon--lg {
+        width: 20px;
+        height: 20px;
+        margin-right: 0;
+    }
+
+    .nav-link--icon {
+        padding: 0.25rem;
+        border-radius: var(--radius-sm);
+    }
+    .nav-link--icon:hover {
+        background-color: var(--bg-hover);
+    }
+
     .site-main {
         flex: 1;
         padding: 2rem 1.5rem;
@@ -289,10 +309,10 @@
     .site-footer {
         background-color: var(--bg-secondary);
         border-top: 1px solid var(--border);
-        padding: 0.75rem 1.5rem;
+        padding: 0.4rem 1.5rem;
         text-align: center;
-        font-size: 0.75rem;
-        color: var(--text-secondary);
+        font-size: 0.7rem;
+        color: var(--text-muted);
         font-family: var(--font-ui);
         animation: fadeIn var(--duration-slow) var(--ease-out-expo) both;
         animation-delay: 200ms;
