@@ -22,11 +22,12 @@
 <body>
     <header class="site-header">
         <div class="header-inner">
-            <img src="{{ url_for('static', filename='images/logo.svg') }}" alt="" class="site-logo-icon" width="28" height="28">
-            <span class="site-logo"><span class="brand-accent">Sentinel</span>X</span>
-            <span class="site-tagline">IOC Triage Tool</span>
+            <a href="{{ url_for('main.index') }}" class="site-brand-link" aria-label="SentinelX home">
+                <img src="{{ url_for('static', filename='images/logo.svg') }}" alt="" class="site-logo-icon" width="24" height="24">
+                <span class="site-logo"><span class="brand-accent">Sentinel</span>X</span>
+            </a>
             <nav class="site-nav">
-                <a href="{{ url_for('main.settings_get') }}" class="nav-link">{{ icon("cog-6-tooth", class="nav-icon") }} Settings</a>
+                <a href="{{ url_for('main.settings_get') }}" class="nav-link nav-link--icon" aria-label="Settings">{{ icon("cog-6-tooth", class="nav-icon nav-icon--lg") }}</a>
             </nav>
         </div>
     </header>
@@ -36,7 +37,7 @@
     </main>
 
     <footer class="site-footer">
-        <p>SentinelX — IOC Triage Tool</p>
+        <p>SentinelX</p>
     </footer>
 
     <script src="{{ url_for('static', filename='main.js') }}" defer></script>
