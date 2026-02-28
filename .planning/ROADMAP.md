@@ -172,4 +172,4 @@ v2.0 phase executes after v1.3: 18
 | 15. Results Page Visual Overhaul | v1.3 | 0/? | Not started | — |
 | 16. Input Page and Global Motion | v1.3 | 0/? | Not started | — |
 | 17. Settings Page Polish | v1.3 | 0/? | Not started | — |
-| 18. Home Page Modernization | 1/3 | In Progress|  | — |
+| 18. Home Page Modernization | 2/3 | In Progress|  | — |

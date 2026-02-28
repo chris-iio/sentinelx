@@ -15,9 +15,9 @@
 
 ### Input
 
-- [ ] **INP-01**: Textarea defaults to approximately 5 visible rows instead of 14
-- [ ] **INP-02**: Textarea auto-grows vertically as content is pasted or typed (up to a max height)
-- [ ] **INP-03**: Form controls row (mode toggle + buttons) uses tighter spacing for a compact, modern feel
+- [x] **INP-01**: Textarea defaults to approximately 5 visible rows instead of 14
+- [x] **INP-02**: Textarea auto-grows vertically as content is pasted or typed (up to a max height)
+- [x] **INP-03**: Form controls row (mode toggle + buttons) uses tighter spacing for a compact, modern feel
 
 ## Future Requirements
 
@@ -50,9 +50,9 @@
 | LAY-01 | Phase 18 | Complete |
 | LAY-02 | Phase 18 | Complete |
 | LAY-03 | Phase 18 | Complete |
-| INP-01 | Phase 18 | Pending |
-| INP-02 | Phase 18 | Pending |
-| INP-03 | Phase 18 | Pending |
+| INP-01 | Phase 18 | Complete |
+| INP-02 | Phase 18 | Complete |
+| INP-03 | Phase 18 | Complete |
 
 **Coverage:**
 - v2.0 requirements: 6 total

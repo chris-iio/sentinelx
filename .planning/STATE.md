@@ -9,7 +9,7 @@ progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 3
-  completed_plans: 1
+  completed_plans: 2
 ---
 
 # Session State
@@ -19,19 +19,19 @@ progress:
 See: .planning/PROJECT.md (updated 2026-02-28)
 
 **Core value:** Safe, correct, and transparent IOC extraction and enrichment
-**Current focus:** v2.0 Home Page Modernization — Phase 18, Plan 01 complete
+**Current focus:** v2.0 Home Page Modernization — Phase 18, Plan 02 complete
 
 ## Position
 
 **Milestone:** v2.0 Home Page Modernization
 **Current phase:** 18 of 1 (Home Page Modernization)
-**Plan:** 1 of 3 complete
+**Plan:** 2 of 3 complete
 **Status:** In progress
-**Last activity:** 2026-02-28 — Plan 18-01 complete (header/footer modernization)
+**Last activity:** 2026-02-28 — Plan 18-02 complete (compact auto-growing textarea)
 
 ## Progress
 
-v2.0: ███░░░░░░░ 33% (1/3 plans)
+v2.0: ██████░░░░ 67% (2/3 plans)
 
 ## Recent Decisions
 
@@ -45,6 +45,9 @@ v2.0: ███░░░░░░░ 33% (1/3 plans)
 - Settings nav is icon-only (nav-link--icon) with aria-label=Settings for accessibility
 - Gear icon uses nav-icon--lg (20px) since there is no label text — icon must be legible standalone
 - Header and footer padding matched at 0.4rem for visual symmetry (bookend pattern)
+- Textarea rows reduced to 5 (INP-01); max-height:400px cap (~16 rows) chosen as "reasonable, not viewport-filling"
+- Auto-grow uses instant height update (no CSS transition) to avoid layout jank fighting scrollHeight measurement
+- Single-line compact placeholder — no &#10; newlines; fits compact 5-row textarea without cramping
 
 ## Blockers/Concerns
 
@@ -53,7 +56,7 @@ v2.0: ███░░░░░░░ 33% (1/3 plans)
 ## Session Continuity
 
 Last session: 2026-02-28
-Stopped at: Plan 18-01 complete — run `/gsd:execute-phase 18` plan 02 next
+Stopped at: Plan 18-02 complete — run `/gsd:execute-phase 18` plan 03 next
 Resume file: none
 
 ## Accumulated Context
