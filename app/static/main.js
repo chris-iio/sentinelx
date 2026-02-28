@@ -76,20 +76,16 @@
         if (!textarea) return;
 
         function grow() {
-            // Reset height to auto so shrinkage works when content is deleted
             textarea.style.height = "auto";
             textarea.style.height = textarea.scrollHeight + "px";
         }
 
-        // Grow on every keystroke
         textarea.addEventListener("input", grow);
 
-        // Grow after paste (content lands after the event)
         textarea.addEventListener("paste", function () {
             setTimeout(grow, 0);
         });
 
-        // Initial sizing (handles pre-filled content on page load)
         grow();
     }
 

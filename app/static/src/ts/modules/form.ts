@@ -93,7 +93,6 @@ function initSubmitButton(): void {
 
 function initAutoGrow(): void {
   const textarea = document.querySelector<HTMLTextAreaElement>("#ioc-text");
-  const wrap = document.getElementById("textarea-wrap");
   if (!textarea) return;
 
   // Non-nullable alias for use inside closures (TypeScript can't narrow through closures)
@@ -104,34 +103,13 @@ function initAutoGrow(): void {
     ta.style.height = ta.scrollHeight + "px";
   }
 
-  function updateCursor(): void {
-    if (!wrap) return;
-    if (ta.value.length > 0) {
-      wrap.classList.add("has-content");
-    } else {
-      wrap.classList.remove("has-content");
-    }
-  }
-
-  ta.addEventListener("input", function () {
-    grow();
-    updateCursor();
-  });
+  ta.addEventListener("input", grow);
 
   ta.addEventListener("paste", function () {
-    setTimeout(function () { grow(); updateCursor(); }, 0);
-  });
-
-  ta.addEventListener("focus", function () {
-    if (wrap) wrap.classList.add("has-focus");
-  });
-
-  ta.addEventListener("blur", function () {
-    if (wrap) wrap.classList.remove("has-focus");
+    setTimeout(grow, 0);
   });
 
   grow();
-  updateCursor();
 }
 
 // ---- Mode toggle switch (INPUT-01, INPUT-03) ----

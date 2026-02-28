@@ -3,11 +3,9 @@
 {% block content %}
 <div class="page-index">
     <div class="input-card">
-        <h1 class="input-title">Extract IOCs</h1>
-        <p class="input-subtitle">
-            Paste a threat report, SIEM alert, or raw IOC list below.
-            Defanged values are automatically refanged.
-        </p>
+        <div class="index-hero">
+            <span class="index-hero-brand"><span class="brand-accent">sentinel</span>x</span>
+        </div>
 
         {% if error %}
         <div class="alert alert-error" role="alert">{{ error }}</div>
@@ -16,23 +14,23 @@
         <form method="post" action="{{ url_for('main.analyze') }}" id="analyze-form">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
 
-            <div class="form-field">
-                <label for="ioc-text" class="form-label">IOC Text</label>
+            <div class="form-field textarea-wrap">
                 <textarea
                     id="ioc-text"
                     name="text"
                     class="ioc-textarea"
                     rows="5"
-                    placeholder="Paste IOCs here, e.g.: 192[.]168[.]1[.]1 · hxxp://evil[.]com/malware · e3b0c44... · CVE-2025-49596"
+                    placeholder=""
                     spellcheck="false"
                     autocomplete="off"
+                    aria-label="IOC text input"
                 ></textarea>
+                <span class="textarea-cursor" aria-hidden="true"></span>
                 <span id="paste-feedback" class="paste-feedback" style="display:none;" aria-live="polite"></span>
             </div>
 
             <div class="form-options">
                 <div class="mode-toggle">
-                    <label class="form-label">Analysis Mode</label>
                     <div class="mode-toggle-widget" id="mode-toggle-widget" data-mode="offline">
                         <span class="mode-toggle-label mode-toggle-label--offline">Offline</span>
                         <button type="button" class="mode-toggle-track" id="mode-toggle-btn" aria-pressed="false" aria-label="Toggle analysis mode">
@@ -54,7 +52,7 @@
                         class="btn btn-primary"
                         id="submit-btn"
                         disabled
-                    >Extract IOCs</button>
+                    >Extract</button>
                 </div>
             </div>
         </form>
