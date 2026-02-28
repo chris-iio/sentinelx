@@ -41,6 +41,8 @@ v1.3: ░░░░░░░░░░ 0% (0/3 phases complete)
 - v1.2 phases 13-14 superseded by v1.3 (broader visual overhaul scope)
 - v1.2 phases 11-12 (tokens + shared components) validated as foundation
 - v1.2 Phase 13 plan 01 (Jinja2 partial extraction) already completed — partials in app/templates/partials/
+- currentColor dot pattern: .ioc-type-badge::before uses background-color:currentColor to auto-inherit type accent color without per-type overrides
+- icon() macro variant parameter: defaults to "solid" (backward-compatible), "outline" switches to stroke-based SVG
 
 ## Blockers/Concerns
 
@@ -49,7 +51,7 @@ v1.3: ░░░░░░░░░░ 0% (0/3 phases complete)
 ## Session Continuity
 
 Last session: 2026-02-28
-Stopped at: v1.3 roadmap created — ready for `/gsd:plan-phase 15`
+Stopped at: Completed 13-02-PLAN.md — RESULTS-02/03/04/08 done; v1.3 ready for `/gsd:plan-phase 15`
 Resume file: none
 
 ## Accumulated Context
@@ -58,11 +60,12 @@ Resume file: none
 - Inter Variable + JetBrains Mono Variable self-hosted and working
 - WCAG AA contrast verified for all 16 token pairs
 - Shared components elevated (verdict badges, buttons, focus rings, form inputs, header/footer)
-- Heroicons Jinja2 macro available for inline SVG
+- Heroicons Jinja2 macro available for inline SVG (solid + outline variants via variant parameter)
 - Jinja2 template partials extracted (from v1.2 Phase 13-01): _ioc_card.html, _verdict_dashboard.html, _filter_bar.html, _enrichment_slot.html
 - All 224 tests passing at 97% coverage
 - Partial naming convention: _snake_case.html in app/templates/partials/
 - CSS-only animations required — no new JS animation dependencies
+- v1.2 Phase 13-02 complete: card hover lift, badge dot indicators, search icon prefix (RESULTS-02/03/04/08 done)
 - v1.2 Phase 13-03 complete: empty state (.empty-state), KPI dashboard (.verdict-kpi-card grid), shimmer loader (shimmer-line pattern)
 - Dual class .spinner-wrapper.shimmer-wrapper pattern preserves JS contracts without JS changes
 
@@ -70,4 +73,5 @@ Resume file: none
 
 - 2026-02-28: Milestone v1.3 started — supersedes remaining v1.2 phases 13-14
 - 2026-02-28: v1.3 roadmap created — 3 phases, 18/18 requirements mapped
+- 2026-02-28: v1.2 Phase 13-02 executed — card hover lift, badge dots, search icon prefix (RESULTS-02/03/04/08 complete)
 - 2026-02-28: v1.2 Phase 13-03 executed — empty state, KPI dashboard, shimmer loader (RESULTS-05/06/07 complete)

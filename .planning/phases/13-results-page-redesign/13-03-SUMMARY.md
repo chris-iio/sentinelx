@@ -119,3 +119,15 @@ None - no external service configuration required.
 ---
 *Phase: 13-results-page-redesign*
 *Completed: 2026-02-28*
+
+## Self-Check: PASSED
+
+- FOUND: app/templates/partials/_empty_state.html
+- FOUND: app/templates/partials/_verdict_dashboard.html
+- FOUND: app/templates/partials/_enrichment_slot.html
+- FOUND: app/static/src/input.css
+- FOUND: app/static/main.js
+- FOUND: tests/e2e/pages/results_page.py
+- FOUND: .planning/phases/13-results-page-redesign/13-03-SUMMARY.md
+- FOUND commit: 47ced4a (Task 1)
+- FOUND commit: a88d9b6 (Task 2)
