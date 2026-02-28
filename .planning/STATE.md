@@ -2,11 +2,11 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Visual Experience Overhaul
-current_phase: Not started
-status: defining_requirements
+current_phase: 15
+status: ready_to_plan
 last_updated: "2026-02-28"
 progress:
-  total_phases: 0
+  total_phases: 3
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -19,22 +19,25 @@ progress:
 See: .planning/PROJECT.md (updated 2026-02-28)
 
 **Core value:** Safe, correct, and transparent IOC extraction and enrichment
-**Current focus:** Defining requirements for v1.3
+**Current focus:** v1.3 Visual Experience Overhaul — Phase 15 ready to plan
 
 ## Position
 
 **Milestone:** v1.3 Visual Experience Overhaul
-**Current phase:** Not started (defining requirements)
+**Current phase:** Phase 15 — Results Page Visual Overhaul (not yet planned)
 **Plan:** —
-**Status:** Defining requirements
-**Last activity:** 2026-02-28 — Milestone v1.3 started
+**Status:** Roadmap created, ready to begin phase planning
+**Last activity:** 2026-02-28 — v1.3 roadmap created (3 phases, 18 requirements mapped)
 
 ## Progress
 
-v1.3: ░░░░░░░░░░ 0%
+v1.3: ░░░░░░░░░░ 0% (0/3 phases complete)
 
 ## Recent Decisions
 
+- v1.3 roadmap derived: 3 phases (15, 16, 17) covering 18 requirements
+- MOT requirements distributed cross-cutting: MOT-03 with results (Phase 15), MOT-01/02/04 with input/global motion (Phase 16)
+- Phase 17 is intentionally small (3 requirements) — settings is a single bounded page
 - v1.2 phases 13-14 superseded by v1.3 (broader visual overhaul scope)
 - v1.2 phases 11-12 (tokens + shared components) validated as foundation
 - v1.2 Phase 13 plan 01 (Jinja2 partial extraction) already completed — partials in app/templates/partials/
@@ -46,7 +49,7 @@ v1.3: ░░░░░░░░░░ 0%
 ## Session Continuity
 
 Last session: 2026-02-28
-Stopped at: Defining requirements for v1.3
+Stopped at: v1.3 roadmap created — ready for `/gsd:plan-phase 15`
 Resume file: none
 
 ## Accumulated Context
@@ -59,7 +62,9 @@ Resume file: none
 - Jinja2 template partials extracted (from v1.2 Phase 13-01): _ioc_card.html, _verdict_dashboard.html, _filter_bar.html, _enrichment_slot.html
 - All 224 tests passing at 97% coverage
 - Partial naming convention: _snake_case.html in app/templates/partials/
+- CSS-only animations required — no new JS animation dependencies
 
 ## Session Log
 
 - 2026-02-28: Milestone v1.3 started — supersedes remaining v1.2 phases 13-14
+- 2026-02-28: v1.3 roadmap created — 3 phases, 18/18 requirements mapped

@@ -65,30 +65,30 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| RES-01 | — | Pending |
-| RES-02 | — | Pending |
-| RES-03 | — | Pending |
-| RES-04 | — | Pending |
-| RES-05 | — | Pending |
-| RES-06 | — | Pending |
-| RES-07 | — | Pending |
-| INP-01 | — | Pending |
-| INP-02 | — | Pending |
-| INP-03 | — | Pending |
-| INP-04 | — | Pending |
-| SET-01 | — | Pending |
-| SET-02 | — | Pending |
-| SET-03 | — | Pending |
-| MOT-01 | — | Pending |
-| MOT-02 | — | Pending |
-| MOT-03 | — | Pending |
-| MOT-04 | — | Pending |
+| RES-01 | Phase 15 | Pending |
+| RES-02 | Phase 15 | Pending |
+| RES-03 | Phase 15 | Pending |
+| RES-04 | Phase 15 | Pending |
+| RES-05 | Phase 15 | Pending |
+| RES-06 | Phase 15 | Pending |
+| RES-07 | Phase 15 | Pending |
+| MOT-03 | Phase 15 | Pending |
+| INP-01 | Phase 16 | Pending |
+| INP-02 | Phase 16 | Pending |
+| INP-03 | Phase 16 | Pending |
+| INP-04 | Phase 16 | Pending |
+| MOT-01 | Phase 16 | Pending |
+| MOT-02 | Phase 16 | Pending |
+| MOT-04 | Phase 16 | Pending |
+| SET-01 | Phase 17 | Pending |
+| SET-02 | Phase 17 | Pending |
+| SET-03 | Phase 17 | Pending |
 
 **Coverage:**
 - v1.3 requirements: 18 total
-- Mapped to phases: 0
-- Unmapped: 18 ⚠️
+- Mapped to phases: 18
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-02-28*
-*Last updated: 2026-02-28 after initial definition*
+*Last updated: 2026-02-28 — traceability table populated after roadmap creation*
