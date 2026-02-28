@@ -6,6 +6,7 @@
 - ✅ **v1.1 UX Overhaul** — Phases 6-8 (shipped 2026-02-25, reduced scope)
 - ✅ **v1.2 Modern UI Redesign** — Phases 11-12 (shipped; 13-14 superseded by v1.3)
 - 📋 **v1.3 Visual Experience Overhaul** — Phases 15-17 (in progress)
+- 📋 **v2.0 Home Page Modernization** — Phase 18 (planned)
 
 ## Phases
 
@@ -50,6 +51,10 @@ Phases 13-14 superseded by v1.3 Visual Experience Overhaul (broader scope). Phas
 - [ ] **Phase 15: Results Page Visual Overhaul** - Card hover lift, staggered cascade animation, shimmer skeleton loader, KPI dashboard with monospace numbers, empty state, type badge dot indicators, search icon prefix, scroll-aware filter bar
 - [ ] **Phase 16: Input Page and Global Motion** - Textarea focus glow, animated paste feedback, mode-aware submit button, input card depth, global CSS transitions, page load stagger, border glow on focus
 - [ ] **Phase 17: Settings Page Polish** - Section cards with bordered layout, JetBrains Mono API key field with show/hide toggle, Configured/Not configured status badge
+
+### v2.0 Home Page Modernization (Phase 18)
+
+- [ ] **Phase 18: Home Page Modernization** - Minimal header (logo + brand + gear icon), compact auto-growing textarea, tighter controls row, simplified footer
 
 ## Phase Details
 
@@ -132,10 +137,25 @@ Plans:
 
 Plans:
 
+### Phase 18: Home Page Modernization
+**Goal**: The home page is a clean, minimal, contemporary experience — a thinner header showing only logo, brand name, and settings icon; a compact auto-growing textarea; tighter inline controls; and a simplified footer that matches the header's stripped-down tone
+**Depends on**: Phase 17
+**Requirements**: LAY-01, LAY-02, LAY-03, INP-01, INP-02, INP-03
+**Success Criteria** (what must be TRUE):
+  1. The header displays exactly three elements — a logo icon, the "SentinelX" brand text, and a settings gear icon — with no tagline or descriptive text visible anywhere in the header
+  2. The header is visibly thinner than the current implementation — reduced vertical padding creates a compact top bar that does not dominate the page
+  3. The textarea defaults to approximately 5 visible rows on first load and grows taller as the user types or pastes text, stopping at a defined maximum height
+  4. The form controls row (mode toggle + submit button) uses tighter horizontal and vertical spacing so the control group feels compact and modern rather than spread out
+  5. The footer uses minimal text and reduced padding, visually matching the header's restrained aesthetic — no prominent section or decorative content
+**Plans**: TBD
+
+Plans:
+
 ## Progress
 
 **Execution Order:**
 v1.3 phases execute in numeric order: 15 → 16 → 17
+v2.0 phase executes after v1.3: 18
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -152,13 +172,4 @@ v1.3 phases execute in numeric order: 15 → 16 → 17
 | 15. Results Page Visual Overhaul | v1.3 | 0/? | Not started | — |
 | 16. Input Page and Global Motion | v1.3 | 0/? | Not started | — |
 | 17. Settings Page Polish | v1.3 | 0/? | Not started | — |
-
-### Phase 18: Keyless multi-source IOC enrichment
-
-**Goal:** [To be planned]
-**Requirements**: TBD
-**Depends on:** Phase 17
-**Plans:** 0 plans
-
-Plans:
-- [ ] TBD (run /gsd:plan-phase 18 to break down)
+| 18. Home Page Modernization | v2.0 | 0/? | Not started | — |
