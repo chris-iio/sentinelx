@@ -9,12 +9,12 @@
 
 ### Build Pipeline
 
-- [ ] **BUILD-01**: esbuild is installed as a standalone binary (no Node.js/npm required) with a pinned version
-- [ ] **BUILD-02**: `make js` compiles TypeScript source to a single IIFE bundle at `app/static/dist/main.js`
-- [ ] **BUILD-03**: `make js-watch` runs esbuild in watch mode for development
-- [ ] **BUILD-04**: `make js-dev` produces a bundle with inline source maps for browser debugging
-- [ ] **BUILD-05**: `make typecheck` runs `tsc --noEmit` to validate types without producing output
-- [ ] **BUILD-06**: `make build` target runs both CSS and JS builds
+- [x] **BUILD-01**: esbuild is installed as a standalone binary (no Node.js/npm required) with a pinned version
+- [x] **BUILD-02**: `make js` compiles TypeScript source to a single IIFE bundle at `app/static/dist/main.js`
+- [x] **BUILD-03**: `make js-watch` runs esbuild in watch mode for development
+- [x] **BUILD-04**: `make js-dev` produces a bundle with inline source maps for browser debugging
+- [x] **BUILD-05**: `make typecheck` runs `tsc --noEmit` to validate types without producing output
+- [x] **BUILD-06**: `make build` target runs both CSS and JS builds
 
 ### Type System
 
@@ -71,12 +71,12 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| BUILD-01 | Phase 19 | Pending |
-| BUILD-02 | Phase 19 | Pending |
-| BUILD-03 | Phase 19 | Pending |
-| BUILD-04 | Phase 19 | Pending |
-| BUILD-05 | Phase 19 | Pending |
-| BUILD-06 | Phase 19 | Pending |
+| BUILD-01 | Phase 19 | Complete |
+| BUILD-02 | Phase 19 | Complete |
+| BUILD-03 | Phase 19 | Complete |
+| BUILD-04 | Phase 19 | Complete |
+| BUILD-05 | Phase 19 | Complete |
+| BUILD-06 | Phase 19 | Complete |
 | TYPE-01 | Phase 20 | Pending |
 | TYPE-02 | Phase 20 | Pending |
 | TYPE-03 | Phase 20 | Pending |

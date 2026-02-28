@@ -180,7 +180,7 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 19-01-PLAN.md — esbuild binary install, Makefile JS targets, tsconfig.json, placeholder main.ts, config updates
+- [x] 19-01-PLAN.md — esbuild binary install, Makefile JS targets, tsconfig.json, placeholder main.ts, config updates
 - [ ] 19-02-PLAN.md — base.html script tag integration, dist/main.js commit, CSP verification
 
 ### Phase 20: Type Definitions Foundation
@@ -258,7 +258,7 @@ v3.0 phases execute in numeric order: 19 → 20 → 21 → 22 → 23
 | 16. Input Page and Global Motion | v1.3 | 0/? | Complete | 2026-02-28 |
 | 17. Settings Page Polish | v1.3 | 0/? | Complete | 2026-02-28 |
 | 18. Home Page Modernization | v2.0 | 3/3 | Complete | 2026-02-28 |
-| 19. Build Pipeline Infrastructure | v3.0 | 0/2 | Planned | — |
+| 19. Build Pipeline Infrastructure | v3.0 | 1/2 | In Progress | — |
 | 20. Type Definitions Foundation | v3.0 | 0/? | Not started | — |
 | 21. Simple Module Extraction | v3.0 | 0/? | Not started | — |
 | 22. Enrichment Module and Entry Point | v3.0 | 0/? | Not started | — |
