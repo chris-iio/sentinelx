@@ -207,9 +207,12 @@ Plans:
   3. All timer variables in form and UI modules use `ReturnType<typeof setTimeout>` as their declared type — no `NodeJS.Timeout` references appear anywhere in the codebase
   4. An `attr(el, name, fallback?)` helper utility exists and is used for all `getAttribute` calls — calling it with a misspelled attribute name still compiles (strings are not typed), but the return type is `string` rather than `string | null`
   5. Running the Playwright E2E suite against the compiled bundle produces the same pass/fail results as before the migration — no behavioral regressions in form controls, clipboard, filtering, or settings
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
+- [ ] 21-01-PLAN.md — DOM utilities (attr helper) + settings module + UI utilities module
+- [ ] 21-02-PLAN.md — Form controls module + clipboard module
+- [ ] 21-03-PLAN.md — Card management module + filter bar module
 
 ### Phase 22: Enrichment Module and Entry Point
 **Goal**: The most complex module (`enrichment.ts`, ~350 lines) is typed and working, `main.ts` imports and initializes all modules, `base.html` references `dist/main.js`, and the original `main.js` is deleted — the migration is structurally complete
