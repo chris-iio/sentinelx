@@ -69,6 +69,10 @@ Progress: v3.0 ██████░░░░ 60%
 - FilterState interface is internal to filter.ts (not exported) — implementation detail, not public API
 - filterRoot narrowed to typed const after null guard in filter.ts — TypeScript cannot re-narrow in nested closure
 - as VerdictKey cast in doSortCards comparator is safe — data-verdict values set exclusively by updateCardVerdict which already takes VerdictKey
+- Non-nullable closure aliases (const ta = textarea) in form.ts — TypeScript cannot narrow through closures; binding narrowed value to new const gives inner functions non-null type without assertions
+- pasteTimer stored at module scope not on HTMLElement — custom properties on HTMLElement rejected by TypeScript; module-level variable is the correct pattern
+- writeToClipboard exported from clipboard.ts — Phase 22 enrichment module uses it for export button without duplicating fallback logic
+- Bare catch block (no parameter) in fallbackCopy — error variable is unused; bare catch avoids noUnusedLocals violation
 
 ### Blockers/Concerns
 
