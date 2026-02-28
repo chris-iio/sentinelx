@@ -88,9 +88,13 @@ Plans:
   4. When no IOCs are found in results, a centered shield/search icon with "No IOCs detected" headline and supported-types body text is displayed instead of an empty list
   5. During enrichment loading, each pending card shows animated shimmer rectangles instead of a spinner — the animation is smooth and does not jank during scroll
   6. The verdict stat dashboard displays four KPI cards with large monospace numbers and colored top borders, not inline pills
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
+- [ ] 13-01-PLAN.md — Template partial extraction (Jinja2 includes) + test_header_branding fix
+- [ ] 13-02-PLAN.md — Card hover lift, type badge dot indicators, search icon prefix, left-border verification
+- [ ] 13-03-PLAN.md — KPI dashboard cards, empty state icon treatment, shimmer skeleton loader
+- [ ] 13-04-PLAN.md — Visual verification checkpoint (human approval)
 
 ### Phase 14: Input & Settings Page Redesign
 **Goal**: The input page and settings page are visually consistent with the v1.2 design system — refined textarea, mode-aware submit button, upgraded toggle, animated paste feedback, and Vercel-style settings section cards with monospace API key field
