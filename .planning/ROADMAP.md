@@ -5,8 +5,9 @@
 - ✅ **v1.0 MVP** — Phases 1-4 (shipped 2026-02-24)
 - ✅ **v1.1 UX Overhaul** — Phases 6-8 (shipped 2026-02-25, reduced scope)
 - ✅ **v1.2 Modern UI Redesign** — Phases 11-12 (shipped; 13-14 superseded by v1.3)
-- 📋 **v1.3 Visual Experience Overhaul** — Phases 15-17 (in progress)
-- 📋 **v2.0 Home Page Modernization** — Phase 18 (planned)
+- ✅ **v1.3 Visual Experience Overhaul** — Phases 15-17 (shipped 2026-02-28)
+- ✅ **v2.0 Home Page Modernization** — Phase 18 (shipped 2026-02-28)
+- 🚧 **v3.0 TypeScript Migration** — Phases 19-23 (in progress)
 
 ## Phases
 
@@ -46,15 +47,29 @@ Phases 13-14 superseded by v1.3 Visual Experience Overhaul (broader scope). Phas
 
 </details>
 
-### v1.3 Visual Experience Overhaul (Phases 15-17)
+<details>
+<summary>✅ v1.3 Visual Experience Overhaul (Phases 15-17) — SHIPPED 2026-02-28</summary>
 
-- [ ] **Phase 15: Results Page Visual Overhaul** - Card hover lift, staggered cascade animation, shimmer skeleton loader, KPI dashboard with monospace numbers, empty state, type badge dot indicators, search icon prefix, scroll-aware filter bar
-- [ ] **Phase 16: Input Page and Global Motion** - Textarea focus glow, animated paste feedback, mode-aware submit button, input card depth, global CSS transitions, page load stagger, border glow on focus
-- [ ] **Phase 17: Settings Page Polish** - Section cards with bordered layout, JetBrains Mono API key field with show/hide toggle, Configured/Not configured status badge
+- [x] Phase 15: Results Page Visual Overhaul — completed 2026-02-28
+- [x] Phase 16: Input Page and Global Motion — completed 2026-02-28
+- [x] Phase 17: Settings Page Polish — completed 2026-02-28
 
-### v2.0 Home Page Modernization (Phase 18)
+</details>
 
-- [ ] **Phase 18: Home Page Modernization** - Minimal header (logo + brand + gear icon), compact auto-growing textarea, tighter controls row, simplified footer
+<details>
+<summary>✅ v2.0 Home Page Modernization (Phase 18) — SHIPPED 2026-02-28</summary>
+
+- [x] Phase 18: Home Page Modernization — completed 2026-02-28
+
+</details>
+
+### v3.0 TypeScript Migration (Phases 19-23)
+
+- [ ] **Phase 19: Build Pipeline Infrastructure** - esbuild binary, tsconfig, Makefile targets, CSP verification
+- [ ] **Phase 20: Type Definitions Foundation** - Domain types, API response interfaces, verdict constants
+- [ ] **Phase 21: Simple Module Extraction** - Six typed modules (form, clipboard, card management, filter, settings, UI utilities)
+- [ ] **Phase 22: Enrichment Module and Entry Point** - Complex enrichment module, main.ts entry point, template update, main.js deletion
+- [ ] **Phase 23: Type Hardening and Verification** - Zero TypeScript errors, zero any types, full E2E suite passing
 
 ## Phase Details
 
@@ -151,11 +166,79 @@ Plans:
 
 Plans:
 
+### Phase 19: Build Pipeline Infrastructure
+**Goal**: A working TypeScript build pipeline is in place — esbuild binary installed, Makefile targets operational, tsconfig configured for strict browser-only type checking, base.html updated to serve the compiled bundle, and the CSP security regression test still passing
+**Depends on**: Phase 18 (v2.0 complete)
+**Requirements**: BUILD-01, BUILD-02, BUILD-03, BUILD-04, BUILD-05, BUILD-06
+**Success Criteria** (what must be TRUE):
+  1. Running `make js` produces `app/static/dist/main.js` as a minified IIFE bundle and the app loads correctly in the browser with all existing functionality working
+  2. Running `make js-dev` produces an unminified bundle with inline source maps — the Sources panel in browser DevTools shows TypeScript source files, not compiled output
+  3. Running `make js-watch` stays running and recompiles the bundle within 200ms whenever a source file changes
+  4. Running `make typecheck` executes `tsc --noEmit` and exits zero with no errors on a valid TypeScript file
+  5. Running `make build` completes both CSS and JS compilation in a single command — the Makefile `build` target depends on both `css` and `js`
+  6. The `test_csp_header_exact_match` security regression test passes against the compiled `dist/main.js` bundle — no CSP violation introduced by esbuild output
+**Plans**: TBD
+
+Plans:
+
+### Phase 20: Type Definitions Foundation
+**Goal**: All shared TypeScript types, interfaces, and typed constants are defined before any module conversion begins — the domain model is centralized, API response shapes are documented, and `tsc --noEmit` passes on the type files alone
+**Depends on**: Phase 19
+**Requirements**: TYPE-01, TYPE-02, TYPE-03, TYPE-04
+**Success Criteria** (what must be TRUE):
+  1. `app/static/src/ts/types/ioc.ts` defines `VerdictKey` and `IocType` as union types, and typed constants `VERDICT_SEVERITY`, `VERDICT_LABELS`, and `IOC_PROVIDER_COUNTS` — importing these in a scratch file and using a non-existent verdict key produces a TypeScript compile error
+  2. `app/static/src/ts/types/api.ts` defines `EnrichmentResult` and `EnrichmentStatus` interfaces that match the Flask `/enrichment/status/{job_id}` response shape — a field name typo in a consuming module causes a type error at compile time
+  3. Running `make typecheck` passes with zero errors on the type definition files — `tsc --noEmit` exits clean
+  4. `tsconfig.json` at project root uses `strict: true`, `isolatedModules: true`, `noUncheckedIndexedAccess: true`, and `"types": []` — attempting to use a Node.js global like `process` produces a type error
+**Plans**: TBD
+
+Plans:
+
+### Phase 21: Simple Module Extraction
+**Goal**: Six TypeScript modules are extracted from `main.js` — form controls, clipboard, card management, filter bar, settings, and UI utilities — with proper null guards, typed DOM interactions, and established patterns (attr helper, timer types) that the enrichment module will reuse
+**Depends on**: Phase 20
+**Requirements**: MOD-02, MOD-03, MOD-05, MOD-06, MOD-07, MOD-08
+**Success Criteria** (what must be TRUE):
+  1. Each of the six modules (`form.ts`, `clipboard.ts`, `cards.ts`, `filter.ts`, `settings.ts`, `ui.ts`) exports a single `init` function — calling `make typecheck` passes with zero errors across all six files
+  2. No module uses a non-null assertion (`!`) anywhere — all `querySelector` and `getElementById` calls are guarded with `if (!el) return` or equivalent null checks that TypeScript accepts
+  3. All timer variables in form and UI modules use `ReturnType<typeof setTimeout>` as their declared type — no `NodeJS.Timeout` references appear anywhere in the codebase
+  4. An `attr(el, name, fallback?)` helper utility exists and is used for all `getAttribute` calls — calling it with a misspelled attribute name still compiles (strings are not typed), but the return type is `string` rather than `string | null`
+  5. Running the Playwright E2E suite against the compiled bundle produces the same pass/fail results as before the migration — no behavioral regressions in form controls, clipboard, filtering, or settings
+**Plans**: TBD
+
+Plans:
+
+### Phase 22: Enrichment Module and Entry Point
+**Goal**: The most complex module (`enrichment.ts`, ~350 lines) is typed and working, `main.ts` imports and initializes all modules, `base.html` references `dist/main.js`, and the original `main.js` is deleted — the migration is structurally complete
+**Depends on**: Phase 21
+**Requirements**: MOD-01, MOD-04, SAFE-03, SAFE-04
+**Success Criteria** (what must be TRUE):
+  1. `app/static/src/ts/modules/enrichment.ts` defines typed interfaces for `VerdictEntry` and the `iocVerdicts` accumulator map — no `any` types appear in the enrichment polling loop, result rendering, or verdict accumulation logic
+  2. `app/static/src/ts/main.ts` exists as the esbuild entry point and imports init functions from all seven modules — the compiled bundle is produced from this single entry point
+  3. `base.html` script tag references `dist/main.js` (not `main.js`) and the app loads correctly with all features working — enrichment polling, card rendering, verdict updates, and dashboard counts all function identically to pre-migration behavior
+  4. `app/static/main.js` no longer exists in the repository — the original file has been deleted and `git status` shows it as removed
+**Plans**: TBD
+
+Plans:
+
+### Phase 23: Type Hardening and Verification
+**Goal**: The migration is complete and verified — zero TypeScript errors, zero unjustified `any` types, all E2E tests passing against the compiled bundle, and the full build pipeline confirmed working end-to-end
+**Depends on**: Phase 22
+**Requirements**: SAFE-01, SAFE-02
+**Success Criteria** (what must be TRUE):
+  1. `make typecheck` exits with zero errors and zero warnings — `tsc --noEmit` produces no output on a clean run
+  2. `grep -r ": any" app/static/src/ts/` returns no results — no `any` type annotations exist anywhere in the TypeScript source (excluding explicitly documented exceptions in a comment)
+  3. All Playwright E2E tests pass against the compiled `dist/main.js` — the full test suite produces the same results as the pre-migration baseline (pre-existing failures like `test_online_mode_indicator` remain unchanged, no new failures introduced)
+  4. The `test_csp_header_exact_match` security regression test passes — the compiled bundle contains no `eval`, no `Function()` constructor, and no inline event handlers
+  5. Running `make build` from a clean state produces both `app/static/dist/style.css` and `app/static/dist/main.js` correctly — the full build pipeline works end-to-end
+**Plans**: TBD
+
+Plans:
+
 ## Progress
 
 **Execution Order:**
-v1.3 phases execute in numeric order: 15 → 16 → 17
-v2.0 phase executes after v1.3: 18
+v3.0 phases execute in numeric order: 19 → 20 → 21 → 22 → 23
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -169,7 +252,12 @@ v2.0 phase executes after v1.3: 18
 | 8. Input Page Polish | v1.1 | 2/2 | Complete | 2026-02-25 |
 | 11. Foundation — Design Tokens & Base CSS | v1.2 | 3/3 | Complete | 2026-02-28 |
 | 12. Shared Component Elevation | v1.2 | 3/3 | Complete | 2026-02-27 |
-| 15. Results Page Visual Overhaul | v1.3 | 0/? | Not started | — |
-| 16. Input Page and Global Motion | v1.3 | 0/? | Not started | — |
-| 17. Settings Page Polish | v1.3 | 0/? | Not started | — |
-| 18. Home Page Modernization | 2/3 | In Progress|  | — |
+| 15. Results Page Visual Overhaul | v1.3 | 0/? | Complete | 2026-02-28 |
+| 16. Input Page and Global Motion | v1.3 | 0/? | Complete | 2026-02-28 |
+| 17. Settings Page Polish | v1.3 | 0/? | Complete | 2026-02-28 |
+| 18. Home Page Modernization | v2.0 | 3/3 | Complete | 2026-02-28 |
+| 19. Build Pipeline Infrastructure | v3.0 | 0/? | Not started | — |
+| 20. Type Definitions Foundation | v3.0 | 0/? | Not started | — |
+| 21. Simple Module Extraction | v3.0 | 0/? | Not started | — |
+| 22. Enrichment Module and Entry Point | v3.0 | 0/? | Not started | — |
+| 23. Type Hardening and Verification | v3.0 | 0/? | Not started | — |

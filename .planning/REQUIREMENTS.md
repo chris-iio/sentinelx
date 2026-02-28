@@ -71,34 +71,34 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| BUILD-01 | TBD | Pending |
-| BUILD-02 | TBD | Pending |
-| BUILD-03 | TBD | Pending |
-| BUILD-04 | TBD | Pending |
-| BUILD-05 | TBD | Pending |
-| BUILD-06 | TBD | Pending |
-| TYPE-01 | TBD | Pending |
-| TYPE-02 | TBD | Pending |
-| TYPE-03 | TBD | Pending |
-| TYPE-04 | TBD | Pending |
-| MOD-01 | TBD | Pending |
-| MOD-02 | TBD | Pending |
-| MOD-03 | TBD | Pending |
-| MOD-04 | TBD | Pending |
-| MOD-05 | TBD | Pending |
-| MOD-06 | TBD | Pending |
-| MOD-07 | TBD | Pending |
-| MOD-08 | TBD | Pending |
-| SAFE-01 | TBD | Pending |
-| SAFE-02 | TBD | Pending |
-| SAFE-03 | TBD | Pending |
-| SAFE-04 | TBD | Pending |
+| BUILD-01 | Phase 19 | Pending |
+| BUILD-02 | Phase 19 | Pending |
+| BUILD-03 | Phase 19 | Pending |
+| BUILD-04 | Phase 19 | Pending |
+| BUILD-05 | Phase 19 | Pending |
+| BUILD-06 | Phase 19 | Pending |
+| TYPE-01 | Phase 20 | Pending |
+| TYPE-02 | Phase 20 | Pending |
+| TYPE-03 | Phase 20 | Pending |
+| TYPE-04 | Phase 20 | Pending |
+| MOD-02 | Phase 21 | Pending |
+| MOD-03 | Phase 21 | Pending |
+| MOD-05 | Phase 21 | Pending |
+| MOD-06 | Phase 21 | Pending |
+| MOD-07 | Phase 21 | Pending |
+| MOD-08 | Phase 21 | Pending |
+| MOD-01 | Phase 22 | Pending |
+| MOD-04 | Phase 22 | Pending |
+| SAFE-03 | Phase 22 | Pending |
+| SAFE-04 | Phase 22 | Pending |
+| SAFE-01 | Phase 23 | Pending |
+| SAFE-02 | Phase 23 | Pending |
 
 **Coverage:**
 - v3.0 requirements: 22 total
-- Mapped to phases: 0
-- Unmapped: 22 ⚠️
+- Mapped to phases: 22
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-02-28*
-*Last updated: 2026-02-28 after initial definition*
+*Last updated: 2026-02-28 — traceability updated after roadmap creation (phases 19-23)*
