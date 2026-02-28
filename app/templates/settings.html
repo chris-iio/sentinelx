@@ -12,7 +12,14 @@
         {% endwith %}
 
         <section class="settings-section">
-            <h2 class="settings-section-title">VirusTotal API Key</h2>
+            <h2 class="settings-section-title">
+                VirusTotal API Key
+                {% if masked_key %}
+                <span class="api-key-status api-key-status--configured"><span class="api-key-status-dot"></span> Configured</span>
+                {% else %}
+                <span class="api-key-status api-key-status--missing"><span class="api-key-status-dot"></span> Not configured</span>
+                {% endif %}
+            </h2>
 
             <p class="settings-info">
                 Your API key is stored locally in <code>~/.sentinelx/config.ini</code>.

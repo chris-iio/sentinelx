@@ -94,6 +94,9 @@
         var submitBtn = document.getElementById("submit-btn");
         if (!submitBtn) return;
         submitBtn.textContent = mode === "online" ? "Extract & Enrich" : "Extract IOCs";
+        // Mode-aware button color
+        submitBtn.classList.remove("mode-online", "mode-offline");
+        submitBtn.classList.add(mode === "online" ? "mode-online" : "mode-offline");
     }
 
     // ---- Paste character count feedback (INPUT-02) ----
@@ -103,9 +106,16 @@
         if (!feedback) return;
         feedback.textContent = charCount + " characters pasted";
         feedback.style.display = "";
+        feedback.classList.remove("is-hiding");
+        feedback.classList.add("is-visible");
         clearTimeout(feedback._timer);
         feedback._timer = setTimeout(function () {
-            feedback.style.display = "none";
+            feedback.classList.remove("is-visible");
+            feedback.classList.add("is-hiding");
+            setTimeout(function () {
+                feedback.style.display = "none";
+                feedback.classList.remove("is-hiding");
+            }, 250);
         }, 2000);
     }
 
@@ -754,6 +764,34 @@
 
     // ---- Initialise on DOM ready ----
 
+    // ---- Scroll-aware filter bar ----
+
+    function initScrollAwareFilterBar() {
+        var filterBar = document.querySelector(".filter-bar-wrapper");
+        if (!filterBar) return;
+        var scrolled = false;
+        window.addEventListener("scroll", function () {
+            var isScrolled = window.scrollY > 40;
+            if (isScrolled !== scrolled) {
+                scrolled = isScrolled;
+                if (scrolled) {
+                    filterBar.classList.add("is-scrolled");
+                } else {
+                    filterBar.classList.remove("is-scrolled");
+                }
+            }
+        }, { passive: true });
+    }
+
+    // ---- Card stagger index ----
+
+    function initCardStagger() {
+        var cards = document.querySelectorAll(".ioc-card");
+        for (var i = 0; i < cards.length; i++) {
+            cards[i].style.setProperty("--card-index", String(Math.min(i, 15)));
+        }
+    }
+
     function init() {
         initSubmitButton();
         initModeToggle();
@@ -762,6 +800,8 @@
         initEnrichmentPolling();
         initExportButton();
         initSettingsPage();
+        initScrollAwareFilterBar();
+        initCardStagger();
     }
 
     if (document.readyState === "loading") {
