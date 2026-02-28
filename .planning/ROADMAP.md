@@ -152,3 +152,13 @@ v1.3 phases execute in numeric order: 15 → 16 → 17
 | 15. Results Page Visual Overhaul | v1.3 | 0/? | Not started | — |
 | 16. Input Page and Global Motion | v1.3 | 0/? | Not started | — |
 | 17. Settings Page Polish | v1.3 | 0/? | Not started | — |
+
+### Phase 18: Keyless multi-source IOC enrichment
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 17
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 18 to break down)

@@ -72,6 +72,10 @@ Resume file: none
 - Dual class .spinner-wrapper.shimmer-wrapper pattern preserves JS contracts without JS changes
 - v1.2 Phase 13-04 complete: all 8 RESULTS requirements human-approved in browser (281 tests passing, Phase 13 fully done)
 
+### Roadmap Evolution
+
+- Phase 18 added: Keyless multi-source IOC enrichment
+
 ## Session Log
 
 - 2026-02-28: Milestone v1.3 started — supersedes remaining v1.2 phases 13-14
