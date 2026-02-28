@@ -126,5 +126,5 @@ Phases execute in numeric order: 11 → 12 → 13 → 14
 | 8. Input Page Polish | v1.1 | 2/2 | Complete | 2026-02-25 |
 | 11. Foundation — Design Tokens & Base CSS | v1.2 | 3/3 | Complete | 2026-02-28 |
 | 12. Shared Component Elevation | 3/3 | Complete    | 2026-02-27 | — |
-| 13. Results Page Redesign | v1.2 | 0/? | Not started | — |
+| 13. Results Page Redesign | 1/4 | In Progress|  | — |
 | 14. Input & Settings Page Redesign | v1.2 | 0/? | Not started | — |

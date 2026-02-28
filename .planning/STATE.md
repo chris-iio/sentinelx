@@ -1,15 +1,15 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
+milestone: v1.2
 milestone_name: Modern UI Redesign
-current_phase: Phase 12 — Shared Component Elevation (COMPLETE)
-status: completed
-last_updated: "2026-02-27T17:47:26.542Z"
+current_phase: Phase 13 — Results Page Redesign (IN PROGRESS)
+status: in_progress
+last_updated: "2026-02-28T06:28:00Z"
 progress:
-  total_phases: 2
+  total_phases: 4
   completed_phases: 2
-  total_plans: 6
-  completed_plans: 6
+  total_plans: 4
+  completed_plans: 1
 ---
 
 # Session State
@@ -21,15 +21,16 @@ See: .planning/PROJECT.md
 ## Position
 
 **Milestone:** v1.2 Modern UI Redesign
-**Current phase:** Phase 12 — Shared Component Elevation (COMPLETE)
-**Plan:** 3 of 3 (12-03 complete)
-**Status:** Milestone complete
+**Current phase:** Phase 13 — Results Page Redesign
+**Plan:** 1 of 4 (13-01 complete)
+**Status:** In progress
 
 ## Progress
 
 Phase 11: ██████████ 100% ✓
 Phase 12: ██████████ 100% ✓ (plans 01-03 complete)
-v1.2:     ████░░░░░░ 50% (2/4 phases)
+Phase 13: ██░░░░░░░░ 25% (plan 01 of 04 complete)
+v1.2:     ██████░░░░ 62% (2.25/4 phases)
 
 ## Recent Decisions
 
@@ -50,6 +51,9 @@ v1.2:     ████░░░░░░ 50% (2/4 phases)
 - Tagline changed from "Offline IOC Extractor" to "IOC Triage Tool" — reflects dual online/offline capability
 - .nav-icon uses vertical-align: -3px for optical baseline alignment with inline SVG next to text
 - .site-logo font-family changed from var(--font-mono) to var(--font-ui) — brand in Inter, not JetBrains Mono
+- All {% if %} guards stay in results.html — partials contain unconditional content only
+- Nested include: _ioc_card.html includes _enrichment_slot.html for spinner div inside card
+- Partial file naming convention: _snake_case.html with leading underscore in app/templates/partials/
 
 ## Blockers/Concerns
 
@@ -57,8 +61,8 @@ v1.2:     ████░░░░░░ 50% (2/4 phases)
 
 ## Session Continuity
 
-Last session: 2026-02-27
-Stopped at: Phase 12 Plan 03 complete — Heroicons Jinja2 macro, emerald header brand accent, Phase 12 fully complete
+Last session: 2026-02-28
+Stopped at: Phase 13 Plan 01 complete — Jinja2 partial extraction, test_header_branding fixed
 Resume file: none
 
 ## Session Log
@@ -73,3 +77,4 @@ Resume file: none
 - 2026-02-27: Plan 12-01 complete — verdict badge borders unified, global :focus-visible, ghost button variant
 - 2026-02-27: Plan 12-02 complete — .form-input dark-theme class (COMP-04), frosted-glass filter bar (COMP-05)
 - 2026-02-27: Plan 12-03 complete — Heroicons Jinja2 macro (COMP-06), emerald header brand accent + Inter typography (COMP-07), Phase 12 fully complete
+- 2026-02-28: Plan 13-01 complete — results.html split into 5 Jinja2 partials, test_header_branding fixed, 57 E2E tests passing

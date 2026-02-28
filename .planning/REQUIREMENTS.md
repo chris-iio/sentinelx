@@ -38,7 +38,7 @@
 
 ### Results Page
 
-- [ ] **RESULTS-01**: Jinja2 template partials extracted — `_ioc_card.html`, `_verdict_dashboard.html`, `_filter_bar.html`, `_enrichment_slot.html` — with E2E tests passing after extraction before any visual changes
+- [x] **RESULTS-01**: Jinja2 template partials extracted — `_ioc_card.html`, `_verdict_dashboard.html`, `_filter_bar.html`, `_enrichment_slot.html` — with E2E tests passing after extraction before any visual changes
 - [ ] **RESULTS-02**: IOC card hover elevation — `translateY(-1px)` + subtle shadow + border-color shift on hover with 150ms ease transition
 - [ ] **RESULTS-03**: IOC type badge dot indicator — `::before` 6px colored circle on each type badge for quick visual scanning
 - [ ] **RESULTS-04**: Search input has inline SVG magnifying glass icon prefix
@@ -102,7 +102,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | COMP-05 | Phase 12 | Complete |
 | COMP-06 | Phase 12 | Complete |
 | COMP-07 | Phase 12 | Complete |
-| RESULTS-01 | Phase 13 | Pending |
+| RESULTS-01 | Phase 13 | Complete |
 | RESULTS-02 | Phase 13 | Pending |
 | RESULTS-03 | Phase 13 | Pending |
 | RESULTS-04 | Phase 13 | Pending |
