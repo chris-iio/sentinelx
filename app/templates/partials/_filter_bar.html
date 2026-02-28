@@ -1,3 +1,4 @@
+{% from "macros/icons.html" import icon %}
 <div class="filter-bar-wrapper">
   <div class="filter-bar">
     {# Verdict filter buttons (FILTER-01) — data-filter-value read by JS click handler #}
@@ -20,7 +21,10 @@
 
     {# Text search (FILTER-03) — id="filter-search-input" used by JS #}
     <div class="filter-search">
-      <input type="search" id="filter-search-input" placeholder="Search IOCs..." class="filter-search-input" autocomplete="off" />
+      <div class="filter-search-wrapper">
+        {{ icon("magnifying-glass", class="filter-search-icon", variant="outline") }}
+        <input type="search" id="filter-search-input" placeholder="Search IOCs..." class="filter-search-input" autocomplete="off" />
+      </div>
     </div>
   </div>
 </div>
