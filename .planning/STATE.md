@@ -8,8 +8,8 @@ last_updated: "2026-02-28"
 progress:
   total_phases: 5
   completed_phases: 0
-  total_plans: 1
-  completed_plans: 1
+  total_plans: 2
+  completed_plans: 2
 ---
 
 # Session State
@@ -24,18 +24,18 @@ See: .planning/PROJECT.md (updated 2026-02-28)
 ## Current Position
 
 Phase: 19 of 23 (Build Pipeline Infrastructure)
-Plan: 1 of 1 in current phase (complete)
+Plan: 2 of 2 in current phase (complete)
 Status: Phase 19 complete — ready for Phase 20
-Last activity: 2026-02-28 — Completed 19-01: Build Pipeline Infrastructure
+Last activity: 2026-02-28 — Completed 19-02: Build Pipeline Integration (base.html wiring)
 
 Progress: v3.0 ██░░░░░░░░ 20%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 1 (v3.0)
-- Average duration: 2 min
-- Total execution time: 2 min
+- Total plans completed: 2 (v3.0)
+- Average duration: 1.5 min
+- Total execution time: 3 min
 
 *Updated after each plan completion*
 
@@ -52,6 +52,8 @@ Progress: v3.0 ██░░░░░░░░ 20%
 - `attr(el, name, fallback?)` helper needed — `getAttribute` returns `string | null`, TypeScript won't narrow on `hasAttribute`
 - Zero behavioral changes during migration — E2E suite is the verification mechanism
 - Source maps excluded from git — generated locally via `make js-dev` or `make js-watch`
+- Dual-script-tag migration pattern: dist/main.js (empty IIFE placeholder) + main.js (real code) until Phase 22 TypeScript conversion completes
+- Option A (dual tags) chosen over Option B (no template change): proves pipeline is wired to template while preserving all JS functionality
 
 ### Blockers/Concerns
 
@@ -60,5 +62,5 @@ Progress: v3.0 ██░░░░░░░░ 20%
 ## Session Continuity
 
 Last session: 2026-02-28
-Stopped at: Completed 19-01-PLAN.md (Build Pipeline Infrastructure)
+Stopped at: Completed 19-02-PLAN.md (Build Pipeline Integration — base.html wiring)
 Resume file: none

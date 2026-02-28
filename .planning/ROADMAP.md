@@ -65,7 +65,7 @@ Phases 13-14 superseded by v1.3 Visual Experience Overhaul (broader scope). Phas
 
 ### v3.0 TypeScript Migration (Phases 19-23)
 
-- [ ] **Phase 19: Build Pipeline Infrastructure** - esbuild binary, tsconfig, Makefile targets, CSP verification
+- [x] **Phase 19: Build Pipeline Infrastructure** - esbuild binary, tsconfig, Makefile targets, CSP verification (completed 2026-02-28)
 - [ ] **Phase 20: Type Definitions Foundation** - Domain types, API response interfaces, verdict constants
 - [ ] **Phase 21: Simple Module Extraction** - Six typed modules (form, clipboard, card management, filter, settings, UI utilities)
 - [ ] **Phase 22: Enrichment Module and Entry Point** - Complex enrichment module, main.ts entry point, template update, main.js deletion
@@ -258,7 +258,7 @@ v3.0 phases execute in numeric order: 19 → 20 → 21 → 22 → 23
 | 16. Input Page and Global Motion | v1.3 | 0/? | Complete | 2026-02-28 |
 | 17. Settings Page Polish | v1.3 | 0/? | Complete | 2026-02-28 |
 | 18. Home Page Modernization | v2.0 | 3/3 | Complete | 2026-02-28 |
-| 19. Build Pipeline Infrastructure | v3.0 | 1/2 | In Progress | — |
+| 19. Build Pipeline Infrastructure | 2/2 | Complete   | 2026-02-28 | — |
 | 20. Type Definitions Foundation | v3.0 | 0/? | Not started | — |
 | 21. Simple Module Extraction | v3.0 | 0/? | Not started | — |
 | 22. Enrichment Module and Entry Point | v3.0 | 0/? | Not started | — |
