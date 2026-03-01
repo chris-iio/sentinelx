@@ -25,10 +25,10 @@
 
 ### Module Structure
 
-- [ ] **MOD-01**: Entry point `main.ts` imports and initializes all feature modules
+- [x] **MOD-01**: Entry point `main.ts` imports and initializes all feature modules
 - [x] **MOD-02**: Form controls module (submit button, clear, auto-grow textarea, mode toggle, paste feedback)
 - [x] **MOD-03**: Clipboard module (copy IOC values, copy-with-enrichment, fallback copy)
-- [ ] **MOD-04**: Enrichment polling module (fetch loop, progress bar, result rendering, warning banner)
+- [x] **MOD-04**: Enrichment polling module (fetch loop, progress bar, result rendering, warning banner)
 - [x] **MOD-05**: Card management module (verdict updates, dashboard counts, severity sorting)
 - [x] **MOD-06**: Filter bar module (verdict/type/search filtering, dashboard badge click)
 - [x] **MOD-07**: Settings module (API key show/hide toggle)
@@ -87,8 +87,8 @@
 | MOD-06 | Phase 21 | Complete |
 | MOD-07 | Phase 21 | Complete |
 | MOD-08 | Phase 21 | Complete |
-| MOD-01 | Phase 22 | Pending |
-| MOD-04 | Phase 22 | Pending |
+| MOD-01 | Phase 22 | Complete |
+| MOD-04 | Phase 22 | Complete |
 | SAFE-03 | Phase 22 | Pending |
 | SAFE-04 | Phase 22 | Pending |
 | SAFE-01 | Phase 23 | Pending |
