@@ -181,7 +181,7 @@ Plans:
 
 Plans:
 - [x] 19-01-PLAN.md — esbuild binary install, Makefile JS targets, tsconfig.json, placeholder main.ts, config updates
-- [ ] 19-02-PLAN.md — base.html script tag integration, dist/main.js commit, CSP verification
+- [x] 19-02-PLAN.md — base.html script tag integration, dist/main.js commit, CSP verification
 
 ### Phase 20: Type Definitions Foundation
 **Goal**: All shared TypeScript types, interfaces, and typed constants are defined before any module conversion begins — the domain model is centralized, API response shapes are documented, and `tsc --noEmit` passes on the type files alone
@@ -195,7 +195,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 20-01-PLAN.md — Domain types (VerdictKey, IocType, typed constants) + API response interfaces (EnrichmentStatus, discriminated union) + tsconfig verification
+- [x] 20-01-PLAN.md — Domain types (VerdictKey, IocType, typed constants) + API response interfaces (EnrichmentStatus, discriminated union) + tsconfig verification
 
 ### Phase 21: Simple Module Extraction
 **Goal**: Six TypeScript modules are extracted from `main.js` — form controls, clipboard, card management, filter bar, settings, and UI utilities — with proper null guards, typed DOM interactions, and established patterns (attr helper, timer types) that the enrichment module will reuse
@@ -211,8 +211,8 @@ Plans:
 
 Plans:
 - [x] 21-01-PLAN.md — DOM utilities (attr helper) + settings module + UI utilities module
-- [ ] 21-02-PLAN.md — Form controls module + clipboard module
-- [ ] 21-03-PLAN.md — Card management module + filter bar module
+- [x] 21-02-PLAN.md — Form controls module + clipboard module
+- [x] 21-03-PLAN.md — Card management module + filter bar module
 
 ### Phase 22: Enrichment Module and Entry Point
 **Goal**: The most complex module (`enrichment.ts`, ~350 lines) is typed and working, `main.ts` imports and initializes all modules, `base.html` references `dist/main.js`, and the original `main.js` is deleted — the migration is structurally complete
@@ -223,9 +223,11 @@ Plans:
   2. `app/static/src/ts/main.ts` exists as the esbuild entry point and imports init functions from all seven modules — the compiled bundle is produced from this single entry point
   3. `base.html` script tag references `dist/main.js` (not `main.js`) and the app loads correctly with all features working — enrichment polling, card rendering, verdict updates, and dashboard counts all function identically to pre-migration behavior
   4. `app/static/main.js` no longer exists in the repository — the original file has been deleted and `git status` shows it as removed
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
+- [ ] 22-01-PLAN.md — Enrichment polling module (enrichment.ts) + main.ts entry point replacement
+- [ ] 22-02-PLAN.md — Remove main.js script tag from base.html, delete original main.js, human verification
 
 ### Phase 23: Type Hardening and Verification
 **Goal**: The migration is complete and verified — zero TypeScript errors, zero unjustified `any` types, all E2E tests passing against the compiled bundle, and the full build pipeline confirmed working end-to-end
@@ -262,8 +264,8 @@ v3.0 phases execute in numeric order: 19 → 20 → 21 → 22 → 23
 | 16. Input Page and Global Motion | v1.3 | 0/? | Complete | 2026-02-28 |
 | 17. Settings Page Polish | v1.3 | 0/? | Complete | 2026-02-28 |
 | 18. Home Page Modernization | v2.0 | 3/3 | Complete | 2026-02-28 |
-| 19. Build Pipeline Infrastructure | 2/2 | Complete    | 2026-02-28 | — |
-| 20. Type Definitions Foundation | 1/1 | Complete    | 2026-02-28 | — |
-| 21. Simple Module Extraction | 3/3 | Complete    | 2026-02-28 | — |
-| 22. Enrichment Module and Entry Point | v3.0 | 0/? | Not started | — |
+| 19. Build Pipeline Infrastructure | v3.0 | 2/2 | Complete | 2026-02-28 |
+| 20. Type Definitions Foundation | v3.0 | 1/1 | Complete | 2026-02-28 |
+| 21. Simple Module Extraction | v3.0 | 3/3 | Complete | 2026-02-28 |
+| 22. Enrichment Module and Entry Point | v3.0 | 0/2 | Not started | — |
 | 23. Type Hardening and Verification | v3.0 | 0/? | Not started | — |
