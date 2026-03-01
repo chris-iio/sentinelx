@@ -38,8 +38,8 @@
 
 - [ ] **SAFE-01**: All existing Playwright E2E tests pass without modification
 - [ ] **SAFE-02**: CSP regression test (`test_security_audit.py`) passes against the new bundle
-- [ ] **SAFE-03**: Original `main.js` is deleted after migration is verified complete
-- [ ] **SAFE-04**: `base.html` script tag updated to reference `dist/main.js`
+- [x] **SAFE-03**: Original `main.js` is deleted after migration is verified complete
+- [x] **SAFE-04**: `base.html` script tag updated to reference `dist/main.js`
 
 ## Future Requirements
 
@@ -89,8 +89,8 @@
 | MOD-08 | Phase 21 | Complete |
 | MOD-01 | Phase 22 | Complete |
 | MOD-04 | Phase 22 | Complete |
-| SAFE-03 | Phase 22 | Pending |
-| SAFE-04 | Phase 22 | Pending |
+| SAFE-03 | Phase 22 | Complete |
+| SAFE-04 | Phase 22 | Complete |
 | SAFE-01 | Phase 23 | Pending |
 | SAFE-02 | Phase 23 | Pending |
 
