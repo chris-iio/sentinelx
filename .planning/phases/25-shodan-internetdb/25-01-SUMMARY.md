@@ -112,3 +112,14 @@ None. The pre-existing `tests/e2e/test_homepage.py::test_page_title` E2E failure
 ---
 *Phase: 25-shodan-internetdb*
 *Completed: 2026-03-02*
+
+## Self-Check: PASSED
+
+- `app/enrichment/adapters/shodan.py` — FOUND
+- `tests/test_shodan.py` — FOUND
+- `.planning/phases/25-shodan-internetdb/25-01-SUMMARY.md` — FOUND
+- Commit `b1cb155` (RED) — FOUND
+- Commit `dd8aa21` (GREEN) — FOUND
+- Commit `a558d38` (docs) — FOUND
+- `Config.ALLOWED_API_HOSTS` includes "internetdb.shodan.io" — CONFIRMED
+- `pytest tests/test_shodan.py` — 25 passed
