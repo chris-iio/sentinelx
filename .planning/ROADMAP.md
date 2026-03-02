@@ -326,7 +326,7 @@ v4.0: 24 → 25 → 26 → 27
 | 21. Simple Module Extraction | v3.0 | 3/3 | Complete | 2026-02-28 |
 | 22. Enrichment Module and Entry Point | v3.0 | 2/2 | Complete | 2026-03-01 |
 | 23. Type Hardening and Verification | v3.0 | 0/? | Skipped | — |
-| 24. Provider Registry Refactor | 2/2 | Complete   | 2026-03-02 | — |
+| 24. Provider Registry Refactor | 2/2 | Complete    | 2026-03-02 | — |
 | 25. Shodan InternetDB (Zero-Auth) | v4.0 | 0/? | Not started | — |
 | 26. Free-Key Providers | v4.0 | 0/? | Not started | — |
 | 27. Results UX Upgrade | v4.0 | 0/? | Not started | — |
