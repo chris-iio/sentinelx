@@ -227,8 +227,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 22-01-PLAN.md — Enrichment polling module (enrichment.ts) + main.ts entry point replacement
-- [ ] 22-02-PLAN.md — Remove main.js script tag from base.html, delete original main.js, human verification
+- [x] 22-01-PLAN.md — Enrichment polling module (enrichment.ts) + main.ts entry point replacement
+- [x] 22-02-PLAN.md — Remove main.js script tag from base.html, delete original main.js, human verification
 
 ### Phase 23: Type Hardening and Verification (skipped)
 **Goal**: The migration is complete and verified — zero TypeScript errors, zero unjustified `any` types, all E2E tests passing against the compiled bundle, and the full build pipeline confirmed working end-to-end
@@ -256,9 +256,11 @@ Plans:
   3. The orchestrator queries the registry instead of hardcoding adapter lists — removing an adapter from registration makes it disappear from enrichment results
   4. ConfigStore supports multi-provider API key storage via `[providers]` INI section — each provider can independently store/retrieve its API key
   5. The settings page dynamically renders provider cards based on registered providers — no template changes needed when adding providers
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
+- [ ] 24-01-PLAN.md — Provider protocol, registry, ConfigStore multi-provider, adapter conformance (TDD)
+- [ ] 24-02-PLAN.md — Setup factory, route wiring, test updates, dynamic provider counts (template + TypeScript)
 
 ### Phase 25: Shodan InternetDB (Zero-Auth Provider)
 **Goal**: Add Shodan InternetDB as the first zero-auth provider using the registry pattern, proving the plugin architecture works end-to-end
@@ -324,7 +326,7 @@ v4.0: 24 → 25 → 26 → 27
 | 21. Simple Module Extraction | v3.0 | 3/3 | Complete | 2026-02-28 |
 | 22. Enrichment Module and Entry Point | v3.0 | 2/2 | Complete | 2026-03-01 |
 | 23. Type Hardening and Verification | v3.0 | 0/? | Skipped | — |
-| 24. Provider Registry Refactor | v4.0 | 0/? | Not started | — |
+| 24. Provider Registry Refactor | v4.0 | 0/2 | Not started | — |
 | 25. Shodan InternetDB (Zero-Auth) | v4.0 | 0/? | Not started | — |
 | 26. Free-Key Providers | v4.0 | 0/? | Not started | — |
 | 27. Results UX Upgrade | v4.0 | 0/? | Not started | — |
