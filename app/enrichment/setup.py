@@ -12,6 +12,7 @@ Usage:
 from __future__ import annotations
 
 from app.enrichment.adapters.malwarebazaar import MBAdapter
+from app.enrichment.adapters.shodan import ShodanAdapter
 from app.enrichment.adapters.threatfox import TFAdapter
 from app.enrichment.adapters.virustotal import VTAdapter
 from app.enrichment.config_store import ConfigStore
@@ -33,7 +34,7 @@ def build_registry(
         config_store: ConfigStore instance used to read provider API keys.
 
     Returns:
-        ProviderRegistry with VTAdapter, MBAdapter, and TFAdapter registered.
+        ProviderRegistry with VTAdapter, MBAdapter, TFAdapter, and ShodanAdapter registered.
     """
     registry = ProviderRegistry()
 
@@ -42,5 +43,6 @@ def build_registry(
     registry.register(VTAdapter(api_key=vt_key, allowed_hosts=allowed_hosts))
     registry.register(MBAdapter(allowed_hosts=allowed_hosts))
     registry.register(TFAdapter(allowed_hosts=allowed_hosts))
+    registry.register(ShodanAdapter(allowed_hosts=allowed_hosts))
 
     return registry

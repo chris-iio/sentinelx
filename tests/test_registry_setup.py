@@ -1,6 +1,6 @@
 """Tests for app/enrichment/setup.py — build_registry() factory.
 
-Verifies that build_registry() returns a ProviderRegistry with all three
+Verifies that build_registry() returns a ProviderRegistry with all four
 providers registered, using the correct API key from ConfigStore.
 """
 from unittest.mock import MagicMock
@@ -18,7 +18,7 @@ def _make_config_store(vt_key: str | None = "test-api-key") -> MagicMock:
 
 
 def _make_allowed_hosts() -> list[str]:
-    return ["www.virustotal.com", "mb-api.abuse.ch", "threatfox-api.abuse.ch"]
+    return ["www.virustotal.com", "mb-api.abuse.ch", "threatfox-api.abuse.ch", "internetdb.shodan.io"]
 
 
 class TestBuildRegistry:
@@ -34,15 +34,15 @@ class TestBuildRegistry:
         )
         assert isinstance(registry, ProviderRegistry)
 
-    def test_registry_has_three_providers(self):
-        """build_registry() registers exactly 3 providers."""
+    def test_registry_has_four_providers(self):
+        """build_registry() registers exactly 4 providers."""
         from app.enrichment.setup import build_registry
 
         registry = build_registry(
             allowed_hosts=_make_allowed_hosts(),
             config_store=_make_config_store(),
         )
-        assert len(registry.all()) == 3
+        assert len(registry.all()) == 4
 
     def test_registry_contains_virustotal(self):
         """build_registry() registers a provider named 'VirusTotal'."""
@@ -76,6 +76,28 @@ class TestBuildRegistry:
         )
         names = [p.name for p in registry.all()]
         assert "ThreatFox" in names
+
+    def test_registry_contains_shodan(self):
+        """build_registry() registers a provider named 'Shodan InternetDB'."""
+        from app.enrichment.setup import build_registry
+
+        registry = build_registry(
+            allowed_hosts=_make_allowed_hosts(),
+            config_store=_make_config_store(),
+        )
+        names = [p.name for p in registry.all()]
+        assert "Shodan InternetDB" in names
+
+    def test_shodan_is_always_configured(self):
+        """ShodanAdapter is configured even without any API key (zero-auth)."""
+        from app.enrichment.setup import build_registry
+
+        registry = build_registry(
+            allowed_hosts=_make_allowed_hosts(),
+            config_store=_make_config_store(None),
+        )
+        shodan = next(p for p in registry.all() if p.name == "Shodan InternetDB")
+        assert shodan.is_configured() is True
 
     def test_vt_adapter_receives_api_key_from_config_store(self):
         """VTAdapter in the registry uses the key returned by config_store.get_vt_api_key()."""
