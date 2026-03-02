@@ -72,18 +72,17 @@ export const VERDICT_LABELS: Record<VerdictKey, string> = {
 } as const;
 
 /**
- * Expected provider counts per enrichable IOC type.
+ * Hardcoded fallback provider counts per enrichable IOC type.
  *
+ * Used as a fallback when the data-provider-counts DOM attribute is absent
+ * (offline mode or server error). Reflects the baseline 3-provider setup:
  * VirusTotal supports all 7 types, MalwareBazaar supports md5/sha1/sha256,
- * ThreatFox supports all 7. Hash types (md5/sha1/sha256) therefore get 3
- * providers; network types (ipv4/ipv6/domain/url) get 2 providers.
+ * ThreatFox supports all 7.
  *
- * Typed as `Record<IocType, number>` to ensure all seven keys are present
- * and indexed access is type-safe.
- *
- * Source: main.js lines 242–250.
+ * Private — callers must use getProviderCounts() to allow runtime override
+ * from the DOM attribute populated by the Flask route.
  */
-export const IOC_PROVIDER_COUNTS: Record<IocType, number> = {
+const _defaultProviderCounts: Record<IocType, number> = {
   ipv4: 2,
   ipv6: 2,
   domain: 2,
@@ -92,3 +91,31 @@ export const IOC_PROVIDER_COUNTS: Record<IocType, number> = {
   sha1: 3,
   sha256: 3,
 } as const;
+
+/**
+ * Return provider counts per IOC type, reading from the DOM when available.
+ *
+ * On the results page in online mode, Flask injects the actual registry counts
+ * via data-provider-counts on .page-results. This function reads that attribute
+ * so the pending-indicator logic reflects the real configured provider set
+ * (e.g., 8+ providers in v4.0) rather than a stale hardcoded value.
+ *
+ * Falls back to _defaultProviderCounts when:
+ *   - .page-results element is absent (not on results page)
+ *   - data-provider-counts attribute is missing (offline mode)
+ *   - JSON parse fails (malformed attribute)
+ *
+ * Returns:
+ *   Record mapping IOC type string → configured provider count.
+ */
+export function getProviderCounts(): Record<string, number> {
+  const el = document.querySelector<HTMLElement>(".page-results");
+  if (el === null) return _defaultProviderCounts;
+  const raw = el.getAttribute("data-provider-counts");
+  if (raw === null) return _defaultProviderCounts;
+  try {
+    return JSON.parse(raw) as Record<string, number>;
+  } catch {
+    return _defaultProviderCounts;
+  }
+}

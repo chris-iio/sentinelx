@@ -10,13 +10,13 @@
  *   - cards.ts    for findCardForIoc, updateCardVerdict, updateDashboardCounts, sortCardsBySeverity
  *   - clipboard.ts for writeToClipboard
  *   - types/api.ts for EnrichmentItem, EnrichmentStatus
- *   - types/ioc.ts for VerdictKey, IocType, VERDICT_LABELS, VERDICT_SEVERITY, IOC_PROVIDER_COUNTS
+ *   - types/ioc.ts for VerdictKey, VERDICT_LABELS, VERDICT_SEVERITY, getProviderCounts
  *   - utils/dom.ts for attr
  */
 
 import type { EnrichmentItem, EnrichmentStatus } from "../types/api";
-import type { VerdictKey, IocType } from "../types/ioc";
-import { VERDICT_LABELS, VERDICT_SEVERITY, IOC_PROVIDER_COUNTS } from "../types/ioc";
+import type { VerdictKey } from "../types/ioc";
+import { VERDICT_LABELS, VERDICT_SEVERITY, getProviderCounts } from "../types/ioc";
 import { attr } from "../utils/dom";
 import {
   findCardForIoc,
@@ -179,7 +179,8 @@ function updateNodataSummary(detailsEl: HTMLDetailsElement): void {
 
 /**
  * Show or update the pending provider indicator after the first result for an IOC.
- * Uses hasOwnProperty check for IOC_PROVIDER_COUNTS access with iocType as IocType.
+ * Reads provider counts from the DOM via getProviderCounts() — reflects the actual
+ * configured provider set injected by the Flask route into data-provider-counts.
  * Source: main.js updatePendingIndicator() (lines 412-441).
  */
 function updatePendingIndicator(
@@ -188,8 +189,9 @@ function updatePendingIndicator(
   receivedCount: number
 ): void {
   const iocType = card ? attr(card, "data-ioc-type") : "";
-  const totalExpected = Object.prototype.hasOwnProperty.call(IOC_PROVIDER_COUNTS, iocType)
-    ? (IOC_PROVIDER_COUNTS[iocType as IocType] ?? 0)
+  const providerCounts = getProviderCounts();
+  const totalExpected = Object.prototype.hasOwnProperty.call(providerCounts, iocType)
+    ? (providerCounts[iocType] ?? 0)
     : 0;
   const remaining = totalExpected - receivedCount;
 
