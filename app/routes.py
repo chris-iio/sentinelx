@@ -18,6 +18,7 @@ Security:
     - Host header validated by TRUSTED_HOSTS middleware (SEC-11)
     - Background enrichment runs in daemon thread — does not block Flask (Pitfall 4)
 """
+import json
 import uuid
 from collections import OrderedDict
 from threading import Lock, Thread
@@ -25,14 +26,12 @@ from threading import Lock, Thread
 from flask import Blueprint, current_app, flash, jsonify, redirect, render_template, request, url_for
 
 from app import limiter
-from app.enrichment.adapters.malwarebazaar import MBAdapter
-from app.enrichment.adapters.threatfox import TFAdapter
-from app.enrichment.adapters.virustotal import VTAdapter
 from app.enrichment.config_store import ConfigStore
 from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.enrichment.orchestrator import EnrichmentOrchestrator
+from app.enrichment.setup import build_registry
 from app.pipeline.extractor import run_pipeline
-from app.pipeline.models import group_by_type
+from app.pipeline.models import IOCType, group_by_type
 
 bp = Blueprint("main", __name__)
 
@@ -113,23 +112,18 @@ def analyze():
     template_extras: dict = {}
     if mode == "online":
         config_store = ConfigStore()
-        api_key = config_store.get_vt_api_key()
+        allowed_hosts = current_app.config.get("ALLOWED_API_HOSTS", [])
+        registry = build_registry(allowed_hosts=allowed_hosts, config_store=config_store)
 
-        if not api_key:
+        if not registry.configured():
             flash(
-                "Please configure your VirusTotal API key before using online mode",
+                "Please configure at least one provider API key before using online mode",
                 "warning",
             )
             return redirect(url_for("main.settings_get"))
 
         job_id = uuid.uuid4().hex
-
-        allowed_hosts = current_app.config.get("ALLOWED_API_HOSTS", [])
-        vt_adapter = VTAdapter(api_key=api_key, allowed_hosts=allowed_hosts)
-        mb_adapter = MBAdapter(allowed_hosts=allowed_hosts)
-        tf_adapter = TFAdapter(allowed_hosts=allowed_hosts)
-        adapters_list = [vt_adapter, mb_adapter, tf_adapter]
-        orchestrator = EnrichmentOrchestrator(adapters=adapters_list)
+        orchestrator = EnrichmentOrchestrator(adapters=registry.all())
 
         with _orch_lock:
             _orchestrators[job_id] = orchestrator
@@ -144,10 +138,19 @@ def analyze():
         thread.start()
 
         enrichable_count = sum(
-            1 for ioc in iocs for adapter in adapters_list
-            if ioc.type in adapter.supported_types
+            len(registry.providers_for_type(ioc.type))
+            for ioc in iocs
         )
-        template_extras = {"job_id": job_id, "enrichable_count": enrichable_count}
+        provider_counts = json.dumps({
+            ioc_type.value: registry.provider_count_for_type(ioc_type)
+            for ioc_type in IOCType
+            if ioc_type != IOCType.CVE
+        })
+        template_extras = {
+            "job_id": job_id,
+            "enrichable_count": enrichable_count,
+            "provider_counts": provider_counts,
+        }
 
     no_results = total_count == 0
     return render_template(

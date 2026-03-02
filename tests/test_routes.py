@@ -200,11 +200,11 @@ def test_analyze_deduplicates(client):
 
 
 def test_analyze_online_without_api_key_redirects_to_settings(client):
-    """POST /analyze online mode with no API key redirects to /settings."""
-    with patch("app.routes.ConfigStore") as MockStore:
-        mock_instance = MagicMock()
-        mock_instance.get_vt_api_key.return_value = None
-        MockStore.return_value = mock_instance
+    """POST /analyze online mode with no configured providers redirects to /settings."""
+    with patch("app.routes.build_registry") as mock_build_registry:
+        mock_registry = MagicMock()
+        mock_registry.configured.return_value = []
+        mock_build_registry.return_value = mock_registry
 
         response = client.post(
             "/analyze",
@@ -215,11 +215,11 @@ def test_analyze_online_without_api_key_redirects_to_settings(client):
 
 
 def test_analyze_online_without_api_key_redirects_follows(client):
-    """POST /analyze online mode with no API key, following redirect, shows flash message."""
-    with patch("app.routes.ConfigStore") as MockStore:
-        mock_instance = MagicMock()
-        mock_instance.get_vt_api_key.return_value = None
-        MockStore.return_value = mock_instance
+    """POST /analyze online mode with no configured providers, following redirect, shows flash message."""
+    with patch("app.routes.build_registry") as mock_build_registry:
+        mock_registry = MagicMock()
+        mock_registry.configured.return_value = []
+        mock_build_registry.return_value = mock_registry
 
         response = client.post(
             "/analyze",
@@ -227,29 +227,22 @@ def test_analyze_online_without_api_key_redirects_follows(client):
             follow_redirects=True,
         )
         assert response.status_code == 200
-        assert b"VirusTotal API key" in response.data or b"configure" in response.data.lower()
+        assert b"provider" in response.data.lower() or b"configure" in response.data.lower()
 
 
 def test_analyze_online_with_api_key_returns_job_id(client):
-    """POST /analyze online mode with mock API key returns results page with job_id."""
+    """POST /analyze online mode with configured registry returns results page with job_id."""
     with (
-        patch("app.routes.ConfigStore") as MockStore,
-        patch("app.routes.VTAdapter") as MockVTAdapter,
-        patch("app.routes.MBAdapter") as MockMBAdapter,
-        patch("app.routes.TFAdapter") as MockTFAdapter,
+        patch("app.routes.build_registry") as mock_build_registry,
         patch("app.routes.EnrichmentOrchestrator") as MockOrchestrator,
         patch("app.routes.Thread") as MockThread,
     ):
-        mock_store = MagicMock()
-        mock_store.get_vt_api_key.return_value = "fake-api-key-1234"
-        MockStore.return_value = mock_store
-
-        mock_vt_adapter = MagicMock()
-        MockVTAdapter.return_value = mock_vt_adapter
-        mock_mb_adapter = MagicMock()
-        MockMBAdapter.return_value = mock_mb_adapter
-        mock_tf_adapter = MagicMock()
-        MockTFAdapter.return_value = mock_tf_adapter
+        mock_registry = MagicMock()
+        mock_registry.configured.return_value = [MagicMock()]
+        mock_registry.all.return_value = [MagicMock()]
+        mock_registry.providers_for_type.return_value = [MagicMock()]
+        mock_registry.provider_count_for_type.return_value = 2
+        mock_build_registry.return_value = mock_registry
 
         mock_orchestrator = MagicMock()
         MockOrchestrator.return_value = mock_orchestrator
@@ -263,83 +256,67 @@ def test_analyze_online_with_api_key_returns_job_id(client):
         )
 
         assert response.status_code == 200
-        # job_id is a hex UUID — 32 hex chars; verify Thread was started
+        # Thread must be started for background enrichment
         mock_thread.start.assert_called_once()
-        # VTAdapter should have been created with the API key and SSRF allowlist
-        call_kwargs = MockVTAdapter.call_args[1]
-        assert call_kwargs["api_key"] == "fake-api-key-1234"
-        assert "www.virustotal.com" in call_kwargs["allowed_hosts"]
+        # build_registry must be called
+        mock_build_registry.assert_called_once()
 
 
 def test_analyze_online_creates_all_three_adapters(client):
-    """Online mode creates VT, MB, and TF adapters and passes them all to the orchestrator."""
+    """Online mode calls build_registry and passes registry.all() to the orchestrator."""
     with (
-        patch("app.routes.ConfigStore") as MockStore,
-        patch("app.routes.VTAdapter") as MockVTAdapter,
-        patch("app.routes.MBAdapter") as MockMBAdapter,
-        patch("app.routes.TFAdapter") as MockTFAdapter,
+        patch("app.routes.build_registry") as mock_build_registry,
         patch("app.routes.EnrichmentOrchestrator") as MockOrchestrator,
         patch("app.routes.Thread") as MockThread,
     ):
-        mock_store = MagicMock()
-        mock_store.get_vt_api_key.return_value = "fake-api-key-5678"
-        MockStore.return_value = mock_store
+        mock_provider_vt = MagicMock(name="VTProvider")
+        mock_provider_mb = MagicMock(name="MBProvider")
+        mock_provider_tf = MagicMock(name="TFProvider")
+        all_providers = [mock_provider_vt, mock_provider_mb, mock_provider_tf]
 
-        mock_vt = MagicMock()
-        mock_mb = MagicMock()
-        mock_tf = MagicMock()
-        MockVTAdapter.return_value = mock_vt
-        MockMBAdapter.return_value = mock_mb
-        MockTFAdapter.return_value = mock_tf
+        mock_registry = MagicMock()
+        mock_registry.configured.return_value = all_providers
+        mock_registry.all.return_value = all_providers
+        mock_registry.providers_for_type.return_value = [MagicMock()]
+        mock_registry.provider_count_for_type.return_value = 2
+        mock_build_registry.return_value = mock_registry
 
         MockOrchestrator.return_value = MagicMock()
         MockThread.return_value = MagicMock()
 
         client.post("/analyze", data={"text": "192[.]168[.]1[.]1", "mode": "online"})
 
-        # All three adapters must be instantiated
-        MockVTAdapter.assert_called_once()
-        MockMBAdapter.assert_called_once()
-        MockTFAdapter.assert_called_once()
+        # build_registry must be called with allowed_hosts and a ConfigStore
+        mock_build_registry.assert_called_once()
+        call_kwargs = mock_build_registry.call_args[1]
+        assert "allowed_hosts" in call_kwargs
+        assert "www.virustotal.com" in call_kwargs["allowed_hosts"]
 
-        # Orchestrator receives all three adapters
+        # Orchestrator receives registry.all() — all three provider mocks
         orch_call_kwargs = MockOrchestrator.call_args[1]
         adapters_passed = orch_call_kwargs["adapters"]
-        assert mock_vt in adapters_passed
-        assert mock_mb in adapters_passed
-        assert mock_tf in adapters_passed
+        assert mock_provider_vt in adapters_passed
+        assert mock_provider_mb in adapters_passed
+        assert mock_provider_tf in adapters_passed
 
 
 def test_enrichable_count_multi_provider(client):
     """SHA256 hash IOC yields enrichable_count=3 (VT + MB + TF all support hashes)."""
+    from app.pipeline.models import IOCType
 
     with (
-        patch("app.routes.ConfigStore") as MockStore,
-        patch("app.routes.VTAdapter") as MockVTAdapter,
-        patch("app.routes.MBAdapter") as MockMBAdapter,
-        patch("app.routes.TFAdapter") as MockTFAdapter,
+        patch("app.routes.build_registry") as mock_build_registry,
         patch("app.routes.EnrichmentOrchestrator") as MockOrchestrator,
         patch("app.routes.Thread") as MockThread,
     ):
-        mock_store = MagicMock()
-        mock_store.get_vt_api_key.return_value = "key-abc"
-        MockStore.return_value = mock_store
+        mock_registry = MagicMock()
+        mock_registry.configured.return_value = [MagicMock(), MagicMock(), MagicMock()]
+        mock_registry.all.return_value = [MagicMock(), MagicMock(), MagicMock()]
+        # SHA256 type — 3 providers support it
+        mock_registry.providers_for_type.return_value = [MagicMock(), MagicMock(), MagicMock()]
+        mock_registry.provider_count_for_type.return_value = 3
+        mock_build_registry.return_value = mock_registry
 
-        # Adapters with real supported_types sets
-        from app.enrichment.adapters.virustotal import VTAdapter as RealVTAdapter
-        from app.enrichment.adapters.malwarebazaar import MBAdapter as RealMBAdapter
-        from app.enrichment.adapters.threatfox import TFAdapter as RealTFAdapter
-
-        mock_vt = MagicMock()
-        mock_vt.supported_types = RealVTAdapter.supported_types
-        mock_mb = MagicMock()
-        mock_mb.supported_types = RealMBAdapter.supported_types
-        mock_tf = MagicMock()
-        mock_tf.supported_types = RealTFAdapter.supported_types
-
-        MockVTAdapter.return_value = mock_vt
-        MockMBAdapter.return_value = mock_mb
-        MockTFAdapter.return_value = mock_tf
         MockOrchestrator.return_value = MagicMock()
         MockThread.return_value = MagicMock()
 
@@ -354,40 +331,26 @@ def test_enrichable_count_multi_provider(client):
 def test_enrichable_count_domain_two_providers(client):
     """Domain IOC yields enrichable_count=2 (VT + TF support domains, MB does not)."""
     with (
-        patch("app.routes.ConfigStore") as MockStore,
-        patch("app.routes.VTAdapter") as MockVTAdapter,
-        patch("app.routes.MBAdapter") as MockMBAdapter,
-        patch("app.routes.TFAdapter") as MockTFAdapter,
+        patch("app.routes.build_registry") as mock_build_registry,
         patch("app.routes.EnrichmentOrchestrator") as MockOrchestrator,
         patch("app.routes.Thread") as MockThread,
     ):
-        mock_store = MagicMock()
-        mock_store.get_vt_api_key.return_value = "key-def"
-        MockStore.return_value = mock_store
+        mock_registry = MagicMock()
+        mock_registry.configured.return_value = [MagicMock(), MagicMock()]
+        mock_registry.all.return_value = [MagicMock(), MagicMock(), MagicMock()]
+        # Domain/URL types — 2 providers (VT + TF, not MB)
+        mock_registry.providers_for_type.return_value = [MagicMock(), MagicMock()]
+        mock_registry.provider_count_for_type.return_value = 2
+        mock_build_registry.return_value = mock_registry
 
-        from app.enrichment.adapters.virustotal import VTAdapter as RealVTAdapter
-        from app.enrichment.adapters.malwarebazaar import MBAdapter as RealMBAdapter
-        from app.enrichment.adapters.threatfox import TFAdapter as RealTFAdapter
-
-        mock_vt = MagicMock()
-        mock_vt.supported_types = RealVTAdapter.supported_types
-        mock_mb = MagicMock()
-        mock_mb.supported_types = RealMBAdapter.supported_types
-        mock_tf = MagicMock()
-        mock_tf.supported_types = RealTFAdapter.supported_types
-
-        MockVTAdapter.return_value = mock_vt
-        MockMBAdapter.return_value = mock_mb
-        MockTFAdapter.return_value = mock_tf
         MockOrchestrator.return_value = MagicMock()
         MockThread.return_value = MagicMock()
 
         # Domain — VT and TF support it, MB does not
         response = client.post("/analyze", data={"text": "hxxps://evil[.]example[.]com", "mode": "online"})
         assert response.status_code == 200
-        # enrichable_count=2 (VT + TF for domain) or more if URL also counted
-        # The domain evil.example.com may also be extracted as URL — check that MB is excluded
-        # The count should NOT be a multiple of 3 for a single domain IOC
+        # The domain evil.example.com may be extracted as both domain and URL — each gets 2 providers
+        # enrichable_count=2 or 4 depending on how many IOCs are extracted
         assert b"Enriching 0/2" in response.data or b"0/2" in response.data or b"0/4" in response.data
 
 
