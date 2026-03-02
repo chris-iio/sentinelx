@@ -8,6 +8,7 @@
 - ✅ **v1.3 Visual Experience Overhaul** — Phases 15-17 (shipped 2026-02-28)
 - ✅ **v2.0 Home Page Modernization** — Phase 18 (shipped 2026-02-28)
 - 🚧 **v3.0 TypeScript Migration** — Phases 19-23 (in progress)
+- 🚧 **v4.0 Universal Threat Intel Hub** — Phases 24-27 (in progress)
 
 ## Phases
 
@@ -229,7 +230,7 @@ Plans:
 - [ ] 22-01-PLAN.md — Enrichment polling module (enrichment.ts) + main.ts entry point replacement
 - [ ] 22-02-PLAN.md — Remove main.js script tag from base.html, delete original main.js, human verification
 
-### Phase 23: Type Hardening and Verification
+### Phase 23: Type Hardening and Verification (skipped)
 **Goal**: The migration is complete and verified — zero TypeScript errors, zero unjustified `any` types, all E2E tests passing against the compiled bundle, and the full build pipeline confirmed working end-to-end
 **Depends on**: Phase 22
 **Requirements**: SAFE-01, SAFE-02
@@ -243,10 +244,64 @@ Plans:
 
 Plans:
 
+### v4.0 Universal Threat Intel Hub (Phases 24-27)
+
+### Phase 24: Provider Registry Refactor
+**Goal**: Extract a formal provider protocol and registry so adding new providers requires zero changes to orchestrator or route code
+**Depends on**: Phase 22 (v3.0 structurally complete)
+**Requirements**: REG-01, REG-02, REG-03, REG-04, REG-05
+**Success Criteria** (what must be TRUE):
+  1. A `Provider` protocol exists with `name`, `supported_types`, `requires_api_key`, `lookup()`, and `is_configured()` — all three existing adapters satisfy it via `isinstance()` check
+  2. A `ProviderRegistry` class manages adapter registration and lookup by IOC type — adding a new provider requires only creating an adapter file and registering it in `setup.py`
+  3. The orchestrator queries the registry instead of hardcoding adapter lists — removing an adapter from registration makes it disappear from enrichment results
+  4. ConfigStore supports multi-provider API key storage via `[providers]` INI section — each provider can independently store/retrieve its API key
+  5. The settings page dynamically renders provider cards based on registered providers — no template changes needed when adding providers
+**Plans**: TBD
+
+Plans:
+
+### Phase 25: Shodan InternetDB (Zero-Auth Provider)
+**Goal**: Add Shodan InternetDB as the first zero-auth provider using the registry pattern, proving the plugin architecture works end-to-end
+**Depends on**: Phase 24
+**Requirements**: SHOD-01, SHOD-02
+**Success Criteria** (what must be TRUE):
+  1. Shodan InternetDB enriches IP addresses without requiring an API key — port/CVE/tag data appears in results
+  2. The adapter was added by creating one file and one registration line — no orchestrator or route changes needed
+**Plans**: TBD
+
+Plans:
+
+### Phase 26: Free-Key Providers
+**Goal**: Add URLhaus, OTX AlienVault, GreyNoise Community, and AbuseIPDB — all providers that offer free API keys
+**Depends on**: Phase 25
+**Requirements**: URL-01, OTX-01, GREY-01, ABUSE-01, MULTI-01, MULTI-02
+**Success Criteria** (what must be TRUE):
+  1. Each provider enriches its supported IOC types when configured with an API key
+  2. Unconfigured providers are gracefully skipped without errors
+  3. All providers register through the same registry pattern — no hardcoded provider lists exist
+**Plans**: TBD
+
+Plans:
+
+### Phase 27: Results UX Upgrade
+**Goal**: Unified results experience — per-IOC summary cards with expandable per-provider detail rows, aggregated verdicts, and provider status indicators
+**Depends on**: Phase 26
+**Requirements**: UX-01, UX-02, UX-03, UX-04, UX-05
+**Success Criteria** (what must be TRUE):
+  1. Each IOC card shows a unified verdict summary aggregated across all providers
+  2. Clicking a card expands to show per-provider detail rows with individual results
+  3. Provider status indicators show which providers contributed data vs. skipped vs. errored
+  4. The settings page shows all registered providers with configuration status
+  5. E2E tests pass for the new results layout
+**Plans**: TBD
+
+Plans:
+
 ## Progress
 
 **Execution Order:**
-v3.0 phases execute in numeric order: 19 → 20 → 21 → 22 → 23
+v3.0: 19 → 20 → 21 → 22 → 23 (skipped)
+v4.0: 24 → 25 → 26 → 27
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -267,5 +322,9 @@ v3.0 phases execute in numeric order: 19 → 20 → 21 → 22 → 23
 | 19. Build Pipeline Infrastructure | v3.0 | 2/2 | Complete | 2026-02-28 |
 | 20. Type Definitions Foundation | v3.0 | 1/1 | Complete | 2026-02-28 |
 | 21. Simple Module Extraction | v3.0 | 3/3 | Complete | 2026-02-28 |
-| 22. Enrichment Module and Entry Point | 2/2 | Complete    | 2026-03-01 | — |
-| 23. Type Hardening and Verification | v3.0 | 0/? | Not started | — |
+| 22. Enrichment Module and Entry Point | v3.0 | 2/2 | Complete | 2026-03-01 |
+| 23. Type Hardening and Verification | v3.0 | 0/? | Skipped | — |
+| 24. Provider Registry Refactor | v4.0 | 0/? | Not started | — |
+| 25. Shodan InternetDB (Zero-Auth) | v4.0 | 0/? | Not started | — |
+| 26. Free-Key Providers | v4.0 | 0/? | Not started | — |
+| 27. Results UX Upgrade | v4.0 | 0/? | Not started | — |
