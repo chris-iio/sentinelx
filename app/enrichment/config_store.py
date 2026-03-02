@@ -23,6 +23,7 @@ from pathlib import Path
 CONFIG_PATH = Path.home() / ".sentinelx" / "config.ini"
 _SECTION = "virustotal"
 _KEY_NAME = "api_key"
+_PROVIDERS_SECTION = "providers"
 
 
 class ConfigStore:
@@ -65,3 +66,56 @@ class ConfigStore:
         fd = os.open(str(self._config_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, "w") as fh:
             cfg.write(fh)
+
+    def get_provider_key(self, name: str) -> str | None:
+        """Read an API key for any provider from the [providers] INI section.
+
+        Provider names are normalized to lowercase for consistent storage.
+
+        Args:
+            name: Provider name (e.g., "greynoise", "abuseipdb"). Case-insensitive.
+
+        Returns:
+            The stored API key string, or None if not configured.
+        """
+        cfg = configparser.ConfigParser()
+        cfg.read(self._config_path)
+        value = cfg.get(_PROVIDERS_SECTION, name.lower(), fallback=None)
+        return value or None
+
+    def set_provider_key(self, name: str, key: str) -> None:
+        """Write an API key for any provider to the [providers] INI section.
+
+        Provider names are normalized to lowercase. Creates the parent directory
+        if it does not exist. File is written with owner-only permissions (0o600).
+
+        Args:
+            name: Provider name (e.g., "GreyNoise", "abuseipdb"). Case-insensitive.
+            key:  The API key to store.
+        """
+        self._config_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        cfg = configparser.ConfigParser()
+        cfg.read(self._config_path)
+        if _PROVIDERS_SECTION not in cfg:
+            cfg[_PROVIDERS_SECTION] = {}
+        cfg[_PROVIDERS_SECTION][name.lower()] = key
+        # SEC-17: Write with owner-only permissions (0o600) to protect API keys
+        fd = os.open(str(self._config_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as fh:
+            cfg.write(fh)
+
+    def all_provider_keys(self) -> dict[str, str]:
+        """Read all provider API keys from the [providers] INI section.
+
+        Returns only keys from the [providers] section — does not include
+        the VirusTotal key stored in the [virustotal] section.
+
+        Returns:
+            Dict mapping provider name (lowercase) to API key. Empty dict if
+            no provider keys have been stored.
+        """
+        cfg = configparser.ConfigParser()
+        cfg.read(self._config_path)
+        if _PROVIDERS_SECTION not in cfg:
+            return {}
+        return dict(cfg[_PROVIDERS_SECTION])
