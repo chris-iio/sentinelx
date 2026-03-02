@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: Universal Threat Intel Hub
 current_phase: 24-provider-registry-refactor
-current_plan: 02
+current_plan: 03
 status: in_progress
-last_updated: "2026-03-02T11:35:00.000Z"
+last_updated: "2026-03-02T11:42:23.000Z"
 progress:
   total_phases: 4
   completed_phases: 0
   total_plans: 18
-  completed_plans: 1
+  completed_plans: 2
 ---
 
 # Session State
@@ -23,8 +23,8 @@ See: .planning/PROJECT.md
 
 **Milestone:** v4.0 Universal Threat Intel Hub
 **Current phase:** 24-provider-registry-refactor
-**Current Plan:** 02 (Provider Setup Module)
-**Status:** Plan 01 complete — ready for Plan 02
+**Current Plan:** 03 (Settings Page Provider Status)
+**Status:** Plan 02 complete — ready for Plan 03
 
 ## Context
 
@@ -46,6 +46,10 @@ v4.0 pivots SentinelX from 3 hardcoded providers to 8+ via provider registry arc
 - [24-01] Registry stores providers by name (dict[str, Provider]) — O(1) duplicate detection via ValueError
 - [24-01] ConfigStore uses separate [providers] INI section — does not conflict with [virustotal] section
 - [24-01] Provider names stored lowercase in [providers] section — case-insensitive retrieval by design
+- [24-02] build_registry() takes allowed_hosts + config_store as args — avoids global state, fully testable
+- [24-02] provider_counts serialized as JSON string in Flask route — Jinja2 autoescaping handles HTML encoding safely
+- [24-02] getProviderCounts() falls back to _defaultProviderCounts on parse error — pending indicator degrades gracefully
+- [24-02] IOC_PROVIDER_COUNTS made private — callers must use getProviderCounts() for runtime accuracy
 
 ## Phases
 
@@ -61,7 +65,8 @@ v4.0 pivots SentinelX from 3 hardcoded providers to 8+ via provider registry arc
 - 2026-03-02: v4.0 milestone started — design doc + implementation plan committed
 - 2026-03-02: Phase 23 skipped by user decision
 - 2026-03-02: Plan 24-01 complete — Provider protocol, ProviderRegistry, ConfigStore multi-provider (4 min)
+- 2026-03-02: Plan 24-02 complete — build_registry() factory, routes wired to registry, dynamic provider counts in TS (5 min)
 
 ## Stopped At
 
-Completed 24-01-PLAN.md. Ready to execute Plan 24-02 (Provider Setup Module).
+Completed 24-02-PLAN.md. Ready to execute Plan 24-03 (Settings Page Provider Status).
