@@ -38,10 +38,12 @@ class Config:
 
     # SSRF prevention: allowlist of permitted outbound API hostnames (SEC-16)
     # Phase 2: VirusTotal; Phase 3: MalwareBazaar and ThreatFox (abuse.ch) added.
+    # Phase 25: Shodan InternetDB (zero-auth)
     ALLOWED_API_HOSTS: list[str] = [
         "www.virustotal.com",
         "mb-api.abuse.ch",
         "threatfox-api.abuse.ch",
+        "internetdb.shodan.io",  # Phase 25: Shodan InternetDB (zero-auth)
     ]
 
     def validate(self) -> None:
