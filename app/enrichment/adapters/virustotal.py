@@ -145,9 +145,16 @@ class VTAdapter:
         IOCType.MD5, IOCType.SHA1, IOCType.SHA256,
     }
 
+    name = "VirusTotal"
+    requires_api_key = True
+
     def __init__(self, api_key: str, allowed_hosts: list[str]) -> None:
         self._api_key = api_key
         self._allowed_hosts = allowed_hosts
+
+    def is_configured(self) -> bool:
+        """Return True when a non-empty API key has been provided."""
+        return bool(self._api_key)
 
     def lookup(self, ioc: IOC) -> EnrichmentResult | EnrichmentError:
         """Enrich a single IOC using the VirusTotal API v3.

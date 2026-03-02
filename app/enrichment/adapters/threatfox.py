@@ -130,8 +130,15 @@ class TFAdapter:
         IOCType.DOMAIN, IOCType.IPV4, IOCType.IPV6, IOCType.URL,
     })
 
+    name = "ThreatFox"
+    requires_api_key = False
+
     def __init__(self, allowed_hosts: list[str]) -> None:
         self._allowed_hosts = allowed_hosts
+
+    def is_configured(self) -> bool:
+        """Always returns True — ThreatFox requires no API key."""
+        return True
 
     def lookup(self, ioc: IOC) -> EnrichmentResult | EnrichmentError:
         """Enrich a single IOC using the ThreatFox API v1.
