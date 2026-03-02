@@ -329,6 +329,6 @@ v4.0: 24 → 25 → 26 → 27
 | 22. Enrichment Module and Entry Point | v3.0 | 2/2 | Complete | 2026-03-01 |
 | 23. Type Hardening and Verification | v3.0 | 0/? | Skipped | — |
 | 24. Provider Registry Refactor | v4.0 | 2/2 | Complete | 2026-03-02 |
-| 25. Shodan InternetDB (Zero-Auth) | v4.0 | 0/2 | Not started | — |
+| 25. Shodan InternetDB (Zero-Auth) | 1/2 | In Progress|  | — |
 | 26. Free-Key Providers | v4.0 | 0/? | Not started | — |
 | 27. Results UX Upgrade | v4.0 | 0/? | Not started | — |
