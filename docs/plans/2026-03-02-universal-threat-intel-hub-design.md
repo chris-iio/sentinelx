@@ -118,10 +118,10 @@ All existing security controls extend to new providers:
 ## Phasing
 
 1. **v3.0 Phase 23**: Finish TypeScript type hardening (already planned)
-2. **v4.0 Phase 24**: Provider registry refactor — extract protocol, build registry, refactor existing 3 adapters
-3. **v4.0 Phase 25**: Zero-auth providers — Shodan InternetDB (immediate value, no config)
-4. **v4.0 Phase 26**: Free-key providers — URLhaus, OTX, GreyNoise, AbuseIPDB + settings page expansion
-5. **v4.0 Phase 27**: Results UX upgrade — unified summary, expandable details, provider consensus
+2. **v4.0 Phase 1**: Provider registry refactor — extract protocol, build registry, refactor existing 3 adapters
+3. **v4.0 Phase 2**: Zero-auth providers — Shodan InternetDB (immediate value, no config)
+4. **v4.0 Phase 3**: Free-key providers — URLhaus, OTX, GreyNoise, AbuseIPDB + settings page expansion
+5. **v4.0 Phase 4**: Results UX upgrade — unified summary, expandable details, provider consensus
 
 ## Future (out of scope for v4.0)
 

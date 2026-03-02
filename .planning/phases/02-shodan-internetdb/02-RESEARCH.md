@@ -1,4 +1,4 @@
-# Phase 25: Shodan InternetDB (Zero-Auth Provider) - Research
+# Phase 2: Shodan InternetDB (Zero-Auth Provider) - Research
 
 **Researched:** 2026-03-02
 **Domain:** Shodan InternetDB API, Python provider adapter pattern, pytest mocking
@@ -10,14 +10,14 @@
 | ID | Description | Research Support |
 |----|-------------|-----------------|
 | SHOD-01 | Shodan InternetDB enriches IP addresses without requiring an API key — port/CVE/tag data appears in results | InternetDB GET endpoint requires no auth; always `is_configured() == True`; returns ports, vulns, tags, hostnames, cpes |
-| SHOD-02 | The adapter was added by creating one file and one registration line — no orchestrator or route changes needed | Phase 24 established this pattern exactly; `setup.py` is the only non-adapter file to touch |
+| SHOD-02 | The adapter was added by creating one file and one registration line — no orchestrator or route changes needed | Phase 1 established this pattern exactly; `setup.py` is the only non-adapter file to touch |
 </phase_requirements>
 
 ---
 
 ## Summary
 
-Phase 25 is the first provider added through the Phase 24 registry architecture. Its primary purpose is to prove the plugin model works end-to-end: one new adapter file plus one `registry.register()` call in `setup.py` is the complete changeset, with zero modifications to routes, orchestrator, templates, or TypeScript.
+Phase 2 is the first provider added through the Phase 1 registry architecture. Its primary purpose is to prove the plugin model works end-to-end: one new adapter file plus one `registry.register()` call in `setup.py` is the complete changeset, with zero modifications to routes, orchestrator, templates, or TypeScript.
 
 The Shodan InternetDB API is a free, zero-authentication REST API (`GET https://internetdb.shodan.io/{ip}`) that returns open ports, known vulnerabilities (CVE IDs), tags, hostnames, and CPE identifiers for any publicly routable IP address. It supports IPv4 and IPv6. Responses are JSON with six fields: `ip`, `ports`, `hostnames`, `cpes`, `vulns`, `tags`. A 404 response with `{"detail":"No information available"}` is returned for IPs with no data (including private/RFC1918 addresses). A 429 response is returned when rate-limited.
 
@@ -49,7 +49,7 @@ Zero new pip packages. The InternetDB API requires no authentication and no clie
 
 ## Architecture Patterns
 
-### File Structure for Phase 25
+### File Structure for Phase 2
 
 ```
 app/enrichment/
@@ -380,7 +380,7 @@ SHODAN_NOT_FOUND = {"detail": "No information available"}
 
 **What goes wrong:** `test_registry_has_three_providers` asserts `len(registry.all()) == 3`. After adding ShodanAdapter, this test fails because there are now 4 providers.
 
-**Why it happens:** The count assertion was written for the Phase 24 baseline.
+**Why it happens:** The count assertion was written for the Phase 1 baseline.
 
 **How to avoid:** Update `test_registry_has_three_providers` to `assert len(registry.all()) == 4` and add a `test_registry_contains_shodan` test. This is a straightforward update, not a design problem.
 
@@ -394,7 +394,7 @@ SHODAN_NOT_FOUND = {"detail": "No information available"}
 
 **How to avoid:** Define `name = "Shodan InternetDB"` as the class attribute, use `self.name` (not a literal string) in all `EnrichmentResult` and `EnrichmentError` constructors. The test that checks `isinstance(adapter, Provider)` verifies the attribute exists; the tests that check `result.provider == "Shodan InternetDB"` verify the value.
 
-**Warning signs:** Settings page (Phase 24-03 if implemented) shows wrong provider name; test assertions on `result.provider` fail.
+**Warning signs:** Settings page (Phase 1-03 if implemented) shows wrong provider name; test assertions on `result.provider` fail.
 
 ### Pitfall 5: IPv6 Address in URL Path
 
@@ -584,17 +584,17 @@ Note: Private/RFC1918 addresses return 404 (not an error). Localhost (127.0.0.1)
 
 | Old Approach | Current Approach | When Changed | Impact |
 |--------------|------------------|--------------|--------|
-| Hardcoded adapters in routes.py | Plugin-style registry with setup.py | Phase 24 | Adding Shodan requires 1 file + 1 line |
-| VT-only online mode guard | registry.configured() check | Phase 24 | Shodan's always-configured status automatically enables online mode |
+| Hardcoded adapters in routes.py | Plugin-style registry with setup.py | Phase 1 | Adding Shodan requires 1 file + 1 line |
+| VT-only online mode guard | registry.configured() check | Phase 1 | Shodan's always-configured status automatically enables online mode |
 
-**What Phase 25 adds:**
+**What Phase 2 adds:**
 - `"internetdb.shodan.io"` to `ALLOWED_API_HOSTS`
 - `ShodanAdapter` in `app/enrichment/adapters/shodan.py`
 - One `registry.register(ShodanAdapter(...))` line in `setup.py`
 - `test_shodan.py` with full unit test coverage
 - Updated `test_registry_setup.py` provider count assertions
 
-**What Phase 25 does NOT touch:**
+**What Phase 2 does NOT touch:**
 - `routes.py` — zero changes
 - `orchestrator.py` — zero changes
 - Any template — zero changes
@@ -608,16 +608,16 @@ Note: Private/RFC1918 addresses return 404 (not an error). Localhost (127.0.0.1)
 
 1. **Should "informational" (ports only, no vulns, no bad tags) map to `"no_data"` or a new `"informational"` verdict?**
    - What we know: The four existing verdicts are `malicious`, `suspicious`, `clean`, `no_data`. The design doc says "else informational" without specifying which verdict string.
-   - What's unclear: The Phase 27 Results UX may introduce a dedicated "informational" display treatment.
-   - Recommendation: Map to `"no_data"` for now. "Clean" implies a reputation verdict (this IP is safe) which Shodan cannot assert. "No_data" means "this provider has no finding to report" which is accurate — having open ports is observation, not verdict. Phase 27 can re-examine if needed.
+   - What's unclear: The Phase 4 Results UX may introduce a dedicated "informational" display treatment.
+   - Recommendation: Map to `"no_data"` for now. "Clean" implies a reputation verdict (this IP is safe) which Shodan cannot assert. "No_data" means "this provider has no finding to report" which is accurate — having open ports is observation, not verdict. Phase 4 can re-examine if needed.
 
 2. **Should `detection_count` reflect the number of CVEs or always be 0/1?**
-   - What we know: `EnrichmentResult.detection_count` is used by the frontend progress bar and potentially by Phase 27 summary display. Other adapters use `1` for "found" and `0` for "not found".
+   - What we know: `EnrichmentResult.detection_count` is used by the frontend progress bar and potentially by Phase 4 summary display. Other adapters use `1` for "found" and `0` for "not found".
    - Recommendation: For the `"suspicious"` verdict (vulns present), set `detection_count = len(vulns)` — this is more informative than `1` and aligns with how VirusTotal uses it (detection ratio). For `"malicious"` (bad tags), use `detection_count = len(bad_tags)`. For `"no_data"`, use `0`.
 
 3. **Is there a meaningful `scan_date` to extract?**
    - What we know: The InternetDB 200 response does not include a timestamp field. The data is updated weekly but no per-record timestamp is exposed via the API.
-   - Recommendation: Set `scan_date=None`. The `raw_stats` dict can include any auxiliary data for Phase 27 display if needed.
+   - Recommendation: Set `scan_date=None`. The `raw_stats` dict can include any auxiliary data for Phase 4 display if needed.
 
 ---
 
@@ -642,7 +642,7 @@ The project has `workflow.nyquist_validation` set to `false` in `.planning/confi
   - `tests/test_malwarebazaar.py` — Test structure reference
   - `tests/test_provider_protocol.py` — Protocol conformance test pattern
   - `tests/test_registry_setup.py` — Setup test that needs updating
-- `.planning/phases/24-provider-registry-refactor/24-01-SUMMARY.md` and `24-02-SUMMARY.md` — Phase 24 decisions
+- `.planning/phases/01-provider-registry-refactor/01-01-SUMMARY.md` and `01-02-SUMMARY.md` — Phase 1 decisions
 
 ### Secondary (MEDIUM confidence)
 

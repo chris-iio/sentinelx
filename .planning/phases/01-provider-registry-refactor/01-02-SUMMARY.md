@@ -1,12 +1,12 @@
 ---
-phase: 24-provider-registry-refactor
+phase: 01-provider-registry-refactor
 plan: 02
 subsystem: api
 tags: [python, flask, registry, typescript, tdd, setup-factory]
 
 # Dependency graph
 requires:
-  - 24-01 (Provider protocol, ProviderRegistry, ConfigStore multi-provider)
+  - 01-01 (Provider protocol, ProviderRegistry, ConfigStore multi-provider)
 provides:
   - build_registry() factory at app/enrichment/setup.py — single provider registration point
   - Routes wired to registry — zero hardcoded adapter imports in routes.py
@@ -56,7 +56,7 @@ duration: 5min
 completed: 2026-03-02
 ---
 
-# Phase 24 Plan 02: Provider Setup Module + Route Wiring Summary
+# Phase 1 Plan 02: Provider Setup Module + Route Wiring Summary
 
 **build_registry() factory wires ProviderRegistry into Flask routes — adding a provider now requires only one register() call in setup.py, with zero changes to routes, orchestrator, or templates**
 
@@ -119,18 +119,18 @@ None — no external service configuration required.
 
 ## Next Phase Readiness
 
-- Phase 24 Plan 03 can add settings page provider-status display using `registry.all()` and `registry.configured()`
-- Phase 25 (Shodan InternetDB) only needs: create `app/enrichment/adapters/shodan.py` + add one `registry.register()` call in `setup.py`
+- Phase 1 Plan 03 can add settings page provider-status display using `registry.all()` and `registry.configured()`
+- Phase 2 (Shodan InternetDB) only needs: create `app/enrichment/adapters/shodan.py` + add one `registry.register()` call in `setup.py`
 - Zero changes required in routes.py, orchestrator.py, templates, or TypeScript for any new provider
 
 ## Self-Check: PASSED
 
 - app/enrichment/setup.py: FOUND
 - tests/test_registry_setup.py: FOUND
-- 24-02-SUMMARY.md: FOUND
+- 01-02-SUMMARY.md: FOUND
 - Commit affa65c: FOUND
 - Commit 3a18781: FOUND
 
 ---
-*Phase: 24-provider-registry-refactor*
+*Phase: 01-provider-registry-refactor*
 *Completed: 2026-03-02*

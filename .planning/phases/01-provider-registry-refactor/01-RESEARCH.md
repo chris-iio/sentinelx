@@ -1,4 +1,4 @@
-# Phase 24: Provider Registry Refactor - Research
+# Phase 1: Provider Registry Refactor - Research
 
 **Researched:** 2026-03-02
 **Domain:** Python typing.Protocol, plugin registry pattern, configparser multi-section, TypeScript DOM data attributes
@@ -47,9 +47,9 @@
 - TypeScript build verification approach
 
 ### Deferred Ideas (OUT OF SCOPE)
-- Settings page dynamic provider cards (Phase 27 scope)
+- Settings page dynamic provider cards (Phase 4 scope)
 - Individual provider adapter implementations (Phases 25-26)
-- Results UX unified summary cards (Phase 27)
+- Results UX unified summary cards (Phase 4)
 - Orchestrator refactoring to use registry directly (stretch — routes handle it for now)
 </user_constraints>
 
@@ -62,16 +62,16 @@
 | REG-02 | A `ProviderRegistry` class manages adapter registration and lookup by IOC type — adding a new provider requires only creating an adapter file and registering it in `setup.py` | Registry + setup.py wiring pattern; frozen after startup |
 | REG-03 | The orchestrator queries the registry instead of hardcoding adapter lists — removing an adapter from registration makes it disappear from enrichment results | Registry's `providers_for_type()` replaces the hardcoded `adapters_list` in routes.py `analyze()` |
 | REG-04 | ConfigStore supports multi-provider API key storage via `[providers]` INI section — each provider can independently store/retrieve its API key | configparser multi-section expansion; backward-compatible with existing `[virustotal]` section |
-| REG-05 | The settings page dynamically renders provider cards based on registered providers — no template changes needed when adding providers (Note: ROADMAP states this; CONTEXT.md defers full settings card rendering to Phase 27; Task 24.5 covers dynamic provider counts for frontend) | `data-provider-counts` DOM attribute + `getProviderCounts()` TypeScript function |
+| REG-05 | The settings page dynamically renders provider cards based on registered providers — no template changes needed when adding providers (Note: ROADMAP states this; CONTEXT.md defers full settings card rendering to Phase 4; Task 24.5 covers dynamic provider counts for frontend) | `data-provider-counts` DOM attribute + `getProviderCounts()` TypeScript function |
 </phase_requirements>
 
 ---
 
 ## Summary
 
-Phase 24 is a pure refactoring phase — no new user-visible features, no new providers. The goal is to convert SentinelX's hardcoded 3-adapter wiring into a plugin-style architecture so that Phases 25-26 can add new providers by dropping in one file and one registration line.
+Phase 1 is a pure refactoring phase — no new user-visible features, no new providers. The goal is to convert SentinelX's hardcoded 3-adapter wiring into a plugin-style architecture so that Phases 25-26 can add new providers by dropping in one file and one registration line.
 
-The technical domain is well-understood Python: `typing.Protocol` with `@runtime_checkable` is the idiomatic way to define structural interfaces in Python 3.8+ without forcing inheritance. The existing codebase already uses frozen dataclasses, configparser, and thread-safe patterns — all consistent with what Phase 24 requires. The key risk is test suite compatibility: 12 route tests currently mock `app.routes.VTAdapter`, `app.routes.MBAdapter`, and `app.routes.TFAdapter` individually; after the refactor they will need to mock `app.enrichment.setup.build_registry` instead.
+The technical domain is well-understood Python: `typing.Protocol` with `@runtime_checkable` is the idiomatic way to define structural interfaces in Python 3.8+ without forcing inheritance. The existing codebase already uses frozen dataclasses, configparser, and thread-safe patterns — all consistent with what Phase 1 requires. The key risk is test suite compatibility: 12 route tests currently mock `app.routes.VTAdapter`, `app.routes.MBAdapter`, and `app.routes.TFAdapter` individually; after the refactor they will need to mock `app.enrichment.setup.build_registry` instead.
 
 The TypeScript half (Task 24.5) is a targeted change: replace the hardcoded `IOC_PROVIDER_COUNTS` constant in `types/ioc.ts` with a runtime function that reads a `data-provider-counts` JSON attribute from the `.page-results` DOM element. This keeps provider count data flowing from backend to frontend dynamically. The esbuild pipeline requires no changes — this is purely a TypeScript module edit.
 
@@ -587,12 +587,12 @@ export function getProviderCounts(): Record<string, number> {
 
 | Old Approach | Current Approach | When Changed | Impact |
 |--------------|------------------|--------------|--------|
-| Hardcoded adapter list in `routes.py` | `build_registry()` + `ProviderRegistry` | Phase 24 | Adding providers requires zero changes to routes.py |
-| `if not api_key:` redirect to settings | `if not registry.configured():` redirect | Phase 24 | Redirect triggers if ANY required provider is unconfigured |
-| Hardcoded `IOC_PROVIDER_COUNTS` in TypeScript | `getProviderCounts()` reading DOM | Phase 24 | Counts update automatically as backend adds providers |
-| Single `[virustotal]` INI section | Multi-section with `[providers]` section | Phase 24 | Per-provider key storage without INI format changes |
+| Hardcoded adapter list in `routes.py` | `build_registry()` + `ProviderRegistry` | Phase 1 | Adding providers requires zero changes to routes.py |
+| `if not api_key:` redirect to settings | `if not registry.configured():` redirect | Phase 1 | Redirect triggers if ANY required provider is unconfigured |
+| Hardcoded `IOC_PROVIDER_COUNTS` in TypeScript | `getProviderCounts()` reading DOM | Phase 1 | Counts update automatically as backend adds providers |
+| Single `[virustotal]` INI section | Multi-section with `[providers]` section | Phase 1 | Per-provider key storage without INI format changes |
 
-**Deprecated/outdated after Phase 24:**
+**Deprecated/outdated after Phase 1:**
 - Direct imports of `VTAdapter`, `MBAdapter`, `TFAdapter` in `routes.py` — replaced by `build_registry`
 - `if not api_key:` check using `config_store.get_vt_api_key()` — replaced by `registry.configured()`
 - `IOC_PROVIDER_COUNTS` as a static TypeScript constant — replaced by `getProviderCounts()`
@@ -624,7 +624,7 @@ export function getProviderCounts(): Record<string, number> {
 
 - Python 3.10 stdlib — `typing.Protocol`, `typing.runtime_checkable`, `configparser` — verified against codebase in use (pyproject.toml requires Python 3.10)
 - Codebase direct inspection — `app/routes.py`, `app/enrichment/adapters/*.py`, `app/enrichment/config_store.py`, `app/enrichment/orchestrator.py`, `tests/test_routes.py`, `app/static/src/ts/types/ioc.ts`, `app/static/src/ts/modules/enrichment.ts`
-- `.planning/phases/24-provider-registry-refactor/24-CONTEXT.md` — locked decisions
+- `.planning/phases/01-provider-registry-refactor/24-CONTEXT.md` — locked decisions
 - `docs/plans/2026-03-02-universal-threat-intel-hub.md` — detailed task specifications with code
 
 ### Secondary (MEDIUM confidence)

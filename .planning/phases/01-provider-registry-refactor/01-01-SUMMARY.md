@@ -1,5 +1,5 @@
 ---
-phase: 24-provider-registry-refactor
+phase: 01-provider-registry-refactor
 plan: 01
 subsystem: api
 tags: [python, protocol, typing, registry, configparser, tdd]
@@ -12,7 +12,7 @@ provides:
   - ConfigStore multi-provider key storage via [providers] INI section
   - Protocol conformance (name, requires_api_key, is_configured) on VTAdapter, MBAdapter, TFAdapter
 affects:
-  - 24-02 (wires registry into routes and frontend)
+  - 01-02 (wires registry into routes and frontend)
   - 25-shodan (new provider will implement Provider protocol)
   - 26-free-key-providers (new providers will implement Provider protocol)
 
@@ -56,7 +56,7 @@ duration: 4min
 completed: 2026-03-02
 ---
 
-# Phase 24 Plan 01: Provider Protocol + Registry Summary
+# Phase 1 Plan 01: Provider Protocol + Registry Summary
 
 **@runtime_checkable Provider protocol, ProviderRegistry with type/config filtering, and ConfigStore expanded to multi-provider [providers] INI section — all three adapters conform via isinstance()**
 
@@ -122,5 +122,5 @@ None - no external service configuration required.
 - ConfigStore ready for Plan 02 to read keys and pass to adapters during registry construction
 
 ---
-*Phase: 24-provider-registry-refactor*
+*Phase: 01-provider-registry-refactor*
 *Completed: 2026-03-02*

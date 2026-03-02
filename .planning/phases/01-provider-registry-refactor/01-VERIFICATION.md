@@ -1,5 +1,5 @@
 ---
-phase: 24-provider-registry-refactor
+phase: 01-provider-registry-refactor
 verified: 2026-03-02T12:10:00Z
 status: passed
 score: 5/5 must-haves verified
@@ -7,7 +7,7 @@ re_verification: false
 gaps: []
 ---
 
-# Phase 24: Provider Registry Refactor — Verification Report
+# Phase 1: Provider Registry Refactor — Verification Report
 
 **Phase Goal:** Extract a formal provider protocol and registry so adding new providers requires zero changes to orchestrator or route code
 **Verified:** 2026-03-02T12:10:00Z
@@ -85,19 +85,19 @@ The phase goal is achieved. The codebase now has a formal `Provider` protocol, a
 
 ### Requirements Coverage
 
-REG requirements are defined in `.planning/ROADMAP.md` Phase 24 Success Criteria and cross-referenced in `.planning/phases/24-provider-registry-refactor/24-RESEARCH.md`. No separate `REQUIREMENTS.md` entry for REG-XX exists (v4.0 requirements live in the ROADMAP). The research file provides authoritative requirement descriptions.
+REG requirements are defined in `.planning/ROADMAP.md` Phase 1 Success Criteria and cross-referenced in `.planning/phases/01-provider-registry-refactor/24-RESEARCH.md`. No separate `REQUIREMENTS.md` entry for REG-XX exists (v4.0 requirements live in the ROADMAP). The research file provides authoritative requirement descriptions.
 
 | Requirement | Source Plan | Description | Status | Evidence |
 |-------------|-------------|-------------|--------|----------|
-| REG-01 | 24-01 | `Provider` protocol with `name`, `supported_types`, `requires_api_key`, `lookup()`, `is_configured()` — all adapters satisfy it via `isinstance()` | SATISFIED | `app/enrichment/provider.py` with `@runtime_checkable`. All 3 adapters pass isinstance checks. 15 protocol tests pass. |
-| REG-02 | 24-01 | `ProviderRegistry` manages adapter registration and lookup by IOC type — adding a new provider requires only creating an adapter file and registering it in `setup.py` | SATISFIED | `app/enrichment/registry.py` + `app/enrichment/setup.py`. Zero other files need change for new provider. 18 registry tests pass. |
-| REG-03 | 24-02 | Orchestrator queries registry instead of hardcoding adapter lists — removing an adapter from registration removes it from enrichment | SATISFIED | `app/routes.py` uses `registry.all()` for orchestrator, `registry.providers_for_type()` for enrichable_count. Zero adapter imports in routes.py. |
-| REG-04 | 24-01 | `ConfigStore` supports multi-provider API key storage via `[providers]` INI section — each provider can independently store/retrieve API key | SATISFIED | `app/enrichment/config_store.py` `_PROVIDERS_SECTION`, `get_provider_key()`, `set_provider_key()`, `all_provider_keys()`. Backward compatible with `[virustotal]` section. |
-| REG-05 | 24-02 | Settings page dynamically renders provider cards based on registered providers | SATISFIED (scoped) | CONTEXT.md explicitly defers full settings card rendering to Phase 27. Phase 24 scope: `data-provider-counts` DOM attribute (results page) + `getProviderCounts()` TypeScript function. Both implemented and verified. The REG-05 interpretation used in plans is documented in 24-RESEARCH.md: "Task 24.5 covers dynamic provider counts for frontend." |
+| REG-01 | 01-01 | `Provider` protocol with `name`, `supported_types`, `requires_api_key`, `lookup()`, `is_configured()` — all adapters satisfy it via `isinstance()` | SATISFIED | `app/enrichment/provider.py` with `@runtime_checkable`. All 3 adapters pass isinstance checks. 15 protocol tests pass. |
+| REG-02 | 01-01 | `ProviderRegistry` manages adapter registration and lookup by IOC type — adding a new provider requires only creating an adapter file and registering it in `setup.py` | SATISFIED | `app/enrichment/registry.py` + `app/enrichment/setup.py`. Zero other files need change for new provider. 18 registry tests pass. |
+| REG-03 | 01-02 | Orchestrator queries registry instead of hardcoding adapter lists — removing an adapter from registration removes it from enrichment | SATISFIED | `app/routes.py` uses `registry.all()` for orchestrator, `registry.providers_for_type()` for enrichable_count. Zero adapter imports in routes.py. |
+| REG-04 | 01-01 | `ConfigStore` supports multi-provider API key storage via `[providers]` INI section — each provider can independently store/retrieve API key | SATISFIED | `app/enrichment/config_store.py` `_PROVIDERS_SECTION`, `get_provider_key()`, `set_provider_key()`, `all_provider_keys()`. Backward compatible with `[virustotal]` section. |
+| REG-05 | 01-02 | Settings page dynamically renders provider cards based on registered providers | SATISFIED (scoped) | CONTEXT.md explicitly defers full settings card rendering to Phase 4. Phase 1 scope: `data-provider-counts` DOM attribute (results page) + `getProviderCounts()` TypeScript function. Both implemented and verified. The REG-05 interpretation used in plans is documented in 24-RESEARCH.md: "Task 24.5 covers dynamic provider counts for frontend." |
 
-**Orphaned requirements check:** ROADMAP.md maps REG-01 through REG-05 exclusively to Phase 24. Both plans claim all five IDs across 24-01 (REG-01, REG-02, REG-04) and 24-02 (REG-03, REG-05). No orphaned requirements.
+**Orphaned requirements check:** ROADMAP.md maps REG-01 through REG-05 exclusively to Phase 1. Both plans claim all five IDs across 01-01 (REG-01, REG-02, REG-04) and 01-02 (REG-03, REG-05). No orphaned requirements.
 
-**Note on REG-05 scope:** The ROADMAP states "settings page dynamically renders provider cards based on registered providers — no template changes needed when adding providers." CONTEXT.md documents a deliberate scope decision: full settings card rendering is deferred to Phase 27 (Results UX). Phase 24's portion of REG-05 is the dynamic `data-provider-counts` mechanism and `getProviderCounts()` — which is implemented. The full REG-05 completion requires Phase 27 execution. This is a phased delivery, not a gap.
+**Note on REG-05 scope:** The ROADMAP states "settings page dynamically renders provider cards based on registered providers — no template changes needed when adding providers." CONTEXT.md documents a deliberate scope decision: full settings card rendering is deferred to Phase 4 (Results UX). Phase 1's portion of REG-05 is the dynamic `data-provider-counts` mechanism and `getProviderCounts()` — which is implemented. The full REG-05 completion requires Phase 4 execution. This is a phased delivery, not a gap.
 
 ---
 
@@ -119,7 +119,7 @@ None. Scanned all created and modified files for TODO/FIXME/placeholder comments
 
 ### Test Suite Results
 
-- **Phase 24 tests only:** 83 passed in 0.40s (protocol × 15, registry × 18, config store multi-provider × 10, registry setup × 9, route tests × 31)
+- **Phase 1 tests only:** 83 passed in 0.40s (protocol × 15, registry × 18, config store multi-provider × 10, registry setup × 9, route tests × 31)
 - **Full suite (non-E2E):** 276 passed in 1.20s — zero regressions
 - **Commits verified:** 775bc29 (protocol), a407af3 (registry + config store), affa65c (routes wiring), 3a18781 (template + TypeScript) — all present in git log
 

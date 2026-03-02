@@ -1,4 +1,4 @@
-# Phase 24: Provider Registry Refactor - Context
+# Phase 1: Provider Registry Refactor - Context
 
 **Gathered:** 2026-03-02
 **Status:** Ready for planning
@@ -71,14 +71,14 @@ Extract a formal provider protocol and registry so adding new providers requires
 <deferred>
 ## Deferred Ideas
 
-- Settings page dynamic provider cards (Phase 27 scope)
+- Settings page dynamic provider cards (Phase 4 scope)
 - Individual provider adapter implementations (Phases 25-26)
-- Results UX unified summary cards (Phase 27)
+- Results UX unified summary cards (Phase 4)
 - Orchestrator refactoring to use registry directly (stretch — routes handle it for now)
 
 </deferred>
 
 ---
 
-*Phase: 24-provider-registry-refactor*
+*Phase: 01-provider-registry-refactor*
 *Context gathered: 2026-03-02 via PRD Express Path*

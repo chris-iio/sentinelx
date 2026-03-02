@@ -8,7 +8,7 @@
 - ✅ **v1.3 Visual Experience Overhaul** — Phases 15-17 (shipped 2026-02-28)
 - ✅ **v2.0 Home Page Modernization** — Phase 18 (shipped 2026-02-28)
 - 🚧 **v3.0 TypeScript Migration** — Phases 19-23 (in progress)
-- 🚧 **v4.0 Universal Threat Intel Hub** — Phases 24-27 (in progress)
+- 🚧 **v4.0 Universal Threat Intel Hub** — Phases 1-4 (in progress)
 
 ## Phases
 
@@ -244,9 +244,9 @@ Plans:
 
 Plans:
 
-### v4.0 Universal Threat Intel Hub (Phases 24-27)
+### v4.0 Universal Threat Intel Hub (Phases 1-4)
 
-### Phase 24: Provider Registry Refactor
+### Phase 1: Provider Registry Refactor
 **Goal**: Extract a formal provider protocol and registry so adding new providers requires zero changes to orchestrator or route code
 **Depends on**: Phase 22 (v3.0 structurally complete)
 **Requirements**: REG-01, REG-02, REG-03, REG-04, REG-05
@@ -259,12 +259,12 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 24-01-PLAN.md — Provider protocol, registry, ConfigStore multi-provider, adapter conformance (TDD)
-- [ ] 24-02-PLAN.md — Setup factory, route wiring, test updates, dynamic provider counts (template + TypeScript)
+- [x] 01-01-PLAN.md — Provider protocol, registry, ConfigStore multi-provider, adapter conformance (TDD)
+- [x] 01-02-PLAN.md — Setup factory, route wiring, test updates, dynamic provider counts (template + TypeScript)
 
-### Phase 25: Shodan InternetDB (Zero-Auth Provider)
+### Phase 2: Shodan InternetDB (Zero-Auth Provider)
 **Goal**: Add Shodan InternetDB as the first zero-auth provider using the registry pattern, proving the plugin architecture works end-to-end
-**Depends on**: Phase 24
+**Depends on**: Phase 1
 **Requirements**: SHOD-01, SHOD-02
 **Success Criteria** (what must be TRUE):
   1. Shodan InternetDB enriches IP addresses without requiring an API key — port/CVE/tag data appears in results
@@ -272,12 +272,12 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 25-01-PLAN.md — ShodanAdapter (TDD): tests first, then implementation, SSRF allowlist update
-- [ ] 25-02-PLAN.md — Registry registration: one import + one register() call in setup.py, update test_registry_setup.py
+- [x] 02-01-PLAN.md — ShodanAdapter (TDD): tests first, then implementation, SSRF allowlist update
+- [x] 02-02-PLAN.md — Registry registration: one import + one register() call in setup.py, update test_registry_setup.py
 
-### Phase 26: Free-Key Providers
+### Phase 3: Free-Key Providers
 **Goal**: Add URLhaus, OTX AlienVault, GreyNoise Community, and AbuseIPDB — all providers that offer free API keys
-**Depends on**: Phase 25
+**Depends on**: Phase 2
 **Requirements**: URL-01, OTX-01, GREY-01, ABUSE-01, MULTI-01, MULTI-02
 **Success Criteria** (what must be TRUE):
   1. Each provider enriches its supported IOC types when configured with an API key
@@ -287,9 +287,9 @@ Plans:
 
 Plans:
 
-### Phase 27: Results UX Upgrade
+### Phase 4: Results UX Upgrade
 **Goal**: Unified results experience — per-IOC summary cards with expandable per-provider detail rows, aggregated verdicts, and provider status indicators
-**Depends on**: Phase 26
+**Depends on**: Phase 3
 **Requirements**: UX-01, UX-02, UX-03, UX-04, UX-05
 **Success Criteria** (what must be TRUE):
   1. Each IOC card shows a unified verdict summary aggregated across all providers
@@ -305,7 +305,7 @@ Plans:
 
 **Execution Order:**
 v3.0: 19 → 20 → 21 → 22 → 23 (skipped)
-v4.0: 24 → 25 → 26 → 27
+v4.0: 1 → 2 → 3 → 4
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -328,7 +328,7 @@ v4.0: 24 → 25 → 26 → 27
 | 21. Simple Module Extraction | v3.0 | 3/3 | Complete | 2026-02-28 |
 | 22. Enrichment Module and Entry Point | v3.0 | 2/2 | Complete | 2026-03-01 |
 | 23. Type Hardening and Verification | v3.0 | 0/? | Skipped | — |
-| 24. Provider Registry Refactor | v4.0 | 2/2 | Complete | 2026-03-02 |
-| 25. Shodan InternetDB (Zero-Auth) | 1/2 | In Progress|  | — |
-| 26. Free-Key Providers | v4.0 | 0/? | Not started | — |
-| 27. Results UX Upgrade | v4.0 | 0/? | Not started | — |
+| 1. Provider Registry Refactor | v4.0 | 2/2 | Complete | 2026-03-02 |
+| 2. Shodan InternetDB (Zero-Auth) | v4.0 | 2/2 | Complete | 2026-03-02 |
+| 3. Free-Key Providers | v4.0 | 0/? | Not started | — |
+| 4. Results UX Upgrade | v4.0 | 0/? | Not started | — |

@@ -12,11 +12,11 @@
 
 ---
 
-## Phase 24: Provider Registry Refactor
+## Phase 1: Provider Registry Refactor
 
 **Goal:** Extract a formal provider protocol and registry so adding new providers requires zero changes to orchestrator or route code.
 
-### Task 24.1: Provider Protocol
+### Task 1.1: Provider Protocol
 
 **Files:**
 - Create: `app/enrichment/provider.py`
@@ -161,7 +161,7 @@ git commit -m "feat(24-01): add Provider protocol and conform existing adapters"
 
 ---
 
-### Task 24.2: Provider Registry
+### Task 1.2: Provider Registry
 
 **Files:**
 - Create: `app/enrichment/registry.py`
@@ -311,7 +311,7 @@ git commit -m "feat(24-02): add ProviderRegistry with type-based lookup"
 
 ---
 
-### Task 24.3: Expand ConfigStore for Multiple Providers
+### Task 1.3: Expand ConfigStore for Multiple Providers
 
 **Files:**
 - Modify: `app/enrichment/config_store.py`
@@ -424,7 +424,7 @@ git commit -m "feat(24-03): expand ConfigStore for multi-provider API keys"
 
 ---
 
-### Task 24.4: Wire Registry into Routes
+### Task 1.4: Wire Registry into Routes
 
 **Files:**
 - Modify: `app/routes.py` (lines 28-31 imports, lines 125-132 adapter wiring)
@@ -582,7 +582,7 @@ git commit -m "feat(24-04): wire ProviderRegistry into routes, replace hardcoded
 
 ---
 
-### Task 24.5: Update TypeScript Types for Dynamic Provider Counts
+### Task 1.5: Update TypeScript Types for Dynamic Provider Counts
 
 **Files:**
 - Modify: `app/static/src/ts/types/ioc.ts`
@@ -658,11 +658,11 @@ git commit -m "feat(24-05): dynamic provider counts from registry to frontend"
 
 ---
 
-## Phase 25: Shodan InternetDB (Zero-Auth Provider)
+## Phase 2: Shodan InternetDB (Zero-Auth Provider)
 
 **Goal:** First new provider — zero auth, IP-only enrichment from Shodan InternetDB.
 
-### Task 25.1: Shodan InternetDB Adapter
+### Task 2.1: Shodan InternetDB Adapter
 
 **Files:**
 - Create: `app/enrichment/adapters/shodan_internetdb.py`
@@ -928,7 +928,7 @@ git commit -m "feat(25-01): add Shodan InternetDB adapter (zero-auth, IP enrichm
 
 ---
 
-### Task 25.2: Register Shodan in Registry and Update Config
+### Task 2.2: Register Shodan in Registry and Update Config
 
 **Files:**
 - Modify: `app/enrichment/setup.py` (add Shodan registration)
@@ -981,17 +981,17 @@ git commit -m "feat(25-02): register Shodan InternetDB in provider registry"
 
 ---
 
-## Phase 26: Free-Key Providers
+## Phase 3: Free-Key Providers
 
 **Goal:** Add URLhaus, OTX AlienVault, GreyNoise Community, and AbuseIPDB adapters + settings page expansion.
 
-### Task 26.1: URLhaus Adapter
+### Task 3.1: URLhaus Adapter
 
 **Files:**
 - Create: `app/enrichment/adapters/urlhaus.py`
 - Create: `tests/test_urlhaus.py`
 
-Follow the same TDD pattern as Task 25.1. Key implementation details:
+Follow the same TDD pattern as Task 2.1. Key implementation details:
 
 - **Endpoint:** POST to `https://urlhaus-api.abuse.ch/v1/url/`, `/host/`, or `/payload/`
 - **Endpoint selection:** URL type -> `/url/` with `{"url": value}`; IP/domain -> `/host/` with `{"host": value}`; hash -> `/payload/` with `{"md5_hash": value}` or `{"sha256_hash": value}`
@@ -1008,7 +1008,7 @@ Write tests covering: found (malicious), not-found (no_data), each IOC type, tim
 
 ---
 
-### Task 26.2: OTX AlienVault Adapter
+### Task 3.2: OTX AlienVault Adapter
 
 **Files:**
 - Create: `app/enrichment/adapters/otx.py`
@@ -1031,7 +1031,7 @@ Write tests covering: high pulse count (malicious), low pulse count (suspicious)
 
 ---
 
-### Task 26.3: GreyNoise Community Adapter
+### Task 3.3: GreyNoise Community Adapter
 
 **Files:**
 - Create: `app/enrichment/adapters/greynoise.py`
@@ -1057,7 +1057,7 @@ Write tests covering: RIOT IP (clean), malicious scanner, benign scanner (suspic
 
 ---
 
-### Task 26.4: AbuseIPDB Adapter
+### Task 3.4: AbuseIPDB Adapter
 
 **Files:**
 - Create: `app/enrichment/adapters/abuseipdb.py`
@@ -1085,7 +1085,7 @@ Write tests covering: high-confidence malicious, suspicious, low-confidence clea
 
 ---
 
-### Task 26.5: Register All New Providers in Registry
+### Task 3.5: Register All New Providers in Registry
 
 **Files:**
 - Modify: `app/enrichment/setup.py`
@@ -1132,7 +1132,7 @@ Write test: `test_build_registry_has_eight_providers` that verifies all 8 provid
 
 ---
 
-### Task 26.6: Settings Page Multi-Provider Key Management
+### Task 3.6: Settings Page Multi-Provider Key Management
 
 **Files:**
 - Modify: `app/routes.py` (settings_get, settings_post)
@@ -1281,11 +1281,11 @@ git commit -m "feat(26-06): multi-provider settings page with key management"
 
 ---
 
-## Phase 27: Results UX Upgrade
+## Phase 4: Results UX Upgrade
 
 **Goal:** Unified summary per IOC card with expandable per-provider details and provider consensus.
 
-### Task 27.1: Update IOC Card Template for Expandable Details
+### Task 4.1: Update IOC Card Template for Expandable Details
 
 **Files:**
 - Modify: `app/templates/partials/_ioc_card.html`
@@ -1389,7 +1389,7 @@ git commit -m "feat(27-01): unified summary + expandable provider details per IO
 
 ---
 
-### Task 27.2: Provider Consensus Indicator
+### Task 4.2: Provider Consensus Indicator
 
 **Files:**
 - Modify: `app/static/src/ts/modules/enrichment.ts`
@@ -1403,7 +1403,7 @@ Add a visual consensus indicator to each IOC card summary:
 
 ---
 
-### Task 27.3: Dashboard Provider Coverage
+### Task 4.3: Dashboard Provider Coverage
 
 **Files:**
 - Modify: `app/templates/partials/_verdict_dashboard.html`
@@ -1419,7 +1419,7 @@ Pass provider status info from `routes.py` via template variable.
 
 ---
 
-### Task 27.4: Update TypeScript Type for CVE Support
+### Task 4.4: Update TypeScript Type for CVE Support
 
 **Files:**
 - Modify: `app/static/src/ts/types/ioc.ts`
@@ -1444,7 +1444,7 @@ Update `getProviderCounts()` fallback to include CVE.
 
 ---
 
-### Task 27.5: Final Integration Test
+### Task 4.5: Final Integration Test
 
 **Files:**
 - Modify: existing E2E tests or create `tests/test_e2e_providers.py`

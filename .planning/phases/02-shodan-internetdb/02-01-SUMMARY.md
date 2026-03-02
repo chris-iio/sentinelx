@@ -1,12 +1,12 @@
 ---
-phase: 25-shodan-internetdb
+phase: 02-shodan-internetdb
 plan: "01"
 subsystem: enrichment
 tags: [shodan, internetdb, adapter, provider-protocol, ssrf, tdd, zero-auth]
 
 # Dependency graph
 requires:
-  - phase: 24-provider-registry-refactor
+  - phase: 01-provider-registry-refactor
     provides: Provider protocol, ProviderRegistry, ConfigStore, http_safety utilities
 provides:
   - ShodanAdapter class satisfying Provider protocol
@@ -14,7 +14,7 @@ provides:
   - internetdb.shodan.io in SSRF allowlist (ALLOWED_API_HOSTS)
   - Full unit test suite (25 tests) for Shodan adapter
 affects:
-  - 25-02 (registry registration — imports ShodanAdapter)
+  - 02-02 (registry registration — imports ShodanAdapter)
   - 26-free-key-providers (pattern to mirror for new adapters)
   - 27-results-ux (verdict types: malicious/suspicious/no_data used here)
 
@@ -53,7 +53,7 @@ duration: 2min
 completed: 2026-03-02
 ---
 
-# Phase 25 Plan 01: ShodanAdapter — Zero-Auth IP Enrichment Summary
+# Phase 2 Plan 01: ShodanAdapter — Zero-Auth IP Enrichment Summary
 
 **ShodanAdapter implemented via TDD: GET-based IPv4/IPv6 enrichment against Shodan InternetDB with verdict logic (malicious tags > CVE vulns > no_data), full HTTP safety controls, and 25-test suite all green.**
 
@@ -86,7 +86,7 @@ TDD plan — committed as RED then GREEN:
 
 - `app/enrichment/adapters/shodan.py` — ShodanAdapter class + _parse_response module-level function, full docstrings
 - `tests/test_shodan.py` — 25 tests across 7 test classes: TestLookupFound, TestLookupNotFound, TestLookupErrors, TestHTTPSafetyControls, TestSupportedTypes, TestProtocolConformance, TestAllowedHostsIntegration
-- `app/config.py` — Added "internetdb.shodan.io" to ALLOWED_API_HOSTS with Phase 25 comment
+- `app/config.py` — Added "internetdb.shodan.io" to ALLOWED_API_HOSTS with Phase 2 comment
 
 ## Decisions Made
 
@@ -101,23 +101,23 @@ None — plan executed exactly as written. Implementation mirrors the plan's cod
 
 ## Issues Encountered
 
-None. The pre-existing `tests/e2e/test_homepage.py::test_page_title` E2E failure (page title mismatch) is unrelated to this plan — it exists before phase 25 and is out of scope.
+None. The pre-existing `tests/e2e/test_homepage.py::test_page_title` E2E failure (page title mismatch) is unrelated to this plan — it exists before phase 2 and is out of scope.
 
 ## Next Phase Readiness
 
-- ShodanAdapter is isolated and fully tested — ready for Plan 25-02 (registry registration)
-- Plan 25-02 will call `build_registry()` in `app/enrichment/setup.py` and register ShodanAdapter
+- ShodanAdapter is isolated and fully tested — ready for Plan 02-02 (registry registration)
+- Plan 02-02 will call `build_registry()` in `app/enrichment/setup.py` and register ShodanAdapter
 - No blockers
 
 ---
-*Phase: 25-shodan-internetdb*
+*Phase: 02-shodan-internetdb*
 *Completed: 2026-03-02*
 
 ## Self-Check: PASSED
 
 - `app/enrichment/adapters/shodan.py` — FOUND
 - `tests/test_shodan.py` — FOUND
-- `.planning/phases/25-shodan-internetdb/25-01-SUMMARY.md` — FOUND
+- `.planning/phases/02-shodan-internetdb/02-01-SUMMARY.md` — FOUND
 - Commit `b1cb155` (RED) — FOUND
 - Commit `dd8aa21` (GREEN) — FOUND
 - Commit `a558d38` (docs) — FOUND
