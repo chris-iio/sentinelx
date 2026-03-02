@@ -269,9 +269,11 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. Shodan InternetDB enriches IP addresses without requiring an API key — port/CVE/tag data appears in results
   2. The adapter was added by creating one file and one registration line — no orchestrator or route changes needed
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
+- [ ] 25-01-PLAN.md — ShodanAdapter (TDD): tests first, then implementation, SSRF allowlist update
+- [ ] 25-02-PLAN.md — Registry registration: one import + one register() call in setup.py, update test_registry_setup.py
 
 ### Phase 26: Free-Key Providers
 **Goal**: Add URLhaus, OTX AlienVault, GreyNoise Community, and AbuseIPDB — all providers that offer free API keys
@@ -326,7 +328,7 @@ v4.0: 24 → 25 → 26 → 27
 | 21. Simple Module Extraction | v3.0 | 3/3 | Complete | 2026-02-28 |
 | 22. Enrichment Module and Entry Point | v3.0 | 2/2 | Complete | 2026-03-01 |
 | 23. Type Hardening and Verification | v3.0 | 0/? | Skipped | — |
-| 24. Provider Registry Refactor | 2/2 | Complete    | 2026-03-02 | — |
-| 25. Shodan InternetDB (Zero-Auth) | v4.0 | 0/? | Not started | — |
+| 24. Provider Registry Refactor | v4.0 | 2/2 | Complete | 2026-03-02 |
+| 25. Shodan InternetDB (Zero-Auth) | v4.0 | 0/2 | Not started | — |
 | 26. Free-Key Providers | v4.0 | 0/? | Not started | — |
 | 27. Results UX Upgrade | v4.0 | 0/? | Not started | — |
