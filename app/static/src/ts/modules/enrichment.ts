@@ -36,7 +36,15 @@ interface VerdictEntry {
   provider: string;
   verdict: VerdictKey;
   summaryText: string;
+  detectionCount: number;   // from result.detection_count (0 for errors)
+  totalEngines: number;     // from result.total_engines (0 for errors)
+  statText: string;         // key stat string for display (e.g., "45/72 engines")
 }
+
+// ---- Module-private state ----
+
+/** Debounce timers for sortDetailRows — keyed by ioc_value */
+const sortTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
 
 // ---- Private helpers ----
 
@@ -83,6 +91,187 @@ function computeWorstVerdict(entries: VerdictEntry[]): VerdictKey {
     }
   }
   return worstEntry.verdict;
+}
+
+/**
+ * Compute consensus: count flagged (malicious/suspicious) and responded
+ * (malicious + suspicious + clean) providers.
+ * Per design: no_data and error do NOT count as votes.
+ */
+function computeConsensus(entries: VerdictEntry[]): { flagged: number; responded: number } {
+  let flagged = 0;
+  let responded = 0;
+  for (const entry of entries) {
+    if (entry.verdict === "malicious" || entry.verdict === "suspicious") {
+      flagged++;
+      responded++;
+    } else if (entry.verdict === "clean") {
+      responded++;
+    }
+    // error and no_data do NOT count
+  }
+  return { flagged, responded };
+}
+
+/**
+ * Return the CSS modifier class for the consensus badge based on flagged count.
+ * 0 flagged → green, 1-2 → yellow, 3+ → red.
+ */
+function consensusBadgeClass(flagged: number): string {
+  if (flagged === 0) return "consensus-badge--green";
+  if (flagged <= 2) return "consensus-badge--yellow";
+  return "consensus-badge--red";
+}
+
+/**
+ * Compute attribution: find the "most detailed" provider to show in summary.
+ * Heuristic: highest totalEngines wins. Ties broken by verdict severity descending.
+ * Providers with no_data or error are excluded as candidates.
+ */
+function computeAttribution(entries: VerdictEntry[]): { provider: string; text: string } {
+  // Only candidates with actual data (not no_data or error)
+  const candidates = entries.filter(
+    (e) => e.verdict !== "no_data" && e.verdict !== "error"
+  );
+
+  if (candidates.length === 0) {
+    return { provider: "", text: "No providers returned data for this IOC" };
+  }
+
+  // Sort: highest totalEngines first. Ties broken by severity descending.
+  const sorted = [...candidates].sort((a, b) => {
+    if (b.totalEngines !== a.totalEngines) return b.totalEngines - a.totalEngines;
+    return verdictSeverityIndex(b.verdict) - verdictSeverityIndex(a.verdict);
+  });
+
+  const best = sorted[0];
+  if (!best) return { provider: "", text: "No providers returned data for this IOC" };
+
+  return { provider: best.provider, text: best.provider + ": " + best.statText };
+}
+
+/**
+ * Get or create the .ioc-summary-row element inside the slot.
+ * Inserts before .chevron-toggle if present, otherwise as first child.
+ */
+function getOrCreateSummaryRow(slot: HTMLElement): HTMLElement {
+  const existing = slot.querySelector<HTMLElement>(".ioc-summary-row");
+  if (existing) return existing;
+
+  const row = document.createElement("div");
+  row.className = "ioc-summary-row";
+
+  // Insert before chevron-toggle if present
+  const chevron = slot.querySelector(".chevron-toggle");
+  if (chevron) {
+    slot.insertBefore(row, chevron);
+  } else {
+    slot.appendChild(row);
+  }
+
+  return row;
+}
+
+/**
+ * Update (or create) the summary row for an IOC in its enrichment slot.
+ * Shows worst verdict badge, attribution text, and consensus badge.
+ * All DOM construction uses createElement + textContent (SEC-08).
+ */
+function updateSummaryRow(
+  slot: HTMLElement,
+  iocValue: string,
+  iocVerdicts: Record<string, VerdictEntry[]>
+): void {
+  const entries = iocVerdicts[iocValue];
+  if (!entries || entries.length === 0) return;
+
+  const worstVerdict = computeWorstVerdict(entries);
+  const attribution = computeAttribution(entries);
+  const { flagged, responded } = computeConsensus(entries);
+
+  const summaryRow = getOrCreateSummaryRow(slot);
+
+  // Clear existing children (immutable rebuild pattern)
+  summaryRow.textContent = "";
+
+  // a. Verdict badge
+  const verdictBadge = document.createElement("span");
+  verdictBadge.className = "verdict-badge verdict-" + worstVerdict;
+  verdictBadge.textContent = VERDICT_LABELS[worstVerdict];
+  summaryRow.appendChild(verdictBadge);
+
+  // b. Attribution text
+  const attributionSpan = document.createElement("span");
+  attributionSpan.className = "ioc-summary-attribution";
+  attributionSpan.textContent = attribution.text;
+  summaryRow.appendChild(attributionSpan);
+
+  // c. Consensus badge
+  const consensusBadge = document.createElement("span");
+  consensusBadge.className = "consensus-badge " + consensusBadgeClass(flagged);
+  consensusBadge.textContent = "[" + flagged + "/" + responded + "]";
+  summaryRow.appendChild(consensusBadge);
+}
+
+/**
+ * Create a single provider detail row for the .enrichment-details container.
+ * All DOM construction uses createElement + textContent (SEC-08).
+ */
+function createDetailRow(
+  provider: string,
+  verdict: VerdictKey,
+  statText: string
+): HTMLElement {
+  const row = document.createElement("div");
+  row.className = "provider-detail-row";
+  row.setAttribute("data-verdict", verdict);
+
+  const nameSpan = document.createElement("span");
+  nameSpan.className = "provider-detail-name";
+  nameSpan.textContent = provider;
+
+  const badge = document.createElement("span");
+  badge.className = "verdict-badge verdict-" + verdict;
+  badge.textContent = VERDICT_LABELS[verdict];
+
+  const statSpan = document.createElement("span");
+  statSpan.className = "provider-detail-stat";
+  statSpan.textContent = statText;
+
+  row.appendChild(nameSpan);
+  row.appendChild(badge);
+  row.appendChild(statSpan);
+
+  return row;
+}
+
+/**
+ * Sort all .provider-detail-row elements in a container by severity descending.
+ * malicious (index 4) first, error (index 0) last.
+ * Debounced at 100ms per IOC to avoid thrashing during batch result delivery.
+ */
+function sortDetailRows(detailsContainer: HTMLElement, iocValue: string): void {
+  const existing = sortTimers.get(iocValue);
+  if (existing !== undefined) {
+    clearTimeout(existing);
+  }
+  const timer = setTimeout(() => {
+    sortTimers.delete(iocValue);
+    const rows = Array.from(
+      detailsContainer.querySelectorAll<HTMLElement>(".provider-detail-row")
+    );
+    rows.sort((a, b) => {
+      const aVerdict = a.getAttribute("data-verdict") as VerdictKey | null;
+      const bVerdict = b.getAttribute("data-verdict") as VerdictKey | null;
+      const aIdx = aVerdict ? verdictSeverityIndex(aVerdict) : -1;
+      const bIdx = bVerdict ? verdictSeverityIndex(bVerdict) : -1;
+      return bIdx - aIdx; // descending: malicious first
+    });
+    for (const row of rows) {
+      detailsContainer.appendChild(row);
+    }
+  }, 100);
+  sortTimers.set(iocValue, timer);
 }
 
 /**
@@ -145,39 +334,6 @@ function updateProgressBar(done: number, total: number): void {
 }
 
 /**
- * Get or create the collapsed no-data section inside an enrichment slot.
- * Source: main.js getOrCreateNodataSection() (lines 386-401).
- */
-function getOrCreateNodataSection(slot: HTMLElement): HTMLDetailsElement {
-  const existing = slot.querySelector<HTMLDetailsElement>(".enrichment-nodata-section");
-  if (existing) return existing;
-
-  const details = document.createElement("details");
-  details.className = "enrichment-nodata-section";
-  // Collapsed by default — no open attribute
-
-  const summary = document.createElement("summary");
-  summary.className = "enrichment-nodata-summary";
-  summary.textContent = "1 provider: no record";
-
-  details.appendChild(summary);
-  slot.appendChild(details);
-  return details;
-}
-
-/**
- * Update the summary count text after appending a no_data result row.
- * Source: main.js updateNodataSummary() (lines 403-410).
- */
-function updateNodataSummary(detailsEl: HTMLDetailsElement): void {
-  const rows = detailsEl.querySelectorAll(".provider-result-row");
-  const count = rows.length;
-  const summary = detailsEl.querySelector("summary");
-  if (!summary) return;
-  summary.textContent = count + " provider" + (count !== 1 ? "s" : "") + ": no record";
-}
-
-/**
  * Show or update the pending provider indicator after the first result for an IOC.
  * Reads provider counts from the DOM via getProviderCounts() — reflects the actual
  * configured provider set injected by the Flask route into data-provider-counts.
@@ -209,13 +365,7 @@ function updatePendingIndicator(
   if (!indicator) {
     indicator = document.createElement("span");
     indicator.className = "enrichment-waiting-text enrichment-pending-text";
-    // Insert before nodata section if present, otherwise append
-    const nodataSection = slot.querySelector(".enrichment-nodata-section");
-    if (nodataSection) {
-      slot.insertBefore(indicator, nodataSection);
-    } else {
-      slot.appendChild(indicator);
-    }
+    slot.appendChild(indicator);
   }
   indicator.textContent = remaining + " provider" + (remaining !== 1 ? "s" : "") + " still loading...";
 }
@@ -258,6 +408,13 @@ function markEnrichmentComplete(done: number, total: number): void {
 /**
  * Render a single enrichment result item into the appropriate IOC card slot.
  * Handles both "result" and "error" discriminated union branches.
+ *
+ * New behavior (Plan 02):
+ * - ALL results go into .enrichment-details container (no direct slot append)
+ * - Summary row updated on each result: worst verdict badge + attribution + consensus badge
+ * - Detail rows sorted by severity descending (debounced 100ms)
+ * - .enrichment-slot--loaded class added on first result (reveals chevron via CSS)
+ *
  * Source: main.js renderEnrichmentResult() (lines 443-540).
  */
 function renderEnrichmentResult(
@@ -278,74 +435,73 @@ function renderEnrichmentResult(
     slot.removeChild(spinnerWrapper);
   }
 
-  // Track received count for this IOC before rendering
+  // Add .enrichment-slot--loaded class — triggers chevron visibility via CSS guard
+  slot.classList.add("enrichment-slot--loaded");
+
+  // Track received count for this IOC
   iocResultCounts[result.ioc_value] = (iocResultCounts[result.ioc_value] ?? 0) + 1;
   const receivedCount = iocResultCounts[result.ioc_value] ?? 1;
 
-  // Build provider result row div (appended, not replacing)
-  const providerRow = document.createElement("div");
-  providerRow.className = "provider-result-row";
-
-  const badge = document.createElement("span");
-  const detail = document.createElement("span");
-  detail.className = "enrichment-detail";
-
-  let summaryText = "";
+  // Determine verdict and statText
   let verdict: VerdictKey;
+  let statText: string;
+  let summaryText: string;
+  let detectionCount = 0;
+  let totalEngines = 0;
 
   if (result.type === "result") {
     verdict = result.verdict;
-    badge.className = "verdict-badge verdict-" + verdict;
-    // Use VERDICT_LABELS for display — never raw verdict strings (UI-06)
-    badge.textContent = VERDICT_LABELS[verdict];
+    detectionCount = result.detection_count;
+    totalEngines = result.total_engines;
 
-    let verdictText = "";
     if (verdict === "malicious") {
-      verdictText = result.detection_count + "/" + result.total_engines + " malicious";
+      statText = result.detection_count + "/" + result.total_engines + " engines";
     } else if (verdict === "suspicious") {
-      verdictText = "Suspicious";
+      statText =
+        result.total_engines > 1
+          ? result.detection_count + "/" + result.total_engines + " engines"
+          : "Suspicious";
     } else if (verdict === "clean") {
-      // Explicitly mention engine count to distinguish from no_data (UI-06)
-      verdictText = "Clean — scanned by " + result.total_engines + " engines";
+      statText = "Clean — " + result.total_engines + " engines";
     } else {
-      // no_data: analyst-friendly phrasing (UI-06)
-      verdictText = "Not in " + result.provider + " database";
+      // no_data
+      statText = "Not in database";
     }
 
     const scanDateStr = formatDate(result.scan_date);
-    detail.textContent =
-      result.provider + ": " + verdictText + (scanDateStr ? " — Scanned " + scanDateStr : "");
-
-    summaryText = result.provider + ": " + verdict + " (" + verdictText + ")";
+    summaryText =
+      result.provider +
+      ": " +
+      verdict +
+      " (" +
+      statText +
+      (scanDateStr ? " — Scanned " + scanDateStr : "") +
+      ")";
   } else {
     // Error result
     verdict = "error";
-    badge.className = "verdict-badge verdict-error";
-    badge.textContent = VERDICT_LABELS["error"];
-    detail.textContent = result.provider + ": " + result.error;
+    statText = result.error;
     summaryText = result.provider + ": error — " + result.error;
   }
 
-  providerRow.appendChild(badge);
-  providerRow.appendChild(detail);
+  // Push to iocVerdicts with extended fields
+  const entries = iocVerdicts[result.ioc_value] ?? [];
+  iocVerdicts[result.ioc_value] = entries;
+  entries.push({ provider: result.provider, verdict, summaryText, detectionCount, totalEngines, statText });
 
-  if (verdict === "no_data") {
-    // Route no_data results into the collapsed details section (UI-06)
-    const nodataSection = getOrCreateNodataSection(slot);
-    nodataSection.appendChild(providerRow);
-    updateNodataSummary(nodataSection);
-  } else {
-    // Active results go directly into the slot
-    slot.appendChild(providerRow);
+  // Build detail row and append to .enrichment-details container
+  const detailsContainer = slot.querySelector<HTMLElement>(".enrichment-details");
+  if (detailsContainer) {
+    const detailRow = createDetailRow(result.provider, verdict, statText);
+    detailsContainer.appendChild(detailRow);
+    sortDetailRows(detailsContainer, result.ioc_value);
   }
+
+  // Update summary row (worst verdict + attribution + consensus)
+  updateSummaryRow(slot, result.ioc_value, iocVerdicts);
 
   // Update pending indicator for remaining providers
   updatePendingIndicator(slot, card, receivedCount);
-
-  // Track per-IOC verdicts for worst-verdict computation
-  const entries = iocVerdicts[result.ioc_value] ?? [];
-  iocVerdicts[result.ioc_value] = entries;
-  entries.push({ provider: result.provider, verdict, summaryText });
 
   // Compute worst verdict for this IOC
   const worstVerdict = computeWorstVerdict(iocVerdicts[result.ioc_value] ?? []);
@@ -357,6 +513,25 @@ function renderEnrichmentResult(
 
   // Update copy button with worst verdict across all providers for this IOC
   updateCopyButtonWorstVerdict(result.ioc_value, iocVerdicts);
+}
+
+/**
+ * Wire expand/collapse toggle for all .chevron-toggle buttons on the page.
+ * Called once from init(). Click listener toggles .is-open on the sibling
+ * .enrichment-details container and sets aria-expanded accordingly.
+ * Multiple cards can be independently opened — no collapse-others logic.
+ */
+function wireExpandToggles(): void {
+  const toggles = document.querySelectorAll<HTMLElement>(".chevron-toggle");
+  toggles.forEach((toggle) => {
+    toggle.addEventListener("click", () => {
+      const details = toggle.nextElementSibling as HTMLElement | null;
+      if (!details || !details.classList.contains("enrichment-details")) return;
+      const isOpen = details.classList.toggle("is-open");
+      toggle.classList.toggle("is-open", isOpen);
+      toggle.setAttribute("aria-expanded", String(isOpen));
+    });
+  });
 }
 
 // ---- Private init helpers ----
@@ -404,6 +579,9 @@ function initExportButton(): void {
  * Guards on .page-results presence and data-mode="online" — returns early
  * on offline mode or when enrichment UI elements are absent.
  *
+ * Wires chevron expand/collapse toggles once at init time (before polling
+ * starts) so they work regardless of when results populate details.
+ *
  * Starts a 750ms polling interval for /enrichment/status/<job_id>,
  * renders incremental results, shows warning banners for errors, and
  * marks enrichment complete when all tasks are done.
@@ -420,11 +598,14 @@ export function init(): void {
 
   if (!jobId || mode !== "online") return;
 
+  // Wire expand/collapse toggles once at init (before polling starts)
+  wireExpandToggles();
+
   // Dedup key: "ioc_value|provider" — each provider result per IOC rendered once
   const rendered: Record<string, boolean> = {};
 
   // Per-IOC verdict tracking for worst-verdict copy/export computation
-  // iocVerdicts[ioc_value] = [{provider, verdict, summaryText}]
+  // iocVerdicts[ioc_value] = [{provider, verdict, summaryText, detectionCount, totalEngines, statText}]
   const iocVerdicts: Record<string, VerdictEntry[]> = {};
 
   // Per-IOC result count tracking for pending indicator
