@@ -43,7 +43,8 @@ class Config:
         "www.virustotal.com",
         "mb-api.abuse.ch",
         "threatfox-api.abuse.ch",
-        "internetdb.shodan.io",  # Phase 25: Shodan InternetDB (zero-auth)
+        "internetdb.shodan.io",    # Phase 25: Shodan InternetDB (zero-auth)
+        "urlhaus-api.abuse.ch",    # Phase 03-01: URLhaus (free-key)
     ]
 
     def validate(self) -> None:
