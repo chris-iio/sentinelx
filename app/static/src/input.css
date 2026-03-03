@@ -158,11 +158,6 @@
     }
 }
 
-@keyframes pulseGlow {
-    0%, 100% { box-shadow: 0 0 0 rgba(56, 189, 248, 0); }
-    50%      { box-shadow: 0 0 16px rgba(56, 189, 248, 0.15); }
-}
-
 /* --- Reset & base --- */
 
 @layer base {
@@ -210,70 +205,8 @@
 
     /* ---- Header / Footer ---- */
 
-    /* ---- Page load stagger animation ---- */
-
-    .stagger-1 { animation: fadeSlideUp var(--duration-slow) var(--ease-out-expo) both; animation-delay: 0ms; }
-    .stagger-2 { animation: fadeSlideUp var(--duration-slow) var(--ease-out-expo) both; animation-delay: 80ms; }
-    .stagger-3 { animation: fadeSlideUp var(--duration-slow) var(--ease-out-expo) both; animation-delay: 160ms; }
-
-    .site-header {
-        background-color: var(--bg-secondary);
-        border-bottom: 1px solid var(--border);
-        padding: 0.4rem 1.5rem;
-        animation: fadeIn var(--duration-normal) var(--ease-out-expo) both;
-    }
-
-    .header-inner {
-        max-width: 960px;
-        margin: 0 auto;
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-    }
-
-    .site-brand-link {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.5rem;
-        text-decoration: none;
-        color: inherit;
-    }
-    .site-brand-link:hover .site-logo {
-        opacity: 0.85;
-    }
-
-    .site-logo {
-        font-family: var(--font-ui);
-        font-size: 1.1rem;
-        font-weight: var(--weight-heading);
-        color: var(--text-primary);
-        letter-spacing: -0.02em;
-    }
-
     .brand-accent {
         color: var(--accent);
-    }
-
-    .site-logo-icon {
-        width: 24px;
-        height: 24px;
-        flex-shrink: 0;
-    }
-
-    .site-nav {
-        margin-left: auto;
-    }
-
-    .site-nav .nav-link {
-        display: inline-flex;
-        align-items: center;
-        color: var(--text-secondary);
-        text-decoration: none;
-        font-size: 0.85rem;
-        transition: color 0.15s ease;
-    }
-    .site-nav .nav-link:hover {
-        color: var(--text-primary);
     }
 
     .nav-icon {
@@ -354,11 +287,6 @@
         align-items: center;
         gap: 0.5rem;
         margin-bottom: 1.5rem;
-    }
-
-    .index-hero-logo {
-        width: 48px;
-        height: 48px;
     }
 
     .index-hero-brand {
@@ -1187,13 +1115,6 @@
         border-top: 1px solid var(--border);
     }
 
-    .provider-result-row {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        flex-wrap: wrap;
-    }
-
     /* ---- Shimmer Skeleton ---- */
 
     @keyframes shimmer {
@@ -1241,47 +1162,6 @@
     .verdict-clean      { background-color: var(--verdict-clean-bg);      color: var(--verdict-clean-text);      border-color: var(--verdict-clean-border); }
     .verdict-no_data    { background-color: var(--verdict-no-data-bg);    color: var(--verdict-no-data-text);    border-color: var(--verdict-no-data-border); }
     .verdict-error      { background-color: var(--verdict-error-bg);      color: var(--verdict-error-text);      border-color: var(--verdict-error-border); }
-
-    .enrichment-detail {
-        font-size: 0.78rem;
-        color: var(--text-secondary);
-    }
-
-    .enrichment-nodata-section {
-        margin-top: 0.35rem;
-        border: 1px solid var(--border);
-        border-radius: var(--radius-sm);
-        background-color: var(--bg-tertiary);
-    }
-
-    .enrichment-nodata-summary {
-        padding: 0.35rem 0.75rem;
-        font-size: 0.75rem;
-        color: var(--text-secondary);
-        cursor: pointer;
-        user-select: none;
-        list-style: none;
-    }
-
-    .enrichment-nodata-summary::-webkit-details-marker {
-        display: none;
-    }
-
-    .enrichment-nodata-summary::before {
-        content: "\25B6";
-        font-size: 0.5rem;
-        margin-right: 0.4rem;
-        display: inline-block;
-        transition: transform 0.15s ease;
-    }
-
-    .enrichment-nodata-section[open] .enrichment-nodata-summary::before {
-        transform: rotate(90deg);
-    }
-
-    .enrichment-nodata-section .provider-result-row {
-        padding: 0.25rem 0.75rem;
-    }
 
     /* ---- Phase 4 Results UX — Summary row ---- */
 
@@ -1427,7 +1307,7 @@
     }
 
     .coverage-sep {
-        color: var(--text-tertiary);
+        color: var(--text-muted);
     }
 
     .coverage-stat--needs-key {
@@ -1563,12 +1443,6 @@
     .enrich-progress {
         animation: fadeIn var(--duration-normal) var(--ease-out-expo) both;
         animation-delay: 100ms;
-    }
-
-    /* ---- Nav link transition ---- */
-
-    .site-nav .nav-link {
-        transition: color var(--duration-fast) var(--ease-out-quart);
     }
 
     /* ---- Mode toggle transition upgrade ---- */

@@ -22,9 +22,6 @@ class Config:
     # Auto-generates if not in env — acceptable for dev; production must set this.
     SECRET_KEY: str = os.environ.get("SECRET_KEY", "") or secrets.token_hex(32)
 
-    # API keys: read from env only, never from code (SEC-02)
-    VIRUSTOTAL_API_KEY: str | None = os.environ.get("VIRUSTOTAL_API_KEY")
-
     # Security configuration
     TRUSTED_HOSTS: list[str] = ["localhost", "127.0.0.1"]
     MAX_CONTENT_LENGTH: int = 512 * 1024  # 512 KB — rejects oversize before route runs (SEC-12)

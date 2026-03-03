@@ -29,7 +29,7 @@ export type VerdictKey =
  *
  * Source: main.js IOC_PROVIDER_COUNTS keys (lines 242–250).
  */
-export type IocType =
+type IocType =
   | "ipv4"
   | "ipv6"
   | "domain"

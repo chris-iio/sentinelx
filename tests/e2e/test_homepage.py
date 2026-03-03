@@ -116,14 +116,13 @@ def test_offline_mode_by_default(page: Page, index_url: str) -> None:
 
 def test_security_headers(page: Page, index_url: str) -> None:
     """Response includes required security headers."""
+    from tests.e2e.conftest import assert_security_headers
+
     response = page.goto(index_url)
     assert response is not None
 
-    headers = response.headers
-    assert "content-security-policy" in headers
-    assert "'self'" in headers["content-security-policy"]
-    assert headers.get("x-content-type-options") == "nosniff"
-    assert headers.get("x-frame-options") == "SAMEORIGIN"
+    assert_security_headers(response.headers)
+    assert "'self'" in response.headers["content-security-policy"]
 
 
 def test_csrf_token_present(page: Page, index_url: str) -> None:

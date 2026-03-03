@@ -2,6 +2,9 @@
 
 Spins up SentinelX on an ephemeral port in a daemon thread so Playwright
 can interact with the real application (CSRF enabled, security headers active).
+
+The config_store module-level CONFIG_PATH is patched to a temp directory so
+E2E tests that save API keys don't touch the real ~/.sentinelx/config.ini.
 """
 
 import socket
@@ -11,7 +14,15 @@ import time
 import pytest
 from werkzeug.serving import make_server
 
+import app.enrichment.config_store as _config_store_mod
 from app import create_app
+
+
+def assert_security_headers(headers: dict) -> None:
+    """Assert response includes required security headers (shared across E2E tests)."""
+    assert "content-security-policy" in headers
+    assert headers.get("x-content-type-options") == "nosniff"
+    assert headers.get("x-frame-options") == "SAMEORIGIN"
 
 
 def pytest_collection_modifyitems(items: list) -> None:
@@ -41,7 +52,22 @@ def _wait_for_server(host: str, port: int, timeout: float = 5.0) -> None:
 
 
 @pytest.fixture(scope="session")
-def live_server():
+def _isolate_config(tmp_path_factory):
+    """Redirect ConfigStore to a temp directory so E2E tests never touch real config.
+
+    Patches the module-level CONFIG_PATH before the Flask server starts.
+    Since Flask runs in a daemon thread in the same process, all ConfigStore()
+    instantiations inside request handlers will pick up the patched path.
+    """
+    original = _config_store_mod.CONFIG_PATH
+    tmp_config = tmp_path_factory.mktemp("sentinelx") / "config.ini"
+    _config_store_mod.CONFIG_PATH = tmp_config
+    yield tmp_config
+    _config_store_mod.CONFIG_PATH = original
+
+
+@pytest.fixture(scope="session")
+def live_server(_isolate_config):
     """Start SentinelX on an ephemeral port for the entire E2E session.
 
     Yields the base URL (e.g. ``http://127.0.0.1:54321``).
@@ -79,3 +105,9 @@ def index_url(live_server: str) -> str:
 def analyze_url(live_server: str) -> str:
     """URL for the analyze endpoint."""
     return live_server + "/analyze"
+
+
+@pytest.fixture()
+def settings_url(live_server: str) -> str:
+    """URL for the settings page."""
+    return live_server + "/settings"
