@@ -300,9 +300,11 @@ Plans:
   3. Provider status indicators show which providers contributed data vs. skipped vs. errored
   4. The settings page shows all registered providers with configuration status
   5. E2E tests pass for the new results layout
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
+- [ ] 04-01-PLAN.md — Template restructure + CSS + backend provider coverage + E2E POM
+- [ ] 04-02-PLAN.md — TypeScript enrichment refactor: summary rows, detail rows, consensus badges, expand/collapse
 
 ## Progress
 
