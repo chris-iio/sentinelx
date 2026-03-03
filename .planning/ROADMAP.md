@@ -318,7 +318,7 @@ v4.0: 1 → 2 → 3 → 4
 | 2. Core Enrichment | v1.0 | 4/4 | Complete | 2026-02-21 |
 | 3. Additional TI Providers | 2/3 | In Progress|  | 2026-02-21 |
 | 3.1. Integration Fixes and Git Hygiene | v1.0 | 1/1 | Complete | 2026-02-22 |
-| 4. UX Polish and Security Verification | v1.0 | 2/2 | Complete | 2026-02-24 |
+| 4. UX Polish and Security Verification | 1/2 | In Progress|  | 2026-02-24 |
 | 6. Foundation — Tailwind + Alpine + Card Layout | v1.1 | 0/? | Complete | 2026-02-24 |
 | 7. Filtering & Search | v1.1 | 2/2 | Complete | 2026-02-25 |
 | 8. Input Page Polish | v1.1 | 2/2 | Complete | 2026-02-25 |

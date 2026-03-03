@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v3.0
-milestone_name: TypeScript Migration
-current_phase: 03-free-key-providers
-current_plan: Not started
-status: planning
-last_updated: "2026-03-03T12:07:13.423Z"
+milestone: v4.0
+milestone_name: Universal Threat Intel Hub
+current_phase: 04-results-ux-upgrade
+current_plan: "02"
+status: executing
+last_updated: "2026-03-03T13:22:41Z"
 progress:
-  total_phases: 7
-  completed_phases: 6
-  total_plans: 15
-  completed_plans: 14
+  total_phases: 4
+  completed_phases: 3
+  total_plans: 2
+  completed_plans: 1
 ---
 
 # Session State
@@ -22,9 +22,9 @@ See: .planning/PROJECT.md
 ## Position
 
 **Milestone:** v4.0 Universal Threat Intel Hub
-**Current phase:** 03-free-key-providers
-**Current Plan:** Not started
-**Status:** Ready to plan
+**Current phase:** 04-results-ux-upgrade
+**Current Plan:** 02 (next)
+**Status:** Plan 01 complete — ready for Plan 02
 
 ## Context
 
@@ -67,15 +67,19 @@ v4.0 pivots SentinelX from 3 hardcoded providers to 8+ via provider registry arc
 - [03-03] settings_post routes virustotal to set_vt_api_key(), others to set_provider_key() — preserves backward compat
 - [03-03] Template loops over providers list; no hardcoded provider names in HTML
 - [03-03] settings.ts uses querySelectorAll('.settings-section') pattern — independent per-provider toggles
+- [04-01] Shimmer skeleton preserved in enrichment slot — removed by JS on first result (existing behavior unchanged)
+- [04-01] Chevron/details hidden via .enrichment-slot:not(.enrichment-slot--loaded) CSS guard pattern — JS toggles class
+- [04-01] provider_coverage computed inline in analyze() using len(registry.all()) and len(registry.configured())
+- [04-01] Provider coverage row placed outside #verdict-dashboard div to avoid affecting KPI card grid layout
 
 ## Phases
 
 | Phase | Name | Tasks | Status |
 |-------|------|-------|--------|
 | 1 | Provider Registry Refactor | 5 | Complete |
-| 2 | Shodan InternetDB (Zero-Auth) | 2 | In progress (code done, SUMMARY pending) |
-| 3 | Free-Key Providers | 6 | In progress (plan 03 complete: registry + settings page wired) |
-| 4 | Results UX Upgrade | 5 | Not started |
+| 2 | Shodan InternetDB (Zero-Auth) | 2 | Complete |
+| 3 | Free-Key Providers | 6 | Complete (Plans 01-03) |
+| 4 | Results UX Upgrade | 5 | In progress (Plan 01 complete) |
 
 ## Session Log
 
@@ -89,7 +93,8 @@ v4.0 pivots SentinelX from 3 hardcoded providers to 8+ via provider registry arc
 - 2026-03-03: Plan 03-01 complete — URLhausAdapter + OTXAdapter TDD, 75 tests green, both hostnames in SSRF allowlist (8 min)
 - 2026-03-03: Plan 03-02 complete — GreyNoiseAdapter + AbuseIPDBAdapter TDD, 62 new tests, 440 total pass (4 min)
 - 2026-03-03: Plan 03-03 complete — build_registry() now 8 providers, PROVIDER_INFO added, multi-provider settings page (4 min)
+- 2026-03-03: Plan 04-01 complete — HTML scaffolding, CSS components, provider_coverage route data, ResultsPage POM Phase 4 methods (3 min)
 
 ## Stopped At
 
-Plan 03-03 complete (9b35cf1). Phase 3 Plans 01-03 done — Plans 03-04 through 03-06 remain.
+Plan 04-01 complete (d5f2f91). Phase 4 Plan 01 done — Plan 02 (TypeScript enrichment.ts refactor) is next.
