@@ -82,8 +82,9 @@ v4.0 pivots SentinelX from 3 hardcoded providers to 8+ via provider registry arc
 - 2026-03-02: Plan 02-01 complete — ShodanAdapter TDD, 25 tests all green, internetdb.shodan.io in SSRF allowlist (2 min)
 - 2026-03-02: Plan 02-02 executed — ShodanAdapter registered in build_registry(), 11 setup tests green
 - 2026-03-02: Renumbered v4.0 phases: 24-27 → 1-4 (milestone-local numbering)
+- 2026-03-03: Plan 03-01 complete — URLhausAdapter + OTXAdapter TDD, 75 tests green, both hostnames in SSRF allowlist (8 min)
 - 2026-03-03: Plan 03-02 complete — GreyNoiseAdapter + AbuseIPDBAdapter TDD, 62 new tests, 440 total pass (4 min)
 
 ## Stopped At
 
-Plan 03-02 complete (11e1349). Phase 3 in progress — Plan 03-01 (URLhaus/OTX) independent and can run in parallel.
+Plan 03-01 SUMMARY created (b342c74). Plan 03-02 also complete. Phase 3 Plans 01-02 done — Plans 03-03 through 03-06 remain.
