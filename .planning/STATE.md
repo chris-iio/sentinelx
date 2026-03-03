@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: Universal Threat Intel Hub
 current_phase: 03-free-key-providers
-current_plan: "02"
+current_plan: "03"
 status: in_progress
-last_updated: "2026-03-03T11:53:11Z"
+last_updated: "2026-03-03T12:00:04Z"
 progress:
   total_phases: 4
   completed_phases: 1
   total_plans: 10
-  completed_plans: 5
+  completed_plans: 6
 ---
 
 # Session State
@@ -23,7 +23,7 @@ See: .planning/PROJECT.md
 
 **Milestone:** v4.0 Universal Threat Intel Hub
 **Current phase:** 03-free-key-providers
-**Current Plan:** 02 complete
+**Current Plan:** 03 complete
 **Status:** In progress
 
 ## Context
@@ -63,6 +63,10 @@ v4.0 pivots SentinelX from 3 hardcoded providers to 8+ via provider registry arc
 - [03-02] AbuseIPDB 429 checked before raise_for_status — enables descriptive "Rate limit exceeded (429)" message
 - [03-02] GreyNoise auth: lowercase 'key'; AbuseIPDB auth: capital 'Key' — different API conventions
 - [03-02] AbuseIPDB score thresholds: >=75 malicious, >=25 suspicious, >0 reports clean, else no_data
+- [03-03] PROVIDER_INFO defined in setup.py (not routes.py) — keeps provider metadata co-located with registration
+- [03-03] settings_post routes virustotal to set_vt_api_key(), others to set_provider_key() — preserves backward compat
+- [03-03] Template loops over providers list; no hardcoded provider names in HTML
+- [03-03] settings.ts uses querySelectorAll('.settings-section') pattern — independent per-provider toggles
 
 ## Phases
 
@@ -70,7 +74,7 @@ v4.0 pivots SentinelX from 3 hardcoded providers to 8+ via provider registry arc
 |-------|------|-------|--------|
 | 1 | Provider Registry Refactor | 5 | Complete |
 | 2 | Shodan InternetDB (Zero-Auth) | 2 | In progress (code done, SUMMARY pending) |
-| 3 | Free-Key Providers | 6 | In progress (plan 02 complete: GreyNoise + AbuseIPDB adapters) |
+| 3 | Free-Key Providers | 6 | In progress (plan 03 complete: registry + settings page wired) |
 | 4 | Results UX Upgrade | 5 | Not started |
 
 ## Session Log
@@ -84,7 +88,8 @@ v4.0 pivots SentinelX from 3 hardcoded providers to 8+ via provider registry arc
 - 2026-03-02: Renumbered v4.0 phases: 24-27 → 1-4 (milestone-local numbering)
 - 2026-03-03: Plan 03-01 complete — URLhausAdapter + OTXAdapter TDD, 75 tests green, both hostnames in SSRF allowlist (8 min)
 - 2026-03-03: Plan 03-02 complete — GreyNoiseAdapter + AbuseIPDBAdapter TDD, 62 new tests, 440 total pass (4 min)
+- 2026-03-03: Plan 03-03 complete — build_registry() now 8 providers, PROVIDER_INFO added, multi-provider settings page (4 min)
 
 ## Stopped At
 
-Plan 03-01 SUMMARY created (b342c74). Plan 03-02 also complete. Phase 3 Plans 01-02 done — Plans 03-03 through 03-06 remain.
+Plan 03-03 complete (9b35cf1). Phase 3 Plans 01-03 done — Plans 03-04 through 03-06 remain.

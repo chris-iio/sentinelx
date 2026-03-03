@@ -286,9 +286,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 03-01-PLAN.md — URLhaus + OTX AlienVault adapters (TDD): multi-endpoint POST + all-type GET including CVE
-- [ ] 03-02-PLAN.md — GreyNoise + AbuseIPDB adapters (TDD): IP-only providers with riot/noise and score-based verdicts
-- [ ] 03-03-PLAN.md — Registry registration (all 4 providers) + multi-provider settings page
+- [x] 03-01-PLAN.md — URLhaus + OTX AlienVault adapters (TDD): multi-endpoint POST + all-type GET including CVE
+- [x] 03-02-PLAN.md — GreyNoise + AbuseIPDB adapters (TDD): IP-only providers with riot/noise and score-based verdicts
+- [x] 03-03-PLAN.md — Registry registration (all 4 providers) + multi-provider settings page
 
 ### Phase 4: Results UX Upgrade
 **Goal**: Unified results experience — per-IOC summary cards with expandable per-provider detail rows, aggregated verdicts, and provider status indicators
@@ -333,5 +333,5 @@ v4.0: 1 → 2 → 3 → 4
 | 23. Type Hardening and Verification | v3.0 | 0/? | Skipped | — |
 | 1. Provider Registry Refactor | v4.0 | 2/2 | Complete | 2026-03-02 |
 | 2. Shodan InternetDB (Zero-Auth) | v4.0 | 2/2 | Complete | 2026-03-02 |
-| 3. Free-Key Providers | v4.0 | 0/3 | Not started | — |
+| 3. Free-Key Providers | v4.0 | 3/3 | Complete | 2026-03-03 |
 | 4. Results UX Upgrade | v4.0 | 0/? | Not started | — |
