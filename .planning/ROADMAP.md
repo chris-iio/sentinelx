@@ -8,7 +8,7 @@
 - ✅ **v1.3 Visual Experience Overhaul** — Phases 15-17 (shipped 2026-02-28)
 - ✅ **v2.0 Home Page Modernization** — Phase 18 (shipped 2026-02-28)
 - 🚧 **v3.0 TypeScript Migration** — Phases 19-23 (in progress)
-- 🚧 **v4.0 Universal Threat Intel Hub** — Phases 1-4 (in progress)
+- ✅ **v4.0 Universal Threat Intel Hub** — Phases 1-4 (shipped 2026-03-03)
 
 ## Phases
 
@@ -303,8 +303,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 04-01-PLAN.md — Template restructure + CSS + backend provider coverage + E2E POM
-- [ ] 04-02-PLAN.md — TypeScript enrichment refactor: summary rows, detail rows, consensus badges, expand/collapse
+- [x] 04-01-PLAN.md — Template restructure + CSS + backend provider coverage + E2E POM
+- [x] 04-02-PLAN.md — TypeScript enrichment refactor: summary rows, detail rows, consensus badges, expand/collapse
 
 ## Progress
 
@@ -336,4 +336,4 @@ v4.0: 1 → 2 → 3 → 4
 | 1. Provider Registry Refactor | v4.0 | 2/2 | Complete | 2026-03-02 |
 | 2. Shodan InternetDB (Zero-Auth) | v4.0 | 2/2 | Complete | 2026-03-02 |
 | 3. Free-Key Providers | v4.0 | 3/3 | Complete | 2026-03-03 |
-| 4. Results UX Upgrade | v4.0 | 0/? | Not started | — |
+| 4. Results UX Upgrade | v4.0 | 2/2 | Complete | 2026-03-03 |

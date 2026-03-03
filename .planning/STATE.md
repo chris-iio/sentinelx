@@ -4,13 +4,13 @@ milestone: v4.0
 milestone_name: Universal Threat Intel Hub
 current_phase: 04-results-ux-upgrade
 current_plan: "02"
-status: executing
-last_updated: "2026-03-03T13:22:41Z"
+status: complete
+last_updated: "2026-03-03T22:35:00Z"
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 2
-  completed_plans: 1
+  completed_plans: 2
 ---
 
 # Session State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md
 **Milestone:** v4.0 Universal Threat Intel Hub
 **Current phase:** 04-results-ux-upgrade
 **Current Plan:** 02 (next)
-**Status:** Plan 01 complete — ready for Plan 02
+**Status:** Phase 04 complete — all plans done, v4.0 milestone complete
 
 ## Context
 
@@ -71,6 +71,11 @@ v4.0 pivots SentinelX from 3 hardcoded providers to 8+ via provider registry arc
 - [04-01] Chevron/details hidden via .enrichment-slot:not(.enrichment-slot--loaded) CSS guard pattern — JS toggles class
 - [04-01] provider_coverage computed inline in analyze() using len(registry.all()) and len(registry.configured())
 - [04-01] Provider coverage row placed outside #verdict-dashboard div to avoid affecting KPI card grid layout
+- [04-02] statText computed inline in renderEnrichmentResult() based on verdict + raw result fields — no separate formatter
+- [04-02] All results (no_data, errors, results) routed to .enrichment-details — old nodata section pattern removed
+- [04-02] sortDetailRows() debounced at 100ms per ioc_value via Map<string, ReturnType<typeof setTimeout>>
+- [04-02] wireExpandToggles() called once at init (not per-result) — all chevron buttons wired on page load
+- [04-02] Attribution heuristic: highest totalEngines first, VERDICT_SEVERITY tiebreaker — VT (72 engines) always wins
 
 ## Phases
 
@@ -79,7 +84,7 @@ v4.0 pivots SentinelX from 3 hardcoded providers to 8+ via provider registry arc
 | 1 | Provider Registry Refactor | 5 | Complete |
 | 2 | Shodan InternetDB (Zero-Auth) | 2 | Complete |
 | 3 | Free-Key Providers | 6 | Complete (Plans 01-03) |
-| 4 | Results UX Upgrade | 5 | In progress (Plan 01 complete) |
+| 4 | Results UX Upgrade | 5 | Complete |
 
 ## Session Log
 
@@ -94,7 +99,8 @@ v4.0 pivots SentinelX from 3 hardcoded providers to 8+ via provider registry arc
 - 2026-03-03: Plan 03-02 complete — GreyNoiseAdapter + AbuseIPDBAdapter TDD, 62 new tests, 440 total pass (4 min)
 - 2026-03-03: Plan 03-03 complete — build_registry() now 8 providers, PROVIDER_INFO added, multi-provider settings page (4 min)
 - 2026-03-03: Plan 04-01 complete — HTML scaffolding, CSS components, provider_coverage route data, ResultsPage POM Phase 4 methods (3 min)
+- 2026-03-03: Plan 04-02 complete — enrichment.ts refactored: summary rows, consensus badges, expand/collapse, attribution heuristic (15 min)
 
 ## Stopped At
 
-Plan 04-01 complete (d5f2f91). Phase 4 Plan 01 done — Plan 02 (TypeScript enrichment.ts refactor) is next.
+Plan 04-02 complete (14178c3). Phase 4 complete — v4.0 Universal Threat Intel Hub milestone done.
