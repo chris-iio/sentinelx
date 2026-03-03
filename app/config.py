@@ -45,6 +45,7 @@ class Config:
         "threatfox-api.abuse.ch",
         "internetdb.shodan.io",    # Phase 25: Shodan InternetDB (zero-auth)
         "urlhaus-api.abuse.ch",    # Phase 03-01: URLhaus (free-key)
+        "otx.alienvault.com",      # Phase 03-01: OTX AlienVault (free-key)
         "api.greynoise.io",        # Phase 03-02: GreyNoise Community (free-key)
         "api.abuseipdb.com",       # Phase 03-02: AbuseIPDB (free-key)
     ]
