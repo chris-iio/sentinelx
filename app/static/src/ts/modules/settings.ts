@@ -1,25 +1,37 @@
 /**
- * Settings page module — API key show/hide toggle.
+ * Settings page module — per-provider API key show/hide toggles.
  *
- * Extracted from main.js initSettingsPage() (lines 792-805).
+ * Handles multiple provider sections independently. Each section contains a
+ * toggle button (data-role="toggle-key") that controls the password/text
+ * state of the nearest API key input within that section.
  */
 
 /**
- * Initialise the settings page show/hide toggle for the API key input.
- * Toggles input.type between "password" and "text" and updates button label.
+ * Initialise show/hide toggles for all provider API key inputs on the settings page.
+ *
+ * Finds every .settings-section element and wires up its toggle button to
+ * its password input independently, so each provider's visibility is controlled
+ * separately.
  */
 export function init(): void {
-  const btn = document.getElementById("toggle-key-btn");
-  const input = document.getElementById("api-key") as HTMLInputElement | null;
-  if (!btn || !input) return;
+  const sections = document.querySelectorAll(".settings-section");
+  sections.forEach((section) => {
+    const btn = section.querySelector(
+      "[data-role='toggle-key']"
+    ) as HTMLButtonElement | null;
+    const input = section.querySelector(
+      "input[type='password'], input[type='text']"
+    ) as HTMLInputElement | null;
+    if (!btn || !input) return;
 
-  btn.addEventListener("click", function () {
-    if (input.type === "password") {
-      input.type = "text";
-      btn.textContent = "Hide";
-    } else {
-      input.type = "password";
-      btn.textContent = "Show";
-    }
+    btn.addEventListener("click", () => {
+      if (input.type === "password") {
+        input.type = "text";
+        btn.textContent = "Hide";
+      } else {
+        input.type = "password";
+        btn.textContent = "Show";
+      }
+    });
   });
 }

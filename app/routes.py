@@ -6,8 +6,8 @@ and the online enrichment pipeline via background threads.
 Routes:
     GET  /          — renders index.html (paste form)
     POST /analyze   — runs pipeline; offline renders results, online launches enrichment
-    GET  /settings  — renders settings.html (API key form)
-    POST /settings  — saves VT API key via ConfigStore, redirects back
+    GET  /settings  — renders settings.html (multi-provider API key forms)
+    POST /settings  — saves provider API key via ConfigStore, redirects back
     GET  /enrichment/status/<job_id> — returns JSON enrichment progress for polling
 
 Security:
@@ -29,7 +29,7 @@ from app import limiter
 from app.enrichment.config_store import ConfigStore
 from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.enrichment.orchestrator import EnrichmentOrchestrator
-from app.enrichment.setup import build_registry
+from app.enrichment.setup import PROVIDER_INFO, build_registry
 from app.pipeline.extractor import run_pipeline
 from app.pipeline.models import IOCType, group_by_type
 
@@ -166,36 +166,62 @@ def analyze():
 @bp.route("/settings", methods=["GET"])
 @limiter.limit("30 per minute")
 def settings_get():
-    """Settings page — shows the API key configuration form.
+    """Settings page — shows per-provider API key configuration forms.
 
-    Reads the current API key from ConfigStore and masks all but the last
-    4 characters for display, so analysts can confirm a key is saved without
-    exposing the full value.
+    Builds a list of provider metadata dicts (from PROVIDER_INFO) enriched with
+    the current key status from ConfigStore. Each entry includes a masked_key
+    (last 4 chars visible, rest asterisks) and a configured boolean.
+
+    Template variable:
+        providers: list[dict] — one entry per key-requiring provider, with keys:
+            id, name, requires_key, signup_url, description, masked_key, configured
     """
     config_store = ConfigStore()
-    current_key = config_store.get_vt_api_key()
-    masked_key = _mask_key(current_key)
-    return render_template("settings.html", masked_key=masked_key)
+    providers_with_status = []
+    for info in PROVIDER_INFO:
+        pid = info["id"]
+        if pid == "virustotal":
+            key = config_store.get_vt_api_key()
+        else:
+            key = config_store.get_provider_key(pid)
+        providers_with_status.append({
+            **info,
+            "masked_key": _mask_key(key),
+            "configured": key is not None,
+        })
+    return render_template("settings.html", providers=providers_with_status)
 
 
 @bp.route("/settings", methods=["POST"])
 @limiter.limit("10 per minute")
 def settings_post():
-    """Save the VT API key submitted via the settings form.
+    """Save a provider API key submitted via the settings form.
 
-    Validates that the submitted key is a non-empty string, then saves it
-    via ConfigStore and redirects back to GET /settings with a success flash.
+    Accepts a provider_id hidden field to identify which provider the key is for.
+    Validates that both provider_id is known and api_key is non-empty, then saves
+    via ConfigStore and redirects back to GET /settings with a flash message.
+
+    VirusTotal uses the legacy set_vt_api_key() path; all others use set_provider_key().
     """
+    provider_id = request.form.get("provider_id", "").strip()
     api_key = request.form.get("api_key", "").strip()
 
     if not api_key:
         flash("API key cannot be empty.", "error")
         return redirect(url_for("main.settings_get"))
 
-    config_store = ConfigStore()
-    config_store.set_vt_api_key(api_key)
+    valid_ids = {p["id"] for p in PROVIDER_INFO}
+    if provider_id not in valid_ids:
+        flash("Unknown provider.", "error")
+        return redirect(url_for("main.settings_get"))
 
-    flash("API key saved successfully.", "success")
+    config_store = ConfigStore()
+    if provider_id == "virustotal":
+        config_store.set_vt_api_key(api_key)
+    else:
+        config_store.set_provider_key(provider_id, api_key)
+
+    flash(f"API key saved for {provider_id}.", "success")
     return redirect(url_for("main.settings_get"))
 
 
