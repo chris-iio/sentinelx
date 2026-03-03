@@ -264,3 +264,21 @@ def test_filter_bar_has_sticky_position(page: Page, index_url: str) -> None:
     assert position == "sticky", (
         f"Expected filter bar to have position:sticky, got: '{position}'"
     )
+
+
+# ---------------------------------------------------------------------------
+# Phase 4 — Results UX structural tests
+# ---------------------------------------------------------------------------
+
+
+def test_offline_mode_has_no_provider_coverage(page: Page, index_url: str) -> None:
+    """Provider coverage row is not present in offline mode."""
+    results = _navigate_to_results(page, index_url)
+    expect(results.provider_coverage).to_have_count(0)
+
+
+def test_offline_mode_cards_have_no_enrichment_slot(page: Page, index_url: str) -> None:
+    """In offline mode, IOC cards do not contain enrichment slots."""
+    results = _navigate_to_results(page, index_url)
+    slots = results.page.locator(".enrichment-slot")
+    expect(slots).to_have_count(0)

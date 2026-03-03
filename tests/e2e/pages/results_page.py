@@ -142,3 +142,30 @@ class ResultsPage:
     def click_dashboard_badge(self, verdict: str) -> None:
         """Click the dashboard badge for the given verdict."""
         self.page.locator(f".verdict-kpi-card[data-verdict='{verdict}']").click()
+
+    # ---- Enrichment Summary (Phase 4) ----
+
+    def summary_row(self, card: Locator) -> Locator:
+        """The summary row within a specific IOC card."""
+        return card.locator(".ioc-summary-row")
+
+    def consensus_badge(self, card: Locator) -> Locator:
+        """The consensus badge within a specific IOC card."""
+        return card.locator(".consensus-badge")
+
+    def chevron_toggle(self, card: Locator) -> Locator:
+        """The chevron expand/collapse toggle within a specific IOC card."""
+        return card.locator(".chevron-toggle")
+
+    def detail_rows(self, card: Locator) -> Locator:
+        """All provider detail rows within a specific IOC card's expanded section."""
+        return card.locator(".provider-detail-row")
+
+    def enrichment_details(self, card: Locator) -> Locator:
+        """The expandable enrichment details container within a specific IOC card."""
+        return card.locator(".enrichment-details")
+
+    @property
+    def provider_coverage(self) -> Locator:
+        """The provider coverage row below the verdict dashboard."""
+        return self.page.locator(".provider-coverage-row")

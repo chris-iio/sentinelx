@@ -1283,6 +1283,157 @@
         padding: 0.25rem 0.75rem;
     }
 
+    /* ---- Phase 4 Results UX — Summary row ---- */
+
+    .ioc-summary-row {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 0;
+        font-size: 0.85rem;
+    }
+
+    .ioc-summary-attribution {
+        color: var(--text-secondary);
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    /* ---- Phase 4 Results UX — Consensus badge ---- */
+
+    .consensus-badge {
+        font-size: 0.75rem;
+        font-weight: 600;
+        padding: 0.125rem 0.5rem;
+        border-radius: var(--radius-sm);
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
+
+    .consensus-badge--green {
+        color: var(--verdict-clean-text);
+        background-color: var(--verdict-clean-bg);
+        border: 1px solid var(--verdict-clean-border);
+    }
+
+    .consensus-badge--yellow {
+        color: var(--verdict-suspicious-text);
+        background-color: var(--verdict-suspicious-bg);
+        border: 1px solid var(--verdict-suspicious-border);
+    }
+
+    .consensus-badge--red {
+        color: var(--verdict-malicious-text);
+        background-color: var(--verdict-malicious-bg);
+        border: 1px solid var(--verdict-malicious-border);
+    }
+
+    /* ---- Phase 4 Results UX — Chevron toggle ---- */
+
+    .chevron-toggle {
+        background: none;
+        border: none;
+        color: var(--text-secondary);
+        cursor: pointer;
+        padding: 0.25rem 0.5rem;
+        transition: color var(--duration-fast) ease;
+        display: flex;
+        align-items: center;
+    }
+
+    .chevron-toggle:hover {
+        color: var(--text-primary);
+    }
+
+    .chevron-icon {
+        transition: transform var(--duration-fast) var(--ease-out-expo);
+    }
+
+    .chevron-toggle.is-open .chevron-icon {
+        transform: rotate(90deg);
+    }
+
+    /* Hide chevron until results arrive */
+    .enrichment-slot:not(.enrichment-slot--loaded) .chevron-toggle {
+        display: none;
+    }
+
+    /* ---- Phase 4 Results UX — Expandable details container ---- */
+
+    .enrichment-details {
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height var(--duration-normal) var(--ease-out-quart);
+    }
+
+    .enrichment-details.is-open {
+        max-height: 600px;
+    }
+
+    /* ---- Phase 4 Results UX — Provider detail rows ---- */
+
+    .provider-detail-row {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.35rem 0.5rem;
+        font-size: 0.78rem;
+        border-top: 1px solid var(--border);
+    }
+
+    .provider-detail-row:first-child {
+        border-top: none;
+    }
+
+    .provider-detail-name {
+        font-weight: 500;
+        color: var(--text-primary);
+        min-width: 6rem;
+        flex-shrink: 0;
+    }
+
+    .provider-detail-stat {
+        color: var(--text-secondary);
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    /* Error rows use red text per CONTEXT.md decision */
+    .provider-detail-row[data-verdict="error"] {
+        color: var(--verdict-malicious-text);
+    }
+
+    .provider-detail-row[data-verdict="error"] .provider-detail-name,
+    .provider-detail-row[data-verdict="error"] .provider-detail-stat {
+        color: var(--verdict-malicious-text);
+    }
+
+    /* ---- Phase 4 Results UX — Provider coverage row ---- */
+
+    .provider-coverage-row {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.25rem;
+        padding: 0.5rem 0;
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+    }
+
+    .coverage-sep {
+        color: var(--text-tertiary);
+    }
+
+    .coverage-stat--needs-key {
+        color: var(--verdict-suspicious-text);
+    }
+
     /* ---- Mode-aware submit button ---- */
 
     .btn-primary.mode-online {
