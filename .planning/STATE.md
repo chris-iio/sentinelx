@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: Universal Threat Intel Hub
-current_phase: 02-shodan-internetdb
+current_phase: 03-free-key-providers
 current_plan: "02"
 status: in_progress
-last_updated: "2026-03-02T12:21:00Z"
+last_updated: "2026-03-03T11:53:11Z"
 progress:
   total_phases: 4
   completed_phases: 1
   total_plans: 10
-  completed_plans: 3
+  completed_plans: 5
 ---
 
 # Session State
@@ -22,8 +22,8 @@ See: .planning/PROJECT.md
 ## Position
 
 **Milestone:** v4.0 Universal Threat Intel Hub
-**Current phase:** 02-shodan-internetdb
-**Current Plan:** 02 executed (SUMMARY pending)
+**Current phase:** 03-free-key-providers
+**Current Plan:** 02 complete
 **Status:** In progress
 
 ## Context
@@ -54,6 +54,15 @@ v4.0 pivots SentinelX from 3 hardcoded providers to 8+ via provider registry arc
 - [02-01] _parse_response extracted as module-level function (not instance method) — stateless, takes provider_name arg
 - [02-01] 404 checked before raise_for_status — required to treat "no data" as EnrichmentResult not EnrichmentError
 - [02-01] body.get("vulns", []) used throughout — vulns/tags/ports keys may be absent in real API responses
+- [03-01] URLhausAdapter excludes SHA1 and CVE — URLhaus API has no SHA1 or CVE endpoints
+- [03-01] OTXAdapter uses frozenset(IOCType) for all-8-types support — simplest declaration, auto-includes future types
+- [03-01] MD5/SHA1/SHA256 all map to OTX "file" path segment — OTX has no per-hash-type endpoints
+- [03-01] OTX pulse count thresholds: >=5 malicious, 1-4 suspicious, 0 no_data
+- [03-02] GreyNoise 404 treated as no_data EnrichmentResult — same pattern as Shodan (not in database)
+- [03-02] AbuseIPDB never returns 404 — unknown IPs return 200 with score=0, totalReports=0
+- [03-02] AbuseIPDB 429 checked before raise_for_status — enables descriptive "Rate limit exceeded (429)" message
+- [03-02] GreyNoise auth: lowercase 'key'; AbuseIPDB auth: capital 'Key' — different API conventions
+- [03-02] AbuseIPDB score thresholds: >=75 malicious, >=25 suspicious, >0 reports clean, else no_data
 
 ## Phases
 
@@ -61,7 +70,7 @@ v4.0 pivots SentinelX from 3 hardcoded providers to 8+ via provider registry arc
 |-------|------|-------|--------|
 | 1 | Provider Registry Refactor | 5 | Complete |
 | 2 | Shodan InternetDB (Zero-Auth) | 2 | In progress (code done, SUMMARY pending) |
-| 3 | Free-Key Providers | 6 | Not started |
+| 3 | Free-Key Providers | 6 | In progress (plan 02 complete: GreyNoise + AbuseIPDB adapters) |
 | 4 | Results UX Upgrade | 5 | Not started |
 
 ## Session Log
@@ -73,7 +82,8 @@ v4.0 pivots SentinelX from 3 hardcoded providers to 8+ via provider registry arc
 - 2026-03-02: Plan 02-01 complete — ShodanAdapter TDD, 25 tests all green, internetdb.shodan.io in SSRF allowlist (2 min)
 - 2026-03-02: Plan 02-02 executed — ShodanAdapter registered in build_registry(), 11 setup tests green
 - 2026-03-02: Renumbered v4.0 phases: 24-27 → 1-4 (milestone-local numbering)
+- 2026-03-03: Plan 03-02 complete — GreyNoiseAdapter + AbuseIPDBAdapter TDD, 62 new tests, 440 total pass (4 min)
 
 ## Stopped At
 
-Plan 02-02 code committed (13537a2). SUMMARY pending. Phase 2 effectively complete — ready to transition to Phase 3.
+Plan 03-02 complete (11e1349). Phase 3 in progress — Plan 03-01 (URLhaus/OTX) independent and can run in parallel.
