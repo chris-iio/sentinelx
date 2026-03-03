@@ -146,10 +146,16 @@ def analyze():
             for ioc_type in IOCType
             if ioc_type != IOCType.CVE
         })
+        provider_coverage = {
+            "registered": len(registry.all()),
+            "configured": len(registry.configured()),
+            "needs_key": len(registry.all()) - len(registry.configured()),
+        }
         template_extras = {
             "job_id": job_id,
             "enrichable_count": enrichable_count,
             "provider_counts": provider_counts,
+            "provider_coverage": provider_coverage,
         }
 
     no_results = total_count == 0

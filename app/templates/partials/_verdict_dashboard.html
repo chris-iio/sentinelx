@@ -20,3 +20,12 @@
         <span class="verdict-kpi-label">No Data</span>
     </div>
 </div>
+{% if provider_coverage %}
+<div class="provider-coverage-row">
+    <span class="coverage-stat">{{ provider_coverage.registered }} registered</span>
+    <span class="coverage-sep">&middot;</span>
+    <span class="coverage-stat">{{ provider_coverage.configured }} configured</span>
+    <span class="coverage-sep">&middot;</span>
+    <span class="coverage-stat coverage-stat--needs-key">{{ provider_coverage.needs_key }} need API keys</span>
+</div>
+{% endif %}

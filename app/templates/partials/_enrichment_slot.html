@@ -4,4 +4,18 @@
         <div class="shimmer-line shimmer-line--medium"></div>
         <div class="shimmer-line shimmer-line--narrow"></div>
     </div>
+    {# Summary row — populated by enrichment.ts on first result #}
+    {# JS will create .ioc-summary-row and insert it here #}
+
+    {# Chevron toggle — wired by enrichment.ts init #}
+    <button class="chevron-toggle" aria-expanded="false" aria-label="Toggle provider details">
+        <svg class="chevron-icon" width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M4.5 2.5L8.5 6L4.5 9.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+    </button>
+
+    {# Expandable details container — starts collapsed #}
+    <div class="enrichment-details">
+        {# Per-provider detail rows rendered by enrichment.ts #}
+    </div>
 </div>
