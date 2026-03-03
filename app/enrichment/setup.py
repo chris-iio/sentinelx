@@ -11,38 +11,105 @@ Usage:
 """
 from __future__ import annotations
 
+from app.enrichment.adapters.abuseipdb import AbuseIPDBAdapter
+from app.enrichment.adapters.greynoise import GreyNoiseAdapter
 from app.enrichment.adapters.malwarebazaar import MBAdapter
+from app.enrichment.adapters.otx import OTXAdapter
 from app.enrichment.adapters.shodan import ShodanAdapter
 from app.enrichment.adapters.threatfox import TFAdapter
+from app.enrichment.adapters.urlhaus import URLhausAdapter
 from app.enrichment.adapters.virustotal import VTAdapter
 from app.enrichment.config_store import ConfigStore
 from app.enrichment.registry import ProviderRegistry
+
+# Metadata for the settings page — one entry per key-requiring provider.
+# Public providers (MalwareBazaar, ThreatFox, Shodan InternetDB) are omitted
+# because they need no configuration.
+PROVIDER_INFO: list[dict[str, str | bool]] = [
+    {
+        "id": "virustotal",
+        "name": "VirusTotal",
+        "requires_key": True,
+        "signup_url": "https://www.virustotal.com/gui/join-us",
+        "description": "IP, domain, URL, hash enrichment",
+    },
+    {
+        "id": "urlhaus",
+        "name": "URLhaus",
+        "requires_key": True,
+        "signup_url": "https://auth.abuse.ch/",
+        "description": "URL, hash, IP, domain — malware distribution tracking",
+    },
+    {
+        "id": "otx",
+        "name": "OTX AlienVault",
+        "requires_key": True,
+        "signup_url": "https://otx.alienvault.com/api",
+        "description": "All IOC types including CVE — community threat intel",
+    },
+    {
+        "id": "greynoise",
+        "name": "GreyNoise",
+        "requires_key": True,
+        "signup_url": "https://www.greynoise.io/",
+        "description": "IP only — internet scanner noise classification",
+    },
+    {
+        "id": "abuseipdb",
+        "name": "AbuseIPDB",
+        "requires_key": True,
+        "signup_url": "https://www.abuseipdb.com/register",
+        "description": "IP only — crowd-sourced abuse reporting",
+    },
+]
 
 
 def build_registry(
     allowed_hosts: list[str],
     config_store: ConfigStore,
 ) -> ProviderRegistry:
-    """Build and return a ProviderRegistry with all providers registered.
+    """Build and return a ProviderRegistry with all 8 providers registered.
 
-    Reads the VirusTotal API key from ConfigStore. Public providers
-    (MalwareBazaar, ThreatFox) are registered unconditionally — they are
-    always is_configured() == True.
+    Reads API keys from ConfigStore for key-requiring providers. Public providers
+    (MalwareBazaar, ThreatFox, Shodan InternetDB) are registered unconditionally —
+    they are always is_configured() == True.
+
+    Registered providers:
+        - VirusTotal       (requires key — via get_vt_api_key)
+        - MalwareBazaar    (public — no key required)
+        - ThreatFox        (public — no key required)
+        - Shodan InternetDB (zero-auth — no key required)
+        - URLhaus          (requires key — via get_provider_key("urlhaus"))
+        - OTX AlienVault   (requires key — via get_provider_key("otx"))
+        - GreyNoise        (requires key — via get_provider_key("greynoise"))
+        - AbuseIPDB        (requires key — via get_provider_key("abuseipdb"))
 
     Args:
         allowed_hosts: SSRF allowlist passed to each adapter for outbound calls.
         config_store: ConfigStore instance used to read provider API keys.
 
     Returns:
-        ProviderRegistry with VTAdapter, MBAdapter, TFAdapter, and ShodanAdapter registered.
+        ProviderRegistry with all 8 providers registered.
     """
     registry = ProviderRegistry()
 
     vt_key = config_store.get_vt_api_key() or ""
-
     registry.register(VTAdapter(api_key=vt_key, allowed_hosts=allowed_hosts))
+
     registry.register(MBAdapter(allowed_hosts=allowed_hosts))
     registry.register(TFAdapter(allowed_hosts=allowed_hosts))
     registry.register(ShodanAdapter(allowed_hosts=allowed_hosts))
+
+    urlhaus_key = config_store.get_provider_key("urlhaus") or ""
+    registry.register(URLhausAdapter(api_key=urlhaus_key, allowed_hosts=allowed_hosts))
+
+    otx_key = config_store.get_provider_key("otx") or ""
+    registry.register(OTXAdapter(api_key=otx_key, allowed_hosts=allowed_hosts))
+
+    gn_key = config_store.get_provider_key("greynoise") or ""
+    registry.register(GreyNoiseAdapter(api_key=gn_key, allowed_hosts=allowed_hosts))
+
+    abuseipdb_key = config_store.get_provider_key("abuseipdb") or ""
+    registry.register(AbuseIPDBAdapter(api_key=abuseipdb_key, allowed_hosts=allowed_hosts))
 
     return registry

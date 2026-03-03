@@ -1,24 +1,37 @@
 """Tests for app/enrichment/setup.py — build_registry() factory.
 
-Verifies that build_registry() returns a ProviderRegistry with all four
+Verifies that build_registry() returns a ProviderRegistry with all eight
 providers registered, using the correct API key from ConfigStore.
 """
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, call
 
 import pytest
 
 from app.enrichment.registry import ProviderRegistry
 
 
-def _make_config_store(vt_key: str | None = "test-api-key") -> MagicMock:
-    """Return a mock ConfigStore with get_vt_api_key() configured."""
+def _make_config_store(
+    vt_key: str | None = "test-api-key",
+    provider_key: str | None = None,
+) -> MagicMock:
+    """Return a mock ConfigStore with get_vt_api_key() and get_provider_key() configured."""
     mock_store = MagicMock()
     mock_store.get_vt_api_key.return_value = vt_key
+    mock_store.get_provider_key.return_value = provider_key
     return mock_store
 
 
 def _make_allowed_hosts() -> list[str]:
-    return ["www.virustotal.com", "mb-api.abuse.ch", "threatfox-api.abuse.ch", "internetdb.shodan.io"]
+    return [
+        "www.virustotal.com",
+        "mb-api.abuse.ch",
+        "threatfox-api.abuse.ch",
+        "internetdb.shodan.io",
+        "urlhaus-api.abuse.ch",
+        "otx.alienvault.com",
+        "api.greynoise.io",
+        "api.abuseipdb.com",
+    ]
 
 
 class TestBuildRegistry:
@@ -34,15 +47,15 @@ class TestBuildRegistry:
         )
         assert isinstance(registry, ProviderRegistry)
 
-    def test_registry_has_four_providers(self):
-        """build_registry() registers exactly 4 providers."""
+    def test_registry_has_eight_providers(self):
+        """build_registry() registers exactly 8 providers."""
         from app.enrichment.setup import build_registry
 
         registry = build_registry(
             allowed_hosts=_make_allowed_hosts(),
             config_store=_make_config_store(),
         )
-        assert len(registry.all()) == 4
+        assert len(registry.all()) == 8
 
     def test_registry_contains_virustotal(self):
         """build_registry() registers a provider named 'VirusTotal'."""
@@ -87,6 +100,50 @@ class TestBuildRegistry:
         )
         names = [p.name for p in registry.all()]
         assert "Shodan InternetDB" in names
+
+    def test_registry_contains_urlhaus(self):
+        """build_registry() registers a provider named 'URLhaus'."""
+        from app.enrichment.setup import build_registry
+
+        registry = build_registry(
+            allowed_hosts=_make_allowed_hosts(),
+            config_store=_make_config_store(),
+        )
+        names = [p.name for p in registry.all()]
+        assert "URLhaus" in names
+
+    def test_registry_contains_otx(self):
+        """build_registry() registers a provider named 'OTX AlienVault'."""
+        from app.enrichment.setup import build_registry
+
+        registry = build_registry(
+            allowed_hosts=_make_allowed_hosts(),
+            config_store=_make_config_store(),
+        )
+        names = [p.name for p in registry.all()]
+        assert "OTX AlienVault" in names
+
+    def test_registry_contains_greynoise(self):
+        """build_registry() registers a provider named 'GreyNoise'."""
+        from app.enrichment.setup import build_registry
+
+        registry = build_registry(
+            allowed_hosts=_make_allowed_hosts(),
+            config_store=_make_config_store(),
+        )
+        names = [p.name for p in registry.all()]
+        assert "GreyNoise" in names
+
+    def test_registry_contains_abuseipdb(self):
+        """build_registry() registers a provider named 'AbuseIPDB'."""
+        from app.enrichment.setup import build_registry
+
+        registry = build_registry(
+            allowed_hosts=_make_allowed_hosts(),
+            config_store=_make_config_store(),
+        )
+        names = [p.name for p in registry.all()]
+        assert "AbuseIPDB" in names
 
     def test_shodan_is_always_configured(self):
         """ShodanAdapter is configured even without any API key (zero-auth)."""
@@ -152,3 +209,54 @@ class TestBuildRegistry:
             config_store=config_store,
         )
         config_store.get_vt_api_key.assert_called_once()
+
+    def test_new_providers_unconfigured_without_keys(self):
+        """URLhaus, OTX, GreyNoise, AbuseIPDB are not configured when no keys are set."""
+        from app.enrichment.setup import build_registry
+
+        # get_provider_key returns None for all providers (default)
+        config_store = _make_config_store(None, provider_key=None)
+        registry = build_registry(
+            allowed_hosts=_make_allowed_hosts(),
+            config_store=config_store,
+        )
+
+        new_provider_names = {"URLhaus", "OTX AlienVault", "GreyNoise", "AbuseIPDB"}
+        for provider in registry.all():
+            if provider.name in new_provider_names:
+                assert provider.is_configured() is False, (
+                    f"{provider.name} should not be configured without an API key"
+                )
+
+    def test_new_provider_configured_with_key(self):
+        """URLhausAdapter is_configured() returns True when a key is provided."""
+        from app.enrichment.setup import build_registry
+
+        config_store = _make_config_store(None)
+        # Return a key only for "urlhaus"
+        def _get_provider_key(name: str) -> str | None:
+            return "my-urlhaus-key" if name == "urlhaus" else None
+
+        config_store.get_provider_key.side_effect = _get_provider_key
+        registry = build_registry(
+            allowed_hosts=_make_allowed_hosts(),
+            config_store=config_store,
+        )
+
+        urlhaus = next(p for p in registry.all() if p.name == "URLhaus")
+        assert urlhaus.is_configured() is True
+
+    def test_config_store_get_provider_key_called_for_each_new_provider(self):
+        """build_registry() calls get_provider_key() once per new key-requiring provider."""
+        from app.enrichment.setup import build_registry
+
+        config_store = _make_config_store("vt-key")
+        build_registry(
+            allowed_hosts=_make_allowed_hosts(),
+            config_store=config_store,
+        )
+
+        # Should be called for urlhaus, otx, greynoise, abuseipdb = 4 times
+        assert config_store.get_provider_key.call_count == 4
+        called_names = {c.args[0] for c in config_store.get_provider_key.call_args_list}
+        assert called_names == {"urlhaus", "otx", "greynoise", "abuseipdb"}
