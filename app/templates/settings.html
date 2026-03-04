@@ -11,65 +11,124 @@
         {% endfor %}
         {% endwith %}
 
-        {% for provider in providers %}
-        <section class="settings-section">
-            <h2 class="settings-section-title">
-                {{ provider.name }} API Key
-                {% if provider.configured %}
-                <span class="api-key-status api-key-status--configured"><span class="api-key-status-dot"></span> Configured</span>
-                {% else %}
-                <span class="api-key-status api-key-status--missing"><span class="api-key-status-dot"></span> Not configured</span>
-                {% endif %}
-            </h2>
+        {# ---- Tab bar ---- #}
+        <div class="settings-tabs" role="tablist">
+            <button class="settings-tab" role="tab" aria-selected="true"
+                    data-tab="providers" id="tab-providers"
+                    aria-controls="panel-providers">Providers</button>
+            <button class="settings-tab" role="tab" aria-selected="false"
+                    data-tab="about" id="tab-about"
+                    aria-controls="panel-about">About</button>
+        </div>
 
-            <p class="settings-info">{{ provider.description }}</p>
-            <p class="settings-info">
-                Your API key is stored locally in <code>~/.sentinelx/config.ini</code>.
-                It is never transmitted except to the {{ provider.name }} API.
-            </p>
-            <p class="settings-info">
-                Get a free API key at
-                <a href="{{ provider.signup_url }}" target="_blank" rel="noopener noreferrer">
-                    {{ provider.signup_url }}
-                </a>
-            </p>
-            <p class="settings-note">
-                Note: API key is validated on first enrichment use, not on save.
-            </p>
+        {# ---- Providers panel ---- #}
+        <div class="settings-tab-panel" id="panel-providers" data-active
+             role="tabpanel" aria-labelledby="tab-providers"
+             data-panel="providers">
 
-            <form method="post" action="{{ url_for('main.settings_post') }}">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                <input type="hidden" name="provider_id" value="{{ provider.id }}"/>
+            <div class="accordion-list" data-accordion>
+                {% for provider in providers %}
+                <section class="settings-section" data-provider="{{ provider.id }}">
+                    <button class="accordion-header" type="button"
+                            aria-expanded="false"
+                            aria-controls="accordion-body-{{ provider.id }}">
+                        <svg class="accordion-chevron" viewBox="0 0 16 16" fill="none"
+                             stroke="currentColor" stroke-width="2">
+                            <path d="M6 4l4 4-4 4"/>
+                        </svg>
+                        <div class="accordion-title-group">
+                            <h2 class="settings-section-title">
+                                {{ provider.name }} API Key
+                            </h2>
+                            <span class="accordion-subtitle">{{ provider.ioc_types }}</span>
+                        </div>
+                        {% if provider.configured %}
+                        <span class="api-key-status api-key-status--configured">
+                            <span class="api-key-status-dot"></span> Configured
+                        </span>
+                        {% else %}
+                        <span class="api-key-status api-key-status--missing">
+                            <span class="api-key-status-dot"></span> Not configured
+                        </span>
+                        {% endif %}
+                    </button>
 
-                <div class="form-field">
-                    <label for="api-key-{{ provider.id }}" class="form-label">API Key</label>
-                    <div class="input-group">
-                        <input
-                            type="password"
-                            id="api-key-{{ provider.id }}"
-                            name="api_key"
-                            class="form-input form-input--mono"
-                            value="{{ provider.masked_key or '' }}"
-                            placeholder="Paste your {{ provider.name }} API key here"
-                            autocomplete="off"
-                            spellcheck="false"
-                        />
-                        <button
-                            type="button"
-                            class="btn btn-secondary"
-                            data-role="toggle-key"
-                            aria-label="Show or hide {{ provider.name }} API key"
-                        >Show</button>
+                    <div class="accordion-body" id="accordion-body-{{ provider.id }}">
+                        <div class="accordion-body-inner">
+                            <div class="accordion-content">
+                                <p class="settings-info">{{ provider.description }}</p>
+                                <p class="settings-info">
+                                    Get a free API key at
+                                    <a href="{{ provider.signup_url }}" target="_blank"
+                                       rel="noopener noreferrer">{{ provider.signup_url }}</a>
+                                </p>
+
+                                <form method="post" action="{{ url_for('main.settings_post') }}">
+                                    <input type="hidden" name="csrf_token"
+                                           value="{{ csrf_token() }}"/>
+                                    <input type="hidden" name="provider_id"
+                                           value="{{ provider.id }}"/>
+
+                                    <div class="form-field">
+                                        <label for="api-key-{{ provider.id }}"
+                                               class="form-label">API Key</label>
+                                        <div class="input-group">
+                                            <input type="password"
+                                                   id="api-key-{{ provider.id }}"
+                                                   name="api_key"
+                                                   class="form-input form-input--mono"
+                                                   value="{{ provider.masked_key or '' }}"
+                                                   placeholder="Paste your {{ provider.name }} API key here"
+                                                   autocomplete="off"
+                                                   spellcheck="false"/>
+                                            <button type="button"
+                                                    class="btn btn-secondary"
+                                                    data-role="toggle-key"
+                                                    aria-label="Show or hide {{ provider.name }} API key"
+                                            >Show</button>
+                                        </div>
+                                    </div>
+
+                                    <div class="form-actions">
+                                        <button type="submit"
+                                                class="btn btn-primary">Save API Key</button>
+                                    </div>
+                                </form>
+
+                                <p class="settings-note">
+                                    Stored in <code>~/.sentinelx/config.ini</code>.
+                                    Validated on first use, not on save.
+                                </p>
+                            </div>
+                        </div>
                     </div>
-                </div>
+                </section>
+                {% endfor %}
+            </div>
 
-                <div class="form-actions">
-                    <button type="submit" class="btn btn-primary">Save API Key</button>
+            <div class="settings-free-providers">
+                <strong>Free providers (no key required):</strong>
+                Shodan InternetDB
+            </div>
+        </div>
+
+        {# ---- About panel ---- #}
+        <div class="settings-tab-panel" id="panel-about"
+             role="tabpanel" aria-labelledby="tab-about"
+             data-panel="about">
+            <div class="about-panel">
+                <div class="about-title">SentinelX</div>
+                <div class="about-tagline">Universal threat intelligence hub for SOC analysts</div>
+                <div class="about-grid">
+                    <span class="about-label">Providers</span>
+                    <span class="about-value">{{ provider_count }} supported ({{ key_required_count }} require API key)</span>
+                    <span class="about-label">Config</span>
+                    <span class="about-value"><code>~/.sentinelx/config.ini</code></span>
+                    <span class="about-label">Stack</span>
+                    <span class="about-value">Python 3.10 · Flask · TypeScript</span>
                 </div>
-            </form>
-        </section>
-        {% endfor %}
+            </div>
+        </div>
     </div>
 </div>
-
 {% endblock %}

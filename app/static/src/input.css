@@ -1335,7 +1335,7 @@
     /* ---- Settings page ---- */
 
     .page-settings {
-        max-width: 600px;
+        max-width: 720px;
         animation: fadeSlideUp var(--duration-slow) var(--ease-out-expo) both;
         animation-delay: 100ms;
     }
@@ -1344,29 +1344,154 @@
         background-color: var(--bg-secondary);
         border: 1px solid var(--border-default);
         border-radius: var(--radius);
-        padding: 2rem;
+        padding: 1.5rem;
         box-shadow: var(--shadow-md);
     }
 
     .settings-title {
         font-size: 1.25rem;
         font-weight: var(--weight-heading);
-        margin-bottom: 1.25rem;
+        margin-bottom: 1rem;
     }
+
+    /* ---- Tabs ---- */
+
+    .settings-tabs {
+        display: flex;
+        gap: 0;
+        border-bottom: 1px solid var(--border-default);
+        margin-bottom: 1.5rem;
+    }
+
+    .settings-tab {
+        position: relative;
+        padding: 0.5rem 1rem;
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: var(--text-secondary);
+        background: none;
+        border: none;
+        cursor: pointer;
+        transition: color 150ms ease;
+    }
+
+    .settings-tab:hover {
+        color: var(--text-primary);
+    }
+
+    .settings-tab[aria-selected="true"] {
+        color: var(--accent);
+    }
+
+    .settings-tab::after {
+        content: '';
+        position: absolute;
+        bottom: -1px;
+        left: 0;
+        right: 0;
+        height: 2px;
+        background-color: var(--accent);
+        transform: scaleX(0);
+        transition: transform 150ms ease;
+    }
+
+    .settings-tab[aria-selected="true"]::after {
+        transform: scaleX(1);
+    }
+
+    .settings-tab-panel {
+        display: none;
+    }
+
+    .settings-tab-panel[data-active] {
+        display: block;
+        animation: fadeIn var(--duration-normal) ease both;
+    }
+
+    /* ---- Accordion ---- */
 
     .settings-section {
         border: 1px solid var(--border);
         border-radius: var(--radius);
-        padding: 1.25rem;
         background-color: var(--bg-primary);
+        overflow: hidden;
+        transition: border-color 150ms ease;
+    }
+
+    .settings-section:hover {
+        border-color: var(--border-default);
+    }
+
+    .accordion-header {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.875rem 1rem;
+        cursor: pointer;
+        user-select: none;
+        background: none;
+        border: none;
+        width: 100%;
+        text-align: left;
+        color: inherit;
+    }
+
+    .accordion-header:focus-visible {
+        outline: 2px solid var(--accent-interactive);
+        outline-offset: -2px;
+        border-radius: var(--radius);
+    }
+
+    .accordion-chevron {
+        width: 16px;
+        height: 16px;
+        flex-shrink: 0;
+        color: var(--text-muted);
+        transition: transform 200ms ease, color 150ms ease;
+    }
+
+    .settings-section[data-expanded] .accordion-chevron {
+        transform: rotate(90deg);
+        color: var(--accent);
+    }
+
+    .accordion-title-group {
+        flex: 1;
+        min-width: 0;
     }
 
     .settings-section-title {
-        font-size: 0.95rem;
+        font-size: 0.9rem;
         font-weight: var(--weight-heading);
-        margin-bottom: 0.75rem;
         color: var(--text-primary);
+        line-height: 1.3;
     }
+
+    .accordion-subtitle {
+        font-size: 0.75rem;
+        color: var(--text-muted);
+        margin-top: 0.125rem;
+    }
+
+    .accordion-body {
+        display: grid;
+        grid-template-rows: 0fr;
+        transition: grid-template-rows 200ms ease;
+    }
+
+    .settings-section[data-expanded] .accordion-body {
+        grid-template-rows: 1fr;
+    }
+
+    .accordion-body-inner {
+        overflow: hidden;
+    }
+
+    .accordion-content {
+        padding: 0 1rem 1rem 2.75rem;
+    }
+
+    /* ---- Settings info / form (inside accordion) ---- */
 
     .settings-info {
         font-size: 0.85rem;
@@ -1403,15 +1528,17 @@
         font-size: 0.85rem;
     }
 
+    /* ---- Status badge ---- */
+
     .api-key-status {
         display: inline-flex;
         align-items: center;
         gap: 0.35rem;
-        font-size: 0.75rem;
+        font-size: 0.7rem;
         font-weight: 500;
-        padding: 0.15rem 0.5rem;
+        padding: 0.125rem 0.5rem;
         border-radius: 2rem;
-        margin-left: 0.5rem;
+        flex-shrink: 0;
     }
 
     .api-key-status--configured {
@@ -1431,6 +1558,64 @@
         height: 6px;
         border-radius: 50%;
         background-color: currentColor;
+    }
+
+    /* ---- Free providers footer ---- */
+
+    .settings-free-providers {
+        margin-top: 1.25rem;
+        padding-top: 1rem;
+        border-top: 1px solid var(--border);
+        font-size: 0.8rem;
+        color: var(--text-muted);
+    }
+
+    .settings-free-providers strong {
+        color: var(--text-secondary);
+        font-weight: 500;
+    }
+
+    /* ---- About tab ---- */
+
+    .about-panel {
+        padding: 0.5rem 0;
+    }
+
+    .about-title {
+        font-size: 1.1rem;
+        font-weight: var(--weight-heading);
+        color: var(--text-primary);
+        margin-bottom: 0.25rem;
+    }
+
+    .about-tagline {
+        font-size: 0.85rem;
+        color: var(--text-secondary);
+        margin-bottom: 1.5rem;
+    }
+
+    .about-grid {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 0.5rem 1rem;
+        font-size: 0.85rem;
+    }
+
+    .about-label {
+        color: var(--text-muted);
+        font-weight: 500;
+    }
+
+    .about-value {
+        color: var(--text-secondary);
+    }
+
+    .about-value code {
+        font-family: var(--font-mono);
+        font-size: 0.8rem;
+        background-color: var(--bg-tertiary);
+        padding: 0.1rem 0.35rem;
+        border-radius: var(--radius-sm);
     }
 
     /* ---- Results page animation ---- */

@@ -1,19 +1,75 @@
 /**
- * Settings page module — per-provider API key show/hide toggles.
- *
- * Handles multiple provider sections independently. Each section contains a
- * toggle button (data-role="toggle-key") that controls the password/text
- * state of the nearest API key input within that section.
+ * Settings page module — tab switching, accordion, and API key toggles.
  */
 
-/**
- * Initialise show/hide toggles for all provider API key inputs on the settings page.
- *
- * Finds every .settings-section element and wires up its toggle button to
- * its password input independently, so each provider's visibility is controlled
- * separately.
- */
-export function init(): void {
+/** Wire up the Providers | About tab bar. */
+function initTabs(): void {
+  const tabs = document.querySelectorAll<HTMLButtonElement>(".settings-tab");
+  const panels = document.querySelectorAll<HTMLElement>(".settings-tab-panel");
+  if (tabs.length === 0) return;
+
+  tabs.forEach((tab) => {
+    tab.addEventListener("click", () => {
+      const target = tab.dataset.tab;
+      if (!target) return;
+
+      tabs.forEach((t) => t.setAttribute("aria-selected", "false"));
+      tab.setAttribute("aria-selected", "true");
+
+      panels.forEach((p) => {
+        if (p.dataset.panel === target) {
+          p.setAttribute("data-active", "");
+        } else {
+          p.removeAttribute("data-active");
+        }
+      });
+    });
+  });
+}
+
+/** Wire up accordion sections — one open at a time. */
+function initAccordion(): void {
+  const sections = document.querySelectorAll<HTMLElement>(
+    ".settings-section[data-provider]"
+  );
+  if (sections.length === 0) return;
+
+  function expandSection(section: HTMLElement): void {
+    sections.forEach((s) => {
+      if (s !== section) {
+        s.removeAttribute("data-expanded");
+        const btn = s.querySelector(".accordion-header");
+        if (btn) btn.setAttribute("aria-expanded", "false");
+      }
+    });
+    section.setAttribute("data-expanded", "");
+    const btn = section.querySelector(".accordion-header");
+    if (btn) btn.setAttribute("aria-expanded", "true");
+  }
+
+  sections.forEach((section) => {
+    const header = section.querySelector(".accordion-header");
+    if (!header) return;
+    header.addEventListener("click", () => {
+      if (section.hasAttribute("data-expanded")) {
+        section.removeAttribute("data-expanded");
+        header.setAttribute("aria-expanded", "false");
+      } else {
+        expandSection(section);
+      }
+    });
+  });
+
+  // Auto-expand first unconfigured provider, or first provider if all configured
+  const firstUnconfigured = document.querySelector<HTMLElement>(
+    ".settings-section:has(.api-key-status--missing)"
+  );
+  const target = firstUnconfigured ?? sections[0];
+  if (target) expandSection(target);
+}
+
+/** Wire up per-provider API key show/hide toggles. */
+function initKeyToggles(): void {
   const sections = document.querySelectorAll(".settings-section");
   sections.forEach((section) => {
     const btn = section.querySelector(
@@ -34,4 +90,10 @@ export function init(): void {
       }
     });
   });
+}
+
+export function init(): void {
+  initTabs();
+  initAccordion();
+  initKeyToggles();
 }
