@@ -6,7 +6,7 @@ from playwright.sync_api import Locator, Page, expect
 
 
 class SettingsPage:
-    """Encapsulates selectors and actions for the multi-provider settings page."""
+    """Encapsulates selectors and actions for the tabbed settings page."""
 
     def __init__(self, page: Page, base_url: str) -> None:
         self.page = page
@@ -19,6 +19,25 @@ class SettingsPage:
     def goto(self) -> None:
         """Navigate to the settings page."""
         self.page.goto(self.base_url + "/settings")
+
+    # ---- Tabs ----
+
+    def tab(self, name: str) -> Locator:
+        """Return the tab button for a given tab name (providers/about)."""
+        return self.page.locator(f'.settings-tab[data-tab="{name}"]')
+
+    def tab_panel(self, name: str) -> Locator:
+        """Return the tab panel for a given tab name."""
+        return self.page.locator(f'.settings-tab-panel[data-panel="{name}"]')
+
+    def click_tab(self, name: str) -> None:
+        """Click a tab to switch panels."""
+        self.tab(name).click()
+
+    def expect_tab_active(self, name: str) -> None:
+        """Assert a tab is currently active."""
+        expect(self.tab(name)).to_have_attribute("aria-selected", "true")
+        expect(self.tab_panel(name)).to_have_attribute("data-active", "")
 
     # ---- Provider Sections ----
 
@@ -49,6 +68,35 @@ class SettingsPage:
         """Return the signup link element for a provider."""
         return self.provider_section(provider_id).locator("a[target='_blank']")
 
+    # ---- Accordion ----
+
+    def accordion_header(self, provider_id: str) -> Locator:
+        """Return the accordion header button for a provider."""
+        return self.provider_section(provider_id).locator(".accordion-header")
+
+    def expand_provider(self, provider_id: str) -> None:
+        """Expand a provider's accordion section if not already expanded."""
+        section = self.provider_section(provider_id)
+        if section.get_attribute("data-expanded") is None:
+            self.accordion_header(provider_id).click()
+
+    def collapse_provider(self, provider_id: str) -> None:
+        """Collapse a provider's accordion section if expanded."""
+        section = self.provider_section(provider_id)
+        if section.get_attribute("data-expanded") is not None:
+            self.accordion_header(provider_id).click()
+
+    def expect_provider_expanded(self, provider_id: str) -> None:
+        """Assert a provider's accordion section is expanded."""
+        expect(self.provider_section(provider_id)).to_have_attribute(
+            "data-expanded", ""
+        )
+
+    def expect_provider_collapsed(self, provider_id: str) -> None:
+        """Assert a provider's accordion section is collapsed."""
+        section = self.provider_section(provider_id)
+        expect(section).not_to_have_attribute("data-expanded", "")
+
     # ---- Form Elements ----
 
     def api_key_input(self, provider_id: str) -> Locator:
@@ -74,7 +122,8 @@ class SettingsPage:
     # ---- Actions ----
 
     def fill_api_key(self, provider_id: str, key: str) -> None:
-        """Fill the API key input for a provider."""
+        """Fill the API key input for a provider (expands section first)."""
+        self.expand_provider(provider_id)
         self.api_key_input(provider_id).fill(key)
 
     def save_api_key(self, provider_id: str, key: str) -> None:
@@ -84,6 +133,7 @@ class SettingsPage:
 
     def toggle_key_visibility(self, provider_id: str) -> None:
         """Click the Show/Hide button to toggle API key visibility."""
+        self.expand_provider(provider_id)
         self.show_hide_button(provider_id).click()
 
     # ---- Assertions ----
