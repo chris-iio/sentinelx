@@ -31,6 +31,7 @@ PROVIDER_INFO: list[dict[str, str | bool]] = [
         "requires_key": True,
         "signup_url": "https://www.virustotal.com/gui/join-us",
         "description": "IP, domain, URL, hash enrichment",
+        "ioc_types": "IP · domain · URL · hash",
     },
     {
         "id": "malwarebazaar",
@@ -38,6 +39,7 @@ PROVIDER_INFO: list[dict[str, str | bool]] = [
         "requires_key": True,
         "signup_url": "https://auth.abuse.ch/",
         "description": "Hash only — malware sample database",
+        "ioc_types": "hash",
     },
     {
         "id": "threatfox",
@@ -45,6 +47,7 @@ PROVIDER_INFO: list[dict[str, str | bool]] = [
         "requires_key": True,
         "signup_url": "https://auth.abuse.ch/",
         "description": "IP, domain, URL, hash — IOC sharing platform",
+        "ioc_types": "IP · domain · URL · hash",
     },
     {
         "id": "urlhaus",
@@ -52,6 +55,7 @@ PROVIDER_INFO: list[dict[str, str | bool]] = [
         "requires_key": True,
         "signup_url": "https://auth.abuse.ch/",
         "description": "URL, hash, IP, domain — malware distribution tracking",
+        "ioc_types": "URL · hash · IP · domain",
     },
     {
         "id": "otx",
@@ -59,6 +63,7 @@ PROVIDER_INFO: list[dict[str, str | bool]] = [
         "requires_key": True,
         "signup_url": "https://otx.alienvault.com/api",
         "description": "All IOC types including CVE — community threat intel",
+        "ioc_types": "IP · domain · URL · hash · CVE",
     },
     {
         "id": "greynoise",
@@ -66,6 +71,7 @@ PROVIDER_INFO: list[dict[str, str | bool]] = [
         "requires_key": True,
         "signup_url": "https://www.greynoise.io/",
         "description": "IP only — internet scanner noise classification",
+        "ioc_types": "IP",
     },
     {
         "id": "abuseipdb",
@@ -73,6 +79,7 @@ PROVIDER_INFO: list[dict[str, str | bool]] = [
         "requires_key": True,
         "signup_url": "https://www.abuseipdb.com/register",
         "description": "IP only — crowd-sourced abuse reporting",
+        "ioc_types": "IP",
     },
 ]
 

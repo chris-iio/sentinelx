@@ -195,7 +195,12 @@ def settings_get():
             "masked_key": _mask_key(key),
             "configured": key is not None,
         })
-    return render_template("settings.html", providers=providers_with_status)
+    return render_template(
+        "settings.html",
+        providers=providers_with_status,
+        provider_count=8,
+        key_required_count=len(PROVIDER_INFO),
+    )
 
 
 @bp.route("/settings", methods=["POST"])
