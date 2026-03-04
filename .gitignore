@@ -55,3 +55,6 @@ app/static/dist/*.map
 
 # Git worktrees
 .worktrees/
+
+# Vendored Claude Code reference
+everything-claude-code/
