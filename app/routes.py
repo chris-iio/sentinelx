@@ -123,7 +123,7 @@ def analyze():
             return redirect(url_for("main.settings_get"))
 
         job_id = uuid.uuid4().hex
-        orchestrator = EnrichmentOrchestrator(adapters=registry.all())
+        orchestrator = EnrichmentOrchestrator(adapters=registry.configured())
 
         with _orch_lock:
             _orchestrators[job_id] = orchestrator

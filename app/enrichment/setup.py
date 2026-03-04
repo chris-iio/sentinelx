@@ -23,8 +23,7 @@ from app.enrichment.config_store import ConfigStore
 from app.enrichment.registry import ProviderRegistry
 
 # Metadata for the settings page — one entry per key-requiring provider.
-# Public providers (MalwareBazaar, ThreatFox, Shodan InternetDB) are omitted
-# because they need no configuration.
+# Shodan InternetDB is omitted because it requires no configuration (zero-auth).
 PROVIDER_INFO: list[dict[str, str | bool]] = [
     {
         "id": "virustotal",
@@ -32,6 +31,20 @@ PROVIDER_INFO: list[dict[str, str | bool]] = [
         "requires_key": True,
         "signup_url": "https://www.virustotal.com/gui/join-us",
         "description": "IP, domain, URL, hash enrichment",
+    },
+    {
+        "id": "malwarebazaar",
+        "name": "MalwareBazaar",
+        "requires_key": True,
+        "signup_url": "https://auth.abuse.ch/",
+        "description": "Hash only — malware sample database",
+    },
+    {
+        "id": "threatfox",
+        "name": "ThreatFox",
+        "requires_key": True,
+        "signup_url": "https://auth.abuse.ch/",
+        "description": "IP, domain, URL, hash — IOC sharing platform",
     },
     {
         "id": "urlhaus",
@@ -76,8 +89,8 @@ def build_registry(
 
     Registered providers:
         - VirusTotal       (requires key — via get_vt_api_key)
-        - MalwareBazaar    (public — no key required)
-        - ThreatFox        (public — no key required)
+        - MalwareBazaar    (requires key — via get_provider_key("malwarebazaar"))
+        - ThreatFox        (requires key — via get_provider_key("threatfox"))
         - Shodan InternetDB (zero-auth — no key required)
         - URLhaus          (requires key — via get_provider_key("urlhaus"))
         - OTX AlienVault   (requires key — via get_provider_key("otx"))
@@ -96,8 +109,11 @@ def build_registry(
     vt_key = config_store.get_vt_api_key() or ""
     registry.register(VTAdapter(api_key=vt_key, allowed_hosts=allowed_hosts))
 
-    registry.register(MBAdapter(allowed_hosts=allowed_hosts))
-    registry.register(TFAdapter(allowed_hosts=allowed_hosts))
+    mb_key = config_store.get_provider_key("malwarebazaar") or ""
+    registry.register(MBAdapter(api_key=mb_key, allowed_hosts=allowed_hosts))
+
+    tf_key = config_store.get_provider_key("threatfox") or ""
+    registry.register(TFAdapter(api_key=tf_key, allowed_hosts=allowed_hosts))
     registry.register(ShodanAdapter(allowed_hosts=allowed_hosts))
 
     urlhaus_key = config_store.get_provider_key("urlhaus") or ""

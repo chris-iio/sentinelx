@@ -14,7 +14,7 @@ Confidence-based verdict mapping (per user decision):
   - confidence_level < 75   ->  verdict="suspicious"
   - query_status="no_result" -> verdict="no_data"
 
-No API key required for basic search queries (ThreatFox public search).
+Auth-Key header required (abuse.ch policy change — previously public search).
 
 Thread safety: a fresh requests.Session is created inside each lookup() call.
 """
@@ -117,11 +117,12 @@ class TFAdapter:
     Verdict mapping: confidence_level >= 75 -> malicious, < 75 -> suspicious.
     Handles all 7 enrichable IOC types; CVE is not supported by ThreatFox.
 
-    No API key required — basic search queries are public.
+    Auth-Key header required (abuse.ch policy change — previously public).
 
     Thread safety: creates a fresh requests.Session per lookup() call.
 
     Args:
+        api_key:       abuse.ch API key for the Auth-Key header.
         allowed_hosts: SSRF allowlist — only these hostnames may be contacted.
     """
 
@@ -131,14 +132,15 @@ class TFAdapter:
     })
 
     name = "ThreatFox"
-    requires_api_key = False
+    requires_api_key = True
 
-    def __init__(self, allowed_hosts: list[str]) -> None:
+    def __init__(self, api_key: str, allowed_hosts: list[str]) -> None:
+        self._api_key = api_key
         self._allowed_hosts = allowed_hosts
 
     def is_configured(self) -> bool:
-        """Always returns True — ThreatFox requires no API key."""
-        return True
+        """Return True if a non-empty API key is set."""
+        return bool(self._api_key)
 
     def lookup(self, ioc: IOC) -> EnrichmentResult | EnrichmentError:
         """Enrich a single IOC using the ThreatFox API v1.
@@ -172,7 +174,10 @@ class TFAdapter:
             payload = {"query": "search_ioc", "search_term": ioc.value}
 
         session = requests.Session()
-        session.headers.update({"Content-Type": "application/json"})
+        session.headers.update({
+            "Content-Type": "application/json",
+            "Auth-Key": self._api_key,
+        })
 
         try:
             resp = session.post(

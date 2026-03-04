@@ -292,7 +292,7 @@ def test_analyze_online_creates_all_three_adapters(client):
         assert "allowed_hosts" in call_kwargs
         assert "www.virustotal.com" in call_kwargs["allowed_hosts"]
 
-        # Orchestrator receives registry.all() — all three provider mocks
+        # Orchestrator receives registry.configured() — only configured provider mocks
         orch_call_kwargs = MockOrchestrator.call_args[1]
         adapters_passed = orch_call_kwargs["adapters"]
         assert mock_provider_vt in adapters_passed

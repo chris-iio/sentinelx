@@ -25,12 +25,12 @@ class TestProviderProtocolConformance:
 
     def test_mb_adapter_is_provider(self) -> None:
         """MBAdapter satisfies the Provider protocol."""
-        adapter = MBAdapter(allowed_hosts=[])
+        adapter = MBAdapter(api_key="test-key", allowed_hosts=[])
         assert isinstance(adapter, Provider)
 
     def test_tf_adapter_is_provider(self) -> None:
         """TFAdapter satisfies the Provider protocol."""
-        adapter = TFAdapter(allowed_hosts=[])
+        adapter = TFAdapter(api_key="test-key", allowed_hosts=[])
         assert isinstance(adapter, Provider)
 
     def test_non_conforming_class_fails_isinstance(self) -> None:
@@ -91,18 +91,23 @@ class TestMBAdapterProtocolAttributes:
 
     def test_mb_adapter_name(self) -> None:
         """MBAdapter.name is 'MalwareBazaar'."""
-        adapter = MBAdapter(allowed_hosts=[])
+        adapter = MBAdapter(api_key="test-key", allowed_hosts=[])
         assert adapter.name == "MalwareBazaar"
 
     def test_mb_adapter_requires_api_key(self) -> None:
-        """MBAdapter.requires_api_key is False."""
-        adapter = MBAdapter(allowed_hosts=[])
-        assert adapter.requires_api_key is False
+        """MBAdapter.requires_api_key is True (abuse.ch auth required)."""
+        adapter = MBAdapter(api_key="test-key", allowed_hosts=[])
+        assert adapter.requires_api_key is True
 
-    def test_mb_is_configured_always_true(self) -> None:
-        """MBAdapter.is_configured() always returns True (no key required)."""
-        adapter = MBAdapter(allowed_hosts=[])
+    def test_mb_is_configured_with_key(self) -> None:
+        """MBAdapter.is_configured() returns True when API key is set."""
+        adapter = MBAdapter(api_key="test-key", allowed_hosts=[])
         assert adapter.is_configured() is True
+
+    def test_mb_is_not_configured_without_key(self) -> None:
+        """MBAdapter.is_configured() returns False when API key is empty."""
+        adapter = MBAdapter(api_key="", allowed_hosts=[])
+        assert adapter.is_configured() is False
 
 
 class TestTFAdapterProtocolAttributes:
@@ -110,15 +115,20 @@ class TestTFAdapterProtocolAttributes:
 
     def test_tf_adapter_name(self) -> None:
         """TFAdapter.name is 'ThreatFox'."""
-        adapter = TFAdapter(allowed_hosts=[])
+        adapter = TFAdapter(api_key="test-key", allowed_hosts=[])
         assert adapter.name == "ThreatFox"
 
     def test_tf_adapter_requires_api_key(self) -> None:
-        """TFAdapter.requires_api_key is False."""
-        adapter = TFAdapter(allowed_hosts=[])
-        assert adapter.requires_api_key is False
+        """TFAdapter.requires_api_key is True (abuse.ch auth required)."""
+        adapter = TFAdapter(api_key="test-key", allowed_hosts=[])
+        assert adapter.requires_api_key is True
 
-    def test_tf_is_configured_always_true(self) -> None:
-        """TFAdapter.is_configured() always returns True (no key required)."""
-        adapter = TFAdapter(allowed_hosts=[])
+    def test_tf_is_configured_with_key(self) -> None:
+        """TFAdapter.is_configured() returns True when API key is set."""
+        adapter = TFAdapter(api_key="test-key", allowed_hosts=[])
         assert adapter.is_configured() is True
+
+    def test_tf_is_not_configured_without_key(self) -> None:
+        """TFAdapter.is_configured() returns False when API key is empty."""
+        adapter = TFAdapter(api_key="", allowed_hosts=[])
+        assert adapter.is_configured() is False

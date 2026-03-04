@@ -23,7 +23,7 @@ ALLOWED_HOSTS = ["threatfox-api.abuse.ch"]
 # -- Fixtures / helpers -------------------------------------------------------
 
 def _make_adapter(allowed_hosts: list[str] | None = None) -> TFAdapter:
-    return TFAdapter(allowed_hosts=allowed_hosts if allowed_hosts is not None else ALLOWED_HOSTS)
+    return TFAdapter(api_key="test-key", allowed_hosts=allowed_hosts if allowed_hosts is not None else ALLOWED_HOSTS)
 
 
 def _make_mock_response(status_code: int, body: dict | None = None) -> MagicMock:
@@ -227,7 +227,7 @@ class TestEdgeCases:
     def test_ssrf_validation(self) -> None:
         """allowed_hosts missing threatfox-api.abuse.ch -> EnrichmentError with SSRF message."""
         ioc = IOC(type=IOCType.IPV4, value="1.2.3.4", raw_match="1.2.3.4")
-        adapter = TFAdapter(allowed_hosts=[])
+        adapter = TFAdapter(api_key="test-key", allowed_hosts=[])
 
         with patch("requests.Session") as mock_session_cls:
             mock_session = MagicMock()

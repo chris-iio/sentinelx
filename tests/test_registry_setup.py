@@ -184,11 +184,11 @@ class TestBuildRegistry:
         # Empty string → is_configured() returns False
         assert vt.is_configured() is False
 
-    def test_public_providers_are_always_configured(self):
-        """MalwareBazaar and ThreatFox are configured even without any API key."""
+    def test_abuse_ch_providers_unconfigured_without_keys(self):
+        """MalwareBazaar and ThreatFox are not configured without API keys."""
         from app.enrichment.setup import build_registry
 
-        config_store = _make_config_store(None)
+        config_store = _make_config_store(None, provider_key=None)
         registry = build_registry(
             allowed_hosts=_make_allowed_hosts(),
             config_store=config_store,
@@ -196,8 +196,8 @@ class TestBuildRegistry:
 
         mb = next(p for p in registry.all() if p.name == "MalwareBazaar")
         tf = next(p for p in registry.all() if p.name == "ThreatFox")
-        assert mb.is_configured() is True
-        assert tf.is_configured() is True
+        assert mb.is_configured() is False
+        assert tf.is_configured() is False
 
     def test_config_store_get_vt_api_key_is_called(self):
         """build_registry() calls config_store.get_vt_api_key() exactly once."""
@@ -210,8 +210,8 @@ class TestBuildRegistry:
         )
         config_store.get_vt_api_key.assert_called_once()
 
-    def test_new_providers_unconfigured_without_keys(self):
-        """URLhaus, OTX, GreyNoise, AbuseIPDB are not configured when no keys are set."""
+    def test_key_providers_unconfigured_without_keys(self):
+        """All key-requiring providers are not configured when no keys are set."""
         from app.enrichment.setup import build_registry
 
         # get_provider_key returns None for all providers (default)
@@ -221,9 +221,12 @@ class TestBuildRegistry:
             config_store=config_store,
         )
 
-        new_provider_names = {"URLhaus", "OTX AlienVault", "GreyNoise", "AbuseIPDB"}
+        key_provider_names = {
+            "MalwareBazaar", "ThreatFox", "URLhaus",
+            "OTX AlienVault", "GreyNoise", "AbuseIPDB",
+        }
         for provider in registry.all():
-            if provider.name in new_provider_names:
+            if provider.name in key_provider_names:
                 assert provider.is_configured() is False, (
                     f"{provider.name} should not be configured without an API key"
                 )
@@ -256,7 +259,7 @@ class TestBuildRegistry:
             config_store=config_store,
         )
 
-        # Should be called for urlhaus, otx, greynoise, abuseipdb = 4 times
-        assert config_store.get_provider_key.call_count == 4
+        # Should be called for malwarebazaar, threatfox, urlhaus, otx, greynoise, abuseipdb = 6 times
+        assert config_store.get_provider_key.call_count == 6
         called_names = {c.args[0] for c in config_store.get_provider_key.call_args_list}
-        assert called_names == {"urlhaus", "otx", "greynoise", "abuseipdb"}
+        assert called_names == {"malwarebazaar", "threatfox", "urlhaus", "otx", "greynoise", "abuseipdb"}
