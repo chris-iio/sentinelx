@@ -1,31 +1,6 @@
 /**
- * Settings page module — tab switching, accordion, and API key toggles.
+ * Settings page module — accordion and API key toggles.
  */
-
-/** Wire up the Providers | About tab bar. */
-function initTabs(): void {
-  const tabs = document.querySelectorAll<HTMLButtonElement>(".settings-tab");
-  const panels = document.querySelectorAll<HTMLElement>(".settings-tab-panel");
-  if (tabs.length === 0) return;
-
-  tabs.forEach((tab) => {
-    tab.addEventListener("click", () => {
-      const target = tab.dataset.tab;
-      if (!target) return;
-
-      tabs.forEach((t) => t.setAttribute("aria-selected", "false"));
-      tab.setAttribute("aria-selected", "true");
-
-      panels.forEach((p) => {
-        if (p.dataset.panel === target) {
-          p.setAttribute("data-active", "");
-        } else {
-          p.removeAttribute("data-active");
-        }
-      });
-    });
-  });
-}
 
 /** Wire up accordion sections — one open at a time. */
 function initAccordion(): void {
@@ -60,12 +35,6 @@ function initAccordion(): void {
     });
   });
 
-  // Auto-expand first unconfigured provider, or first provider if all configured
-  const firstUnconfigured = document.querySelector<HTMLElement>(
-    ".settings-section:has(.api-key-status--missing)"
-  );
-  const target = firstUnconfigured ?? sections[0];
-  if (target) expandSection(target);
 }
 
 /** Wire up per-provider API key show/hide toggles. */
@@ -93,7 +62,6 @@ function initKeyToggles(): void {
 }
 
 export function init(): void {
-  initTabs();
   initAccordion();
   initKeyToggles();
 }

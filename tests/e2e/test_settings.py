@@ -1,6 +1,6 @@
 """E2E tests for the SentinelX settings page.
 
-Covers: page rendering, tabs, accordion, provider listing, API key forms,
+Covers: page rendering, accordion, provider listing, API key forms,
 status indicators, show/hide toggle (JS), flash messages, CSRF, navigation,
 security headers.
 """
@@ -20,10 +20,10 @@ EXPECTED_PROVIDERS = [
 
 
 def test_settings_page_loads(page: Page, live_server: str) -> None:
-    """Settings page renders with a title."""
+    """Settings page renders with a back link."""
     sp = SettingsPage(page, live_server)
     sp.goto()
-    expect(sp.title).to_have_text("Settings")
+    expect(sp.back_link).to_be_visible()
 
 
 def test_settings_page_title_tag(page: Page, live_server: str) -> None:
@@ -41,49 +41,15 @@ def test_settings_security_headers(page: Page, live_server: str) -> None:
     assert_security_headers(response.headers)
 
 
-# -- Tabs --
-
-
-def test_providers_tab_active_by_default(page: Page, live_server: str) -> None:
-    """Providers tab is selected when the settings page loads."""
-    sp = SettingsPage(page, live_server)
-    sp.goto()
-    sp.expect_tab_active("providers")
-
-
-def test_about_tab_shows_content(page: Page, live_server: str) -> None:
-    """Clicking the About tab reveals the about panel."""
-    sp = SettingsPage(page, live_server)
-    sp.goto()
-    sp.click_tab("about")
-    sp.expect_tab_active("about")
-    expect(sp.tab_panel("about")).to_contain_text("SentinelX")
-    expect(sp.tab_panel("about")).to_contain_text("SOC analysts")
-
-
-def test_tab_switching_hides_other_panel(page: Page, live_server: str) -> None:
-    """Switching to About hides Providers panel and vice versa."""
-    sp = SettingsPage(page, live_server)
-    sp.goto()
-
-    sp.click_tab("about")
-    expect(sp.tab_panel("providers")).not_to_have_attribute("data-active", "")
-
-    sp.click_tab("providers")
-    sp.expect_tab_active("providers")
-    expect(sp.tab_panel("about")).not_to_have_attribute("data-active", "")
-
-
 # -- Accordion --
 
 
-def test_accordion_auto_expands_first_unconfigured(page: Page, live_server: str) -> None:
-    """First unconfigured provider is auto-expanded on page load."""
+def test_accordion_all_collapsed_by_default(page: Page, live_server: str) -> None:
+    """All accordion sections are collapsed on page load."""
     sp = SettingsPage(page, live_server)
     sp.goto()
-    # In isolated config, all are unconfigured, so first provider should be expanded
-    first_pid = EXPECTED_PROVIDERS[0]
-    sp.expect_provider_expanded(first_pid)
+    for pid in EXPECTED_PROVIDERS:
+        sp.expect_provider_collapsed(pid)
 
 
 def test_accordion_expands_on_click(page: Page, live_server: str) -> None:
@@ -132,7 +98,7 @@ def test_each_provider_has_title(page: Page, live_server: str) -> None:
         "abuseipdb": "AbuseIPDB",
     }
     for pid, name in expected_names.items():
-        expect(sp.provider_title(pid)).to_contain_text(f"{name} API Key")
+        expect(sp.provider_title(pid)).to_contain_text(name)
 
 
 def test_each_provider_has_description(page: Page, live_server: str) -> None:
@@ -278,7 +244,6 @@ def test_show_hide_toggles_are_independent(page: Page, live_server: str) -> None
     sp = SettingsPage(page, live_server)
     sp.goto()
 
-    # Show virustotal key (first provider, auto-expanded)
     sp.expand_provider("virustotal")
     sp.toggle_key_visibility("virustotal")
     sp.expect_key_input_visible("virustotal")
@@ -368,7 +333,6 @@ def test_settings_nav_from_index(page: Page, live_server: str) -> None:
     settings_link.click()
 
     expect(page).to_have_url(live_server + "/settings")
-    expect(page.locator("h1.settings-title")).to_have_text("Settings")
 
 
 def test_settings_nav_from_results(page: Page, live_server: str) -> None:

@@ -14,7 +14,7 @@
         <form method="post" action="{{ url_for('main.analyze') }}" id="analyze-form">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
 
-            <div class="form-field textarea-wrap">
+            <div class="form-field">
                 <textarea
                     id="ioc-text"
                     name="text"
@@ -26,7 +26,6 @@
                     autofocus
                     aria-label="IOC text input"
                 ></textarea>
-                <span class="textarea-cursor" aria-hidden="true"></span>
                 <span id="paste-feedback" class="paste-feedback" style="display:none;" aria-live="polite"></span>
             </div>
 

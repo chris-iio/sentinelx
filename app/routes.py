@@ -198,8 +198,6 @@ def settings_get():
     return render_template(
         "settings.html",
         providers=providers_with_status,
-        provider_count=8,
-        key_required_count=len(PROVIDER_INFO),
     )
 
 

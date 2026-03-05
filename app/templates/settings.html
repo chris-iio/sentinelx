@@ -2,8 +2,14 @@
 
 {% block content %}
 <div class="page-settings">
+    <a href="{{ url_for('main.index') }}" class="back-link" aria-label="Back to home">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"
+             width="16" height="16">
+            <path d="M10 12L6 8l4-4"/>
+        </svg>
+        Back
+    </a>
     <div class="settings-card">
-        <h1 class="settings-title">Settings</h1>
 
         {% with messages = get_flashed_messages(with_categories=true) %}
         {% for category, message in messages %}
@@ -11,20 +17,8 @@
         {% endfor %}
         {% endwith %}
 
-        {# ---- Tab bar ---- #}
-        <div class="settings-tabs" role="tablist">
-            <button class="settings-tab" role="tab" aria-selected="true"
-                    data-tab="providers" id="tab-providers"
-                    aria-controls="panel-providers">Providers</button>
-            <button class="settings-tab" role="tab" aria-selected="false"
-                    data-tab="about" id="tab-about"
-                    aria-controls="panel-about">About</button>
-        </div>
-
-        {# ---- Providers panel ---- #}
-        <div class="settings-tab-panel" id="panel-providers" data-active
-             role="tabpanel" aria-labelledby="tab-providers"
-             data-panel="providers">
+        {# ---- Providers ---- #}
+        <div class="settings-providers">
 
             <div class="accordion-list" data-accordion>
                 {% for provider in providers %}
@@ -38,7 +32,7 @@
                         </svg>
                         <div class="accordion-title-group">
                             <h2 class="settings-section-title">
-                                {{ provider.name }} API Key
+                                {{ provider.name }}
                             </h2>
                             <span class="accordion-subtitle">{{ provider.ioc_types }}</span>
                         </div>
@@ -104,29 +98,6 @@
                     </div>
                 </section>
                 {% endfor %}
-            </div>
-
-            <div class="settings-free-providers">
-                <strong>Free providers (no key required):</strong>
-                Shodan InternetDB
-            </div>
-        </div>
-
-        {# ---- About panel ---- #}
-        <div class="settings-tab-panel" id="panel-about"
-             role="tabpanel" aria-labelledby="tab-about"
-             data-panel="about">
-            <div class="about-panel">
-                <div class="about-title">SentinelX</div>
-                <div class="about-tagline">Universal threat intelligence hub for SOC analysts</div>
-                <div class="about-grid">
-                    <span class="about-label">Providers</span>
-                    <span class="about-value">{{ provider_count }} supported ({{ key_required_count }} require API key)</span>
-                    <span class="about-label">Config</span>
-                    <span class="about-value"><code>~/.sentinelx/config.ini</code></span>
-                    <span class="about-label">Stack</span>
-                    <span class="about-value">Python 3.10 · Flask · TypeScript</span>
-                </div>
             </div>
         </div>
     </div>

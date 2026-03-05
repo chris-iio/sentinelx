@@ -36,7 +36,7 @@ function showPasteFeedback(charCount: number): void {
 function updateSubmitLabel(mode: string): void {
   const submitBtn = document.getElementById("submit-btn");
   if (!submitBtn) return;
-  submitBtn.textContent = mode === "online" ? "Extract & Enrich" : "Extract IOCs";
+  submitBtn.textContent = "Extract";
   // Mode-aware button color
   submitBtn.classList.remove("mode-online", "mode-offline");
   submitBtn.classList.add(mode === "online" ? "mode-online" : "mode-offline");

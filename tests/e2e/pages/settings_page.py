@@ -13,31 +13,12 @@ class SettingsPage:
         self.base_url = base_url
 
         # Top-level locators
-        self.title = page.locator("h1.settings-title")
+        self.back_link = page.locator(".page-settings .back-link")
         self.flash_messages = page.locator("[role='alert']")
 
     def goto(self) -> None:
         """Navigate to the settings page."""
         self.page.goto(self.base_url + "/settings")
-
-    # ---- Tabs ----
-
-    def tab(self, name: str) -> Locator:
-        """Return the tab button for a given tab name (providers/about)."""
-        return self.page.locator(f'.settings-tab[data-tab="{name}"]')
-
-    def tab_panel(self, name: str) -> Locator:
-        """Return the tab panel for a given tab name."""
-        return self.page.locator(f'.settings-tab-panel[data-panel="{name}"]')
-
-    def click_tab(self, name: str) -> None:
-        """Click a tab to switch panels."""
-        self.tab(name).click()
-
-    def expect_tab_active(self, name: str) -> None:
-        """Assert a tab is currently active."""
-        expect(self.tab(name)).to_have_attribute("aria-selected", "true")
-        expect(self.tab_panel(name)).to_have_attribute("data-active", "")
 
     # ---- Provider Sections ----
 

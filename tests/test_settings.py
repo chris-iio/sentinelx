@@ -17,10 +17,10 @@ from unittest.mock import MagicMock, patch
 
 
 def test_get_settings_page(client):
-    """GET /settings returns 200 and contains VirusTotal API Key section."""
+    """GET /settings returns 200 and contains VirusTotal section."""
     response = client.get("/settings")
     assert response.status_code == 200
-    assert b"VirusTotal API Key" in response.data
+    assert b"VirusTotal" in response.data
 
 
 def test_get_settings_page_has_form(client):
