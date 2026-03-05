@@ -38,7 +38,7 @@ PROVIDER_INFO: list[dict[str, str | bool]] = [
         "name": "MalwareBazaar",
         "requires_key": True,
         "signup_url": "https://auth.abuse.ch/",
-        "description": "Hash only — malware sample database",
+        "description": "Hash only, malware sample database",
         "ioc_types": "hash",
     },
     {
@@ -46,7 +46,7 @@ PROVIDER_INFO: list[dict[str, str | bool]] = [
         "name": "ThreatFox",
         "requires_key": True,
         "signup_url": "https://auth.abuse.ch/",
-        "description": "IP, domain, URL, hash — IOC sharing platform",
+        "description": "IP, domain, URL, hash, IOC sharing platform",
         "ioc_types": "IP · domain · URL · hash",
     },
     {
@@ -54,7 +54,7 @@ PROVIDER_INFO: list[dict[str, str | bool]] = [
         "name": "URLhaus",
         "requires_key": True,
         "signup_url": "https://auth.abuse.ch/",
-        "description": "URL, hash, IP, domain — malware distribution tracking",
+        "description": "URL, hash, IP, domain, malware distribution tracking",
         "ioc_types": "URL · hash · IP · domain",
     },
     {
@@ -62,7 +62,7 @@ PROVIDER_INFO: list[dict[str, str | bool]] = [
         "name": "OTX AlienVault",
         "requires_key": True,
         "signup_url": "https://otx.alienvault.com/api",
-        "description": "All IOC types including CVE — community threat intel",
+        "description": "All IOC types including CVE, community threat intel",
         "ioc_types": "IP · domain · URL · hash · CVE",
     },
     {
@@ -70,7 +70,7 @@ PROVIDER_INFO: list[dict[str, str | bool]] = [
         "name": "GreyNoise",
         "requires_key": True,
         "signup_url": "https://www.greynoise.io/",
-        "description": "IP only — internet scanner noise classification",
+        "description": "IP only, internet scanner noise classification",
         "ioc_types": "IP",
     },
     {
@@ -78,7 +78,7 @@ PROVIDER_INFO: list[dict[str, str | bool]] = [
         "name": "AbuseIPDB",
         "requires_key": True,
         "signup_url": "https://www.abuseipdb.com/register",
-        "description": "IP only — crowd-sourced abuse reporting",
+        "description": "IP only, crowd-sourced abuse reporting",
         "ioc_types": "IP",
     },
 ]

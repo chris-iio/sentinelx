@@ -1300,6 +1300,7 @@
 
     .page-settings {
         max-width: 720px;
+        margin: 0 auto;
         animation: fadeSlideUp var(--duration-slow) var(--ease-out-expo) both;
         animation-delay: 100ms;
     }

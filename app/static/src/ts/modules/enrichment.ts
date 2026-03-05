@@ -462,7 +462,7 @@ function renderEnrichmentResult(
           ? result.detection_count + "/" + result.total_engines + " engines"
           : "Suspicious";
     } else if (verdict === "clean") {
-      statText = "Clean — " + result.total_engines + " engines";
+      statText = "Clean, " + result.total_engines + " engines";
     } else {
       // no_data
       statText = "Not in database";
@@ -475,13 +475,13 @@ function renderEnrichmentResult(
       verdict +
       " (" +
       statText +
-      (scanDateStr ? " — Scanned " + scanDateStr : "") +
+      (scanDateStr ? ", scanned " + scanDateStr : "") +
       ")";
   } else {
     // Error result
     verdict = "error";
     statText = result.error;
-    summaryText = result.provider + ": error — " + result.error;
+    summaryText = result.provider + ": error, " + result.error;
   }
 
   // Push to iocVerdicts with extended fields
