@@ -1,5 +1,27 @@
 # Milestones
 
+## v5.0 Quality-of-Life (Shipped: 2026-03-09)
+
+**Phases:** 1 (01) | **Plans:** 0 (retroactive adoption) | **Requirements:** 4/4
+**Timeline:** Ad-hoc (2026-03-03 to 2026-03-09)
+**LOC:** ~3,515 app Python + ~3,619 frontend (TS+CSS) + ~8,408 tests
+**Tests:** 483 unit/integration (up from 457 at v4.0)
+
+**Delivered:** Four quality-of-life features built ad-hoc after v4.0 and adopted retroactively into GSD tracking. No prospective PLANs -- single SUMMARY-only phase.
+
+**Key accomplishments:**
+1. Enrichment Result Cache -- SQLite-backed with configurable TTL, thread-safe, settings UI for TTL and cache clearing
+2. Export Menu -- JSON/CSV/clipboard client-side export replacing single copy button, dropdown UX
+3. Bulk IOC Input Mode -- one-per-line parser, toggle UI, route branching, validation with skip
+4. Provider Context Fields -- VT top_detections/reputation, generic context field rendering for all 8 providers
+
+**Git range:** 2 logical commits (backend+tests, frontend+templates+docs)
+
+**Archives:**
+- `.planning/phases/01-quality-of-life/01-SUMMARY.md`
+
+---
+
 ## v4.0 Universal Threat Intel Hub (Shipped: 2026-03-03)
 
 **Phases:** 4 (01-04) | **Plans:** 9 | **Requirements:** 18/18

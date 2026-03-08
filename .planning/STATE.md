@@ -5,7 +5,7 @@ milestone_name: null
 current_phase: null
 current_plan: null
 status: idle
-last_updated: "2026-03-04T00:00:00.000Z"
+last_updated: "2026-03-09T00:00:00.000Z"
 progress:
   total_phases: 0
   completed_phases: 0
@@ -17,19 +17,19 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-04)
+See: .planning/PROJECT.md (updated 2026-03-09)
 
 **Core value:** Safe, correct, and transparent IOC extraction and enrichment
-**Current focus:** All milestones complete (v1.0 through v4.0). Next milestone TBD.
+**Current focus:** All milestones complete (v1.0 through v5.0). Next milestone TBD.
 
 ## Position
 
-**Last milestone:** v4.0 Universal Threat Intel Hub (shipped 2026-03-03)
+**Last milestone:** v5.0 Quality-of-Life (shipped 2026-03-09)
 **Status:** Idle — no active milestone
 
 ## Context
 
-Seven milestones shipped (v1.0 → v4.0). SentinelX is a fully functional universal threat intelligence hub with 8 providers, TypeScript frontend, and unified results UX. 542 tests, ~14,500 LOC total.
+Eight milestones shipped (v1.0 → v5.0). SentinelX is a fully functional universal threat intelligence hub with 8 providers, TypeScript frontend, unified results UX, enrichment cache, export menu, bulk input mode, and provider context fields. 483 unit/integration tests, ~16,000 LOC total.
 
 ## Decisions
 
@@ -37,4 +37,5 @@ Seven milestones shipped (v1.0 → v4.0). SentinelX is a fully functional univer
 
 ## Session Log
 
+- 2026-03-09: Adopted ad-hoc v5.0 Quality-of-Life work into GSD tracking (retroactive milestone)
 - 2026-03-04: Completed v3.0 + v4.0 milestone archival

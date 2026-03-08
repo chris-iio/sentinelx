@@ -9,6 +9,7 @@
 - ✅ **v2.0 Home Page Modernization** — Phase 18 (shipped 2026-02-28)
 - ✅ **v3.0 TypeScript Migration** — Phases 19-22, Phase 23 skipped (shipped 2026-03-01)
 - ✅ **v4.0 Universal Threat Intel Hub** — Phases 1-4 (shipped 2026-03-03)
+- ✅ **v5.0 Quality-of-Life** — Phase 1 retroactive (shipped 2026-03-09)
 
 ## Phases
 
@@ -89,6 +90,15 @@ Full details: `milestones/v4.0-ROADMAP.md`
 
 </details>
 
+<details>
+<summary>✅ v5.0 Quality-of-Life (Phase 1) — SHIPPED 2026-03-09</summary>
+
+- [x] Phase 1: Quality-of-Life Features (retroactive, no PLANs) — completed 2026-03-09
+
+Ad-hoc work adopted into GSD tracking. See `.planning/phases/01-quality-of-life/01-SUMMARY.md`.
+
+</details>
+
 ## Progress
 
 | Milestone | Phases | Plans | Status | Shipped |
@@ -100,3 +110,4 @@ Full details: `milestones/v4.0-ROADMAP.md`
 | v2.0 Home Page | 1 | 3 | ✅ Complete | 2026-02-28 |
 | v3.0 TypeScript | 4 | 8 | ✅ Complete | 2026-03-01 |
 | v4.0 Threat Intel Hub | 4 | 9 | ✅ Complete | 2026-03-03 |
+| v5.0 Quality-of-Life | 1 | 0 | ✅ Complete | 2026-03-09 |

@@ -21,7 +21,7 @@ import type { VerdictKey } from "./ioc";
  * The `type` field is a literal string discriminant used to narrow the
  * `EnrichmentItem` union to this branch.
  */
-interface EnrichmentResultItem {
+export interface EnrichmentResultItem {
   /** Discriminant literal — always "result" for this branch. */
   type: "result";
   /** Raw IOC value (e.g. "1.2.3.4", "evil.com"). */
@@ -55,6 +55,11 @@ interface EnrichmentResultItem {
    * code must narrow before accessing individual fields.
    */
   raw_stats: Record<string, unknown>;
+  /**
+   * ISO 8601 timestamp of when this result was served from cache.
+   * Only present when result came from cache. Absent for fresh lookups.
+   */
+  cached_at?: string;
 }
 
 /**

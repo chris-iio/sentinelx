@@ -100,6 +100,30 @@
                 {% endfor %}
             </div>
         </div>
+
+        {# ---- Cache ---- #}
+        <div class="settings-cache-section">
+            <h2 class="settings-cache-title">Cache</h2>
+            <div class="settings-cache-stats">
+                <span class="cache-stat">{{ cache_stats.total_entries }} cached entries</span>
+            </div>
+
+            <form method="post" action="{{ url_for('main.cache_ttl_set') }}" class="cache-ttl-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <label for="cache-ttl" class="form-label">TTL (hours)</label>
+                <div class="input-group">
+                    <input type="number" id="cache-ttl" name="cache_ttl"
+                           class="form-input cache-ttl-input"
+                           value="{{ cache_ttl }}" min="1" max="720"/>
+                    <button type="submit" class="btn btn-secondary">Save</button>
+                </div>
+            </form>
+
+            <form method="post" action="{{ url_for('main.cache_clear') }}" class="cache-clear-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <button type="submit" class="btn btn-secondary btn-danger-subtle" id="clear-cache-btn">Clear Cache</button>
+            </form>
+        </div>
     </div>
 </div>
 {% endblock %}

@@ -138,13 +138,44 @@ function initModeToggle(): void {
   updateSubmitLabel(mi.value);
 }
 
+// ---- Input mode toggle (freetext vs bulk) ----
+
+function initInputModeToggle(): void {
+  const buttons = document.querySelectorAll<HTMLElement>(".input-mode-btn");
+  const hiddenInput = document.querySelector<HTMLInputElement>("#input-mode-input");
+  const textarea = document.querySelector<HTMLTextAreaElement>("#ioc-text");
+  if (buttons.length === 0 || !hiddenInput || !textarea) return;
+
+  const hi: HTMLInputElement = hiddenInput;
+  const ta: HTMLTextAreaElement = textarea;
+
+  buttons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const mode = btn.getAttribute("data-input-mode") ?? "freetext";
+      hi.value = mode;
+
+      buttons.forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+
+      if (mode === "bulk") {
+        ta.placeholder = "One IOC per line...";
+        ta.classList.add("ioc-textarea--bulk");
+      } else {
+        ta.placeholder = "";
+        ta.classList.remove("ioc-textarea--bulk");
+      }
+    });
+  });
+}
+
 // ---- Public API ----
 
 /**
- * Initialise all form controls: submit button state, auto-grow, and mode toggle.
+ * Initialise all form controls: submit button state, auto-grow, mode toggle, and input mode toggle.
  */
 export function init(): void {
   initSubmitButton();
   initAutoGrow();
   initModeToggle();
+  initInputModeToggle();
 }

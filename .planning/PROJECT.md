@@ -33,6 +33,10 @@ Safe, correct, and transparent IOC extraction and enrichment — never invent sc
 - ✓ 8 threat intel providers: VirusTotal, MalwareBazaar, ThreatFox, Shodan, URLhaus, OTX, GreyNoise, AbuseIPDB — v4.0
 - ✓ Unified results UX: summary rows with consensus badges, expandable per-provider details — v4.0
 - ✓ Multi-provider settings page with dynamic provider cards and API key management — v4.0
+- ✓ SQLite-backed enrichment result cache with configurable TTL and settings UI — v5.0
+- ✓ Client-side export menu (JSON/CSV/clipboard) replacing single copy button — v5.0
+- ✓ Bulk IOC input mode with one-per-line parser and toggle UI — v5.0
+- ✓ Provider context fields (VT top detections/reputation) with generic field rendering — v5.0
 
 ### Active
 
@@ -57,8 +61,8 @@ Safe, correct, and transparent IOC extraction and enrichment — never invent sc
 - **Environment:** Runs on analyst's local machine or an internal jump box (not internet-facing)
 - **Tech stack:** Python 3.10 + Flask 3.1, iocextract + iocsearcher for extraction, requests for HTTP
 - **Frontend stack:** TypeScript 5.8 + esbuild (IIFE output), Tailwind CSS standalone CLI, Inter Variable + JetBrains Mono Variable, dark-first zinc/emerald/teal design tokens
-- **Codebase:** ~3,127 LOC Python, ~3,072 LOC frontend (TS+CSS), ~386 LOC templates, ~8,006 LOC tests
-- **Test suite:** 542 tests (up from 224 at v1.0)
+- **Codebase:** ~3,515 LOC Python, ~3,619 LOC frontend (TS+CSS), ~449 LOC templates, ~8,408 LOC tests
+- **Test suite:** 483 unit/integration + E2E suite (up from 224 at v1.0)
 - **Threat intel providers (8):** VirusTotal (API key), MalwareBazaar (public), ThreatFox (public), Shodan InternetDB (zero-auth), URLhaus (free key), OTX AlienVault (free key), GreyNoise Community (free key), AbuseIPDB (free key)
 - **Architecture:** Provider Protocol + ProviderRegistry — adding a provider = one adapter file + one `register()` call
 - **Security posture:** All defenses from v1.0 maintained — CSP, CSRF, SSRF allowlist, host validation, automated regression guards
@@ -101,8 +105,9 @@ Safe, correct, and transparent IOC extraction and enrichment — never invent sc
 | v2.0 | Home Page Modernization | 2026-02-28 | 1 | Minimal header + compact controls |
 | v3.0 | TypeScript Migration | 2026-03-01 | 4 | JS→TS with strict types |
 | v4.0 | Universal Threat Intel Hub | 2026-03-03 | 4 | 8 providers + registry + unified UX |
+| v5.0 | Quality-of-Life | 2026-03-09 | 1 | Cache + export + bulk input + context fields |
 
 See `.planning/MILESTONES.md` for full details.
 
 ---
-*Last updated: 2026-03-04 after v3.0 + v4.0 milestones completed*
+*Last updated: 2026-03-09 after v5.0 Quality-of-Life milestone adopted*

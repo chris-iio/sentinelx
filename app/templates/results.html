@@ -22,7 +22,14 @@
         </div>
 
         {% if mode == "online" and job_id %}
-        <button class="btn btn-export" id="export-btn" type="button" disabled>Export All</button>
+        <div class="export-group">
+            <button class="btn btn-export" id="export-btn" type="button" disabled>Export</button>
+            <div id="export-dropdown" class="export-dropdown" style="display:none;">
+                <button type="button" class="export-dropdown-item" data-export="json">Export JSON</button>
+                <button type="button" class="export-dropdown-item" data-export="csv">Export CSV</button>
+                <button type="button" class="export-dropdown-item" data-export="iocs">Copy all IOCs</button>
+            </div>
+        </div>
         {% endif %}
 
         <a href="{{ url_for('main.index') }}" class="btn btn-secondary back-link">&larr; Back to input</a>

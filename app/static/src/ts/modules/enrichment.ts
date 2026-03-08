@@ -14,7 +14,7 @@
  *   - utils/dom.ts for attr
  */
 
-import type { EnrichmentItem, EnrichmentStatus } from "../types/api";
+import type { EnrichmentItem, EnrichmentResultItem, EnrichmentStatus } from "../types/api";
 import type { VerdictKey } from "../types/ioc";
 import { VERDICT_LABELS, VERDICT_SEVERITY, getProviderCounts } from "../types/ioc";
 import { attr } from "../utils/dom";
@@ -25,6 +25,7 @@ import {
   sortCardsBySeverity,
 } from "./cards";
 import { writeToClipboard } from "./clipboard";
+import { exportJSON, exportCSV, copyAllIOCs } from "./export";
 
 // ---- Module-private types ----
 
@@ -46,6 +47,9 @@ interface VerdictEntry {
 /** Debounce timers for sortDetailRows — keyed by ioc_value */
 const sortTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
 
+/** Accumulated enrichment results for export */
+const allResults: EnrichmentItem[] = [];
+
 // ---- Private helpers ----
 
 /**
@@ -57,6 +61,25 @@ function formatDate(iso: string | null): string {
   if (!iso) return "";
   try {
     return new Date(iso).toLocaleDateString();
+  } catch {
+    return iso;
+  }
+}
+
+/**
+ * Format an ISO 8601 timestamp as a relative time string (e.g. "2h ago").
+ * Falls back to the raw ISO string if parsing fails.
+ */
+function formatRelativeTime(iso: string): string {
+  try {
+    const diffMs = Date.now() - new Date(iso).getTime();
+    const diffMin = Math.floor(diffMs / 60000);
+    if (diffMin < 1) return "just now";
+    if (diffMin < 60) return diffMin + "m ago";
+    const diffHr = Math.floor(diffMin / 60);
+    if (diffHr < 24) return diffHr + "h ago";
+    const diffDay = Math.floor(diffHr / 24);
+    return diffDay + "d ago";
   } catch {
     return iso;
   }
@@ -213,6 +236,120 @@ function updateSummaryRow(
   summaryRow.appendChild(consensusBadge);
 }
 
+// ---- Provider context field definitions ----
+
+/** Mapping of provider name -> fields to extract from raw_stats. */
+interface ContextFieldDef {
+  key: string;
+  label: string;
+  type: "text" | "tags";
+}
+
+const PROVIDER_CONTEXT_FIELDS: Record<string, ContextFieldDef[]> = {
+  VirusTotal: [
+    { key: "top_detections", label: "Detections", type: "tags" },
+    { key: "reputation", label: "Reputation", type: "text" },
+  ],
+  MalwareBazaar: [
+    { key: "signature", label: "Signature", type: "text" },
+    { key: "tags", label: "Tags", type: "tags" },
+    { key: "file_type", label: "File type", type: "text" },
+    { key: "first_seen", label: "First seen", type: "text" },
+    { key: "last_seen", label: "Last seen", type: "text" },
+  ],
+  ThreatFox: [
+    { key: "malware_printable", label: "Malware", type: "text" },
+    { key: "threat_type", label: "Threat type", type: "text" },
+    { key: "confidence_level", label: "Confidence", type: "text" },
+  ],
+  AbuseIPDB: [
+    { key: "abuseConfidenceScore", label: "Confidence", type: "text" },
+    { key: "totalReports", label: "Reports", type: "text" },
+    { key: "countryCode", label: "Country", type: "text" },
+    { key: "isp", label: "ISP", type: "text" },
+    { key: "usageType", label: "Usage", type: "text" },
+  ],
+  "Shodan InternetDB": [
+    { key: "ports", label: "Ports", type: "tags" },
+    { key: "vulns", label: "Vulns", type: "tags" },
+    { key: "hostnames", label: "Hostnames", type: "tags" },
+  ],
+  "GreyNoise Community": [
+    { key: "noise", label: "Noise", type: "text" },
+    { key: "riot", label: "RIOT", type: "text" },
+    { key: "classification", label: "Classification", type: "text" },
+  ],
+  URLhaus: [
+    { key: "threat", label: "Threat", type: "text" },
+    { key: "url_status", label: "Status", type: "text" },
+    { key: "tags", label: "Tags", type: "tags" },
+  ],
+  "OTX AlienVault": [
+    { key: "pulse_count", label: "Pulses", type: "text" },
+    { key: "reputation", label: "Reputation", type: "text" },
+  ],
+};
+
+/**
+ * Create contextual fields from a provider result's raw_stats.
+ * Returns null if no context fields are available for this provider.
+ * All DOM construction uses createElement + textContent (SEC-08).
+ */
+function createContextFields(result: EnrichmentResultItem): HTMLElement | null {
+  const fieldDefs = PROVIDER_CONTEXT_FIELDS[result.provider];
+  if (!fieldDefs) return null;
+
+  const stats = result.raw_stats;
+  if (!stats) return null;
+
+  const container = document.createElement("div");
+  container.className = "provider-context";
+
+  let hasFields = false;
+
+  for (const def of fieldDefs) {
+    const value = stats[def.key];
+    if (value === undefined || value === null || value === "") continue;
+
+    if (def.type === "tags" && Array.isArray(value) && value.length > 0) {
+      const fieldEl = document.createElement("span");
+      fieldEl.className = "provider-context-field";
+
+      const labelEl = document.createElement("span");
+      labelEl.className = "provider-context-label";
+      labelEl.textContent = def.label + ": ";
+      fieldEl.appendChild(labelEl);
+
+      for (const tag of value) {
+        if (typeof tag !== "string" && typeof tag !== "number") continue;
+        const tagEl = document.createElement("span");
+        tagEl.className = "context-tag";
+        tagEl.textContent = String(tag);
+        fieldEl.appendChild(tagEl);
+      }
+      container.appendChild(fieldEl);
+      hasFields = true;
+    } else if (def.type === "text" && (typeof value === "string" || typeof value === "number" || typeof value === "boolean")) {
+      const fieldEl = document.createElement("span");
+      fieldEl.className = "provider-context-field";
+
+      const labelEl = document.createElement("span");
+      labelEl.className = "provider-context-label";
+      labelEl.textContent = def.label + ": ";
+      fieldEl.appendChild(labelEl);
+
+      const valEl = document.createElement("span");
+      valEl.textContent = String(value);
+      fieldEl.appendChild(valEl);
+
+      container.appendChild(fieldEl);
+      hasFields = true;
+    }
+  }
+
+  return hasFields ? container : null;
+}
+
 /**
  * Create a single provider detail row for the .enrichment-details container.
  * All DOM construction uses createElement + textContent (SEC-08).
@@ -220,7 +357,8 @@ function updateSummaryRow(
 function createDetailRow(
   provider: string,
   verdict: VerdictKey,
-  statText: string
+  statText: string,
+  result?: EnrichmentItem
 ): HTMLElement {
   const row = document.createElement("div");
   row.className = "provider-detail-row";
@@ -241,6 +379,23 @@ function createDetailRow(
   row.appendChild(nameSpan);
   row.appendChild(badge);
   row.appendChild(statSpan);
+
+  // Cache badge — show relative time if result was served from cache
+  if (result && result.type === "result" && result.cached_at) {
+    const cacheBadge = document.createElement("span");
+    cacheBadge.className = "cache-badge";
+    const ago = formatRelativeTime(result.cached_at);
+    cacheBadge.textContent = "cached " + ago;
+    row.appendChild(cacheBadge);
+  }
+
+  // Context fields — provider-specific intelligence from raw_stats
+  if (result && result.type === "result") {
+    const contextEl = createContextFields(result);
+    if (contextEl) {
+      row.appendChild(contextEl);
+    }
+  }
 
   return row;
 }
@@ -492,7 +647,7 @@ function renderEnrichmentResult(
   // Build detail row and append to .enrichment-details container
   const detailsContainer = slot.querySelector<HTMLElement>(".enrichment-details");
   if (detailsContainer) {
-    const detailRow = createDetailRow(result.provider, verdict, statText);
+    const detailRow = createDetailRow(result.provider, verdict, statText, result);
     detailsContainer.appendChild(detailRow);
     sortDetailRows(detailsContainer, result.ioc_value);
   }
@@ -537,37 +692,39 @@ function wireExpandToggles(): void {
 // ---- Private init helpers ----
 
 /**
- * Wire the export button click handler.
- * Iterates .ioc-card elements, builds lines with IOC values + enrichment summaries,
- * and calls writeToClipboard.
- * Source: main.js initExportButton() (lines 615-643).
+ * Wire the export dropdown with JSON, CSV, and copy-all-IOCs options.
  */
 function initExportButton(): void {
   const exportBtn = document.getElementById("export-btn");
-  if (!exportBtn) return;
+  const dropdown = document.getElementById("export-dropdown");
+  if (!exportBtn || !dropdown) return;
 
   exportBtn.addEventListener("click", function () {
-    const lines: string[] = [];
-    const iocCards = document.querySelectorAll<HTMLElement>(".ioc-card");
+    const isVisible = dropdown.style.display !== "none";
+    dropdown.style.display = isVisible ? "none" : "";
+  });
 
-    iocCards.forEach(function (card) {
-      const valueEl = card.querySelector(".ioc-value");
-      if (!valueEl) return;
+  // Close dropdown when clicking outside
+  document.addEventListener("click", function (e) {
+    const target = e.target as HTMLElement;
+    if (!target.closest(".export-group")) {
+      dropdown.style.display = "none";
+    }
+  });
 
-      const iocValue = (valueEl.textContent ?? "").trim();
-      const copyBtn = findCopyButtonForIoc(iocValue);
-      // data-enrichment holds the worst verdict summary (set by polling loop)
-      const enrichment = copyBtn ? copyBtn.getAttribute("data-enrichment") : null;
-
-      if (enrichment) {
-        lines.push(iocValue + " | " + enrichment);
-      } else {
-        lines.push(iocValue);
+  const buttons = dropdown.querySelectorAll<HTMLElement>("[data-export]");
+  buttons.forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      const action = btn.getAttribute("data-export");
+      if (action === "json") {
+        exportJSON(allResults);
+      } else if (action === "csv") {
+        exportCSV(allResults);
+      } else if (action === "iocs") {
+        copyAllIOCs(btn);
       }
+      dropdown.style.display = "none";
     });
-
-    const exportText = lines.join("\n");
-    writeToClipboard(exportText, exportBtn);
   });
 }
 
@@ -631,6 +788,7 @@ export function init(): void {
           const dedupKey = result.ioc_value + "|" + result.provider;
           if (!rendered[dedupKey]) {
             rendered[dedupKey] = true;
+            allResults.push(result);
             renderEnrichmentResult(result, iocVerdicts, iocResultCounts);
           }
 
