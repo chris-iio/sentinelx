@@ -5,7 +5,7 @@
  * All constants are sourced from app/static/main.js and must remain in sync
  * with the Flask backend verdict values.
  *
- * No runtime logic here — pure type definitions and typed constants.
+ * Shared type definitions, typed constants, and verdict utility functions.
  */
 
 /**
@@ -53,6 +53,14 @@ export const VERDICT_SEVERITY = [
   "suspicious",
   "malicious",
 ] as const satisfies readonly VerdictKey[];
+
+/**
+ * Returns the severity index for a verdict key.
+ * Higher index = higher severity. Returns -1 if not found.
+ */
+export function verdictSeverityIndex(verdict: VerdictKey): number {
+  return VERDICT_SEVERITY.indexOf(verdict);
+}
 
 /**
  * Human-readable display labels for each verdict key.

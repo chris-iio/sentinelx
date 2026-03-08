@@ -64,15 +64,12 @@ class CacheStore:
         Returns the result dict with an added 'cached_at' key, or None
         if not found or expired.
         """
-        conn = self._connect()
-        try:
+        with self._connect() as conn:
             row = conn.execute(
                 "SELECT result_json, cached_at FROM enrichment_cache "
                 "WHERE ioc_value = ? AND ioc_type = ? AND provider = ?",
                 (ioc_value, ioc_type, provider),
             ).fetchone()
-        finally:
-            conn.close()
 
         if row is None:
             return None
@@ -99,28 +96,20 @@ class CacheStore:
         """Store or update a cached enrichment result."""
         now = datetime.datetime.now(tz=datetime.timezone.utc).isoformat()
         result_json = json.dumps(result_dict)
-        with self._lock:
-            conn = self._connect()
-            try:
-                conn.execute(
-                    "INSERT OR REPLACE INTO enrichment_cache "
-                    "(ioc_value, ioc_type, provider, result_json, cached_at) "
-                    "VALUES (?, ?, ?, ?, ?)",
-                    (ioc_value, ioc_type, provider, result_json, now),
-                )
-                conn.commit()
-            finally:
-                conn.close()
+        with self._lock, self._connect() as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO enrichment_cache "
+                "(ioc_value, ioc_type, provider, result_json, cached_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (ioc_value, ioc_type, provider, result_json, now),
+            )
+            conn.commit()
 
     def clear(self) -> None:
         """Remove all cached entries."""
-        with self._lock:
-            conn = self._connect()
-            try:
-                conn.execute("DELETE FROM enrichment_cache")
-                conn.commit()
-            finally:
-                conn.close()
+        with self._lock, self._connect() as conn:
+            conn.execute("DELETE FROM enrichment_cache")
+            conn.commit()
 
     def stats(self) -> dict:
         """Return cache statistics.
@@ -128,16 +117,13 @@ class CacheStore:
         Returns:
             Dict with 'total_entries' (int) and 'oldest' (ISO string or None).
         """
-        conn = self._connect()
-        try:
+        with self._connect() as conn:
             count = conn.execute(
                 "SELECT COUNT(*) FROM enrichment_cache"
             ).fetchone()[0]
             oldest_row = conn.execute(
                 "SELECT MIN(cached_at) FROM enrichment_cache"
             ).fetchone()
-        finally:
-            conn.close()
 
         oldest = oldest_row[0] if oldest_row else None
         return {"total_entries": count, "oldest": oldest}

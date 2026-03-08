@@ -6,7 +6,7 @@
  */
 
 import type { VerdictKey } from "../types/ioc";
-import { VERDICT_SEVERITY, VERDICT_LABELS } from "../types/ioc";
+import { VERDICT_LABELS, verdictSeverityIndex } from "../types/ioc";
 import { attr } from "../utils/dom";
 
 /**
@@ -106,14 +106,6 @@ export function sortCardsBySeverity(): void {
 }
 
 // ---- Private helpers ----
-
-/**
- * Returns the severity index for a verdict key.
- * Higher index = higher severity. Returns -1 if not found.
- */
-function verdictSeverityIndex(verdict: VerdictKey): number {
-  return VERDICT_SEVERITY.indexOf(verdict);
-}
 
 /**
  * Reorders .ioc-card elements in #ioc-cards-grid by verdict severity (most

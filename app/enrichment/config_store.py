@@ -40,35 +40,43 @@ class ConfigStore:
     def __init__(self, config_path: Path | None = None) -> None:
         self._config_path = config_path if config_path is not None else CONFIG_PATH
 
+    def _read_config(self) -> configparser.ConfigParser:
+        """Read and return the config file as a ConfigParser instance."""
+        cfg = configparser.ConfigParser()
+        cfg.read(self._config_path)
+        return cfg
+
+    def _save_config(self, cfg: configparser.ConfigParser) -> None:
+        """Write config to disk with owner-only permissions (SEC-17: 0o600)."""
+        self._config_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        fd = os.open(str(self._config_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as fh:
+            cfg.write(fh)
+
+    def _set_value(self, section: str, key: str, value: str) -> None:
+        """Set a single value in the config file, creating the section if needed."""
+        cfg = self._read_config()
+        if section not in cfg:
+            cfg[section] = {}
+        cfg[section][key] = value
+        self._save_config(cfg)
+
     def get_vt_api_key(self) -> str | None:
         """Read the VirusTotal API key from config file.
 
         Returns:
             The API key string, or None if not configured.
         """
-        cfg = configparser.ConfigParser()
-        cfg.read(self._config_path)
-        value = cfg.get(_SECTION, _KEY_NAME, fallback=None)
+        value = self._read_config().get(_SECTION, _KEY_NAME, fallback=None)
         return value or None
 
     def set_vt_api_key(self, key: str) -> None:
         """Write the VirusTotal API key to config file.
 
-        Creates the parent directory if it does not exist.
-
         Args:
             key: The API key to store.
         """
-        self._config_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        cfg = configparser.ConfigParser()
-        cfg.read(self._config_path)
-        if _SECTION not in cfg:
-            cfg[_SECTION] = {}
-        cfg[_SECTION][_KEY_NAME] = key
-        # SEC-17: Write with owner-only permissions (0o600) to protect API key
-        fd = os.open(str(self._config_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(fd, "w") as fh:
-            cfg.write(fh)
+        self._set_value(_SECTION, _KEY_NAME, key)
 
     def get_provider_key(self, name: str) -> str | None:
         """Read an API key for any provider from the [providers] INI section.
@@ -81,31 +89,19 @@ class ConfigStore:
         Returns:
             The stored API key string, or None if not configured.
         """
-        cfg = configparser.ConfigParser()
-        cfg.read(self._config_path)
-        value = cfg.get(_PROVIDERS_SECTION, name.lower(), fallback=None)
+        value = self._read_config().get(_PROVIDERS_SECTION, name.lower(), fallback=None)
         return value or None
 
     def set_provider_key(self, name: str, key: str) -> None:
         """Write an API key for any provider to the [providers] INI section.
 
-        Provider names are normalized to lowercase. Creates the parent directory
-        if it does not exist. File is written with owner-only permissions (0o600).
+        Provider names are normalized to lowercase.
 
         Args:
             name: Provider name (e.g., "GreyNoise", "abuseipdb"). Case-insensitive.
             key:  The API key to store.
         """
-        self._config_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        cfg = configparser.ConfigParser()
-        cfg.read(self._config_path)
-        if _PROVIDERS_SECTION not in cfg:
-            cfg[_PROVIDERS_SECTION] = {}
-        cfg[_PROVIDERS_SECTION][name.lower()] = key
-        # SEC-17: Write with owner-only permissions (0o600) to protect API keys
-        fd = os.open(str(self._config_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(fd, "w") as fh:
-            cfg.write(fh)
+        self._set_value(_PROVIDERS_SECTION, name.lower(), key)
 
     def get_cache_ttl(self) -> int:
         """Read the cache TTL in hours from config file.
@@ -113,9 +109,7 @@ class ConfigStore:
         Returns:
             TTL in hours. Defaults to 24 if not configured.
         """
-        cfg = configparser.ConfigParser()
-        cfg.read(self._config_path)
-        value = cfg.get(_CACHE_SECTION, _CACHE_TTL_KEY, fallback=None)
+        value = self._read_config().get(_CACHE_SECTION, _CACHE_TTL_KEY, fallback=None)
         if value is not None:
             try:
                 return int(value)
@@ -129,28 +123,19 @@ class ConfigStore:
         Args:
             hours: TTL in hours. Must be a positive integer.
         """
-        self._config_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        cfg = configparser.ConfigParser()
-        cfg.read(self._config_path)
-        if _CACHE_SECTION not in cfg:
-            cfg[_CACHE_SECTION] = {}
-        cfg[_CACHE_SECTION][_CACHE_TTL_KEY] = str(hours)
-        fd = os.open(str(self._config_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(fd, "w") as fh:
-            cfg.write(fh)
+        self._set_value(_CACHE_SECTION, _CACHE_TTL_KEY, str(hours))
 
     def all_provider_keys(self) -> dict[str, str]:
         """Read all provider API keys from the [providers] INI section.
 
-        Returns only keys from the [providers] section — does not include
+        Returns only keys from the [providers] section -- does not include
         the VirusTotal key stored in the [virustotal] section.
 
         Returns:
             Dict mapping provider name (lowercase) to API key. Empty dict if
             no provider keys have been stored.
         """
-        cfg = configparser.ConfigParser()
-        cfg.read(self._config_path)
+        cfg = self._read_config()
         if _PROVIDERS_SECTION not in cfg:
             return {}
         return dict(cfg[_PROVIDERS_SECTION])

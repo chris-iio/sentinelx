@@ -10,13 +10,13 @@
  *   - cards.ts    for findCardForIoc, updateCardVerdict, updateDashboardCounts, sortCardsBySeverity
  *   - clipboard.ts for writeToClipboard
  *   - types/api.ts for EnrichmentItem, EnrichmentStatus
- *   - types/ioc.ts for VerdictKey, VERDICT_LABELS, VERDICT_SEVERITY, getProviderCounts
+ *   - types/ioc.ts for VerdictKey, VERDICT_LABELS, verdictSeverityIndex, getProviderCounts
  *   - utils/dom.ts for attr
  */
 
 import type { EnrichmentItem, EnrichmentResultItem, EnrichmentStatus } from "../types/api";
 import type { VerdictKey } from "../types/ioc";
-import { VERDICT_LABELS, VERDICT_SEVERITY, getProviderCounts } from "../types/ioc";
+import { VERDICT_LABELS, verdictSeverityIndex, getProviderCounts } from "../types/ioc";
 import { attr } from "../utils/dom";
 import {
   findCardForIoc,
@@ -86,34 +86,12 @@ function formatRelativeTime(iso: string): string {
 }
 
 /**
- * Returns the severity index for a verdict key.
- * Higher index = higher severity. Returns -1 if not found.
- * Source: main.js verdictSeverity() (lines 230-233).
- */
-function verdictSeverityIndex(verdict: VerdictKey): number {
-  const idx = VERDICT_SEVERITY.indexOf(verdict);
-  return idx === -1 ? -1 : idx;
-}
-
-/**
  * Compute the worst (highest severity) verdict from a list of VerdictEntry records.
- * Guards array[0] with `if (!worst)` for noUncheckedIndexedAccess.
  * Source: main.js computeWorstVerdict() (lines 542-551).
  */
 function computeWorstVerdict(entries: VerdictEntry[]): VerdictKey {
-  if (entries.length === 0) return "no_data";
-  const worst = entries[0];
-  if (!worst) return "no_data";
-
-  let worstEntry = worst;
-  for (let i = 1; i < entries.length; i++) {
-    const current = entries[i];
-    if (!current) continue;
-    if (verdictSeverityIndex(current.verdict) > verdictSeverityIndex(worstEntry.verdict)) {
-      worstEntry = current;
-    }
-  }
-  return worstEntry.verdict;
+  const worst = findWorstEntry(entries);
+  return worst ? worst.verdict : "no_data";
 }
 
 /**
@@ -291,6 +269,22 @@ const PROVIDER_CONTEXT_FIELDS: Record<string, ContextFieldDef[]> = {
 };
 
 /**
+ * Create a labeled context field element with the provider-context-field class.
+ * All DOM construction uses createElement + textContent (SEC-08).
+ */
+function createLabeledField(label: string): HTMLElement {
+  const fieldEl = document.createElement("span");
+  fieldEl.className = "provider-context-field";
+
+  const labelEl = document.createElement("span");
+  labelEl.className = "provider-context-label";
+  labelEl.textContent = label + ": ";
+  fieldEl.appendChild(labelEl);
+
+  return fieldEl;
+}
+
+/**
  * Create contextual fields from a provider result's raw_stats.
  * Returns null if no context fields are available for this provider.
  * All DOM construction uses createElement + textContent (SEC-08).
@@ -312,14 +306,7 @@ function createContextFields(result: EnrichmentResultItem): HTMLElement | null {
     if (value === undefined || value === null || value === "") continue;
 
     if (def.type === "tags" && Array.isArray(value) && value.length > 0) {
-      const fieldEl = document.createElement("span");
-      fieldEl.className = "provider-context-field";
-
-      const labelEl = document.createElement("span");
-      labelEl.className = "provider-context-label";
-      labelEl.textContent = def.label + ": ";
-      fieldEl.appendChild(labelEl);
-
+      const fieldEl = createLabeledField(def.label);
       for (const tag of value) {
         if (typeof tag !== "string" && typeof tag !== "number") continue;
         const tagEl = document.createElement("span");
@@ -330,18 +317,10 @@ function createContextFields(result: EnrichmentResultItem): HTMLElement | null {
       container.appendChild(fieldEl);
       hasFields = true;
     } else if (def.type === "text" && (typeof value === "string" || typeof value === "number" || typeof value === "boolean")) {
-      const fieldEl = document.createElement("span");
-      fieldEl.className = "provider-context-field";
-
-      const labelEl = document.createElement("span");
-      labelEl.className = "provider-context-label";
-      labelEl.textContent = def.label + ": ";
-      fieldEl.appendChild(labelEl);
-
+      const fieldEl = createLabeledField(def.label);
       const valEl = document.createElement("span");
       valEl.textContent = String(value);
       fieldEl.appendChild(valEl);
-
       container.appendChild(fieldEl);
       hasFields = true;
     }
@@ -445,6 +424,25 @@ function findCopyButtonForIoc(iocValue: string): HTMLElement | null {
 }
 
 /**
+ * Find the worst (highest severity) VerdictEntry from a list.
+ * Returns undefined if the list is empty.
+ */
+function findWorstEntry(entries: VerdictEntry[]): VerdictEntry | undefined {
+  const first = entries[0];
+  if (!first) return undefined;
+
+  let worst = first;
+  for (let i = 1; i < entries.length; i++) {
+    const current = entries[i];
+    if (!current) continue;
+    if (verdictSeverityIndex(current.verdict) > verdictSeverityIndex(worst.verdict)) {
+      worst = current;
+    }
+  }
+  return worst;
+}
+
+/**
  * Update the copy button's data-enrichment attribute with the worst verdict
  * summary text across all providers for the given IOC.
  * Source: main.js updateCopyButtonWorstVerdict() (lines 553-569).
@@ -456,20 +454,8 @@ function updateCopyButtonWorstVerdict(
   const copyBtn = findCopyButtonForIoc(iocValue);
   if (!copyBtn) return;
 
-  const verdicts = iocVerdicts[iocValue] ?? [];
-  if (verdicts.length === 0) return;
-
-  const first = verdicts[0];
-  if (!first) return;
-
-  let worstEntry = first;
-  for (let i = 1; i < verdicts.length; i++) {
-    const current = verdicts[i];
-    if (!current) continue;
-    if (verdictSeverityIndex(current.verdict) > verdictSeverityIndex(worstEntry.verdict)) {
-      worstEntry = current;
-    }
-  }
+  const worstEntry = findWorstEntry(iocVerdicts[iocValue] ?? []);
+  if (!worstEntry) return;
 
   copyBtn.setAttribute("data-enrichment", worstEntry.summaryText);
 }
@@ -542,7 +528,7 @@ function showEnrichWarning(message: string): void {
  * update text, and enable the export button.
  * Source: main.js markEnrichmentComplete() (lines 590-603).
  */
-function markEnrichmentComplete(done: number, total: number): void {
+function markEnrichmentComplete(): void {
   const container = document.getElementById("enrich-progress");
   if (container) {
     container.classList.add("complete");
@@ -555,9 +541,6 @@ function markEnrichmentComplete(done: number, total: number): void {
   if (exportBtn) {
     exportBtn.removeAttribute("disabled");
   }
-  // Suppress unused parameter warning — done/total mirror original signature
-  void done;
-  void total;
 }
 
 /**
@@ -816,7 +799,7 @@ export function init(): void {
 
         if (data.complete) {
           clearInterval(intervalId);
-          markEnrichmentComplete(data.done, data.total);
+          markEnrichmentComplete();
         }
       })
       .catch(function () {
