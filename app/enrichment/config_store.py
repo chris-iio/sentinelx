@@ -24,6 +24,9 @@ CONFIG_PATH = Path.home() / ".sentinelx" / "config.ini"
 _SECTION = "virustotal"
 _KEY_NAME = "api_key"
 _PROVIDERS_SECTION = "providers"
+_CACHE_SECTION = "cache"
+_CACHE_TTL_KEY = "ttl_hours"
+_CACHE_TTL_DEFAULT = 24
 
 
 class ConfigStore:
@@ -100,6 +103,38 @@ class ConfigStore:
             cfg[_PROVIDERS_SECTION] = {}
         cfg[_PROVIDERS_SECTION][name.lower()] = key
         # SEC-17: Write with owner-only permissions (0o600) to protect API keys
+        fd = os.open(str(self._config_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as fh:
+            cfg.write(fh)
+
+    def get_cache_ttl(self) -> int:
+        """Read the cache TTL in hours from config file.
+
+        Returns:
+            TTL in hours. Defaults to 24 if not configured.
+        """
+        cfg = configparser.ConfigParser()
+        cfg.read(self._config_path)
+        value = cfg.get(_CACHE_SECTION, _CACHE_TTL_KEY, fallback=None)
+        if value is not None:
+            try:
+                return int(value)
+            except ValueError:
+                pass
+        return _CACHE_TTL_DEFAULT
+
+    def set_cache_ttl(self, hours: int) -> None:
+        """Write the cache TTL in hours to config file.
+
+        Args:
+            hours: TTL in hours. Must be a positive integer.
+        """
+        self._config_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        cfg = configparser.ConfigParser()
+        cfg.read(self._config_path)
+        if _CACHE_SECTION not in cfg:
+            cfg[_CACHE_SECTION] = {}
+        cfg[_CACHE_SECTION][_CACHE_TTL_KEY] = str(hours)
         fd = os.open(str(self._config_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, "w") as fh:
             cfg.write(fh)

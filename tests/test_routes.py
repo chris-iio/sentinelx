@@ -386,6 +386,7 @@ def test_enrichment_status_returns_json(client):
     import app.routes as routes_module
 
     mock_orchestrator = MagicMock()
+    mock_orchestrator.cached_markers = {}
     mock_orchestrator.get_status.return_value = {
         "total": 3,
         "done": 2,
@@ -427,6 +428,7 @@ def test_enrichment_result_serialization(client):
     )
 
     mock_orchestrator = MagicMock()
+    mock_orchestrator.cached_markers = {}
     mock_orchestrator.get_status.return_value = {
         "total": 1,
         "done": 1,
@@ -470,6 +472,7 @@ def test_enrichment_error_serialization(client):
     )
 
     mock_orchestrator = MagicMock()
+    mock_orchestrator.cached_markers = {}
     mock_orchestrator.get_status.return_value = {
         "total": 1,
         "done": 1,

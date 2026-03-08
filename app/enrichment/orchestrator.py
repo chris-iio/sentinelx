@@ -18,6 +18,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock
 from typing import Any
 
+from app.cache.store import CacheStore
 from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.pipeline.models import IOC
 
@@ -42,12 +43,22 @@ class EnrichmentOrchestrator:
                      are evicted via FIFO (OrderedDict) when limit is exceeded.
     """
 
-    def __init__(self, adapters: list[Any], max_workers: int = 4, max_jobs: int = 100) -> None:
+    def __init__(
+        self,
+        adapters: list[Any],
+        max_workers: int = 4,
+        max_jobs: int = 100,
+        cache: CacheStore | None = None,
+        cache_ttl_seconds: int = 86400,
+    ) -> None:
         self._adapters = adapters
         self._max_workers = max_workers
         self._max_jobs = max_jobs
         self._jobs: OrderedDict[str, dict] = OrderedDict()
         self._lock = Lock()
+        self._cache = cache
+        self._cache_ttl_seconds = cache_ttl_seconds
+        self._cached_markers: dict[str, str] = {}
 
     def enrich_all(self, job_id: str, iocs: list[IOC]) -> None:
         """Enrich all enrichable IOCs in parallel across all matching adapters.
@@ -115,9 +126,15 @@ class EnrichmentOrchestrator:
                 return None
             return dict(job)
 
+    @property
+    def cached_markers(self) -> dict[str, str]:
+        """Return copy of cached result markers (ioc_value|provider -> cached_at)."""
+        return dict(self._cached_markers)
+
     def _do_lookup(self, adapter: Any, ioc: IOC) -> EnrichmentResult | EnrichmentError:
         """Look up a single IOC via a specific adapter, retrying once on EnrichmentError.
 
+        Checks cache before calling adapter. Stores successful results in cache.
         Calls adapter.lookup(ioc). If the result is an EnrichmentError,
         retries the lookup exactly once and returns the second result regardless
         of success or failure.
@@ -130,9 +147,47 @@ class EnrichmentOrchestrator:
             EnrichmentResult on success (first or retry attempt).
             EnrichmentError if both attempts fail.
         """
+        provider_name = getattr(adapter, "name", "")
+
+        # Check cache
+        if self._cache is not None and provider_name:
+            cached = self._cache.get(
+                ioc.value, ioc.type.value, provider_name, self._cache_ttl_seconds
+            )
+            if cached is not None:
+                cached_at = cached.pop("cached_at", "")
+                cache_key = ioc.value + "|" + provider_name
+                self._cached_markers[cache_key] = cached_at
+                return EnrichmentResult(
+                    ioc=ioc,
+                    provider=cached["provider"],
+                    verdict=cached["verdict"],
+                    detection_count=cached["detection_count"],
+                    total_engines=cached["total_engines"],
+                    scan_date=cached.get("scan_date"),
+                    raw_stats=cached.get("raw_stats", {}),
+                )
+
         result = adapter.lookup(ioc)
         if isinstance(result, EnrichmentError):
             result = adapter.lookup(ioc)
+
+        # Store successful results in cache
+        if self._cache is not None and provider_name and isinstance(result, EnrichmentResult):
+            self._cache.put(
+                ioc.value,
+                ioc.type.value,
+                provider_name,
+                {
+                    "provider": result.provider,
+                    "verdict": result.verdict,
+                    "detection_count": result.detection_count,
+                    "total_engines": result.total_engines,
+                    "scan_date": result.scan_date,
+                    "raw_stats": result.raw_stats,
+                },
+            )
+
         return result
 
     def _evict_if_needed(self) -> None:

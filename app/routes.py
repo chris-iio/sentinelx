@@ -26,10 +26,12 @@ from threading import Lock, Thread
 from flask import Blueprint, current_app, flash, jsonify, redirect, render_template, request, url_for
 
 from app import limiter
+from app.cache.store import CacheStore
 from app.enrichment.config_store import ConfigStore
 from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.enrichment.orchestrator import EnrichmentOrchestrator
 from app.enrichment.setup import PROVIDER_INFO, build_registry
+from app.pipeline.bulk import parse_bulk_iocs
 from app.pipeline.extractor import run_pipeline
 from app.pipeline.models import IOCType, group_by_type
 
@@ -53,13 +55,17 @@ def _mask_key(key: str | None) -> str | None:
     return "*" * (len(key) - 4) + key[-4:]
 
 
-def _serialize_result(r: EnrichmentResult | EnrichmentError) -> dict:
+def _serialize_result(
+    r: EnrichmentResult | EnrichmentError,
+    cached_markers: dict[str, str] | None = None,
+) -> dict:
     """Serialize an enrichment result or error to a JSON-safe dict.
 
     Used by the polling endpoint to return incremental results to the browser.
+    If cached_markers is provided, adds 'cached_at' for cache-served results.
     """
     if isinstance(r, EnrichmentResult):
-        return {
+        d: dict = {
             "type": "result",
             "ioc_value": r.ioc.value,
             "ioc_type": r.ioc.type.value,
@@ -70,6 +76,12 @@ def _serialize_result(r: EnrichmentResult | EnrichmentError) -> dict:
             "scan_date": r.scan_date,
             "raw_stats": r.raw_stats,
         }
+        if cached_markers is not None:
+            cache_key = r.ioc.value + "|" + r.provider
+            cached_at = cached_markers.get(cache_key)
+            if cached_at:
+                d["cached_at"] = cached_at
+        return d
     return {
         "type": "error",
         "ioc_value": r.ioc.value,
@@ -100,11 +112,12 @@ def analyze():
     """
     text = request.form.get("text", "")
     mode = request.form.get("mode", "offline")
+    input_mode = request.form.get("input_mode", "freetext")
 
     if not text.strip():
         return render_template("index.html", error="No input provided.")
 
-    iocs = run_pipeline(text)
+    iocs = parse_bulk_iocs(text) if input_mode == "bulk" else run_pipeline(text)
     grouped = group_by_type(iocs)
     total_count = len(iocs)
 
@@ -123,7 +136,13 @@ def analyze():
             return redirect(url_for("main.settings_get"))
 
         job_id = uuid.uuid4().hex
-        orchestrator = EnrichmentOrchestrator(adapters=registry.configured())
+        cache = CacheStore()
+        cache_ttl_hours = config_store.get_cache_ttl()
+        orchestrator = EnrichmentOrchestrator(
+            adapters=registry.configured(),
+            cache=cache,
+            cache_ttl_seconds=cache_ttl_hours * 3600,
+        )
 
         with _orch_lock:
             _orchestrators[job_id] = orchestrator
@@ -195,9 +214,14 @@ def settings_get():
             "masked_key": _mask_key(key),
             "configured": key is not None,
         })
+    cache = CacheStore()
+    cache_stats = cache.stats()
+    cache_ttl = config_store.get_cache_ttl()
     return render_template(
         "settings.html",
         providers=providers_with_status,
+        cache_stats=cache_stats,
+        cache_ttl=cache_ttl,
     )
 
 
@@ -234,6 +258,34 @@ def settings_post():
     return redirect(url_for("main.settings_get"))
 
 
+@bp.route("/settings/cache/clear", methods=["POST"])
+@limiter.limit("10 per minute")
+def cache_clear():
+    """Clear all cached enrichment results."""
+    cache = CacheStore()
+    cache.clear()
+    flash("Cache cleared.", "success")
+    return redirect(url_for("main.settings_get"))
+
+
+@bp.route("/settings/cache/ttl", methods=["POST"])
+@limiter.limit("10 per minute")
+def cache_ttl_set():
+    """Update cache TTL hours setting."""
+    ttl_str = request.form.get("cache_ttl", "").strip()
+    try:
+        ttl = int(ttl_str)
+        if ttl < 1:
+            raise ValueError
+    except (ValueError, TypeError):
+        flash("TTL must be a positive integer.", "error")
+        return redirect(url_for("main.settings_get"))
+    config_store = ConfigStore()
+    config_store.set_cache_ttl(ttl)
+    flash(f"Cache TTL set to {ttl} hours.", "success")
+    return redirect(url_for("main.settings_get"))
+
+
 @bp.route("/enrichment/status/<job_id>", methods=["GET"])
 @limiter.limit("120 per minute")
 def enrichment_status(job_id: str):
@@ -261,7 +313,10 @@ def enrichment_status(job_id: str):
     if status is None:
         return jsonify({"error": "job not found"}), 404
 
-    serialized_results = [_serialize_result(r) for r in status["results"]]
+    cached_markers = orchestrator.cached_markers
+    serialized_results = [
+        _serialize_result(r, cached_markers) for r in status["results"]
+    ]
 
     return jsonify(
         {

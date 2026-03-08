@@ -87,6 +87,27 @@ def _parse_response(ioc: IOC, body: dict) -> EnrichmentResult:
     else:
         verdict = "clean"
 
+    # Extract top 5 unique malicious detection names from full analysis results
+    analysis_results: dict = attrs.get("last_analysis_results", {})
+    seen: set[str] = set()
+    top_detections: list[str] = []
+    for engine_result in analysis_results.values():
+        if len(top_detections) >= 5:
+            break
+        if not isinstance(engine_result, dict):
+            continue
+        if engine_result.get("category") == "malicious":
+            name = engine_result.get("result")
+            if name and name not in seen:
+                seen.add(name)
+                top_detections.append(name)
+
+    enriched_stats = {
+        **stats,
+        "top_detections": top_detections,
+        "reputation": attrs.get("reputation", 0),
+    }
+
     return EnrichmentResult(
         ioc=ioc,
         provider="VirusTotal",
@@ -94,7 +115,7 @@ def _parse_response(ioc: IOC, body: dict) -> EnrichmentResult:
         detection_count=malicious,
         total_engines=total,
         scan_date=scan_date,
-        raw_stats=stats,
+        raw_stats=enriched_stats,
     )
 
 
