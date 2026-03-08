@@ -383,42 +383,6 @@
         caret-color: var(--accent);
     }
 
-    .ioc-textarea--bulk {
-        font-family: var(--font-mono);
-        line-height: 1.8;
-    }
-
-    /* ---- Input mode toggle ---- */
-
-    .input-mode-toggle {
-        display: flex;
-        gap: 0.25rem;
-        margin-bottom: 0.5rem;
-    }
-
-    .input-mode-btn {
-        padding: 0.25rem 0.75rem;
-        font-size: 0.75rem;
-        font-weight: 500;
-        color: var(--text-muted);
-        background: none;
-        border: 1px solid var(--border);
-        border-radius: var(--radius);
-        cursor: pointer;
-        transition: all var(--duration-fast) ease;
-    }
-
-    .input-mode-btn:hover {
-        color: var(--text-secondary);
-        border-color: var(--border-default);
-    }
-
-    .input-mode-btn.active {
-        color: var(--accent);
-        border-color: rgba(56, 189, 248, 0.3);
-        background-color: rgba(56, 189, 248, 0.06);
-    }
-
     .form-options {
         display: flex;
         align-items: center;

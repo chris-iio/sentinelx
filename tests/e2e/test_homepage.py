@@ -82,7 +82,7 @@ def test_form_elements_present(page: Page, index_url: str) -> None:
 
 
 def test_textarea_placeholder(page: Page, index_url: str) -> None:
-    """Textarea starts with empty placeholder in freetext mode."""
+    """Textarea starts with empty placeholder."""
     idx = IndexPage(page, index_url.rstrip("/"))
     idx.goto()
 

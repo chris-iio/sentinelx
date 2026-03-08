@@ -31,7 +31,6 @@ from app.enrichment.config_store import ConfigStore
 from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.enrichment.orchestrator import EnrichmentOrchestrator
 from app.enrichment.setup import PROVIDER_INFO, build_registry
-from app.pipeline.bulk import parse_bulk_iocs
 from app.pipeline.extractor import run_pipeline
 from app.pipeline.models import IOCType, group_by_type
 
@@ -112,12 +111,11 @@ def analyze():
     """
     text = request.form.get("text", "")
     mode = request.form.get("mode", "offline")
-    input_mode = request.form.get("input_mode", "freetext")
 
     if not text.strip():
         return render_template("index.html", error="No input provided.")
 
-    iocs = parse_bulk_iocs(text) if input_mode == "bulk" else run_pipeline(text)
+    iocs = run_pipeline(text)
     grouped = group_by_type(iocs)
     total_count = len(iocs)
 

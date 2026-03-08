@@ -14,12 +14,6 @@
         <form method="post" action="{{ url_for('main.analyze') }}" id="analyze-form">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
 
-            <div class="input-mode-toggle">
-                <button type="button" class="input-mode-btn active" data-input-mode="freetext">Free text</button>
-                <button type="button" class="input-mode-btn" data-input-mode="bulk">IOC list</button>
-            </div>
-            <input type="hidden" name="input_mode" id="input-mode-input" value="freetext">
-
             <div class="form-field">
                 <textarea
                     id="ioc-text"
