@@ -22,7 +22,7 @@ def test_back_link_returns_to_index(page: Page, index_url: str) -> None:
 
     # Should be back on the index page
     expect(page).to_have_url(index_url.rstrip("/") + "/")
-    expect(idx.title).to_have_text("Extract IOCs")
+    expect(idx.hero_brand).to_be_visible()
 
 
 def test_round_trip_extract_back_extract(page: Page, index_url: str) -> None:
@@ -58,4 +58,4 @@ def test_results_page_has_back_link_on_no_results(page: Page, index_url: str) ->
     expect(results.back_link).to_be_visible()
 
     results.go_back()
-    expect(idx.title).to_have_text("Extract IOCs")
+    expect(idx.hero_brand).to_be_visible()

@@ -11,16 +11,16 @@ from tests.e2e.pages import IndexPage
 def test_page_title(page: Page, index_url: str) -> None:
     """Page title includes 'SentinelX'."""
     page.goto(index_url)
-    expect(page).to_have_title("SentinelX — IOC Extractor")
+    expect(page).to_have_title("SentinelX")
 
 
 def test_header_branding(page: Page, index_url: str) -> None:
-    """Header shows logo, brand text, and settings icon — no tagline."""
+    """Page shows hero brand and floating settings icon — no tagline."""
     idx = IndexPage(page, index_url.rstrip("/"))
     idx.goto()
 
-    expect(idx.site_logo).to_have_text("SentinelX")
-    # Tagline removed in Phase 18 — header is minimal
+    expect(idx.hero_brand).to_be_visible()
+    expect(idx.site_settings_link).to_be_visible()
     expect(page.locator(".site-tagline")).to_have_count(0)
 
 
@@ -74,8 +74,7 @@ def test_form_elements_present(page: Page, index_url: str) -> None:
     idx = IndexPage(page, index_url.rstrip("/"))
     idx.goto()
 
-    expect(idx.title).to_have_text("Extract IOCs")
-    expect(idx.subtitle).to_contain_text("Paste a threat report")
+    expect(idx.hero_brand).to_be_visible()
     expect(idx.textarea).to_be_visible()
     expect(idx.submit_btn).to_be_visible()
     expect(idx.clear_btn).to_be_visible()
@@ -83,15 +82,12 @@ def test_form_elements_present(page: Page, index_url: str) -> None:
 
 
 def test_textarea_placeholder(page: Page, index_url: str) -> None:
-    """Textarea has helpful placeholder text with examples."""
+    """Textarea starts with empty placeholder in freetext mode."""
     idx = IndexPage(page, index_url.rstrip("/"))
     idx.goto()
 
     placeholder = idx.textarea.get_attribute("placeholder")
-    assert placeholder is not None
-    assert "192[.]168[.]1[.]1" in placeholder
-    assert "hxxp://" in placeholder
-    assert "CVE-" in placeholder
+    assert placeholder == ""
 
 
 def test_mode_toggle_labels(page: Page, index_url: str) -> None:

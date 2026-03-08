@@ -3,6 +3,8 @@
 Covers: submit button enable/disable, clear button, mode toggle.
 """
 
+import re
+
 from playwright.sync_api import Page, expect
 
 from tests.e2e.pages import IndexPage
@@ -98,18 +100,20 @@ def test_mode_toggle_back_to_offline(page: Page, index_url: str) -> None:
     expect(idx.mode_toggle_btn).to_have_attribute("aria-pressed", "false")
 
 
-def test_submit_label_changes_on_mode_toggle(page: Page, index_url: str) -> None:
-    """Submit button label changes between 'Extract IOCs' and 'Extract & Enrich' on toggle."""
+def test_submit_style_changes_on_mode_toggle(page: Page, index_url: str) -> None:
+    """Submit button style changes between mode-offline and mode-online on toggle."""
     idx = IndexPage(page, index_url.rstrip("/"))
     idx.goto()
 
-    expect(idx.submit_btn).to_have_text("Extract IOCs")
+    expect(idx.submit_btn).to_have_text("Extract")
+    expect(idx.submit_btn).to_have_class(re.compile(r"mode-offline"))
 
     idx.toggle_mode()
-    expect(idx.submit_btn).to_have_text("Extract & Enrich")
+    expect(idx.submit_btn).to_have_text("Extract")
+    expect(idx.submit_btn).to_have_class(re.compile(r"mode-online"))
 
     idx.toggle_mode()
-    expect(idx.submit_btn).to_have_text("Extract IOCs")
+    expect(idx.submit_btn).to_have_class(re.compile(r"mode-offline"))
 
 
 def test_paste_shows_character_count_feedback(page: Page, index_url: str) -> None:

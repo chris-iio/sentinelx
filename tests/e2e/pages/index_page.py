@@ -21,9 +21,8 @@ class IndexPage:
         self.mode_input = page.locator("#mode-input")
         self.paste_feedback = page.locator("#paste-feedback")
         self.error_alert = page.locator(".alert-error")
-        self.site_logo = page.locator(".site-logo")
-        self.site_settings_link = page.locator("nav.site-nav a[aria-label='Settings']")
-        self.site_brand_link = page.locator("a.site-brand-link")
+        self.hero_brand = page.locator(".index-hero-brand")
+        self.site_settings_link = page.locator("nav.floating-settings a[aria-label='Settings']")
 
     def goto(self) -> None:
         """Navigate to the index page."""

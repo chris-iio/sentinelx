@@ -29,7 +29,7 @@ def test_settings_page_loads(page: Page, live_server: str) -> None:
 def test_settings_page_title_tag(page: Page, live_server: str) -> None:
     """Browser tab title is set for the settings page."""
     page.goto(live_server + "/settings")
-    expect(page).to_have_title("sentinelx")
+    expect(page).to_have_title("SentinelX")
 
 
 def test_settings_security_headers(page: Page, live_server: str) -> None:
@@ -127,12 +127,12 @@ def test_each_provider_has_signup_link(page: Page, live_server: str) -> None:
         expect(link).to_have_attribute("rel", "noopener noreferrer")
 
 
-def test_free_providers_listed(page: Page, live_server: str) -> None:
-    """Free providers are listed in the footer note."""
+def test_cache_section_visible(page: Page, live_server: str) -> None:
+    """Cache section is visible on settings page."""
     sp = SettingsPage(page, live_server)
     sp.goto()
-    footer = page.locator(".settings-free-providers")
-    expect(footer).to_contain_text("Shodan InternetDB")
+    cache_section = page.locator(".settings-cache-section")
+    expect(cache_section).to_be_visible()
 
 
 # -- Status Indicators --
