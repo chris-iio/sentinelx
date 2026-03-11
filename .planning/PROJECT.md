@@ -40,7 +40,11 @@ Safe, correct, and transparent IOC extraction and enrichment — never invent sc
 
 ### Active
 
-(No active milestone — next milestone TBD)
+## Current Milestone: v6.0 Analyst Experience
+
+**Goal:** Research-driven expansion — discover what cybersecurity analysts actually need from threat intel tools and make SentinelX competitive with platforms like VirusTotal.
+
+**Target features:** TBD — research-first approach. Investigating depth of analysis, breadth of capability, and workflow integration.
 
 ### Out of Scope
 

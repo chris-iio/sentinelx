@@ -1,11 +1,11 @@
 ---
 gsd_state_version: 1.0
-milestone: null
-milestone_name: null
+milestone: v6.0
+milestone_name: Analyst Experience
 current_phase: null
 current_plan: null
-status: idle
-last_updated: "2026-03-09T00:00:00.000Z"
+status: defining_requirements
+last_updated: "2026-03-11T00:00:00.000Z"
 progress:
   total_phases: 0
   completed_phases: 0
@@ -17,19 +17,21 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-09)
+See: .planning/PROJECT.md (updated 2026-03-11)
 
 **Core value:** Safe, correct, and transparent IOC extraction and enrichment
-**Current focus:** All milestones complete (v1.0 through v5.0). Next milestone TBD.
+**Current focus:** v6.0 Analyst Experience — research-driven expansion
 
 ## Position
 
-**Last milestone:** v5.0 Quality-of-Life (shipped 2026-03-09)
-**Status:** Idle — no active milestone
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-03-11 — Milestone v6.0 started
 
 ## Context
 
-Eight milestones shipped (v1.0 → v5.0). SentinelX is a fully functional universal threat intelligence hub with 8 providers, TypeScript frontend, unified results UX, enrichment cache, export menu, bulk input mode, and provider context fields. 483 unit/integration tests, ~16,000 LOC total.
+Eight milestones shipped (v1.0 → v5.0). SentinelX is a fully functional universal threat intelligence hub with 8 providers, TypeScript frontend, unified results UX, enrichment cache, export menu, bulk input mode, and provider context fields. 483 unit/integration tests, ~16,000 LOC total. Now researching what analysts actually need to make this competitive with VirusTotal-class tools.
 
 ## Decisions
 
@@ -37,5 +39,6 @@ Eight milestones shipped (v1.0 → v5.0). SentinelX is a fully functional univer
 
 ## Session Log
 
+- 2026-03-11: Milestone v6.0 Analyst Experience started — research-first approach
 - 2026-03-09: Adopted ad-hoc v5.0 Quality-of-Life work into GSD tracking (retroactive milestone)
 - 2026-03-04: Completed v3.0 + v4.0 milestone archival
