@@ -121,11 +121,12 @@ Ad-hoc work adopted into GSD tracking. See `.planning/phases/01-quality-of-life/
   3. User sees proxy/VPN/hosting/mobile flags for any IP, allowing instant datacenter vs residential classification
   4. User sees a "KNOWN GOOD" verdict badge (visually distinct from CLEAN/MALICIOUS/UNKNOWN) on any hash IOC that CIRCL hashlookup confirms is in the NSRL
   5. User sees ports, CVEs, hostnames, and CPEs in the Shodan InternetDB card (data already fetched, now fully rendered)
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 01-01: TBD
-- [ ] 01-02: TBD
+- [ ] 01-01-PLAN.md — Backend adapters (CIRCL hashlookup + ip-api.com) and provider registration
+- [ ] 01-02-PLAN.md — known_good verdict type system (TS types, CSS, templates) + Shodan EPROV-01 field completion
+- [ ] 01-03-PLAN.md — IP Context row rendering (frontend display of GeoIP/rDNS/proxy flags)
 
 ### Phase 02: Domain Intelligence
 **Goal**: Analysts can assess any domain IOC's live infrastructure and certificate history without API keys, transforming domain cards from near-opaque to genuinely informative
@@ -181,13 +182,13 @@ Plans:
 | v3.0 TypeScript | 4 | 8 | ✅ Complete | 2026-03-01 |
 | v4.0 Threat Intel Hub | 4 | 9 | ✅ Complete | 2026-03-03 |
 | v5.0 Quality-of-Life | 1 | 0 | ✅ Complete | 2026-03-09 |
-| v6.0 Analyst Experience | 4 | TBD | 🚧 In progress | — |
+| v6.0 Analyst Experience | 4 | 3 | 🚧 In progress | — |
 
 **v6.0 Phase Progress:**
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 01. Zero-Auth IP Intelligence + Known-Good | 0/TBD | Not started | - |
+| 01. Zero-Auth IP Intelligence + Known-Good | 0/3 | Planned | - |
 | 02. Domain Intelligence | 0/TBD | Not started | - |
 | 03. Passive DNS Pivoting | 0/TBD | Not started | - |
 | 04. Deep Analysis View | 0/TBD | Not started | - |
