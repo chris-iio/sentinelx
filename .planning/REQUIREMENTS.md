@@ -22,11 +22,11 @@ Requirements for the Analyst Experience milestone. Each maps to roadmap phases.
 ### Hash Intelligence (Zero-Auth)
 
 - [ ] **HINT-01**: User can see whether a file hash is a known-good (NSRL) file via CIRCL hashlookup without an API key
-- [ ] **HINT-02**: Known-good verdict is visually distinct from malicious/clean/unknown in summary rows and filter bar
+- [x] **HINT-02**: Known-good verdict is visually distinct from malicious/clean/unknown in summary rows and filter bar
 
 ### Enhanced Providers
 
-- [ ] **EPROV-01**: User can see ports, CVEs, hostnames, and CPEs in Shodan InternetDB result cards
+- [x] **EPROV-01**: User can see ports, CVEs, hostnames, and CPEs in Shodan InternetDB result cards
 
 ### Deep Analysis
 
@@ -76,8 +76,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DINT-02 | Phase 02 | Pending |
 | DINT-03 | Phase 03 | Pending |
 | HINT-01 | Phase 01 | Pending |
-| HINT-02 | Phase 01 | Pending |
-| EPROV-01 | Phase 01 | Pending |
+| HINT-02 | Phase 01 | Complete |
+| EPROV-01 | Phase 01 | Complete |
 | DEEP-01 | Phase 04 | Pending |
 | DEEP-02 | Phase 04 | Pending |
 | DEEP-03 | Phase 04 | Pending |
