@@ -9,17 +9,22 @@
  */
 
 /**
- * The five verdict keys returned by the Flask enrichment API.
+ * The verdict keys returned by the Flask enrichment API.
  *
  * Source: main.js VERDICT_LABELS keys (lines 231–237).
  * Used as discriminant values throughout enrichment result processing.
+ *
+ * Note: known_good is intentionally excluded from VERDICT_SEVERITY — it is
+ * not a severity level but a classification override. verdictSeverityIndex()
+ * returns -1 for known_good, which is correct and intentional.
  */
 export type VerdictKey =
   | "error"
   | "no_data"
   | "clean"
   | "suspicious"
-  | "malicious";
+  | "malicious"
+  | "known_good";
 
 /**
  * The seven IOC types supported for enrichment.
@@ -39,27 +44,31 @@ type IocType =
   | "sha256";
 
 /**
- * Severity order for verdicts — index 0 is least severe, index 4 is most severe.
+ * Ranked severity verdicts — index 0 is least severe, index 4 is most severe.
  *
- * Used by the worst-verdict computation: iterate over results and track the
- * highest index in this array. Tuple type is preserved by `as const`.
+ * known_good is intentionally excluded: it is a classification override, not
+ * a severity level. verdictSeverityIndex returns -1 for known_good, which is
+ * the correct and expected behavior (it always wins via computeWorstVerdict's
+ * early-return check, not by severity ranking).
  *
  * Source: main.js line 228.
  */
-export const VERDICT_SEVERITY = [
+type RankedVerdict = "error" | "no_data" | "clean" | "suspicious" | "malicious";
+
+const VERDICT_SEVERITY = [
   "error",
   "no_data",
   "clean",
   "suspicious",
   "malicious",
-] as const satisfies readonly VerdictKey[];
+] as const satisfies readonly RankedVerdict[];
 
 /**
  * Returns the severity index for a verdict key.
- * Higher index = higher severity. Returns -1 if not found.
+ * Higher index = higher severity. Returns -1 if not found (e.g. known_good).
  */
 export function verdictSeverityIndex(verdict: VerdictKey): number {
-  return VERDICT_SEVERITY.indexOf(verdict);
+  return (VERDICT_SEVERITY as readonly string[]).indexOf(verdict);
 }
 
 /**
@@ -75,6 +84,7 @@ export const VERDICT_LABELS: Record<VerdictKey, string> = {
   malicious: "MALICIOUS",
   suspicious: "SUSPICIOUS",
   clean: "CLEAN",
+  known_good: "KNOWN GOOD",
   no_data: "NO DATA",
   error: "ERROR",
 } as const;

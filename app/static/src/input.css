@@ -79,6 +79,10 @@
     --verdict-error-bg:     #451a03;
     --verdict-error-border: #f59e0b;
 
+    --verdict-known-good-text:   #60a5fa;  /* blue-400 */
+    --verdict-known-good-bg:     #172554;  /* blue-950 */
+    --verdict-known-good-border: #3b82f6;  /* blue-500 */
+
     /* Interactive — sky blue */
     --btn-primary-bg:     #0ea5e9;   /* sky-500 */
     --btn-primary-hover:  #0284c7;   /* sky-600 */
@@ -679,6 +683,7 @@
     .verdict-kpi-card:nth-child(2) { animation-delay: 120ms; }
     .verdict-kpi-card:nth-child(3) { animation-delay: 180ms; }
     .verdict-kpi-card:nth-child(4) { animation-delay: 240ms; }
+    .verdict-kpi-card:nth-child(5) { animation-delay: 300ms; }
 
     .verdict-kpi-card:hover {
         background-color: var(--bg-tertiary);
@@ -694,6 +699,7 @@
     .verdict-kpi-card--malicious  { border-top-color: var(--verdict-malicious-border); }
     .verdict-kpi-card--suspicious { border-top-color: var(--verdict-suspicious-border); }
     .verdict-kpi-card--clean      { border-top-color: var(--verdict-clean-border); }
+    .verdict-kpi-card--known_good { border-top-color: var(--verdict-known-good-border); }
     .verdict-kpi-card--no_data    { border-top-color: var(--verdict-no-data-border); }
 
     .verdict-kpi-count {
@@ -795,6 +801,12 @@
         border-color: var(--verdict-clean-border);
         color: var(--verdict-clean-text);
         background-color: var(--verdict-clean-bg);
+    }
+
+    .filter-btn--known_good.filter-btn--active {
+        border-color: var(--verdict-known-good-border);
+        color: var(--verdict-known-good-text);
+        background-color: var(--verdict-known-good-bg);
     }
 
     .filter-btn--no_data.filter-btn--active {
@@ -940,6 +952,7 @@
     .ioc-card[data-verdict="malicious"]  { border-left-color: var(--verdict-malicious-border); }
     .ioc-card[data-verdict="suspicious"] { border-left-color: var(--verdict-suspicious-border); }
     .ioc-card[data-verdict="clean"]      { border-left-color: var(--verdict-clean-border); }
+    .ioc-card[data-verdict="known_good"] { border-left-color: var(--verdict-known-good-border); }
     .ioc-card[data-verdict="no_data"]    { border-left-color: var(--verdict-no-data-border); }
     .ioc-card[data-verdict="error"]      { border-left-color: var(--verdict-error-border); }
 
@@ -1005,11 +1018,12 @@
         flex-shrink: 0;
     }
 
-    .verdict-label--malicious  { background-color: var(--verdict-malicious-bg);  color: var(--verdict-malicious-text); border: 1px solid var(--verdict-malicious-border); }
+    .verdict-label--malicious  { background-color: var(--verdict-malicious-bg);   color: var(--verdict-malicious-text);   border: 1px solid var(--verdict-malicious-border); }
     .verdict-label--suspicious { background-color: var(--verdict-suspicious-bg); color: var(--verdict-suspicious-text); border: 1px solid var(--verdict-suspicious-border); }
-    .verdict-label--clean      { background-color: var(--verdict-clean-bg);      color: var(--verdict-clean-text); border: 1px solid var(--verdict-clean-border); }
-    .verdict-label--no_data    { background-color: var(--verdict-no-data-bg);    color: var(--verdict-no-data-text); border: 1px solid var(--verdict-no-data-border); }
-    .verdict-label--error      { background-color: var(--verdict-error-bg);      color: var(--verdict-error-text); border: 1px solid var(--verdict-error-border); }
+    .verdict-label--clean      { background-color: var(--verdict-clean-bg);      color: var(--verdict-clean-text);      border: 1px solid var(--verdict-clean-border); }
+    .verdict-label--known_good { background-color: var(--verdict-known-good-bg); color: var(--verdict-known-good-text); border: 1px solid var(--verdict-known-good-border); }
+    .verdict-label--no_data    { background-color: var(--verdict-no-data-bg);    color: var(--verdict-no-data-text);    border: 1px solid var(--verdict-no-data-border); }
+    .verdict-label--error      { background-color: var(--verdict-error-bg);      color: var(--verdict-error-text);      border: 1px solid var(--verdict-error-border); }
 
     .ioc-card-actions {
         display: flex;
@@ -1120,9 +1134,10 @@
         border: 1px solid transparent;
     }
 
-    .verdict-malicious  { background-color: var(--verdict-malicious-bg);  color: var(--verdict-malicious-text);  border-color: var(--verdict-malicious-border); }
+    .verdict-malicious  { background-color: var(--verdict-malicious-bg);   color: var(--verdict-malicious-text);   border-color: var(--verdict-malicious-border); }
     .verdict-suspicious { background-color: var(--verdict-suspicious-bg); color: var(--verdict-suspicious-text); border-color: var(--verdict-suspicious-border); }
     .verdict-clean      { background-color: var(--verdict-clean-bg);      color: var(--verdict-clean-text);      border-color: var(--verdict-clean-border); }
+    .verdict-known_good { background-color: var(--verdict-known-good-bg); color: var(--verdict-known-good-text); border-color: var(--verdict-known-good-border); }
     .verdict-no_data    { background-color: var(--verdict-no-data-bg);    color: var(--verdict-no-data-text);    border-color: var(--verdict-no-data-border); }
     .verdict-error      { background-color: var(--verdict-error-bg);      color: var(--verdict-error-text);      border-color: var(--verdict-error-border); }
 
