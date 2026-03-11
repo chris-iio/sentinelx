@@ -53,8 +53,8 @@ def test_filter_bar_renders(page: Page, index_url: str) -> None:
     # Filter bar wrapper is present
     expect(results.filter_bar).to_be_visible()
 
-    # 5 verdict buttons: All | Malicious | Suspicious | Clean | No Data
-    expect(results.filter_verdict_buttons).to_have_count(5)
+    # 6 verdict buttons: All | Malicious | Suspicious | Clean | Known Good | No Data
+    expect(results.filter_verdict_buttons).to_have_count(6)
 
     # "All Types" pill plus one pill per type present (ipv4, domain, md5)
     expect(results.filter_type_pills).to_have_count(4)  # All Types + 3 types

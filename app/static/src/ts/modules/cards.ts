@@ -75,6 +75,7 @@ export function updateDashboardCounts(): void {
     malicious: 0,
     suspicious: 0,
     clean: 0,
+    known_good: 0,
     no_data: 0,
   };
 
@@ -85,7 +86,7 @@ export function updateDashboardCounts(): void {
     }
   });
 
-  const verdicts = ["malicious", "suspicious", "clean", "no_data"];
+  const verdicts = ["malicious", "suspicious", "clean", "known_good", "no_data"];
   verdicts.forEach((verdict) => {
     const countEl = dashboard.querySelector<HTMLElement>(
       '[data-verdict-count="' + verdict + '"]'

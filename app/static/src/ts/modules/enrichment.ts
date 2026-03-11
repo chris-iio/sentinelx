@@ -8,7 +8,6 @@
  *
  * Depends on:
  *   - cards.ts    for findCardForIoc, updateCardVerdict, updateDashboardCounts, sortCardsBySeverity
- *   - clipboard.ts for writeToClipboard
  *   - types/api.ts for EnrichmentItem, EnrichmentStatus
  *   - types/ioc.ts for VerdictKey, VERDICT_LABELS, verdictSeverityIndex, getProviderCounts
  *   - utils/dom.ts for attr
@@ -24,7 +23,6 @@ import {
   updateDashboardCounts,
   sortCardsBySeverity,
 } from "./cards";
-import { writeToClipboard } from "./clipboard";
 import { exportJSON, exportCSV, copyAllIOCs } from "./export";
 
 // ---- Module-private types ----
@@ -87,9 +85,18 @@ function formatRelativeTime(iso: string): string {
 
 /**
  * Compute the worst (highest severity) verdict from a list of VerdictEntry records.
+ *
+ * known_good from any provider overrides all other verdicts at summary level.
+ * This is an intentional design decision: known_good (e.g. NSRL match) means
+ * the IOC is a recognized safe artifact regardless of other signals.
+ *
  * Source: main.js computeWorstVerdict() (lines 542-551).
  */
 function computeWorstVerdict(entries: VerdictEntry[]): VerdictKey {
+  // known_good from any provider overrides everything at summary level
+  if (entries.some((e) => e.verdict === "known_good")) {
+    return "known_good";
+  }
   const worst = findWorstEntry(entries);
   return worst ? worst.verdict : "no_data";
 }
@@ -251,6 +258,12 @@ const PROVIDER_CONTEXT_FIELDS: Record<string, ContextFieldDef[]> = {
     { key: "ports", label: "Ports", type: "tags" },
     { key: "vulns", label: "Vulns", type: "tags" },
     { key: "hostnames", label: "Hostnames", type: "tags" },
+    { key: "cpes", label: "CPEs", type: "tags" },      // EPROV-01
+    { key: "tags", label: "Tags", type: "tags" },      // EPROV-01
+  ],
+  "CIRCL Hashlookup": [
+    { key: "file_name", label: "File", type: "text" },
+    { key: "source", label: "Source", type: "text" },
   ],
   "GreyNoise Community": [
     { key: "noise", label: "Noise", type: "text" },
@@ -601,6 +614,8 @@ function renderEnrichmentResult(
           : "Suspicious";
     } else if (verdict === "clean") {
       statText = "Clean, " + result.total_engines + " engines";
+    } else if (verdict === "known_good") {
+      statText = "NSRL match";
     } else {
       // no_data
       statText = "Not in database";
