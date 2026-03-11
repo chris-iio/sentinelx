@@ -1,597 +1,318 @@
 # Pitfalls Research
 
-**Domain:** TypeScript migration of vanilla JS IIFE in a Python/Flask application with strict CSP
-**Researched:** 2026-02-28
-**Confidence:** HIGH — sourced from esbuild official docs, TypeScript official docs, verified community findings, and direct codebase audit of SentinelX `main.js`
+**Domain:** Expanding a local IOC enrichment tool into a deeper analyst experience platform (zero-auth sources, bundled databases, open feeds)
+**Researched:** 2026-03-11
+**Confidence:** HIGH — sourced from MaxMind official docs, dnspython official docs, verified GitHub issues, community post-mortems, and direct codebase audit of SentinelX v5.0
 
 ---
 
-## Context: What This Migration Is
+## Context: What This Research Covers
 
-The existing `app/static/main.js` is an 856-line IIFE with `"use strict"` that runs in the browser
-as a `<script defer>` tag served from Flask's static file endpoint. The CSP is `script-src 'self'`
-(no inline scripts, no dynamic code execution, no unsafe-inline). There are Playwright E2E tests
-that test DOM behavior driven by this JS. The project has no Node.js build pipeline beyond Tailwind
-standalone CLI.
+SentinelX v5.0 is a working, security-first, 8-provider enrichment tool running on Python 3.10 + Flask 3.1.
+The v6.0 expansion adds **zero-auth enrichment** (DNS, GeoIP, WHOIS, ASN, certificate transparency),
+**bundled databases** (GeoLite2/ASN MMDB files), and **richer results UX**. The existing system has
+strict security posture: SSRF allowlist, CSP, CSRF, no subprocess, no innerHTML, and a Provider Protocol
+(`typing.Protocol`) that governs all adapters.
 
-**What v3.0 adds:** TypeScript build pipeline (esbuild or tsc), convert `main.js` IIFE to typed
-ES modules, type definitions for DOM interactions and API shapes, source maps. Zero functional changes.
-
-The pitfalls below are calibrated for this exact context — not a generic TS migration.
+The pitfalls below are calibrated for this exact context — not a generic enrichment tool.
 
 ---
 
 ## Critical Pitfalls
 
-### Pitfall 1: CSP Violation from Bundler-Injected Dynamic Code Evaluation
+### Pitfall 1: GeoLite2 License Requires Free-But-Not-Anonymous Signup
 
 **What goes wrong:**
-Webpack and some bundler configurations inject dynamic code evaluation into development bundles
-for fast source maps (the `devtool: 'eval'` mode or HMR). This causes the browser to refuse
-script execution under `script-src 'self'` CSP. The CSP regression test in
-`test_security_audit.py` explicitly asserts `"unsafe-eval" not in csp` — so any bundler-generated
-dynamic evaluation breaks both production safety and the regression guard.
-
-The problem also arises through polyfills: Node.js compatibility shims injected by bundlers
-(e.g., `regenerator-runtime` for async/generator support) use dynamic code evaluation internally.
-`--platform=browser` in esbuild suppresses these polyfills; other bundlers may inject them.
+Developers assume "free database" means "download and ship it." GeoLite2 databases are free but
+require a MaxMind account and license key to download since December 30, 2019. Users who try to
+bundle a pre-downloaded MMDB in the repo will violate the license if they do not personally own
+the file. Users who discover the download requires a MaxMind account at install time feel misled
+by documentation that said "zero-auth."
 
 **Why it happens:**
-Developers reach for Webpack or Vite without reading CSP implications. Webpack's default
-development mode uses eval-based source maps. The mistake is treating source map configuration
-as a performance concern, not a security concern.
-
-**Specific risk in SentinelX:**
-- `test_csp_header_exact_match` asserts `"unsafe-eval" not in csp` — any dynamic evaluation in bundle breaks this
-- The CSP header is set via `after_request` in Flask — the server will NOT change; the bundle must comply
-- esbuild with `--format=iife` and `--platform=browser` does NOT inject dynamic code evaluation — it is CSP-safe
-- Webpack devtool defaults, Vite dev server HMR, and async/await polyfills can all introduce dynamic evaluation
+The `maxminddb-geolite2` Python convenience package on PyPI was once a widely-cited workaround —
+it bundled the database directly. That package now has **inactive maintenance status** and the bundled
+database is severely stale (Snyk Advisory). Developers find it in blog posts from before 2019 and
+treat it as current best practice.
 
 **How to avoid:**
-Use esbuild as the bundler. esbuild IIFE output does not use dynamic code evaluation and
-does not inject HMR boilerplate. Its source maps are external files (`--sourcemap=linked`) —
-not inline hacks. Explicitly avoid Webpack and Vite for this project.
-
-For source maps, use `--sourcemap=linked` (esbuild default for external maps): generates a
-`main.js.map` file and appends `//# sourceMappingURL=main.js.map` to the bundle. Flask serves the
-`.map` file statically from `app/static/` — no CSP implications because source maps are not executed.
+- Do NOT bundle the MMDB files in the repository
+- Do NOT use `maxminddb-geolite2` from PyPI — it is unmaintained and stale
+- Use the official `geoip2` library + MaxMind's `geoipupdate` tool for database management
+- Document that GeoIP/ASN features require a (free) MaxMind account during first-run setup
+- Present GeoIP features as "optional enhanced enrichment — requires one-time MaxMind signup"
+  rather than "zero-auth" to avoid user frustration
+- Store MMDB path in `~/.sentinelx/config.ini` under `[local_databases]` — same pattern as API keys
 
 **Warning signs:**
-- Browser console reports CSP violation on page load after introducing the build pipeline
-- `test_csp_header_exact_match` fails after introducing the build pipeline
-- Any Node.js polyfill appears in bundle output (esbuild with `--platform=browser` suppresses these)
-- Scanning the bundle output reveals dynamic code execution patterns (inspect with: `grep -n "unsafe" app/static/main.js`)
+- Any reference to `maxminddb-geolite2` as the installation path
+- MMDB files appearing in `.gitignore` exemption or tracked in the repo
+- Documentation that says "no signup needed" for GeoIP features
 
 **Phase to address:**
-Phase 1 (Build Pipeline Setup) — verify CSP compliance before any TypeScript code is converted.
-After each build, load the page in browser and check the CSP test passes before proceeding.
+GeoIP/ASN phase — document the MaxMind signup requirement explicitly in the feature plan and
+in any first-run setup message. Treat this as a soft dependency with graceful degradation.
 
 ---
 
-### Pitfall 2: Module Format Mismatch — ESM Modules Without `type="module"` Script Tag
+### Pitfall 2: Bundled MMDB Files Become Stale — Lookups Return Wrong Country/ASN Data
 
 **What goes wrong:**
-TypeScript source files use `import`/`export` syntax (ESM). If esbuild is configured with
-`--format=esm` but the HTML still loads the output as `<script src="main.js" defer>` (without
-`type="module"`), the browser throws a parse error: `import` declarations are only valid in modules.
-The page loads but all JavaScript silently fails.
-
-The inverse also breaks: if `--format=iife` is used (correct for this project) but the TypeScript
-source uses top-level `await` or relies on ESM module scoping, esbuild wraps correctly but the
-semantics change.
+MaxMind updates GeoLite2 databases weekly (every Tuesday). IP allocations change as ISPs acquire,
+reassign, or return CIDR blocks. A bundled MMDB that is 3+ months old can misidentify the country
+or ASN for a significant fraction of IP addresses. An analyst sees "Germany" for a Russian IP and
+draws a wrong conclusion. Worse, the tool shows confident geolocation with no indication the data
+is stale — the analyst trusts it.
 
 **Why it happens:**
-Developers configure TypeScript with `"module": "ESNext"` in tsconfig (for IDE features) but
-use esbuild `--format=iife` to produce the actual bundle. This combination works correctly.
-The mistake is accidentally switching esbuild to `--format=esm` without updating the HTML template.
-
-**Specific risk in SentinelX:**
-`base.html` currently has: `<script src="{{ url_for('static', filename='main.js') }}" defer>`
-— no `type="module"`. If the output format changes to ESM, the script tag MUST add `type="module"`.
-If `type="module"` is added when using IIFE output, it has no effect but can confuse future readers.
+The database is included once at development time and never updated. There is no automatic
+refresh mechanism. The developer tests with one or two IPs they know and the results look correct
+(because common major-provider IPs rarely change registrations).
 
 **How to avoid:**
-Decide on one output format and fix it:
-- **Recommended: IIFE format** — `esbuild --format=iife --platform=browser`. Keep the existing
-  script tag unchanged. IIFE wraps all code in a function expression, preventing global scope
-  pollution identically to the existing `(function() { ... })()` pattern.
-- If ESM is chosen: update `base.html` to `<script type="module" src="..." defer>` and add
-  `type="module"` as a documented requirement in the Makefile comment.
-
-Lock the format choice in the Makefile. Do not leave it configurable.
+- Never commit MMDB files to the repository — document the required path and update cadence
+- Check MMDB file modification time at startup; warn if the file is older than 30 days
+- Display data age next to every GeoIP result: "GeoIP data from [file date]"
+- Document in setup instructions: "Run `geoipupdate` weekly or set a cron job"
+- Use `mmdb_file_path` in config; if absent, skip GeoIP enrichment with a clear "not configured"
+  status rather than using a stale bundled file
+- MaxMind's EULA actually **requires** deletion of databases older than 30 days after a new
+  release — violating this is a license compliance issue, not just an accuracy concern
 
 **Warning signs:**
-- Browser console: `Uncaught SyntaxError: Cannot use import statement outside a module`
-- Page loads but all JS behavior is absent (submit button stays disabled, mode toggle does nothing)
-- `type="module"` and IIFE format used simultaneously (mismatch — IIFE does not need it)
+- GeoIP results are shown without a "data as of" date
+- MMDB file is present in the repo, not in `.gitignore`
+- No check for file modification time before use
 
 **Phase to address:**
-Phase 1 (Build Pipeline Setup) — fix format and script tag before writing any TypeScript.
+GeoIP/ASN phase — implement a freshness check at adapter initialization time. If file is older
+than 30 days, log a warning and surface it in the UI alongside results.
 
 ---
 
-### Pitfall 3: Refactoring Behavior While Migrating Types
+### Pitfall 3: DNS Lookups Block the ThreadPoolExecutor — Silent Performance Cliff
 
 **What goes wrong:**
-The migration adds TypeScript types. During the process, a developer also improves variable
-naming, extracts helpers, changes event-listener attachment order, or restructures module
-boundaries. The resulting PR mixes type changes with behavioral changes — and a regression is
-introduced that is invisible in code review because reviewers focus on type correctness, not
-behavioral correctness.
+The existing `EnrichmentOrchestrator` uses `ThreadPoolExecutor(max_workers=4)`. Adding DNS lookups
+via `dnspython` or Python's `socket.getaddrinfo()` to the same pool means DNS resolution competes
+with HTTP provider calls for the 4 worker slots. A single slow DNS server (timeout: 5+ seconds) or
+DNS NXDOMAIN for a domain with many NS records can stall the entire pool. The analyst sees the
+progress bar freeze, not time out — there is no per-DNS-query timeout visible to the orchestrator.
 
-This is the most common cause of Playwright test failures in TS migrations. The tests test
-behavior; type changes alone cannot break behavior; therefore any test failure means behavior
-changed.
+Python's `socket.getaddrinfo()` (used by default DNS resolution) is **not thread-safe** and has
+no reliable per-call timeout. The `dnspython` library IS thread-safe for `resolve()` calls on a
+shared `Resolver` instance, but the default `lifetime` parameter (the total time allowed across
+all DNS servers for a single query) defaults to a generous value.
 
 **Why it happens:**
-The existing code is 856 lines of old-style JS with `var`, function declarations inside IIFE,
-and loop patterns that invite modernization with `Array.from`, `for...of`, arrow functions, and
-`const`/`let`. The temptation to modernize is strong. "It's the same logic, just cleaner" is the
-lie developers tell themselves as they introduce a subtle closure scope difference.
-
-**Specific risk in SentinelX:**
-- `showPasteFeedback()` uses `feedback._timer` — a property set dynamically on a DOM element. This
-  is a JavaScript anti-pattern but it works. TypeScript will object to it. The "fix" of using a
-  module-level `let pasteFeedbackTimer: number | null = null` is functionally equivalent — but
-  moving the state introduces a risk if multiple feedback elements existed (they do not, but the
-  behavioral equivalence must be verified deliberately).
-- `iocVerdicts` and `iocResultCounts` are closure variables inside `initEnrichmentPolling()`.
-  Extracting them to module scope changes their lifetime in ways that could break re-initialization.
-- The `Array.prototype.slice.call(grid.querySelectorAll(".ioc-card"))` in `doSortCards()` is a
-  legacy `NodeList` pattern. Converting to `Array.from(...)` is equivalent — but verify before doing it.
+DNS lookups feel like cheap, fast operations in development (local resolver responds in <10ms).
+Under production conditions — split-brain DNS, corporate resolvers with SERVFAIL cascades, or
+resolving malicious domains that have intentionally flaky authoritative servers — DNS can take
+30+ seconds per query before the resolver gives up.
 
 **How to avoid:**
-Strict rule: the TypeScript migration PR contains ZERO behavioral changes. Separate into two phases:
-1. **Phase A — Type annotations only.** Rename `.js` to `.ts`, add type annotations, fix type
-   errors. Do not change any runtime behavior. Do not rename variables. Do not extract functions.
-   Do not change loop style. The only allowed `var` to `let`/`const` changes are where TypeScript
-   requires them for correctness.
-2. **Phase B — Refactor.** After E2E tests pass on the typed code, create a separate PR to modernize
-   the code style.
-
-Run Playwright tests after Phase A before touching anything else.
+- Use `dnspython` (`dns.resolver`), NOT `socket.getaddrinfo()` for all DNS enrichment — it
+  supports per-resolver timeout configuration
+- Create a module-level shared `dns.resolver.Resolver` instance — it is safe for concurrent
+  `resolve()` calls from multiple threads
+- Set `resolver.lifetime = 5.0` (seconds) — this is the total per-query budget across all
+  nameservers; default is much higher
+- Set `resolver.timeout = 2.0` (seconds) — per-nameserver attempt timeout
+- Wrap all DNS exceptions explicitly:
+  ```python
+  except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):   # legitimate no-data
+      verdict = "no_data"
+  except dns.exception.Timeout:                             # slow/unresponsive NS
+      return EnrichmentError(...)
+  except dns.resolver.NoNameservers:                        # all NS unreachable
+      return EnrichmentError(...)
+  ```
+- Consider a separate, higher `max_workers` value for DNS-only lookups since they are I/O-bound
+  and fast when they succeed — or implement a DNS-specific timeout wrapper
+- Add a hardened `supported_types` set: a DNS adapter should only accept `domain` IOC types to
+  avoid unexpected lookup attempts on IPs or hashes
 
 **Warning signs:**
-- E2E tests fail after TS migration for reasons unrelated to types
-- The PR diff contains renamed variables, extracted helpers, or restructured modules
-- `Array.from`, `for...of`, or arrow functions appear where the original used `for` loops or `forEach`
+- DNS lookup uses `socket.getaddrinfo()` instead of `dnspython`
+- No `lifetime` or `timeout` set on the `dns.resolver.Resolver` instance
+- DNS lookups share the same `max_workers=4` pool as HTTP provider calls without consideration
+- No explicit `except dns.exception.Timeout` in the adapter
 
 **Phase to address:**
-All migration phases — enforce as a code review rule. If `pytest tests/e2e/` passes after the TS
-migration, no behavior changed.
+DNS enrichment phase — implement timeout guards before wiring into the orchestrator. Add a
+unit test that simulates DNS timeout by mocking `dns.resolver.Resolver.resolve` to raise
+`dns.exception.Timeout` and verifies the adapter returns `EnrichmentError`, not a hang.
 
 ---
 
-### Pitfall 4: querySelector Returns `null` — Boilerplate Strategy Must Be Consistent
+### Pitfall 4: WHOIS Returns "REDACTED FOR PRIVACY" — Parsed as Empty, Treated as Error
 
 **What goes wrong:**
-`document.getElementById()` and `document.querySelector()` return `HTMLElement | null` in TypeScript's
-DOM typings. With `strict: true` in tsconfig, every DOM query requires a null check or a non-null
-assertion (`!`). The temptation is to add `!` everywhere:
+Since GDPR enforcement (2018), the majority of WHOIS records for gTLDs return PII fields with
+literal text like `"REDACTED FOR PRIVACY"`, `"DATA REDACTED"`, or entirely empty fields. The
+`python-whois` library parses these as legitimate registrant/email values — so `result.registrant_email`
+returns `"REDACTED FOR PRIVACY"` as a string, not `None`. Code that checks `if result.registrant_email:`
+treats this as success and shows "REDACTED FOR PRIVACY" as the registrant email in the analyst UI.
+This is technically correct but confusing — it looks like a bug.
 
-```typescript
-// Dangerous pattern — silences TypeScript without adding safety:
-const form = document.getElementById("analyze-form")!;
-```
-
-The problem is that non-null assertion defeats the purpose of strict null checking — it silences
-TypeScript without adding safety. Worse, if a future template change removes the element, the
-runtime error is a cryptic `Cannot read properties of null` rather than a type error caught at compile time.
-
-The opposite mistake (checking null everywhere with redundant guards) leads to deeply nested
-code that is harder to read than the original JavaScript.
+Worse: many WHOIS servers rate-limit aggressively. `python-whois` can **hang indefinitely** on
+rate-limited connections (no timeout by default). A domain whose WHOIS server is rate-limiting
+will silently stall the lookup thread until the connection eventually fails.
 
 **Why it happens:**
-TypeScript requires explicit null handling but does not enforce a consistent strategy. Developers
-pick the path of least resistance: `!` everywhere, or `if (!el) return` boilerplate that
-fragments initialization functions.
-
-**Specific risk in SentinelX:**
-`main.js` already uses defensive null checks at the start of each `init*` function:
-
-```javascript
-function initSubmitButton() {
-    var form = document.getElementById("analyze-form");
-    if (!form) return;
-    var textarea = document.getElementById("ioc-text");
-    var submitBtn = document.getElementById("submit-btn");
-    if (!textarea || !submitBtn) return;
-    // ... rest of function
-}
-```
-
-This pattern IS the correct TypeScript pattern — it narrows the type to `HTMLElement` after the
-check. The migration should preserve these checks exactly. Do NOT replace them with `!` assertions.
+WHOIS was designed before GDPR. The `python-whois` library does not normalize privacy strings.
+Developers test with a few hand-picked domains during development and never see a rate-limited
+or fully-redacted response.
 
 **How to avoid:**
-- Preserve the existing `if (!el) return;` guards — they serve as TypeScript type narrowing
-- Use `as HTMLInputElement` (type assertion with specific interface) when a more specific DOM
-  interface is needed (e.g., `textarea.value` requires `HTMLTextAreaElement`)
-- Never use `!` on DOM queries unless you can prove the element is server-rendered on every page
-  that runs that JS
-- For elements that genuinely cannot be absent (e.g., `document.body`), use `!` only with a comment
+- Use `python-whois` with explicit socket timeout: wrap the lookup in a thread with a timeout,
+  or patch the socket timeout before calling — `python-whois` does not expose a timeout parameter
+  directly; use `socket.setdefaulttimeout(10)` before the call and restore it after
+- Alternatively, use `whoisit` (RDAP-based, `pip install whoisit`) which provides structured JSON
+  via IANA's RDAP service — rate limits are less severe and data is machine-readable
+- Normalize privacy strings: if a field value contains "REDACTED", "PRIVACY", or "WITHHELD",
+  treat it as `None` and display "Redacted (GDPR)" in the UI
+- WHOIS enrichment is explicitly listed as "Out of Scope" in `PROJECT.md` for v6.0 — if
+  reconsidering, treat it as a high-risk feature requiring its own research phase
+- Display WHOIS fields with a "data quality" indicator: "Registration date", "Registrar",
+  and "Domain age" are reliably available; registrant contact fields are frequently redacted
 
 **Warning signs:**
-- `!` appears on every `getElementById` or `querySelector` call without accompanying comment
-- TypeScript errors suppressed with `// @ts-ignore` instead of proper type narrowing
-- Type assertion chain: `(document.getElementById("x") as any).value` — two red flags in one line
+- WHOIS lookup has no timeout
+- `result.registrant_email` displayed directly without privacy-string normalization
+- WHOIS included in the main enrichment pool (it should be a separate, optional call due to
+  rate limit risk)
 
 **Phase to address:**
-Phase 2 (TypeScript Conversion) — establish null-check strategy before writing any types.
-Document in the PR: "null strategy is preserve existing guards."
+If WHOIS is added: implement it as a **separate, isolated lookup** — not wired into the main
+`EnrichmentOrchestrator` pool. Timeout wrapper is mandatory. Privacy normalization is mandatory.
+Given the "Out of Scope" note in `PROJECT.md`, treat this as a Phase N+ feature, not v6.0.
 
 ---
 
-### Pitfall 5: Timer Types Conflict — `NodeJS.Timeout` vs `number` in Browser Context
+### Pitfall 5: Certificate Transparency Lookup Returns Hundreds of Subdomain Records — UI Overload
 
 **What goes wrong:**
-`setTimeout()` in a browser context returns `number`. In Node.js context (and when `@types/node`
-is installed as a dev dependency), `setTimeout()` returns `NodeJS.Timeout`. If both type packages
-are in scope simultaneously, TypeScript cannot resolve the type of the timer variable and throws:
-`Type 'Timeout' is not assignable to type 'number'`.
+`crt.sh` is the canonical CT log search API. A query for a domain like `google.com` returns
+thousands of certificate records — wildcard certs, expired certs, subdomains at every level.
+An adapter that naively presents "certificates found" as a count and a list will overwhelm the
+analyst with hundreds of rows in an already-dense results UI.
 
-This matters in `main.js` which uses timers in multiple places:
-- `feedback._timer = setTimeout(...)` in `showPasteFeedback()`
-- `sortTimer = null; sortTimer = setTimeout(...)` in `sortCardsBySeverity()`
-- `clearTimeout(sortTimer)` in `sortCardsBySeverity()`
-- `setInterval(...)` in `initEnrichmentPolling()`
+The `crt.sh` HTTP JSON API (via `https://crt.sh/?q=domain&output=json`) is public and zero-auth
+but **has no documented rate limit** — it silently starts returning 504 Gateway Timeout errors
+under heavy load. The direct PostgreSQL access (`psql -h crt.sh -p 5432`) provides more
+flexibility but has strict session idle timeout (connection drops quickly) and is not appropriate
+for a production Flask route.
 
 **Why it happens:**
-`@types/node` is often installed as a dev dependency for other build tooling. Once installed, it
-pollutes the global type environment. TypeScript's `lib` setting (`"DOM"`) and `types` compiler
-option interact in non-obvious ways.
+CT data is inherently wide — certificates exist for every subdomain. Developers test with a
+private or small domain that has only 3-4 certificates and design the UI for that scale.
 
 **How to avoid:**
-Three approaches (pick one, document the choice):
-
-Option A — Use `ReturnType<typeof setTimeout>` as the timer type. This derives the correct type
-for the actual runtime environment and works regardless of which `@types` are installed:
-
-```typescript
-let sortTimer: ReturnType<typeof setTimeout> | null = null;
-```
-
-Option B — Use `window.setTimeout()` explicitly. TypeScript always infers `number` for `window.setTimeout`:
-
-```typescript
-const intervalId = window.setInterval(pollFn, 750); // type: number
-```
-
-Option C — Restrict `@types` in tsconfig so only DOM types are included:
-
-```json
-{ "compilerOptions": { "types": [] } }
-```
-
-This prevents `@types/node` from polluting global scope.
-
-**Recommended:** Option A (`ReturnType<typeof setTimeout>`) — most portable, no tsconfig surgery needed.
+- Aggregate CT results, not list them: show "X unique subdomains, Y certificates found,
+  oldest [date], newest [date]" rather than individual certificate rows
+- Limit API response processing: cap at 50 or 100 records for display purposes; show "X+ more"
+- Wrap crt.sh HTTP call with a strict timeout (8-10 seconds) and treat 504 as a soft failure
+  (`verdict="no_data"` with error note "CT log temporarily unavailable")
+- Use `https://crt.sh/?q=%.domain.tld&output=json` (leading `%` for subdomain wildcard) — note
+  that the bare `q=domain.tld` also returns certs for parent domains which may not be wanted
+- Only support `domain` IOC type — CT lookups make no sense for IPs or hashes
+- Show CT data as "passive DNS / subdomain intelligence" rather than a verdict
 
 **Warning signs:**
-- TypeScript error: `Type 'Timeout' is not assignable to type 'number'`
-- `let sortTimer: any = null` used to suppress the error — defeats type safety
-- Timer variables typed as `number` compile fine locally but fail in CI where `@types/node` is installed
+- CT adapter returns raw list of certificate objects to the UI
+- No response size cap on the crt.sh API call (SEC-05 `read_limited` pattern must apply)
+- CT lookup included for all IOC types rather than domain-only
 
 **Phase to address:**
-Phase 2 (TypeScript Conversion) — resolve before converting `initEnrichmentPolling()` and `sortCardsBySeverity()`.
+CT log phase — design the UI aggregation layer before writing the adapter. The data shape
+drives the adapter output schema; do not write the adapter first and retrofit the UI.
 
 ---
 
-### Pitfall 6: `getAttribute()` Always Returns `string | null` — TypeScript Won't Narrow on `hasAttribute()`
+### Pitfall 6: Zero-Auth Provider That Always Returns `is_configured() = True` Becomes Noise
 
 **What goes wrong:**
-TypeScript's DOM types define `getAttribute(name: string): string | null`. Even after calling
-`element.hasAttribute("data-verdict")`, TypeScript does NOT narrow the return type of
-`element.getAttribute("data-verdict")` to `string`. Every `getAttribute()` call requires
-explicit null handling.
+Zero-auth providers (DNS, GeoIP, Shodan InternetDB) implement `is_configured()` returning `True`
+always. This works correctly for Shodan InternetDB because the API is unconditionally available.
+But for GeoIP/ASN (requires local MMDB file) or DNS (requires `dnspython` installed), returning
+`True` when the underlying resource is missing means the adapter runs, fails with an unexpected
+error, and returns `EnrichmentError("MMDB file not found")` — which appears in the UI alongside
+real results.
 
-`main.js` calls `getAttribute()` in many places without null checks (because the JS already
-guarantees the attribute exists via template rendering). TypeScript will flag every one of these.
+The existing `setup.py` registers all configured providers. If a zero-auth provider is always
+registered and never checks its actual preconditions, it adds noise to every result set regardless
+of whether the analyst expected it.
 
 **Why it happens:**
-TypeScript's type narrowing does not flow from `hasAttribute()` to `getAttribute()` — this is a
-known TypeScript limitation (GitHub issue #22238). Developers discover this only when converting
-the code and face dozens of type errors.
+The SentinelX Provider Protocol's `is_configured()` contract was designed for API-key providers:
+"True if you have a key, False if you don't." Zero-auth providers inherit this design but have
+different readiness conditions (file exists, library installed, etc.).
 
 **How to avoid:**
-Use a typed helper that coalesces null to empty string or a default, avoiding null handling at
-every call site:
-
-```typescript
-function attr(el: Element, name: string, fallback = ""): string {
-    return el.getAttribute(name) ?? fallback;
-}
-```
-
-For verdict attributes specifically, use a type-safe approach with the union type:
-
-```typescript
-type Verdict = "malicious" | "suspicious" | "clean" | "no_data" | "error";
-
-function getVerdict(el: Element): Verdict {
-    return (el.getAttribute("data-verdict") ?? "no_data") as Verdict;
-}
-```
+- For MMDB-based providers (GeoIP, ASN): `is_configured()` should check that the configured
+  MMDB path exists and is readable, not just that the path is non-empty in config:
+  ```python
+  def is_configured(self) -> bool:
+      path = self._mmdb_path
+      return bool(path) and os.path.isfile(path)
+  ```
+- For DNS: `is_configured()` should verify `dnspython` is importable (it is an optional dep)
+- The orchestrator already gates on `is_configured()` before dispatch — this pattern is correct;
+  the adapter must be honest about its readiness
+- Distinguish between "not configured" (user hasn't set it up) and "configured but file missing"
+  in error messages — they require different user actions
 
 **Warning signs:**
-- `el.getAttribute("x")!` used everywhere to suppress null
-- TypeScript errors: `Object is possibly 'null'` on every `getAttribute` call
-- `// @ts-ignore` comments before getAttribute lines
+- Zero-auth adapter `is_configured()` returns `True` unconditionally
+- `EnrichmentError("MMDB file not found")` appearing in normal result sets
+- No MMDB path validation at adapter initialization or at `is_configured()` time
 
 **Phase to address:**
-Phase 2 (TypeScript Conversion) — define utility functions before converting DOM manipulation code.
+Each local-database adapter phase — establish the `is_configured()` contract for file-backed
+providers before wiring into the registry.
 
 ---
 
-### Pitfall 7: Source Map Path Resolution Broken in Flask Static File Serving
+### Pitfall 7: DNS Rebinding Attack Against the SSRF Allowlist
 
 **What goes wrong:**
-esbuild generates source maps with paths relative to the source files at build time. When Flask
-serves `main.js` from `/static/main.js`, the browser DevTools fetches the map at `/static/main.js.map`.
-Inside the map, the `sources` array contains paths like `../src/main.ts` — relative to where
-esbuild ran, not to how Flask serves them.
+The existing SSRF allowlist (`http_safety.py`) validates hostnames against `ALLOWED_API_HOSTS`
+before every network call. A DNS-based enrichment adapter introduces a new attack surface:
+**DNS rebinding**. The attack flow: malicious IOC `evil.attacker.com` resolves to a public IP
+(passes the `is_safe_url()` check), but the attacker's DNS server then returns `127.0.0.1`
+for the second resolution (the actual HTTP connection). This bypasses hostname-based allowlists.
 
-If esbuild is run from the project root but the source files are in `app/static/src/`, the
-resolved paths in DevTools may point to the wrong location: DevTools shows the TypeScript source
-but cannot map breakpoints back to it.
-
-**Why it happens:**
-Flask's static file serving adds a URL prefix (`/static/`) that does not correspond to the
-file system layout that esbuild uses. Source map `sources` are relative paths that esbuild
-resolves from the bundle output file location, not the URL where the browser loads the bundle.
-
-**How to avoid:**
-Run esbuild from the directory that makes the relative paths correct:
-- Source: `app/static/src/main.ts`
-- Output: `app/static/main.js`
-- Run esbuild from project root with explicit paths
-
-Verify source maps work by: (1) loading the page in Chrome, (2) opening DevTools Sources tab,
-(3) finding `main.ts` under the page's sources, (4) setting a breakpoint on the `initSubmitButton`
-function call. If the breakpoint maps to the correct TypeScript line, source maps are working.
-
-Use `--sourcemap=linked` in the esbuild command (generates external map file, appends
-`//# sourceMappingURL` comment to bundle). This is the correct setup for Flask static serving
-— the map file is a separate HTTP request, not inlined, no CSP implications.
-
-Do NOT use `--sourcemap=inline` — it bloats the JS file and serves source code to any browser
-that loads the page. Acceptable for a local tool, but bad practice.
-
-**Warning signs:**
-- DevTools Sources tab shows the minified bundle but not the TypeScript source
-- Setting breakpoints in TypeScript shows `X` (could not load source) in DevTools
-- The `.map` file is not accessible at the expected URL (`/static/main.js.map`)
-- DevTools console shows: `Could not load content for main.js.map: HTTP error: status code 404`
-
-**Phase to address:**
-Phase 1 (Build Pipeline Setup) — verify source maps in browser before proceeding to TS conversion.
-
----
-
-### Pitfall 8: Makefile Build Not Integrated — TypeScript Silently Runs Stale JS
-
-**What goes wrong:**
-After adding the TypeScript build step, the Makefile has a `ts` or `build` target. But:
-1. The developer edits `.ts` files and refreshes the browser — the browser loads the old `main.js`
-   because they forgot to run `make ts`.
-2. CI runs `pytest tests/e2e/` without first running `make ts` — tests run against the old JS.
-3. The `.ts` files diverge from `main.js` for weeks before anyone notices.
-
-This is the most common TypeScript migration productivity failure and produces confusing debugging
-sessions ("why isn't my change showing up?").
+This attack is most relevant if SentinelX ever accepts IOC values from untrusted sources and
+makes outbound HTTP calls to domains derived from those values. For the DNS enrichment adapter
+itself (which looks up analyst-provided domains), the risk is lower — but the existing SSRF
+allowlist pattern assumes HTTP calls, not DNS lookups.
 
 **Why it happens:**
-Adding a build step to a project that previously had none requires updating every workflow that
-touches the JS file: development habits, CI scripts, deployment steps, and any documentation
-that says "edit `main.js`." This update is easy to miss in the heat of the migration.
-
-**Specific risk in SentinelX:**
-- `app/static/main.js` must become a BUILD ARTIFACT, not a source file
-- The file must be tracked in git as generated (with a clear comment at the top of the file)
-- CI must run `make ts` (or `make build`) before running E2E tests
-- Watch mode (`make ts-watch`) should exist for development iteration
+The SSRF protection in `http_safety.py` validates the URL before the HTTP call. DNS rebinding
+exploits the time gap between validation and connection. This is a Time-Of-Check/Time-Of-Use
+(TOCTOU) vulnerability pattern.
 
 **How to avoid:**
-As Phase 1 of the build pipeline:
-1. Add `ts` and `ts-watch` targets to `Makefile`
-2. Update `build` to depend on both `css` and `ts`
-3. Add a comment to `app/static/main.js` at the top: `/* GENERATED FILE — edit app/static/src/main.ts instead */`
-4. Update any CI or test scripts to run `make build` before tests
-5. Document in the project that `.ts` files are the source of truth
+- DNS enrichment adapters do DNS **lookups** of IOC values — they do not make HTTP calls to
+  those domains; the DNS lookup itself is safe (it calls the configured resolver, not the target)
+- Ensure DNS adapters never use the resolved IP to make subsequent HTTP connections — lookups
+  should terminate at the DNS response
+- For any feature that resolves a domain and then connects to the resolved IP (e.g., banner
+  grabbing, HTTP header checks), implement a double-resolution check:
+  1. Resolve the domain before connection attempt
+  2. Verify the resolved IP is not in RFC1918/loopback/link-local space
+  3. Make the connection to the explicit IP (not the hostname) to prevent re-resolution
+- Add RFC1918 + loopback IP check to `http_safety.py` for any IPs derived from DNS resolution
 
 **Warning signs:**
-- Editing `.ts` file and refreshing browser shows no change
-- `main.js` timestamp is older than `main.ts` after editing
-- CI passes but local tests fail (or vice versa) because different JS versions are being tested
-- PR diff shows changes in both `main.ts` and `main.js` manually synchronized
+- Any adapter that resolves a domain and then makes an HTTP call to that domain
+- HTTP calls to analyst-provided URLs without IP-level validation
+- Feature involving "fetch HTTP headers" or "check HTTP response" for IOC domains
 
 **Phase to address:**
-Phase 1 (Build Pipeline Setup) — establish Makefile integration before writing any TypeScript.
-
----
-
-### Pitfall 9: Over-Typing with `any` — Defeats the Purpose of the Migration
-
-**What goes wrong:**
-The migration hits a complex type: the enrichment result object from the JSON API response, the
-`iocVerdicts` accumulator map, or the `event.target` in a DOM event listener. Rather than defining
-a proper interface, the developer types it as `any` and moves on. At the end of the migration,
-20% of the codebase is `any` and TypeScript provides zero safety for the most important types.
-
-**Why it happens:**
-`any` silences TypeScript errors immediately. Under deadline pressure or when stuck on a complex
-type, `any` is the zero-friction escape hatch. The intention is always to "fix it later" — which
-rarely happens.
-
-**Specific risk in SentinelX:**
-The most complex types in `main.js` that developers are likely to punt on:
-
-1. **Enrichment result from API** — the JSON from `/enrichment/status/{job_id}`:
-
-```typescript
-// Do NOT use:
-function renderEnrichmentResult(result: any) { ... }
-
-// Use instead:
-interface EnrichmentResult {
-    type: "result" | "error";
-    ioc_value: string;
-    provider: string;
-    verdict?: "malicious" | "suspicious" | "clean" | "no_data";
-    detection_count?: number;
-    total_engines?: number;
-    scan_date?: string;
-    error?: string;
-}
-```
-
-2. **iocVerdicts accumulator** — a map of ioc_value to verdict array:
-
-```typescript
-// Do NOT use:
-const iocVerdicts: Record<string, any[]> = {};
-
-// Use instead:
-interface VerdictEntry { provider: string; verdict: string; summaryText: string; }
-const iocVerdicts: Record<string, VerdictEntry[]> = {};
-```
-
-3. **Event target in listeners** — `event.target` is `EventTarget | null`, not `HTMLElement`.
-   Use the closed-over element reference instead of the event target:
-
-```typescript
-// Do NOT use event parameter typed as any:
-btn.addEventListener("click", (event: any) => { event.target.getAttribute("data-value"); });
-
-// Use instead — btn is already typed in the closure:
-btn.addEventListener("click", () => { btn.getAttribute("data-value"); });
-```
-
-**How to avoid:**
-Define all API response interfaces in a dedicated `types.ts` module before converting any logic.
-The TypeScript migration PR should include `app/static/src/types.ts` with all domain types
-defined before any function is converted.
-
-**Warning signs:**
-- More than 3 uses of `: any` in converted code
-- `Record<string, any>` for the iocVerdicts map
-- `event: any` in addEventListener callbacks
-- `(result as any).verdict` — type assertion to `any` then property access
-
-**Phase to address:**
-Phase 2 (TypeScript Conversion) — write `types.ts` first, before converting `main.js`.
-
----
-
-### Pitfall 10: Under-Typing with Overly Broad Unions — Accepts Invalid Values
-
-**What goes wrong:**
-The opposite problem: types are so broad they accept invalid values and TypeScript provides false
-confidence. For example, typing verdict as `string` instead of the specific union type means a
-typo in an API response key is not caught.
-
-**Why it happens:**
-Getting the union types right requires reading the backend code and API documentation.
-Developers in a hurry define `verdict: string` to avoid this investigation.
-
-**Specific risk in SentinelX:**
-`VERDICT_SEVERITY = ["error", "no_data", "clean", "suspicious", "malicious"]` is a runtime list
-that drives the severity sorting. If typed as `string[]` instead of `Verdict[]`, TypeScript
-cannot catch attempts to compare an invalid verdict string.
-
-**How to avoid:**
-
-```typescript
-// In types.ts:
-export type Verdict = "malicious" | "suspicious" | "clean" | "no_data" | "error";
-export type IocType = "ipv4" | "ipv6" | "domain" | "url" | "md5" | "sha1" | "sha256" | "cve";
-
-// VERDICT_SEVERITY becomes:
-const VERDICT_SEVERITY: readonly Verdict[] = ["error", "no_data", "clean", "suspicious", "malicious"];
-
-// verdictSeverity function becomes typed:
-function verdictSeverity(verdict: Verdict): number {
-    return VERDICT_SEVERITY.indexOf(verdict);
-}
-```
-
-**Warning signs:**
-- Constants typed as `string[]` instead of specific union type arrays
-- Function parameters accepting `string` where a union type would be more precise
-- `VERDICT_LABELS` typed as `Record<string, string>` instead of `Record<Verdict, string>`
-
-**Phase to address:**
-Phase 2 (TypeScript Conversion) — define narrow union types in `types.ts` as first step.
-
----
-
-### Pitfall 11: E2E Tests Break Due to Build Output Race or Stale Artifact
-
-**What goes wrong:**
-After the TS pipeline is added, CI runs E2E tests. One of two failure modes:
-
-Mode A — Missing build: CI does not run `make ts` before `pytest tests/e2e/`. The tests run against
-the old `main.js`. If the old `main.js` is deleted (because it is now a build artifact), the page
-loads without JavaScript and ALL E2E tests fail with `element not found` or timeout errors.
-
-Mode B — Stale build: CI runs the old `main.js` (cached artifact, not rebuilt). Tests pass
-for behavior that was removed or renamed in the TypeScript refactor. False green.
-
-**Why it happens:**
-CI scripts are written before the build pipeline exists. Adding a new build step requires updating
-CI — which is done separately from the migration PR, often forgotten.
-
-**How to avoid:**
-- Add `make ts` (or `make build`) to the CI test workflow before the pytest invocation
-- Verify in the migration PR that `app/static/main.js` is rebuilt as a step in the test command
-- If `main.js` is gitignored (correct for a generated file), CI must always build it before tests
-- Add a CI check: verify `main.js` exists before allowing E2E tests to run
-
-**Warning signs:**
-- E2E tests fail with `TimeoutError: Locator.expect_to_be_visible: Timeout 30000ms exceeded`
-  (not a JS error, element just is not interactive because JS did not load)
-- All E2E tests pass in CI but only because they are running against stale correct behavior
-- The `app/static/main.js` in CI differs from the local build
-
-**Phase to address:**
-Phase 1 (Build Pipeline Setup) — update CI before merging the migration PR.
-
----
-
-### Pitfall 12: Import Path Extension Mismatch (`.ts` vs `.js`)
-
-**What goes wrong:**
-TypeScript sources import other modules. The correct extension in TypeScript ESM imports is `.js`
-(the compiled output extension), NOT `.ts`. Developers write `import { initSubmitButton } from './submit'`
-(no extension) or `import ... from './submit.ts'` — both can cause resolution issues in different contexts.
-
-This is less relevant for IIFE format (esbuild bundles everything into one file from a single entry point),
-but becomes critical if the migration splits `main.ts` into multiple modules.
-
-**Why it happens:**
-TypeScript file resolution allows importing without extension in non-bundler mode. But esbuild
-requires explicit extensions for proper resolution in some configurations, and `import from './foo.ts'`
-is a TypeScript extension that does not follow Node ESM standards.
-
-**Specific risk in SentinelX:**
-If `main.ts` is split into `submit.ts`, `polling.ts`, `filter.ts` etc. (a likely refactor),
-cross-file imports must use `.js` extension (the compiled output) even though the source is `.ts`.
-
-**How to avoid:**
-- If using IIFE format with a single entry point: esbuild handles resolution from a single file —
-  extensions less critical because esbuild follows imports through the source directory
-- If using ESM format or multiple source files: use `.js` extension in all import statements
-- Set `moduleResolution: "bundler"` in tsconfig — designed for esbuild/vite/etc. and allows
-  extensionless imports that esbuild resolves correctly
-- Document the convention in a comment in the first import statement
-
-**Warning signs:**
-- esbuild error: `Could not resolve "./submit.ts"`
-- TypeScript error: `An import path cannot end with a '.ts' extension`
-- Module not found errors only in the production bundle but not in the IDE
-
-**Phase to address:**
-Phase 2 (TypeScript Conversion) — establish import convention before splitting modules.
+Any network-enrichment phase that touches analyst-provided domain values — add IP validation
+to `http_safety.py` as a shared utility before building features that depend on it.
 
 ---
 
@@ -601,71 +322,93 @@ Shortcuts that seem reasonable but create long-term problems.
 
 | Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
 |----------|-------------------|----------------|-----------------|
-| Type entire codebase as `any` first, fix later | Migration completes fast | "Fix later" never happens; TypeScript provides false safety | Never — define API types first |
-| Use `!` on every `getElementById` | Silences null errors instantly | Crashes at runtime if element removed from template | Only with comment proving element is always present |
-| Skip `tsc --noEmit` type checking, use only esbuild | Fast builds, no type-check overhead | Type errors accumulate silently; esbuild never catches them | Never — `tsc --noEmit` must run in CI |
-| Keep `main.js` in version control as hand-edited source | Avoids CI changes and build step | Developers edit the wrong file; source of truth is ambiguous | Never after pipeline is established |
-| Define types inline instead of in `types.ts` | Faster to write | Types duplicated across files; domain model not centralized | Never for shared API shapes |
-| Convert entire 856-line file at once | PR is a single commit | Massive diff, hard to review, hard to bisect regressions | Convert function by function for large files |
-| Mix refactoring with type annotations | One PR for everything | Behavioral regressions hidden in type changes; test failures hard to attribute | Never — separate type migration from code modernization |
+| Bundle GeoLite2 MMDB in repo | Simple install, no setup friction | License violation, stale data, large repo size | Never — document the download path instead |
+| Use `maxminddb-geolite2` PyPI package | One-line install, no signup | Unmaintained, database is 1+ year stale | Never — use official `geoip2` + `geoipupdate` |
+| Use `socket.getaddrinfo()` for DNS | Standard library, no extra deps | No per-call timeout, not thread-safe, no fine-grained error handling | Never for production enrichment paths |
+| Share a single `requests.Session` across DNS+HTTP adapters | Slightly lower overhead | Connection pool pollution, session state leaks between adapter types | Never — DNS adapters don't use HTTP sessions anyway |
+| Show all CT certificate records raw | Simple implementation | Hundreds of rows in UI, analyst cognitive overload | Never — aggregate before display |
+| Register zero-auth providers unconditionally | Simple setup.py | Errors in results when MMDB missing, no graceful degradation | Never — `is_configured()` must check actual readiness |
+| Add WHOIS in main enrichment pool | Feature completeness | Rate limit hangs stall all other results | Never — WHOIS must be isolated if added at all |
+| Accept `any` IOC type in DNS/GeoIP adapters | Broader coverage appearance | Silent errors for hash/URL/CVE types that can't be DNS-queried | Never — `supported_types` must be precise |
 
 ---
 
 ## Integration Gotchas
 
-Specific to the SentinelX TypeScript migration context.
+Common mistakes when connecting zero-auth and local enrichment sources.
 
 | Integration | Common Mistake | Correct Approach |
 |-------------|----------------|------------------|
-| Flask static files | Serving `main.ts` directly instead of the compiled `main.js` | esbuild compiles to `app/static/main.js`; Flask serves that; never serve `.ts` files |
-| Source maps + Flask | Map file not accessible at `/static/main.js.map` | Output map to `app/static/` alongside `main.js`; Flask serves it automatically |
-| Tailwind safelist + TS | Dynamic class names in TypeScript not recognized by Tailwind | TypeScript files should not generate new dynamic classes; class names remain in templates |
-| Playwright E2E | Tests use `page.evaluate()` to run JS snippets — these are not typed | Keep `evaluate()` calls untyped; they run in browser scope where types do not apply |
-| CSP + tsc `outFile` | tsc `outFile` concatenation mode can produce non-compliant output | Use esbuild for bundling, `tsc --noEmit` for type checking only; never use tsc for production output |
-| `feedback._timer` property | TypeScript rejects dynamic properties on DOM elements | Refactor to module-level `let feedbackTimer: ReturnType<typeof setTimeout> | null = null` |
-| `CSS.escape()` usage | May seem like an obscure API without types | TypeScript DOM lib includes `CSS.escape()` — ensure `lib` includes `"DOM"` in tsconfig |
+| MaxMind GeoLite2 | Use `maxminddb-geolite2` package or bundle MMDB in repo | Use official `geoip2` library; store MMDB at `~/.sentinelx/GeoLite2-*.mmdb`; check file freshness |
+| `dnspython` resolver | Create a new `Resolver()` per lookup call | Create one module-level `Resolver` with `lifetime=5.0` and `timeout=2.0`; it is thread-safe for `resolve()` |
+| `dnspython` NXDOMAIN | Treat `NXDOMAIN` as an error → `EnrichmentError` | `NXDOMAIN` is a valid DNS response meaning "no record" → `verdict="no_data"` |
+| `dnspython` NoAnswer | Treat `NoAnswer` as error | `NoAnswer` means the record type doesn't exist for that domain → `verdict="no_data"` |
+| crt.sh API | Query `q=domain.tld` and display all results | Query `q=%.domain.tld`, cap at 100 results, aggregate into subdomain count + date range |
+| crt.sh 504 | Propagate as HTTP error to analyst | Treat as soft failure: `verdict="no_data"`, note "CT log temporarily unavailable" |
+| pyasn / BGPView | Use BGPView REST API for ASN lookups | BGPView blocks user agents and rate-limits aggressively; use `pyasn` with local BGP dump or ipwhois RDAP for ASN data |
+| WHOIS timeout | Call `python-whois` directly in enrichment thread | Use `socket.setdefaulttimeout(10)` wrapper or isolate in a separate timed thread; never block enrichment pool |
+| Provider Protocol with MMDB | `is_configured()` returns `True` if config key exists | `is_configured()` must verify `os.path.isfile(configured_path)` — config key presence is not sufficient |
+
+---
+
+## Performance Traps
+
+Patterns that work fine for 1-2 IOCs but degrade with realistic analyst workloads (10-50 IOCs).
+
+| Trap | Symptoms | Prevention | When It Breaks |
+|------|----------|------------|----------------|
+| DNS lookup per IOC on main pool (max_workers=4) | Progress stalls when any DNS server is slow; HTTP providers queued behind DNS | Increase `max_workers` for DNS-heavy workloads, or give DNS adapters a dedicated executor | 5+ domains with at least one slow nameserver |
+| Opening MMDB file on every `lookup()` call | GeoIP lookups are slow, CPU spikes | Open `maxminddb.open_database()` once at adapter init; store as `self._reader` | Every lookup call |
+| WHOIS in main enrichment pool | One rate-limited WHOIS hangs entire job | Isolate WHOIS calls with per-call timeout; run after primary enrichment completes | First rate-limited domain (~5% of queries) |
+| CT log query blocking on crt.sh unavailability | All domain lookups stall for 8-10 seconds while CT times out | Wrap with strict timeout; treat 504 as immediate soft failure | crt.sh intermittent outages (happens monthly) |
+| Loading GeoIP + ASN MMDB readers from disk on every request | Slow first lookup, high I/O | Initialize readers at Flask app startup or adapter singleton init | Concurrent requests |
+| No caching for DNS results | Same domain looked up 8x (once per provider) and also via DNS adapter | DNS results are cacheable — the existing `CacheStore` (SQLite) should apply | Any IOC list with repeated domains |
 
 ---
 
 ## Security Mistakes
 
-TypeScript-migration-specific security issues for SentinelX.
+Domain-specific security issues beyond general web security, specific to zero-auth enrichment expansion.
 
 | Mistake | Risk | Prevention |
 |---------|------|------------|
-| Introducing dynamic code execution via bundler (see Pitfall 1) | Breaks CSP, creates code injection vectors | Use esbuild IIFE; explicitly avoid webpack; verify bundle contents after build |
-| Switching to `innerHTML` to "fix" a TypeScript DOM typing error | Opens XSS — the existing `textContent` pattern is a deliberate security control (SEC-08) | Preserve all `.textContent` assignments; never change to `.innerHTML` to resolve a type error |
-| Adding `style-src 'unsafe-inline'` to fix a build-generated inline style | Weakens CSP globally; no bundler should be generating inline styles | TypeScript does not generate inline styles; investigate the actual source of any inline style CSP violation |
-| Including `@types/node` globally in tsconfig without restricting scope | NodeJS types pollute global scope; timer types become ambiguous | Restrict `types` in tsconfig to exclude Node global pollution in browser code |
-| Using `as any` to bypass type check on user input or API response data | Defeats type safety on the most security-sensitive data paths | Define strict interfaces for all API response shapes; use `unknown` with runtime validation, not `any` |
+| DNS rebinding via resolved-then-HTTP pattern | SSRF bypass to internal services | Never make HTTP connections to domains derived from analyst IOC values without IP validation; DNS lookups (not HTTP) are safe |
+| Displaying raw MMDB data without sanitization | GeoIP city/org names in MMDB can contain arbitrary Unicode/HTML-like strings | All MMDB string fields go through `textContent` (never `innerHTML`) — existing SEC-08 pattern |
+| Logging IOC values from failed DNS lookups | Analyst IPs and internal hostnames appear in server logs | Log only error type and provider name, never IOC value in error logs |
+| Using `subprocess` to call `whois` binary | Violates PROJECT.md constraint (no subprocess); potential injection if IOC value reaches shell | Never use subprocess; use `python-whois` (pure Python) or `whoisit` (HTTP/RDAP) |
+| Bundling MMDB with insecure permissions | MMDB file readable by other local users on shared jump box | Document that MMDB files should be stored with 600 permissions in `~/.sentinelx/` |
+| ipwhois/python-whois making outbound connections to IOC nameservers | DNS provider could log the query, revealing analyst investigation focus | Acceptable risk for a SOC tool; document this in threat model; ensure analyst awareness |
 
 ---
 
 ## UX Pitfalls
 
-TypeScript migration-specific UX risks.
+Common user experience mistakes when expanding from "simple results" to "deep analysis."
 
 | Pitfall | User Impact | Better Approach |
 |---------|-------------|-----------------|
-| JS loading fails after migration (format mismatch) | Entire UI becomes static — no button enable/disable, no mode toggle, no polling | Verify E2E tests pass before deployment; test with browser DevTools network tab |
-| Source map not found causes console errors | Noisy DevTools console distracts analyst debugging a different issue | Verify map file is accessible and add to Makefile verification step |
-| Build output is unminified in production | Slightly larger file size (negligible for local tool; but inconsistent with CSS which IS minified) | Add `--minify` flag to production esbuild command; match CSS build behavior |
-| TypeScript errors prevent build, blocking page refresh | Developer productivity loss; page does not update when tsc is blocking | Use esbuild for always-compiling output; run tsc separately as a check; esbuild errors do not block the browser |
+| Adding GeoIP/ASN/DNS columns to existing result cards | Cards become wide tables; analyst loses the "at a glance" verdict clarity established in v4.0 | Add enrichment data as a new expandable section within existing card — preserve summary row |
+| Showing "no data" for every zero-auth source on every IOC | Result grid fills with grey "no data" badges for GeoIP on hash IOCs, DNS on IP IOCs | Suppress zero-auth providers from result display when `supported_types` makes them irrelevant (e.g., GeoIP on hashes) |
+| Treating GeoIP country as a verdict | Analyst may misinterpret "Russia" as "malicious" | GeoIP is context, not verdict — display as metadata, never as a colored verdict badge |
+| CT "found X certificates" displayed prominently | Suggests the domain is suspicious due to having certificates (all HTTPS sites do) | Label CT data as "certificate history" — normalize it as neutral context |
+| DNS resolution showing "resolved" as green/clean | Successful DNS resolution is not a positive indicator | DNS resolution is infrastructure data, not threat intel — use neutral grey display |
+| New enrichment sources showing "Loading..." indefinitely | Analyst confusion when MMDB is not configured or dnspython not installed | Show "Not configured" state clearly for each optional source; link to setup instructions |
+| Info-dumping: showing all enrichment sections expanded by default | Analyst cognitive overload — they came to triage, not read a thesis | New enrichment sections start collapsed; only expand automatically for suspicious/malicious findings |
 
 ---
 
 ## "Looks Done But Isn't" Checklist
 
-- [ ] **CSP compliance:** Bundle compiles and loads — but inspect bundle for dynamic code execution patterns; run `pytest tests/test_security_audit.py` to verify CSP assertions pass
-- [ ] **Type checking:** esbuild builds successfully — but `tsc --noEmit` must also pass (esbuild does not type-check)
-- [ ] **E2E tests:** Tests pass locally — but verify CI runs `make ts` before pytest
-- [ ] **Source maps:** DevTools shows "main.js" — but verify it shows "main.ts" with correct line numbers (set a breakpoint to confirm)
-- [ ] **Timer types:** Code compiles — but verify timer variables are typed with `ReturnType<typeof setTimeout>` not `any`
-- [ ] **API types:** Enrichment polling compiles — but verify `EnrichmentResult` interface matches actual `/enrichment/status/` JSON shape
-- [ ] **Behavior preserved:** All TypeScript added — but run `pytest tests/e2e/` and all existing unit tests before marking migration complete
-- [ ] **Makefile updated:** New `ts` and `ts-watch` targets added — but verify `build` target now depends on both `css` and `ts`
-- [ ] **No innerHTML regressions:** DOM manipulation code compiled — but scan for `.innerHTML` assignments to confirm none were introduced
-- [ ] **No inline styles introduced:** Code passes review — but scan for `element.style.color` and `element.style.background` to catch color literals
+- [ ] **GeoIP adapter:** `is_configured()` returns True — but verify it calls `os.path.isfile(path)` not just `bool(path)`
+- [ ] **GeoIP freshness:** Results are displaying — but verify file modification time is checked and surfaced in the UI
+- [ ] **DNS adapter:** Lookups succeed in dev — but verify `lifetime` and `timeout` are set on the Resolver and tested with a simulated timeout
+- [ ] **DNS adapter:** NXDOMAIN returns no data — but verify it returns `EnrichmentResult(verdict="no_data")` not `EnrichmentError`
+- [ ] **CT log adapter:** Domain returns results — but test with a major domain (e.g., `microsoft.com`) to verify response capping at 100 records
+- [ ] **CT log adapter:** Results display — but verify the `read_limited()` SEC-05 pattern is applied (crt.sh responses can be very large)
+- [ ] **Zero-auth providers:** All pass unit tests — but test the "MMDB file missing" code path to verify clean degradation
+- [ ] **maxminddb reader:** GeoIP lookups are fast — but verify the `maxminddb.open_database()` call happens once at init, not on every `lookup()` call
+- [ ] **ThreadPool:** All providers complete — but verify DNS lookups do not stall the pool by timing a 50-domain batch
+- [ ] **Results UX:** New sections added — but verify they are collapsed by default and do not break existing verdict/filter summary row layout
 
 ---
 
@@ -675,55 +418,56 @@ When pitfalls occur despite prevention, how to recover.
 
 | Pitfall | Recovery Cost | Recovery Steps |
 |---------|---------------|----------------|
-| CSP violation from bundler dynamic evaluation | LOW | Switch to esbuild IIFE; remove webpack/vite dependency; rebuild |
-| Module format mismatch (ESM without type="module") | LOW | Add `type="module"` to script tag in `base.html` OR switch esbuild to `--format=iife` |
-| Behavior regression from refactor-during-migration | MEDIUM | Revert behavioral changes; keep only type annotations; re-run E2E tests |
-| Dozens of `!` assertions discovered in review | MEDIUM | Systematic replace with null guards using existing `if (!el) return` pattern |
-| Timer type conflicts throughout codebase | LOW | Global find/replace of timer variable types to `ReturnType<typeof setTimeout>` |
-| Source maps broken in DevTools | LOW | Fix esbuild output path; verify `main.js.map` accessible at `/static/main.js.map` |
-| CI fails because `make ts` not in test pipeline | LOW | Add build step to CI workflow before pytest invocation |
-| `any` types throughout — type safety near zero | HIGH | Must re-migrate with proper types; hardest to recover from because requires re-reading all logic |
+| Stale bundled MMDB discovered | MEDIUM | Remove from repo, add to .gitignore, document download path, add freshness check to adapter |
+| DNS pool starvation stalling other providers | MEDIUM | Increase `max_workers` or add separate DNS executor; add `lifetime` timeout; re-test with 50-domain batch |
+| WHOIS hanging enrichment pool | HIGH | Remove WHOIS from main pool, implement isolated timeout wrapper, redeploy — stale in-flight jobs must time out |
+| CT results overwhelming analyst (thousands of rows) | LOW | Add server-side cap to 100 results + aggregation; no UX re-architecture needed |
+| `maxminddb-geolite2` stale data discovered | LOW | Replace with official `geoip2` library + fresh MMDB download; update config |
+| Zero-auth provider showing spurious errors | LOW | Fix `is_configured()` to check actual readiness; errors disappear from results |
+| GeoIP/ASN reader opened per-call (slow) | LOW | Move `maxminddb.open_database()` to adapter `__init__`; restart Flask |
 
 ---
 
 ## Pitfall-to-Phase Mapping
 
-| Pitfall | Prevention Phase | Verification Method |
-|---------|------------------|---------------------|
-| CSP violation from bundler (Pitfall 1) | Phase 1 — Build pipeline | `pytest tests/test_security_audit.py` passes; bundle contents inspected for dynamic code patterns |
-| Module format mismatch (Pitfall 2) | Phase 1 — Build pipeline | Load page; check DevTools console for module syntax errors |
-| Refactoring behavior during migration (Pitfall 3) | All migration phases — code review | All Playwright E2E tests pass after TS conversion; diff contains no behavioral changes |
-| querySelector null strategy (Pitfall 4) | Phase 2 — TS conversion | Review null strategy; no `!` on querySelector without documented justification |
-| Timer type conflicts (Pitfall 5) | Phase 2 — TS conversion | `tsc --noEmit` passes; timer types use `ReturnType<typeof setTimeout>` |
-| getAttribute null return (Pitfall 6) | Phase 2 — TS conversion | Utility helper `attr()` defined; no raw `getAttribute()` without null handling |
-| Source map path resolution (Pitfall 7) | Phase 1 — Build pipeline | Breakpoint in DevTools maps to correct TypeScript line number |
-| Makefile/CI not updated (Pitfall 8) | Phase 1 — Build pipeline | CI test job includes `make ts` before pytest; watch mode target exists |
-| Over-typing with any (Pitfall 9) | Phase 2 — TS conversion | `types.ts` created with API interfaces; `any` count in codebase is 0 or explicitly justified |
-| Under-typing with broad strings (Pitfall 10) | Phase 2 — TS conversion | Verdict, IocType are union types; `verdictSeverity` accepts `Verdict` not `string` |
-| E2E test race/stale artifact (Pitfall 11) | Phase 1 — Build pipeline | CI pipeline verified; `main.js` freshness confirmed in CI |
-| Import path extension mismatch (Pitfall 12) | Phase 2 — TS conversion | `moduleResolution: "bundler"` in tsconfig; all imports resolve in both esbuild and tsc |
+How roadmap phases should address these pitfalls.
+
+| Pitfall | Prevention Phase | Verification |
+|---------|------------------|--------------|
+| GeoLite2 license/signup requirement (Pitfall 1) | GeoIP/ASN phase planning | Setup docs state MaxMind account is required; no MMDB in repo |
+| Stale bundled MMDB (Pitfall 2) | GeoIP adapter implementation | File freshness check exists; `.gitignore` includes `*.mmdb`; UI shows data age |
+| DNS blocking thread pool (Pitfall 3) | DNS enrichment phase | `Resolver.lifetime=5.0` set; unit test for timeout behavior; 50-domain batch completes in <30s |
+| WHOIS privacy/hang (Pitfall 4) | Defer to post-v6.0 | WHOIS remains "Out of Scope" in v6.0; revisit only with dedicated research |
+| CT log UI overload (Pitfall 5) | CT log phase | Adapter caps at 100 records; test with `microsoft.com`; SEC-05 applied |
+| Zero-auth always-True is_configured (Pitfall 6) | Each local-DB adapter phase | `is_configured()` verifies `os.path.isfile()`; test missing-file code path |
+| DNS rebinding / SSRF expansion (Pitfall 7) | Any network-enrichment phase | No adapter makes HTTP calls to IOC-derived hostnames; IP validation added to `http_safety.py` if needed |
 
 ---
 
 ## Sources
 
-- esbuild API documentation (format, sourcemap, platform options): https://esbuild.github.io/api/
-- esbuild TypeScript caveats (no type checking, no decorator metadata, ignored tsconfig fields): https://esbuild.github.io/content-types/#typescript
-- TypeScript: Migrating from JavaScript (official docs): https://www.typescriptlang.org/docs/handbook/migrating-from-javascript.html
-- TypeScript DOM Manipulation documentation: https://www.typescriptlang.org/docs/handbook/dom-manipulation.html
-- TypeScript tsconfig Reference (lib, types, moduleResolution): https://www.typescriptlang.org/tsconfig/
-- getAttribute not narrowed by hasAttribute — known TypeScript limitation: https://github.com/microsoft/TypeScript/issues/22238
-- setTimeout return type conflict (NodeJS.Timeout vs number): https://guilhermesimoes.github.io/blog/making-settimeout-return-number-in-typescript
-- Heap Engineering: Migrating to TypeScript (avoid refactoring during migration): https://www.heap.io/blog/migrating-to-typescript
-- Qualtrics Engineering: Migrating Legacy JS to TypeScript (preserve behavior): https://www.qualtrics.com/eng/typescript-refactor/
-- Webpack CSP dynamic evaluation issue: https://github.com/webpack/webpack/issues/5627
-- webpack-dev-server unsafe-eval CSP requirement: https://github.com/webpack/webpack/discussions/18073
-- EventTarget property access in TypeScript: https://freshman.tech/snippets/typescript/fix-value-not-exist-eventtarget/
-- SentinelX codebase: `app/static/main.js` (856 lines, IIFE pattern, all DOM patterns documented)
-- SentinelX codebase: `tests/test_security_audit.py` (CSP assertions: no unsafe-eval, no unsafe-inline)
-- SentinelX codebase: `app/templates/base.html` (script tag: `defer`, no `type="module"`)
+- MaxMind GeoLite2 licensing changes (December 2019, account required): https://blog.maxmind.com/2019/12/significant-changes-to-accessing-and-using-geolite2-databases/
+- MaxMind GeoLite2 EULA (30-day deletion requirement): https://www.maxmind.com/en/geolite2/eula
+- MaxMind GeoLite2 developer docs (update frequency, download): https://dev.maxmind.com/geoip/geolite2-free-geolocation-data/
+- maxminddb-geolite2 PyPI inactive maintenance status: https://snyk.io/advisor/python/maxminddb-geolite2
+- dnspython thread safety docs: https://dnspython.readthedocs.io/en/latest/threads.html
+- dnspython resolver class (lifetime, timeout parameters): https://dnspython.readthedocs.io/en/latest/resolver-class.html
+- dnspython exceptions reference: https://dnspython.readthedocs.io/en/latest/exceptions.html
+- python-whois "not found" parsing issues: https://github.com/DannyCork/python-whois/issues/89
+- python-whois rate limit behavior: https://github.com/DannyCork/python-whois/issues/167
+- whoisit RDAP library (structured alternative to python-whois): https://github.com/meeb/whoisit
+- WHOIS GDPR redaction impact on cybersecurity: https://main.whoisxmlapi.com/privacy-or-accountability-what-the-redaction-of-whois-data-means-for-cybersecurity
+- crt.sh architecture and HTTP API availability: https://www.lukeshu.com/blog/crt-sh-architecture.html
+- BGPView rate limiting and user-agent blocking: community reports + https://bgpview.docs.apiary.io/
+- pyasn local lookup approach: https://github.com/hadiasghari/pyasn
+- DNS rebinding SSRF bypass pattern: https://www.clear-gate.com/blog/ssrf-with-dns-rebinding-2/
+- OWASP SSRF prevention (allow-lists over deny-lists): https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html
+- SentinelX codebase: `app/enrichment/provider.py` (Provider Protocol — `is_configured()` contract)
+- SentinelX codebase: `app/enrichment/http_safety.py` (SSRF allowlist, SEC-04 through SEC-07 patterns)
+- SentinelX codebase: `app/enrichment/adapters/shodan.py` (zero-auth adapter reference implementation)
+- SentinelX codebase: `.planning/PROJECT.md` (WHOIS "Out of Scope" note; no-subprocess constraint)
 
 ---
 
-*Pitfalls research for: TypeScript migration of vanilla JS IIFE in a Python/Flask application with strict CSP (SentinelX v3.0)*
-*Researched: 2026-02-28*
+*Pitfalls research for: v6.0 analyst experience expansion — zero-auth enrichment, bundled databases, open feeds*
+*Researched: 2026-03-11*

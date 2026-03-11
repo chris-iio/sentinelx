@@ -1,200 +1,197 @@
 # Project Research Summary
 
-**Project:** SentinelX v3.0 — TypeScript Migration
-**Domain:** TypeScript build pipeline integration into existing Python/Flask static file architecture
-**Researched:** 2026-02-28
+**Project:** SentinelX v6.0 — Analyst Experience Expansion
+**Domain:** Threat intelligence enrichment platform — zero-auth deep analysis
+**Researched:** 2026-03-11
 **Confidence:** HIGH
 
 ## Executive Summary
 
-SentinelX v3.0 is a TypeScript migration of a single 856-line vanilla JS IIFE (`app/static/main.js`) that powers a local SOC analyst triage tool. This is not a new application — it is a type-safety layer added to working code with zero new functional behavior. The recommended approach mirrors the existing Tailwind CSS pipeline exactly: download a standalone esbuild binary (no Node.js runtime), compile TypeScript source to an IIFE bundle, and serve the compiled output from Flask's static file endpoint. The migration decomposes the IIFE into typed ES modules (one per functional area), which esbuild bundles into a single `app/static/dist/main.js` at build time.
+SentinelX v6.0 expands a working 8-provider threat intelligence tool into a richer analyst workstation platform by adding zero-auth enrichment depth, local offline databases, and a deeper per-IOC analysis experience. The core insight from research is that the analyst complaint ("can't we do more without API keys?") has a concrete, high-quality answer: seven additional data sources covering IP geolocation/ASN, reverse DNS, live DNS records, certificate transparency, NSRL known-good hash detection, and passive DNS pivoting — all zero-auth at query time, all fitting the existing Provider Protocol without model changes. After v6.0, a fully configured instance with zero API keys rivals what VirusTotal shows on its free public lookup page for most triage scenarios.
 
-The key recommendation is to use esbuild v0.27.3 as a standalone binary (`tools/esbuild`) for bundling, and TypeScript 5.8.3 (installed via npm, dev-only) for type checking via `tsc --noEmit`. This separation — esbuild for transpilation/bundling, tsc for type validation — is the 2025 standard for browser-only TypeScript projects and enables fast incremental builds (~100ms) without a Node.js runtime requirement for production builds. IIFE output format is required because `base.html` uses a plain `<script defer>` tag and the CSP (`script-src 'self'`) must not change.
+The recommended approach is additive and low-risk: all new capabilities are new Provider Protocol adapter files plus one `register()` call each. The existing orchestrator, cache, and TypeScript rendering pipeline are unchanged. The three new Python libraries required (`dnspython`, `geoip2`, `ipwhois`) have verified compatibility with the Python 3.10 baseline. The one significant setup wrinkle is GeoLite2: the databases are free but require a MaxMind account signup and cannot be bundled in the repository — this must be surfaced honestly in UX as "optional enhanced enrichment requiring one-time setup" rather than presented as seamlessly zero-auth.
 
-The primary risks are: (1) CSP violation if any bundler other than esbuild is used, since webpack and Vite inject dynamic code evaluation that breaks the `script-src 'self'` CSP asserted by existing security tests; (2) behavioral regressions from mixing refactoring with type annotations in the same PR — the E2E test suite (224 tests, 97% coverage) must pass after the migration before any code modernization begins; and (3) over-typing with `any` in complex areas like the enrichment polling logic, which defeats the migration's purpose. All three risks are preventable with the discipline of establishing the build pipeline first and type-annotating without refactoring.
+The key risks are operational rather than architectural: GeoLite2 staleness (MaxMind EULA requires deletion of databases older than 30 days after a new release), DNS lookup timeouts stalling the ThreadPoolExecutor (mitigated by `dnspython` with explicit `lifetime=5.0` and `timeout=2.0`), and certificate transparency response volume (crt.sh returns thousands of records for popular domains — must be capped and aggregated before display). The security posture remains strong: new providers follow existing SSRF allowlist patterns, GeoIP lookups are offline (no HTTP), and DNS resolution does not introduce new SSRF surface. The `ipwhois` RDAP path should be deferred because its dynamic RIR endpoint URLs are incompatible with the static SSRF allowlist model.
 
 ## Key Findings
 
 ### Recommended Stack
 
-The v3.0 stack adds three components to an otherwise locked-in system. The backend (Python 3.10 + Flask 3.1), CSS pipeline (Tailwind standalone CLI), design tokens, fonts, and Playwright E2E tests are all unchanged. The TypeScript additions are: esbuild standalone binary (`tools/esbuild`) as a parallel to `tools/tailwindcss`, TypeScript 5.8.3 installed via npm once for developer type checking, and a `tsconfig.json` at the project root configured for strict browser-only type checking.
+The v5.0 stack (Python 3.10 + Flask 3.1, TypeScript + esbuild, Tailwind, SQLite) is not changing. Three libraries are additive for v6.0 zero-auth enrichment, all verified against PyPI and official documentation at Python 3.10+ compatibility.
 
-**Core technologies (new additions only):**
-- **esbuild 0.27.3 (standalone binary):** TypeScript bundler and minifier — standalone binary via curl (same pattern as Tailwind CLI), natively strips TypeScript types without Node.js, produces IIFE output compatible with the existing CSP and Flask static file serving
-- **TypeScript 5.8.3 (npm, dev-only):** Type checking via `tsc --noEmit` — provides `lib.dom.d.ts` for DOM types (built-in, no `@types/*` packages needed), enforces strict null checks and domain type safety; TypeScript 6.0 is currently in beta and must be avoided
-- **tsconfig.json:** Strict, browser-targeted, esbuild-compatible configuration — `strict: true`, `isolatedModules: true` (required by esbuild), `lib: ["es2022", "dom", "dom.iterable"]`, `moduleResolution: "Bundler"`, `noEmit: true`
+**Core new libraries:**
+- `dnspython==2.8.0`: Active DNS resolution (A, AAAA, MX, NS, TXT, PTR) — the only option for MX/TXT/NS queries; thread-safe with configurable `lifetime`/`timeout`; zero external dependencies
+- `geoip2==5.2.0`: Offline IP geolocation (country, city, ASN, org) from local MaxMind `.mmdb` files — fully offline at query time; compatible with existing `requests==2.32.5`; official MaxMind Python client
+- `ipwhois==1.3.0`: RDAP-based IP-to-ASN and netblock data — **deferred from v6.0** due to SSRF allowlist incompatibility with dynamic RIR endpoint URLs
+
+**No new library needed for certificate transparency:** direct `requests.get()` to the crt.sh JSON API (`https://crt.sh/?q=<domain>&output=json`) covers all triage use cases. `pycrtsh` adds `psycopg2-binary` + `lxml` overhead for no additional benefit.
+
+**Database dependencies (not Python packages):**
+- `GeoLite2-City.mmdb` (~70 MB): country, region, city, lat/lon — stored at `~/.sentinelx/geoip/`
+- `GeoLite2-ASN.mmdb` (~9 MB): ASN + organization name — stored at `~/.sentinelx/geoip/`
+- Requires free MaxMind account registration; license key used for download only; runtime lookups are fully offline
 
 ### Expected Features
 
-The migration's feature set is defined by correctness and build tooling, not new user-facing behavior. Behavioral parity with the existing IIFE is the success criterion.
+**Must have (table stakes) — analysts expect these in any "robust" IP/domain lookup tool:**
+- GeoIP + ASN + ISP enrichment (ip-api.com zero-auth for instant country/city/ISP/ASN/proxy flags)
+- Reverse DNS / PTR record lookup (standard IP context, zero network dependency beyond system resolver)
+- Live DNS resolution for domains (A/MX/NS/TXT records via Cloudflare DoH — zero-auth)
+- NSRL known-good hash detection (CIRCL hashlookup — reduces false-positive workload significantly)
+- Enhanced Shodan card rendering (ports/CVEs/hostnames already in `raw_stats` — frontend-only, zero backend)
 
-**Must have (table stakes):**
-- `strict: true` in tsconfig — without this, TypeScript adds syntax noise with no safety gain; the entire migration value comes from `strictNullChecks` and `noImplicitAny`
-- DOM type narrowing for all `querySelector` calls — every `document.getElementById()` returns `HTMLElement | null`; existing `if (!el) return` guards must be preserved and type-annotated
-- Type definitions for API response shapes — `EnrichmentResult`, `EnrichmentStatus`, `VerdictKey`, `IocType` interfaces document the Flask API contract and catch field name changes at compile time
-- esbuild build pipeline (Makefile `js`, `js-watch`, `typecheck` targets) — without this there is no migration
-- Behavioral parity — all 10 `initX` functions must behave identically after migration; the Playwright E2E suite is the verification mechanism
+**Should have (competitive differentiators):**
+- GeoIP proxy/VPN/hosting detection flags (ip-api.com includes `proxy`, `hosting`, `mobile` booleans at no extra cost)
+- Certificate transparency via crt.sh (domain cert history + subdomain enumeration from SANs — MEDIUM complexity, powerful for infrastructure analysis)
+- DNS record depth: MX, NS, TXT/SPF/DMARC (extends DNS provider — high value for phishing triage)
+- ThreatMiner passive DNS (IP/domain/hash — the feature that turns SentinelX from lookup tool to investigation tool — MEDIUM complexity, 10 req/min rate limit)
+- "KNOWN GOOD" badge treatment for CIRCL trust score >= 70 (unique differentiator — no competitor offers this)
 
-**Should have (valuable, same milestone):**
-- Feature-based module splitting — 10 TypeScript modules (`modules/form.ts`, `modules/enrichment.ts`, `modules/filter.ts`, etc.) plus `types/ioc.ts` and `types/api.ts`; modules communicate through the DOM at runtime, not shared in-memory state
-- `make typecheck` as a CI gate running `tsc --noEmit` — esbuild never type-checks; without this, type errors accumulate silently
-- `modules/enrichment.ts` verdict utility functions (`computeWorstVerdict`, `verdictSeverity`) isolated from DOM manipulation code
-
-**Defer (v4.0+):**
-- Vitest unit tests for pure logic functions — the existing E2E tests already verify observable behavior; adding a JS test runtime is a separate decision that should not block the migration
-- Zod runtime validation of API responses — SentinelX is a local tool with a controlled internal API; the existing `|| "no_data"` fallback pattern is sufficient
-- TypeScript 6.0 upgrade — currently in beta (February 2026); defer until stable
+**Defer to future milestone:**
+- STIX/TAXII export (niche for triage tool; current JSON export covers most MISP workflows)
+- Provider capability matrix UI in settings (low analyst data value)
+- urlscan.io integration (URL screenshot/DOM scanning; requires API key for reliable access)
+- WHOIS/RDAP domain registration data (explicitly out of scope in PROJECT.md — privacy redaction makes 90%+ of gTLD WHOIS useless post-2018)
+- AI/LLM verdict explanation (hallucination risk, external service dependency, violates "no opaque scores" principle)
+- `ipwhois` ASN enrichment (SSRF allowlist incompatibility — defer to Cymru WHOIS TCP approach in a later phase)
 
 ### Architecture Approach
 
-The TypeScript build pipeline slots into the existing Flask static file architecture as a parallel to the CSS pipeline. Source TypeScript files live in `app/static/src/ts/` (parallel to `app/static/src/input.css`). esbuild compiles them to `app/static/dist/main.js` (parallel to `app/static/dist/style.css`). Flask serves the compiled output with no configuration changes. The only template modification is changing the script tag from `filename='main.js'` to `filename='dist/main.js'`. Source maps (`main.js.map`) are generated locally during development via `make js-dev` or `make js-watch` and are excluded from git.
+All new capabilities integrate through the existing Provider Protocol (`typing.Protocol`) as new adapter files with a single `register()` call in `setup.py`. The orchestrator, registry, cache, and TypeScript pipeline are unchanged. Local providers (DNS via dnspython, GeoIP via geoip2) differ from remote providers only in that they skip `http_safety` SSRF validation (no outbound HTTP) and have near-instant execution. Remote zero-auth providers (crt.sh, ip-api.com) follow the existing ShodanAdapter pattern. Two new Flask routes are needed for the deeper per-IOC analysis view (`GET /ioc/<value>` and `GET /api/graph/<job_id>`), and a new `NoteStore` SQLite module parallel to `CacheStore` handles analyst annotations.
 
-**Major components:**
-1. **`app/static/src/ts/types/`** — Shared TypeScript interfaces (`EnrichmentResult`, `EnrichmentStatus`, `VerdictKey`, `IocType`) and typed constants (`VERDICT_SEVERITY`, `VERDICT_LABELS`, `IOC_PROVIDER_COUNTS`); must be created before any module is converted
-2. **`app/static/src/ts/modules/`** — One module per `initX` function: `form.ts` (~120 lines), `enrichment.ts` (~350 lines, the largest), `filter.ts` (~130 lines), `clipboard.ts` (~70 lines), `export.ts` (~40 lines), `settings.ts` (~20 lines), `stagger.ts` (~10 lines)
-3. **`app/static/src/ts/main.ts`** — Entry point that imports all module init functions and calls `init()` at DOMContentLoaded; esbuild bundles everything from this entry point into a single IIFE
-4. **`tools/esbuild` + Makefile targets** — `js` (production, minified), `js-dev` (source map, no minify), `js-watch` (watch mode), `typecheck` (`tsc --noEmit`); `build` target depends on both `css` and `js`
+**Major new components:**
+1. **Zero-auth provider adapters** (3-4 files): `dns_resolver.py`, `geoip.py`, `cert_transparency.py` — each ~150-250 LOC, following existing ShodanAdapter pattern
+2. **NoteStore** (`app/notes/store.py`): SQLite `ioc_notes` table, separate from cache (notes survive cache clear), stores analyst tags and free-text notes per IOC
+3. **Per-IOC detail page** (`GET /ioc/<value>`): server-rendered tabbed view aggregating all cached enrichment + local enrichment + notes; allows bookmarkable URLs for analyst ticket sharing
+4. **Graph visualization** (`app/static/vendor/cytoscape.min.js` + `modules/graph.ts`): Cytoscape.js self-hosted (not CDN — CSP constraint), renders IOC-to-provider relationship topology; lazy-loaded within detail page
 
 ### Critical Pitfalls
 
-1. **CSP violation from bundler-injected dynamic code evaluation** — Webpack and Vite inject `eval`-based source maps and HMR boilerplate that violate `script-src 'self'` CSP, breaking the `test_csp_header_exact_match` security test. Use esbuild exclusively; its IIFE output has no dynamic code execution. Verify CSP compliance in Phase 1 before writing any TypeScript.
+1. **GeoLite2 license and staleness** — Never bundle `.mmdb` files in the repo (license violation) and never use `maxminddb-geolite2` from PyPI (unmaintained, stale database). Implement `is_configured()` to check `os.path.isfile(path)`. Display "GeoIP data from [file date]" on every result. Check file modification time at adapter init and warn if older than 30 days (MaxMind EULA requires deletion after 30 days post-release).
 
-2. **Behavioral regression from mixing refactoring with type annotations** — The IIFE has patterns (`feedback._timer` as DOM element property, `Array.prototype.slice.call()`) that invite modernization. Any behavioral change during type migration can introduce bugs invisible in review. Strict rule: the migration PR contains zero behavioral changes. A refactor PR follows only after all E2E tests pass on the typed code.
+2. **DNS lookups blocking ThreadPoolExecutor** — Never use `socket.getaddrinfo()` (not thread-safe, no timeout). Create one module-level `dns.resolver.Resolver` instance with `lifetime=5.0` and `timeout=2.0`. Treat `NXDOMAIN` and `NoAnswer` as `verdict="no_data"` (not errors). Treat `dns.exception.Timeout` as `EnrichmentError`. Validate with a simulated-timeout unit test and a 50-domain batch timing test.
 
-3. **Timer type conflict (`NodeJS.Timeout` vs `number`)** — If `@types/node` is installed as any dev dependency, `setTimeout()` resolves to `NodeJS.Timeout` instead of `number`, causing type errors throughout enrichment polling and sort debounce code. Use `ReturnType<typeof setTimeout>` for all timer variable types.
+3. **Certificate transparency response volume** — crt.sh returns thousands of records for popular domains. Cap adapter response processing at 100 records. Aggregate to "X unique subdomains, Y certificates, date range" — never display raw certificate list. Apply existing `read_limited()` SEC-05 pattern. Treat crt.sh 504 as soft failure (`verdict="no_data"`).
 
-4. **`getAttribute()` always returns `string | null` — TypeScript won't narrow on `hasAttribute()`** — Every `getAttribute("data-verdict")` call in enrichment rendering produces a type error. Define a `function attr(el: Element, name: string, fallback?: string): string` utility before converting DOM manipulation code.
+4. **Zero-auth `is_configured()` must check actual readiness** — A provider that returns `is_configured() = True` unconditionally when its MMDB is missing will produce `EnrichmentError("MMDB file not found")` in normal result sets. `is_configured()` must call `os.path.isfile(configured_path)`, not just check config key presence.
 
-5. **Over-typing with `any`** — The `renderEnrichmentResult` function, `iocVerdicts` accumulator map, and event listener targets are the highest-risk spots for `any` escape hatching. Define `EnrichmentResult` and `VerdictEntry` interfaces in `types/api.ts` before converting any enrichment logic. A single `any` in the API response type defeats type safety for the most critical data path.
+5. **ipwhois SSRF allowlist incompatibility** — `ipwhois` makes RDAP queries to dynamic RIR endpoints (ARIN, RIPE, APNIC) that vary by IP range and include redirects. These cannot be statically allowlisted in `ALLOWED_API_HOSTS`. Defer ASN enrichment; extract what's available from existing Shodan `raw_stats`, or research a Cymru WHOIS TCP approach for a later phase.
 
 ## Implications for Roadmap
 
-Based on the research dependency chain and the pitfall-to-phase mapping from PITFALLS.md, the migration has a clear 5-phase structure with strict ordering requirements. The ordering is not negotiable — later phases depend on earlier ones.
+Based on research, the natural phase structure follows three dependency boundaries: (1) IP enrichment providers are independent of domain/hash providers, (2) domain providers (DNS, crt.sh) can be built in parallel with IP providers, (3) the per-IOC detail page depends on both provider sets and NoteStore, and (4) graph visualization depends on the detail page.
 
-### Phase 1: Build Pipeline Infrastructure
+### Phase 1: Zero-Auth IP Enrichment + NSRL Known-Good
 
-**Rationale:** Every subsequent phase depends on a working build pipeline. CSP compliance and Makefile integration must be verified before any TypeScript is written. Pitfalls 1, 2, 7, 8, and 11 from PITFALLS.md all manifest at this stage and are cheapest to catch here.
+**Rationale:** Directly addresses the primary analyst complaint. All four deliverables fit the existing Provider Protocol with zero model changes, except for the new `known_good` verdict type required by CIRCL. Enhanced Shodan rendering is frontend-only and can be completed independently within this phase. These are the highest user-value, lowest implementation-risk items in the feature set.
 
-**Delivers:** `tools/esbuild` binary installed; `tsconfig.json` at project root; Makefile `js`, `js-dev`, `js-watch`, `typecheck`, `esbuild-install` targets; `.gitignore` updated to exclude `main.js.map`; `base.html` script tag updated to `dist/main.js`; CSP audit test still passing; CI updated to run `make js` before pytest
+**Delivers:** Country/city/ASN/ISP/proxy+hosting flags for all IP IOCs (via ip-api.com), PTR hostname for all IP IOCs (system resolver via dnspython), NSRL known-good detection for hashes (CIRCL hashlookup), and full Shodan data visible in UI (ports, CVEs, hostnames).
 
-**Addresses:** Build pipeline integration (P1 from FEATURES.md)
+**Addresses:** GeoIP + ASN, rDNS, CIRCL hashlookup, Enhanced Shodan rendering (all P1 from FEATURES.md)
 
-**Avoids:** CSP violation (Pitfall 1), module format mismatch (Pitfall 2), source map path issues (Pitfall 7), stale JS in CI (Pitfalls 8, 11)
+**Avoids:** GeoLite2 bundling pitfall (use ip-api.com, not MaxMind, for IP geolocation in this phase — MaxMind offline approach is a Phase 1 optional add-on), zero-auth `is_configured()` pitfall, DNS thread-pool starvation (PTR via dnspython with timeout guards)
 
-**Research flag:** Standard patterns — well-documented in official esbuild docs, no additional research needed
+**New verdict:** `known_good` verdict level — requires update to verdict severity ordering in both backend models and frontend badge rendering; budget for this cross-cutting change early
 
-### Phase 2: Type Definitions Foundation
+### Phase 2: Domain Intelligence (DNS + Certificate Transparency)
 
-**Rationale:** All modules depend on shared types. Creating `types/api.ts` and `types/ioc.ts` before converting any logic prevents the `any` escape-hatch trap and ensures the domain model is centralized. This is the highest-leverage investment in the migration.
+**Rationale:** Domains are currently the weakest IOC type in zero-auth context — they get only the 8 existing key-based providers. DNS resolution and cert transparency together transform domain cards from near-opaque to genuinely informative. Both providers cover `domain` IOC type exclusively and can be built in parallel without conflicts.
 
-**Delivers:** `app/static/src/ts/types/api.ts` with `EnrichmentResult`, `EnrichmentStatus` interfaces; `app/static/src/ts/types/ioc.ts` with `VerdictKey`, `IocType` union types, typed `VERDICT_SEVERITY`, `VERDICT_LABELS`, `IOC_PROVIDER_COUNTS` constants; `tsc --noEmit` passes on types alone
+**Delivers:** Live A/AAAA/MX/NS/TXT (SPF, DMARC) records for domain IOCs (Cloudflare DoH), cert history + subdomain enumeration from SANs for domain IOCs (crt.sh). SSRF allowlist additions: `1.1.1.1` (Cloudflare DoH) and `crt.sh`.
 
-**Addresses:** Type definitions for API response shapes, `src/types.ts` with shared interfaces (P1 from FEATURES.md)
+**Addresses:** DNS Resolution Provider, crt.sh Certificate Provider (P2 from FEATURES.md)
 
-**Avoids:** Over-typing with `any` (Pitfall 9), under-typing with broad strings (Pitfall 10)
+**Avoids:** CT response volume pitfall (aggregate before display — design UI shape before writing adapter), `read_limited()` application to crt.sh, crt.sh 504 soft failure handling
 
-**Research flag:** Standard patterns — TypeScript interface definitions are well-documented
+**Note:** `crt.sh` queries use the existing `requests` dependency; no new library needed. Cloudflare DoH also uses `requests`.
 
-### Phase 3: Module Extraction (Simple Modules First)
+### Phase 3: Infrastructure Pivoting (ThreatMiner Passive DNS)
 
-**Rationale:** Extract simpler modules before `enrichment.ts` (the most complex at ~350 lines). Inside-out ordering — no-dependency modules first — minimizes broken intermediate states. Establish the null-check strategy and `getAttribute` helper pattern early, before tackling complex DOM manipulation in enrichment.
+**Rationale:** ThreatMiner is the most architecturally complex new provider: multiple endpoints per IOC type (different `rt=` parameter values for passive DNS vs related hashes vs subdomains), a strict 10 req/min rate limit requiring graceful throttling, and richer response data needing more complex rendering. It is also the highest-value differentiator — passive DNS pivoting is what distinguishes a "lookup tool" from an "investigation tool." Build after Phase 1 and 2 stabilize.
 
-**Delivers:** TypeScript modules for clipboard, stagger, settings, form, export, filter (in dependency order); `attr()` helper utility defined; null-guard strategy established; timer types resolved with `ReturnType<typeof setTimeout>`; `tsc --noEmit` passes on all simple modules
+**Delivers:** Passive DNS history (what other domains pointed to this IP? what IPs has this domain used?), related malware samples for hashes, related infrastructure context for IPs and domains. Covers IP, domain, and hash IOC types.
 
-**Addresses:** Feature-based module splitting, DOM type narrowing, behavioral parity (P1/P2 from FEATURES.md)
+**Addresses:** ThreatMiner Passive DNS Provider (P2 from FEATURES.md)
 
-**Avoids:** Refactoring behavior during migration (Pitfall 3), querySelector null strategy inconsistency (Pitfall 4), timer type conflicts (Pitfall 5), getAttribute null return (Pitfall 6), import path extension mismatch (Pitfall 12)
+**Avoids:** Rate limit hang (10 req/min — implement per-request throttling or exponential backoff, not silent blocking), IOC-type-specific endpoint routing (different `rt=` values per type)
 
-**Research flag:** Standard patterns — module boundaries and expected line counts are documented in ARCHITECTURE.md
+### Phase 4: Deeper Analysis View + Analyst Notes
 
-### Phase 4: Enrichment Module and Entry Point
+**Rationale:** Once the zero-auth provider set is complete (Phases 1-3), the per-IOC detail page becomes the integration surface. This phase adds the `GET /ioc/<value>` route (server-rendered tabbed view aggregating all cached enrichment), NoteStore (analyst annotations), and graph visualization (Cytoscape.js topology). These are UI and persistence features that depend on all providers being present to show full value.
 
-**Rationale:** `modules/enrichment.ts` is the largest and most complex module (~350 lines), depending on both type files and verdict utilities. Converting it last means all supporting types and patterns are already established and verified. The entry point (`main.ts`) is created after all modules are working, as it imports from everything.
+**Delivers:** Bookmarkable per-IOC detail page with tabbed sections (Network, DNS, Certificates, Threat Intel, Graph, Notes), analyst tag and note persistence in `~/.sentinelx/notes.db`, IOC-to-provider relationship graph via Cytoscape.js (self-hosted for CSP compliance).
 
-**Delivers:** `app/static/src/ts/modules/enrichment.ts` with fully typed polling loop, result rendering, verdict accumulation, and card sorting; `app/static/src/ts/main.ts` entry point importing all modules; old `app/static/main.js` deleted; `tailwind.config.js` content paths updated to include `.ts` files
+**Addresses:** Per-IOC deep analysis views, IOC tagging and notes, relationship graph (from ARCHITECTURE.md)
 
-**Addresses:** Behavioral parity (critical P1 from FEATURES.md), all 10 `initX` functions typed
-
-**Avoids:** Behavioral regression (Pitfall 3), `any` types in enrichment (Pitfall 9)
-
-**Research flag:** Standard patterns — architecture blueprint specifies exact module boundaries and dependency order
-
-### Phase 5: Type Hardening and CI Verification
-
-**Rationale:** After all modules compile and the E2E suite passes, a hardening pass catches any compromises made during conversion (stray `any`, broad string types, missing narrowness). The CI verification confirms the build pipeline is correctly integrated end-to-end. esbuild's success does not mean tsc passes — these are separate tools.
-
-**Delivers:** Zero TypeScript errors on `tsc --noEmit`; zero `any` types outside explicitly justified exceptions; all 224+ E2E tests passing against compiled `dist/main.js`; CI pipeline verified with `make js` before pytest; "looks done but isn't" checklist from PITFALLS.md completed (CSP audit, source maps, timer types, API types, no innerHTML regressions)
-
-**Addresses:** `make typecheck` CI target (P2 from FEATURES.md), behavioral parity verification
-
-**Avoids:** All pitfalls — final verification sweep
-
-**Research flag:** Standard patterns — verification and hardening; no new research needed
+**Avoids:** CDN Cytoscape.js pitfall (self-host at `app/static/vendor/` — no CSP change needed), `innerHTML` for IOC values in graph nodes (Cytoscape SVG/Canvas rendering is inherently safe), URL path IOC value injection (validate through normalization pipeline before any use)
 
 ### Phase Ordering Rationale
 
-- **Pipeline before code:** No TypeScript conversion is possible without a working build pipeline. Phase 1 is a hard prerequisite for everything.
-- **Types before modules:** Modules import types. Creating `types/` first means every module has its dependencies available from the first line — without this order, `any` fills the gaps.
-- **Simple before complex:** Enrichment is the riskiest module (most DOM manipulation, most state, most complex logic). Converting simpler modules first establishes the patterns (null guards, `getAttribute` helpers, timer types) that enrichment will use.
-- **Entry point last:** `main.ts` imports from all modules; creating it before its dependencies guarantees import errors during conversion.
-- **Hardening pass always:** esbuild never type-checks. A passing build does not mean passing types. A dedicated hardening phase prevents the "looks done but isn't" failure mode documented in PITFALLS.md.
+- Phases 1 and 2 are largely independent and could be parallelized by a team; for a solo developer, Phase 1 first because GeoIP + PTR (P1) has higher analyst impact than DNS/CT (P2)
+- Phase 3 (ThreatMiner) should not precede Phase 2 (DNS/CT) because its response rendering complexity is easier to tackle after the simpler DNS adapter patterns are established
+- Phase 4 (detail page) must come last — it is the integration surface for all prior phases and has little value before provider data exists
+- The `known_good` verdict introduced in Phase 1 is the only cross-cutting change that touches both backend models and frontend badge rendering; address it first within Phase 1 to avoid retrofitting later
+- GeoLite2 offline GeoIP (MaxMind) can be treated as a Phase 1 optional enhancement — ip-api.com covers the immediate zero-auth need; GeoLite2 adds offline capability for air-gapped deployments and richer city-level data
 
 ### Research Flags
 
-All phases have standard, well-documented patterns. No phases require `/gsd:research-phase`:
+Phases likely needing deeper research during planning:
 
-- **Phase 1:** esbuild binary installation and IIFE Makefile integration are fully documented in official esbuild docs with verified examples
-- **Phase 2:** TypeScript interface definitions follow standard patterns; official docs cover all relevant tsconfig options
-- **Phase 3:** Module extraction boundaries are documented in ARCHITECTURE.md with explicit module names, functions, and approximate line counts
-- **Phase 4:** Enrichment module architecture documented in detail in ARCHITECTURE.md; entry point pattern is a single well-defined import-and-call structure
-- **Phase 5:** Verification checklist is fully specified in PITFALLS.md's "Looks Done But Isn't" section
+- **Phase 3 (ThreatMiner):** Rate limit behavior (10 req/min) needs concrete throttling strategy — decide whether to use a semaphore, a token bucket, or a simple sleep-based approach compatible with the ThreadPoolExecutor model. ThreatMiner has no SLA; downtime handling needs definition.
+- **Phase 4 (Graph visualization):** Cytoscape.js layout algorithm selection (which of the 10+ built-in layouts renders a star/bipartite IOC-to-provider graph most clearly) needs a spike. NoteStore tag search UI is underspecified — decide between a dedicated search page and inline filtering before implementation.
+
+Phases with standard patterns (skip research-phase):
+
+- **Phase 1 (IP enrichment + NSRL):** All four adapters follow the existing ShodanAdapter pattern. ip-api.com, dnspython PTR, and CIRCL hashlookup are well-documented. The `known_good` verdict is additive and well-defined.
+- **Phase 2 (DNS + CT):** Cloudflare DoH is a standard JSON HTTP call. crt.sh response aggregation is a data-shaping problem, not an architecture problem. Both follow documented adapter patterns in ARCHITECTURE.md.
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | esbuild and TypeScript official docs verified via WebFetch; version numbers confirmed; standalone binary download mechanism confirmed identical to existing Tailwind pattern; no inferred recommendations |
-| Features | HIGH | TypeScript official migration docs used as primary source; esbuild API reference verified; feature scope is narrow (parity-only migration) which reduces uncertainty; priority tiers are well-reasoned with source citations |
-| Architecture | HIGH | esbuild official docs confirm all output format, platform, and sourcemap flags; Flask static serving behavior confirmed from existing project behavior; tsconfig options verified against TypeScript reference; module boundaries derived from direct analysis of the 856-line `main.js` |
-| Pitfalls | HIGH | Sourced from esbuild official docs, TypeScript official docs, and direct SentinelX codebase audit (`main.js` pattern analysis, `test_security_audit.py` CSP assertions, `base.html` script tag); pitfalls are specific to this codebase, not generic |
+| Stack | HIGH | All versions verified against PyPI and official docs. Python 3.10 compatibility confirmed for all three new libraries. Version conflicts checked against existing `requirements.txt`. |
+| Features | HIGH | Zero-auth service endpoints verified live. Analyst workflow patterns sourced from multiple vendor guides (ANY.RUN, SentinelOne, SOCRadar). Competitor feature matrix cross-checked against VirusTotal public docs. |
+| Architecture | HIGH | Provider Protocol integration pattern verified against existing ShodanAdapter (zero-auth reference). SSRF allowlist conflict for ipwhois identified from direct codebase audit. Cytoscape.js vanilla JS + self-hosting confirmed. |
+| Pitfalls | HIGH | MaxMind license terms confirmed from official MaxMind blog (2019 changes) and EULA. dnspython thread safety confirmed from official docs. Python-whois rate limit and hang issues confirmed from GitHub issue tracker. |
 
 **Overall confidence:** HIGH
 
 ### Gaps to Address
 
-- **Minor esbuild `--target` flag discrepancy:** STACK.md recommends `es2022` while ARCHITECTURE.md uses `es2020` in some Makefile examples. Use `es2022` (STACK.md is authoritative on this); standardize in Phase 1 Makefile and document the decision.
+- **ip-api.com vs GeoLite2 for Phase 1:** Research recommends ip-api.com (zero-auth, no setup) for immediate impact. MaxMind GeoLite2 adds offline capability. The plan should decide whether Phase 1 implements both (ip-api.com as primary, GeoLite2 as optional offline fallback) or one at a time. This is a scope/ordering decision, not a technical uncertainty.
 
-- **`feedback._timer` dynamic property pattern:** The existing `showPasteFeedback()` sets `_timer` directly on a DOM element — a pattern TypeScript will reject. Research identifies refactoring to a module-level `let feedbackTimer` as the solution, but the behavioral equivalence must be explicitly verified. Include a dedicated E2E verification step in Phase 3 for this specific function.
+- **ThreadPoolExecutor `max_workers` for DNS:** The existing executor handles 8 remote providers. Adding DNS lookups that can be near-instant or block for 5 seconds introduces a new profile. The plan should decide whether to increase `max_workers` globally, add a DNS-specific executor, or accept shared pool (acceptable for typical 1-20 IOC batch sizes).
 
-- **TypeScript version drift (minor):** TypeScript 5.8.3 is cited as latest stable at research time. If 5.9.x releases before implementation, pin to `typescript@5.8` in the npm install to avoid unexpected behavior changes. Not blocking.
+- **ThreatMiner throttling approach:** 10 req/min is a hard community-reported limit with no SLA. Options are: (a) token bucket in the adapter, (b) semaphore limiting concurrent ThreatMiner lookups, or (c) a dedicated single-worker executor making ThreatMiner sequential. Option (c) is simplest but makes ThreatMiner always the last provider to complete.
+
+- **Cytoscape.js vendoring:** ARCHITECTURE.md references v3.33.0 (July 2025). The plan needs a `make vendor` or `make vendor-install` target. Confirm the download source URL and add `cytoscape.min.js` to `.gitignore`.
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- esbuild Getting Started (esbuild.github.io/getting-started/) — standalone binary download via curl, v0.27.3 current, no Node.js required
-- esbuild API (esbuild.github.io/api/) — `--format=iife`, `--bundle`, `--outfile`, `--sourcemap`, `--platform=browser`, `--target=es2022` flags
-- esbuild Content Types (esbuild.github.io/content-types/#typescript) — TypeScript loader behavior, `isolatedModules` requirement, no type checking by design
-- TypeScript 5.8 release blog (devblogs.microsoft.com/typescript/announcing-typescript-5-8/) — version confirmation; 6.0 in beta
-- TypeScript TSConfig Reference (typescriptlang.org/tsconfig/) — `lib`, `types`, `isolatedModules`, `moduleResolution: "Bundler"`, `strict`, `noEmit`
-- TypeScript DOM Manipulation docs (typescriptlang.org/docs/handbook/dom-manipulation.html) — querySelector type hierarchy, null return pattern
-- TypeScript Migrating from JavaScript (typescriptlang.org/docs/handbook/migrating-from-javascript.html) — migration strategy
-- Total TypeScript tsconfig cheat sheet (totaltypescript.com/tsconfig-cheat-sheet) — bundler workflow configuration
-- SentinelX `app/static/main.js` — source of truth for behavior to preserve and type surfaces to cover
-- SentinelX `tests/test_security_audit.py` — CSP assertions confirmed (no unsafe-eval, no unsafe-inline)
-- SentinelX `app/templates/base.html` — script tag structure confirmed (`defer`, no `type="module"`)
+- [dnspython PyPI + ReadTheDocs](https://dnspython.readthedocs.io/en/latest/) — v2.8.0 confirmed, thread safety, `Resolver` lifecycle, exception hierarchy
+- [geoip2 ReadTheDocs](https://geoip2.readthedocs.io/) — v5.2.0 confirmed, Reader creation cost, `AddressNotFoundError`
+- [MaxMind GeoLite2 developer docs](https://dev.maxmind.com/geoip/geolite2-free-geolocation-data/) — free database confirmed; account + license key required for download; runtime offline
+- [MaxMind GeoLite2 EULA](https://www.maxmind.com/en/geolite2/eula) — 30-day deletion requirement after new release
+- [MaxMind blog — 2019 license changes](https://blog.maxmind.com/2019/12/significant-changes-to-accessing-and-using-geolite2-databases/) — account requirement since Dec 30, 2019
+- [CIRCL hashlookup service](https://www.circl.lu/services/hashlookup/) — no auth required; NSRL + OS packages; trust score field confirmed
+- [Cloudflare DoH API](https://developers.cloudflare.com/1.1.1.1/encryption/dns-over-https/make-api-requests/) — no auth for DNS queries; JSON format confirmed
+- [ip-api.com documentation](https://ip-api.com/) — no key required; 45 req/min; proxy/hosting/mobile fields confirmed
+- [Cytoscape.js official site](https://js.cytoscape.org/) — CDN availability, vanilla JS usage, built-in graph algorithms; v3.33.0 release July 2025
+- [SentinelX codebase audit] — Provider Protocol, ShodanAdapter zero-auth pattern, CacheStore, SSRF allowlist (`http_safety.py`), existing `ALLOWED_API_HOSTS`
 
 ### Secondary (MEDIUM confidence)
-- WebSearch: esbuild vs rollup vs webpack comparison 2025 — esbuild fastest, standalone, minimal config; multiple sources agree
-- getAttribute not narrowed by hasAttribute — TypeScript issue #22238 documented limitation
-- setTimeout return type conflict (guilhermesimoes.github.io) — `ReturnType<typeof setTimeout>` pattern verified against TypeScript issue tracker
-- Heap Engineering: Migrating to TypeScript — avoid refactoring during migration
-- Qualtrics Engineering: Migrating Legacy JS to TypeScript — preserve behavior guidance
-- TypeScript anti-patterns (ducin.dev) — informs anti-features section; consistent with TypeScript team guidance
+- [ThreatMiner API reference](https://www.threatminer.org/api.php) — no-auth public API; 10 req/min rate limit; endpoint parameters; community-operated, no formal SLA
+- [crt.sh architecture and HTTP API](https://crt.sh/) — zero-auth JSON via `?output=json`; no formal rate limits; 504 behavior under load
+- [ANY.RUN SOC triage analyst guide](https://any.run/cybersecurity-blog/triage-analyst-guide/) — analyst 2-minute triage workflow, escalation pattern
+- [SOCRadar Top 20 Free Cybersecurity APIs](https://socradar.io/blog/top-20-free-apis-for-cybersecurity/) — zero-auth API landscape survey
+- [ipwhois RDAP documentation](https://ipwhois.readthedocs.io/en/latest/RDAP.html) — RDAP endpoint behavior; SSRF conflict identified from ARCHITECTURE.md codebase analysis
 
-### Tertiary (LOW confidence)
-- typed-query-selector npm — optional querySelector improvement; not recommended for this project scope
-- TypeScript strict mode non-monotonicity blog (huonw.github.io) — interaction between `strictNullChecks` and `noImplicitAny`; enable both together via `"strict": true`
+### Tertiary (MEDIUM-LOW confidence)
+- [ipwho.is API](https://www.ipwho.org/) — alternative zero-auth GeoIP; viable backup if ip-api.com rate limits become a problem
+- [Cytoscape.js 3.33.0 release blog](https://blog.js.cytoscape.org/2025/07/28/3.33.0-release/) — active maintenance confirmed 2025
+- [DNS rebinding SSRF bypass pattern](https://www.clear-gate.com/blog/ssrf-with-dns-rebinding-2/) — TOCTOU pattern; low risk for SentinelX given DNS adapters do not make HTTP to resolved IPs
 
 ---
-*Research completed: 2026-02-28*
+*Research completed: 2026-03-11*
 *Ready for roadmap: yes*

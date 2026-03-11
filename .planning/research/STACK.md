@@ -1,335 +1,126 @@
 # Stack Research
 
-**Domain:** TypeScript migration of vanilla JS frontend in a Flask project (SentinelX v3.0)
-**Researched:** 2026-02-28
-**Confidence:** HIGH (esbuild standalone binary, tsconfig options), HIGH (TypeScript version), HIGH (CSP compatibility), MEDIUM (Makefile integration patterns)
+**Domain:** Threat intelligence enrichment — zero-auth/no-API-key deep analysis capabilities
+**Researched:** 2026-03-11
+**Confidence:** HIGH (all versions verified against PyPI and official documentation)
 
 ---
 
-## Context: What Already Exists (Do Not Change)
+## Context: Additive Stack Only
 
-This is a SUBSEQUENT MILESTONE research document. The following stack is locked in and working — do not re-research or modify it:
+SentinelX v5.0 baseline is locked and validated. This document covers ONLY new
+libraries needed for v6.0 analyst experience expansion. Do not re-evaluate Flask,
+requests, iocextract, iocsearcher, esbuild, Tailwind, or the existing 8 provider
+adapters — they are not in scope.
 
-- Python 3.10 + Flask 3.1 — backend, unchanged
-- Tailwind CSS standalone CLI v3.4.17 — CSS build via `tools/tailwindcss` binary, `make css`
-- Vanilla JS IIFE — `app/static/main.js` (856 lines, one file)
-- CSS custom properties + design tokens — `app/static/src/input.css`
-- Inter Variable + JetBrains Mono Variable — self-hosted fonts
-- Heroicons v2 inline SVG via Jinja2 macros
-- pytest + Playwright E2E — 224 tests, 97% coverage
-- CSP: `default-src 'self'; script-src 'self'` — strict, prohibits unsafe-eval
-
-**Project constraint: No Node.js runtime.** The project uses standalone binaries (like the Tailwind CLI). This constraint MUST be preserved.
+The question this research answers: what Python libraries enable deep analysis without
+API keys? Which free databases can be bundled or downloaded?
 
 ---
 
-## What We Need to Add
+## New Library Recommendations
 
-The v3.0 milestone adds:
+### Tier 1: Core Zero-Auth Enrichment
 
-1. A **TypeScript bundler** (standalone binary, no Node.js) to transpile `.ts` to `.js`
-2. A **TypeScript compiler config** (`tsconfig.json`) for type checking and IDE support
-3. A **type-check step** (separate from bundling) to catch type errors
-4. An updated **Makefile** with `js`, `js-watch`, and `typecheck` targets
-5. An updated **`base.html`** pointing to the output bundle instead of `main.js`
+These three libraries enable the most analyst-valuable enrichment and should be added
+immediately. All are zero-auth at query time.
 
----
+| Library | Version | Purpose | Why Recommended |
+|---------|---------|---------|-----------------|
+| `dnspython` | 2.8.0 | Active DNS resolution (A, AAAA, MX, NS, TXT, PTR, SOA records) | The standard Python DNS toolkit — used by Ansible, MISP, and every serious Python security tool. Zero external dependencies beyond stdlib. Python 3.10+ (matches baseline). No API key, no rate-limit account, no database files. A single `dns.resolver.resolve(domain, "MX")` call returns mail server info. MX + NS + TXT records give analysts SPF, DMARC, mail infrastructure, and nameserver context in one shot. |
+| `geoip2` | 5.2.0 | Offline IP geolocation (country, city, ASN, org name) from local .mmdb database | Official MaxMind Python client. Reads local .mmdb files — zero network calls at lookup time. Python 3.10+ required (matches baseline). GeoLite2 databases are free with a MaxMind account; the license key is only used for the initial download. Runtime lookups are fully offline. The GeoLite2-ASN database (9 MB) is particularly valuable: maps any IP to its Autonomous System Number and organization name without any API call. |
+| `ipwhois` | 1.3.0 | IP-to-ASN, netblock owner, and network registration data via RDAP | No API key. Queries public IANA/RDAP registries directly. `lookup_rdap()` returns structured dicts with org name, ASN, CIDR, country, and RIR — richer ownership context than geoip2 for threat triage. Complements geoip2: geoip2 gives geographic location from a local file (fast, offline), ipwhois gives current netblock ownership from RDAP (slower, online, more authoritative). Both are needed. |
 
-## Recommended Stack
+### Tier 2: Domain Intelligence
 
-### Core Technologies (New Additions Only)
+| Library | Version | Purpose | Why Recommended |
+|---------|---------|---------|-----------------|
+| *(none — use requests directly)* | — | Certificate transparency log queries via crt.sh | The crt.sh service exposes a public JSON API (`https://crt.sh/?q=<domain>&output=json`) with zero authentication. It returns issued certificates, Subject Alternative Names (SANs), issuer details, and validity periods. A direct `requests.get()` call using the existing `requests` dependency is sufficient. No new library required. SAN enumeration from CT logs is high-value for phishing detection — typosquatters always issue certs. |
 
-| Technology | Version | Purpose | Why Recommended |
-|------------|---------|---------|-----------------|
-| esbuild standalone binary | 0.27.3 | TypeScript bundler + minifier | Standalone binary download via curl (same pattern as Tailwind CLI). Natively understands TypeScript — strips types without a Node.js runtime. Produces IIFE output with source maps. 10-100x faster than webpack. No config file required for simple use. |
-| TypeScript (npm package, dev-only) | 5.8.3 | Type checking via `tsc --noEmit` | Provides `tsc` for type checking only — esbuild handles transpilation. Install via npm once for development; DOM types are built-in (lib.dom.d.ts). No separate @types packages needed. |
-| `tsconfig.json` | N/A | TypeScript compiler configuration | Configures strict type checking, DOM lib, isolatedModules (required for esbuild), target ES2022. esbuild reads select fields (target, strict, verbatimModuleSyntax). |
-
-### Supporting Libraries (No New Runtime Dependencies)
-
-| Library | Version | Purpose | When to Use |
-|---------|---------|---------|-------------|
-| Built-in `lib.dom` | Ships with TypeScript | DOM type definitions (HTMLElement, HTMLTextAreaElement, fetch, CSS, etc.) | Activated via `"lib": ["es2022", "dom", "dom.iterable"]` in tsconfig — no separate package needed |
-
-**Note:** No `@types/*` packages are needed. The DOM types are bundled inside TypeScript's `lib.dom.d.ts`. The project has no npm dependencies at runtime — only esbuild (as a binary) and TypeScript (for type-checking only, dev workflow only).
-
-### Development Tools
-
-| Tool | Purpose | Notes |
-|------|---------|-------|
-| `tools/esbuild` | Standalone binary for bundling TypeScript to IIFE JS | Downloaded via curl from esbuild.github.io/dl/v0.27.3; same `tools/` directory as Tailwind CLI |
-| `tsc` (from `npm install -D typescript`) | Type checking only — `tsc --noEmit` | Does NOT emit JS; esbuild handles transpilation. Run as `make typecheck` |
-| Makefile `js` target | One-shot TypeScript build | Runs esbuild to produce `app/static/dist/main.js` with source maps |
-| Makefile `js-watch` target | Development rebuild on file change | esbuild `--watch` flag; fast incremental rebuilds |
-| Makefile `typecheck` target | CI-safe type validation | Runs `tsc --noEmit` against `tsconfig.json` |
+**Note on pycrtsh:** The `pycrtsh` library (version 0.3.14, October 2025) wraps crt.sh but
+requires `psycopg2-binary` and `lxml` as transitive dependencies, which pull in C compilation
+and PostgreSQL adapter complexity. The direct `requests` approach covers every use case needed
+for triage enrichment. Reach for pycrtsh only if the direct HTTP API proves unreliable or if
+PostgreSQL direct-connect to crt.sh's database is required for advanced filtering — neither
+condition is likely for a single-shot triage tool.
 
 ---
 
-## esbuild Standalone Binary
+## What NOT to Add
 
-esbuild distributes standalone native binaries that require zero Node.js runtime. The download mechanism is identical to the existing Tailwind CLI pattern.
+| Avoid | Why | Use Instead |
+|-------|-----|-------------|
+| `pyasn` | Requires offline BGP MRT dump files (100+ MB) that need weekly refresh from RIPE/RouteViews. Significant operational burden for an analyst workstation tool. | `ipwhois` RDAP returns ASN with zero local database management. |
+| `python-whois`, `whoisit`, `whodap` | WHOIS text is inconsistently formatted across TLDs and privacy-redacted for the majority of registrations since GDPR. PROJECT.md explicitly lists "WHOIS / RDAP enrichment — high complexity, often privacy-redacted" as out of scope. This constraint is correct. | Skip WHOIS for domains entirely. Use `ipwhois` RDAP for IPs (structured, reliable). |
+| `certstream` | Live CT log streaming requires a persistent WebSocket connection. Fundamentally incompatible with SentinelX's single-shot triage model. | Direct crt.sh JSON API queries via `requests` for historical CT data. |
+| `aiodns` | Async DNS requires event loop integration that conflicts with Flask's synchronous request handling and the existing thread-pool-based enrichment orchestrator. | `dnspython` synchronous interface — clean fit with current architecture. |
+| Any GeoIP web service API (ipinfo.io, ipgeolocation.io, etc.) | All require API key registration. Adds another external dependency when GeoLite2 offline solves the same problem for a locally-deployed tool. | `geoip2` + locally downloaded GeoLite2 .mmdb files. |
+| `IP2Location LITE` | Less accurate than GeoLite2, smaller Python ecosystem, less maintained. MaxMind GeoLite2 is the industry standard for free offline geolocation. | `geoip2` with GeoLite2 databases. |
+| `pycrtsh` | psycopg2-binary + lxml C extension overhead for a task that `requests` handles equally well. | Direct `requests.get()` to crt.sh JSON API. |
 
-### Download Command
+---
+
+## Database Dependencies (not Python packages)
+
+### MaxMind GeoLite2 .mmdb Files
+
+Required for `geoip2` offline lookups. These are binary database files, not Python packages.
+
+| Database | Filename | Size | Content |
+|----------|----------|------|---------|
+| GeoLite2-City | `GeoLite2-City.mmdb` | ~70 MB | Country, region, city, postal code, lat/lon for IP |
+| GeoLite2-ASN | `GeoLite2-ASN.mmdb` | ~9 MB | ASN number + organization name for IP |
+
+**Acquisition:** Free download from MaxMind after free account registration at
+`maxmind.com/en/geolite2/signup`. A license key is issued — used only in the download URL, not
+at query time. Lookups are fully offline once the .mmdb files are on disk. MaxMind releases
+database updates twice monthly; the EULA requires deletion within 30 days of a new release.
+
+**Storage:** `~/.sentinelx/geoip/GeoLite2-City.mmdb` and `~/.sentinelx/geoip/GeoLite2-ASN.mmdb`
+
+**Do NOT bundle in the repository.** The .mmdb files are 70+ MB binary assets with their own
+EULA. Store the MaxMind license key in ConfigStore (`~/.sentinelx/config.ini`) and provide a
+`make geoip-update` target or Flask CLI command to download/refresh the databases.
+
+**Fallback behavior:** When .mmdb files are absent, the GeoIP provider adapter must return
+`no_data` verdict (not error) — same pattern as API-key providers without configured keys.
+The settings UI should display a download prompt with instructions.
+
+---
+
+## Integration with Existing Provider Architecture
+
+All new libraries integrate as Provider Protocol adapters. Zero changes to the orchestrator,
+registry, or routes. Each new capability = one adapter file + one `register()` call in `setup.py`.
+
+### Adapter Map
+
+| Adapter file | Library | Supported IOC Types | requires_api_key | Notes |
+|-------------|---------|---------------------|------------------|-------|
+| `dns_provider.py` | `dnspython` | `Domain`, `URL` | `False` | A/AAAA/MX/NS/TXT/PTR records; derive verdict from MX presence, SPF/DMARC in TXT records |
+| `geoip_provider.py` | `geoip2` | `IPv4`, `IPv6` | `False` | Country, city, ASN from offline .mmdb; `is_configured()` returns `False` if .mmdb absent |
+| `ipwhois_provider.py` | `ipwhois` | `IPv4`, `IPv6` | `False` | RDAP lookup: org, netblock CIDR, RIR, ASN; complements geoip2 for ownership context |
+| `crtsh_provider.py` | `requests` (existing) | `Domain` | `False` | Direct HTTP to `crt.sh/?q=<domain>&output=json`; existing `http_safety` module applies |
+
+**CrtShProvider reuses the existing `requests` dependency.** The `http_safety` module's SSRF
+allowlist, timeout constant, and `read_limited()` stream reader apply directly to crt.sh queries.
+Add `crt.sh` to the SSRF allowlist (`ALLOWED_API_HOSTS`).
+
+---
+
+## Installation
 
 ```bash
-# Linux x64 (current dev environment) — installs to current directory
-curl -fsSL https://esbuild.github.io/dl/v0.27.3 | sh
-mv esbuild tools/esbuild
-chmod +x tools/esbuild
+# Tier 1 — Core zero-auth enrichment libraries
+pip install dnspython==2.8.0 geoip2==5.2.0 ipwhois==1.3.0
+
+# GeoLite2 databases (not pip — downloaded separately via MaxMind)
+# Requires a free MaxMind account and license key
+# Store databases at: ~/.sentinelx/geoip/
+# See MaxMind download documentation: https://dev.maxmind.com/geoip/geolite2-free-geolocation-data/
 ```
 
-Or manual download from npm registry (no npm needed):
-
-```bash
-curl -O https://registry.npmjs.org/@esbuild/linux-x64/-/linux-x64-0.27.3.tgz
-tar xzf linux-x64-0.27.3.tgz
-mv package/bin/esbuild tools/esbuild
-chmod +x tools/esbuild
-```
-
-**Verified:** esbuild v0.27.3 is the current stable release (February 2026). The binary is approximately 8MB and self-contained.
-
-### esbuild CLI Flags for This Project
-
-```bash
-./tools/esbuild \
-  app/static/src/main.ts \
-  --bundle \
-  --format=iife \
-  --platform=browser \
-  --target=es2022 \
-  --sourcemap \
-  --minify \
-  --outfile=app/static/dist/main.js
-```
-
-**Flag rationale:**
-
-| Flag | Value | Why |
-|------|-------|-----|
-| `--bundle` | (no value) | Inlines all TS imports into a single output file — matches Flask's single static file serving |
-| `--format=iife` | iife | Wraps bundle in an immediately-invoked function expression — same structure as current `main.js`; no global scope pollution; matches `script-src 'self'` CSP |
-| `--platform=browser` | browser | Configures esbuild for browser targets; disables Node.js built-ins; sets correct globals |
-| `--target=es2022` | es2022 | Match tsconfig target; ES2022 is supported in all modern browsers and Playwright test environment |
-| `--sourcemap` | (no value) | Emits linked `.js.map` file alongside output; browser DevTools map minified code back to `.ts` source |
-| `--minify` | (no value) | Minifies for production; esbuild minification is safe and very fast |
-| `--outfile` | `app/static/dist/main.js` | Output goes to the existing dist directory alongside `style.css` |
-
-**esbuild TypeScript support:** esbuild natively strips TypeScript type annotations and transpiles syntax. It does NOT type-check. Run `tsc --noEmit` separately for type safety.
-
-**esbuild `isolatedModules` requirement:** esbuild processes each file independently (no cross-file type information). Therefore `isolatedModules: true` must be set in `tsconfig.json` — this prevents TypeScript code patterns that require full type system knowledge (e.g., `const enum` re-exports, ambient namespace merging).
-
----
-
-## tsconfig.json Configuration
-
-### Recommended `tsconfig.json`
-
-```json
-{
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "ESNext",
-    "moduleResolution": "Bundler",
-    "lib": ["es2022", "dom", "dom.iterable"],
-
-    "strict": true,
-    "noUncheckedIndexedAccess": true,
-    "noImplicitOverride": true,
-    "noFallthroughCasesInSwitch": true,
-
-    "isolatedModules": true,
-    "verbatimModuleSyntax": true,
-
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "resolveJsonModule": true,
-    "moduleDetection": "force",
-
-    "noEmit": true
-  },
-  "include": ["app/static/src/**/*.ts"],
-  "exclude": ["node_modules"]
-}
-```
-
-### Key Decision Rationale
-
-| Option | Value | Why |
-|--------|-------|-----|
-| `target` | `ES2022` | Modern but stable; supported in Playwright test browsers; matches esbuild `--target=es2022`; avoids TypeScript 6.0 beta churn |
-| `module` | `ESNext` | Lets us write `import`/`export` in source files; esbuild handles bundling into IIFE |
-| `moduleResolution` | `Bundler` | Designed for bundler-mediated resolution; understands package.json `exports` fields; correct for esbuild workflows |
-| `lib` | `["es2022", "dom", "dom.iterable"]` | DOM types (HTMLElement, fetch, CSS.escape, etc.) are built into TypeScript — no extra packages needed |
-| `strict` | `true` | Enables strictNullChecks, noImplicitAny, strictFunctionTypes — the migration's primary value |
-| `noUncheckedIndexedAccess` | `true` | Array index access returns `T or undefined` — catches the many array-to-DOM lookups in main.js |
-| `isolatedModules` | `true` | Required for esbuild — prevents TS patterns that need cross-file type information |
-| `verbatimModuleSyntax` | `true` | Ensures `import type` is used for type-only imports — esbuild-safe |
-| `noEmit` | `true` | `tsc` only type-checks; esbuild handles JS emit |
-
-### What `noEmit: true` Means
-
-`tsc --noEmit` validates types without writing `.js` files. This is the standard pattern when using esbuild as the transpiler:
-
-```
-tsc --noEmit       -> type errors -> fail build (no output written)
-esbuild main.ts    -> produces dist/main.js -> served by Flask
-```
-
-Both steps run independently. In a Makefile `build` target, run `typecheck` before `js` so type errors fail the build before output is written.
-
----
-
-## Module Structure for Migration
-
-The 856-line IIFE in `main.js` decomposes naturally into these TypeScript modules:
-
-```
-app/static/src/
-    main.ts               <- entry point; calls init(), imports all modules
-    types.ts              <- shared type definitions (Verdict, IOCType, EnrichmentResult)
-    submit.ts             <- initSubmitButton(), initModeToggle(), updateSubmitLabel()
-    textarea.ts           <- initAutoGrow(), showPasteFeedback()
-    clipboard.ts          <- initCopyButtons(), writeToClipboard(), fallbackCopy()
-    polling.ts            <- initEnrichmentPolling(), renderEnrichmentResult(), updateProgressBar()
-    cards.ts              <- updateCardVerdict(), updateDashboardCounts(), sortCardsBySeverity()
-    filters.ts            <- initFilterBar(), applyFilter()
-    settings.ts           <- initSettingsPage()
-    ui.ts                 <- initScrollAwareFilterBar(), initCardStagger()
-```
-
-**esbuild bundles all of these into a single `app/static/dist/main.js` IIFE.** Flask serves only the output file — no ES module imports in the browser, no `<script type="module">` tag needed, no import maps. The module structure is a build-time concern only.
-
-### Key Types to Define in `types.ts`
-
-```typescript
-type Verdict = 'malicious' | 'suspicious' | 'clean' | 'no_data' | 'error';
-
-type IOCType = 'ipv4' | 'ipv6' | 'domain' | 'url' | 'md5' | 'sha1' | 'sha256' | 'cve';
-
-interface EnrichmentResult {
-  ioc_value: string;
-  provider: string;
-  type: 'result' | 'error';
-  verdict?: Verdict;
-  detection_count?: number;
-  total_engines?: number;
-  scan_date?: string;
-  error?: string;
-}
-
-interface PollResponse {
-  done: number;
-  total: number;
-  complete: boolean;
-  results: EnrichmentResult[];
-}
-
-interface VerdictEntry {
-  provider: string;
-  verdict: Verdict;
-  summaryText: string;
-}
-```
-
----
-
-## Makefile Integration
-
-```makefile
-ESBUILD  := ./tools/esbuild
-TS_ENTRY := app/static/src/main.ts
-JS_OUT   := app/static/dist/main.js
-
-## Download esbuild standalone binary (no Node.js required)
-esbuild-install:
-	@mkdir -p tools
-	curl -fsSL https://esbuild.github.io/dl/v0.27.3 | sh
-	mv esbuild $(ESBUILD)
-	chmod +x $(ESBUILD)
-	@echo "esbuild installed at $(ESBUILD)"
-
-## Compile TypeScript to IIFE bundle (one-shot, minified)
-js:
-	$(ESBUILD) $(TS_ENTRY) \
-		--bundle \
-		--format=iife \
-		--platform=browser \
-		--target=es2022 \
-		--sourcemap \
-		--minify \
-		--outfile=$(JS_OUT)
-
-## Watch mode for development (no minify for readable DevTools)
-js-watch:
-	$(ESBUILD) $(TS_ENTRY) \
-		--bundle \
-		--format=iife \
-		--platform=browser \
-		--target=es2022 \
-		--sourcemap \
-		--outfile=$(JS_OUT) \
-		--watch
-
-## Type-check TypeScript (no JS output — requires tsc in PATH)
-typecheck:
-	tsc --noEmit
-
-## Full build: CSS + JS
-build: css js
-```
-
-**Note:** `--minify` is omitted from `js-watch` so DevTools source maps remain readable during development.
-
----
-
-## CSP Compatibility
-
-The existing CSP is `default-src 'self'; script-src 'self'`. The TypeScript migration must not break this.
-
-| Concern | Status | Notes |
-|---------|--------|-------|
-| IIFE output format | SAFE | IIFE wraps code in a function — produces static code without dynamic code execution |
-| Source maps | SAFE | `.js.map` files are served from `/static/dist/` — same origin. Browser DevTools fetches them; CSP does not restrict sourcemap file fetching |
-| esbuild IIFE output | SAFE | esbuild IIFE format produces deterministic static output; no dynamic code execution patterns |
-| Import syntax | NOT USED | esbuild bundles everything into one IIFE; no dynamic import() or ESM in output; script type="module" not needed |
-| TypeScript `const enum` | AVOID | esbuild handles const enum within a single file but cross-file const enum usage requires full type information; use regular enum or string literals instead |
-
-**The CSP header does not need to change.** The output is a single IIFE `.js` file served from `/static/dist/` — identical security posture to the current `main.js`.
-
----
-
-## Output File Location
-
-Current: `app/static/main.js` (source and output are the same file — no build step)
-
-After migration:
-
-```
-app/static/
-    src/
-        main.ts           <- TypeScript source (entry point)
-        types.ts
-        submit.ts
-        ...               <- remaining modules
-    dist/
-        style.css         <- existing Tailwind output (unchanged)
-        main.js           <- NEW: esbuild output bundle
-        main.js.map       <- NEW: source map for debugging
-    main.js               <- KEEP during transition; DELETE after migration complete
-```
-
-`base.html` update (one-line change):
-
-```html
-<!-- Before -->
-<script src="{{ url_for('static', filename='main.js') }}" defer></script>
-
-<!-- After -->
-<script src="{{ url_for('static', filename='dist/main.js') }}" defer></script>
-```
-
-The `defer` attribute stays — it is important for DOM-ready initialization logic.
+No Tier 2 pip installs are needed — crt.sh integration uses the existing `requests` package.
 
 ---
 
@@ -337,49 +128,11 @@ The `defer` attribute stays — it is important for DOM-ready initialization log
 
 | Recommended | Alternative | When to Use Alternative |
 |-------------|-------------|-------------------------|
-| esbuild (standalone binary) | tsc emit mode (no bundler) | If you only have one TS file and want zero tooling — but this project needs a multi-file module structure |
-| esbuild (standalone binary) | Rollup | Rollup produces cleaner output for library authoring with better tree-shaking; esbuild is faster and has a standalone binary with no Node.js required |
-| esbuild (standalone binary) | Webpack | If you need heavy plugin ecosystem (CSS loaders, HMR dev server, code splitting for SPAs) — wrong scale for a Flask static script |
-| esbuild (standalone binary) | Vite | Vite is a dev server + build tool designed for framework SPAs; requires Node.js; no standalone binary |
-| esbuild (standalone binary) | Bun | Excellent bundler but introduces a new runtime dependency; esbuild binary is simpler for this scope |
-| esbuild (standalone binary) | Parcel | Good zero-config DX but requires Node.js; no standalone binary |
-| IIFE output format | ESM output (`--format=esm`) | Use ESM if you need native browser module loading with import maps; IIFE is simpler for Flask's single-script static serving and requires no HTML changes beyond the src path |
-
----
-
-## What NOT to Use
-
-| Avoid | Why | Use Instead |
-|-------|-----|-------------|
-| Webpack | Requires Node.js runtime; no standalone binary; enormous config overhead for a simple browser script | esbuild standalone binary |
-| Vite | Requires Node.js; designed for SPAs with HMR dev server — wrong fit for Flask multi-page app | esbuild standalone binary |
-| `tsc` emit mode | Produces one JS file per TS file without bundling; requires separate bundler anyway; much slower than esbuild | esbuild for transpilation + bundling; `tsc --noEmit` for type checking only |
-| `ts-node` or `tsx` | Runtime TS execution — not needed; we are building browser JS, not running TS server-side | Not applicable |
-| `const enum` in TypeScript | esbuild cannot inline const enum values from other files in isolated module mode — produces runtime errors | Use regular `enum` or `as const` object literals |
-| `namespace` merging | Requires cross-file type information — breaks with `isolatedModules: true` | Use ES module `import`/`export` |
-| `emitDecoratorMetadata` | Not supported by esbuild | Not needed for this project (no framework decorators) |
-| Node.js as build runtime | Breaks the project constraint of standalone binaries only | esbuild binary; `tsc` installed once for dev type-checking |
-| `--format=esm` output | Requires `<script type="module">` in HTML; more complex serving | `--format=iife` — self-contained, same security model as current setup |
-| TypeScript 6.0 | Currently in beta (February 2026); breaking changes possible; not yet stable | TypeScript 5.8.3 (latest stable) |
-
----
-
-## Stack Patterns by Variant
-
-**If developing locally (fast iteration):**
-- Use `make js-watch` (esbuild `--watch` flag)
-- Skip `--minify` for readable DevTools output
-- Source maps enabled — browser maps errors back to `.ts` files
-
-**If running CI or full build:**
-- Run `make typecheck` first (fails on type errors before any file is emitted)
-- Then run `make build` (runs `make css` + `make js` with `--minify`)
-- Playwright E2E tests run against the built `dist/main.js`
-
-**If adding a new TypeScript module:**
-- Create `app/static/src/new-module.ts`
-- Export functions, import in `main.ts`
-- esbuild bundles everything automatically — no build config change needed
+| `dnspython` | stdlib `socket.getaddrinfo()` | Never — socket resolves only A/AAAA. dnspython is the only option for MX/TXT/NS/PTR queries. |
+| `geoip2` + GeoLite2 (offline) | Online GeoIP APIs (ipinfo.io, ipgeolocation.io) | Only if the operator refuses to manage local database files and accepts API key registration and rate limits. Wrong model for a workstation-local tool. |
+| `ipwhois` RDAP | `pyasn` + offline BGP dump | Never for this use case. pyasn requires 100+ MB BGP database files with weekly refresh and complex setup. `ipwhois` RDAP is simpler, zero local files, and free. |
+| Direct `requests` to crt.sh JSON API | `pycrtsh` library | Only if direct HTTP proves unreliable for CT log queries or if PostgreSQL direct-connect is required for advanced filtering. Neither condition is likely for triage. |
+| Skip WHOIS for domains | Any WHOIS library | Per PROJECT.md constraints. Privacy-redaction makes domain WHOIS low-signal for most real-world IOCs. The constraint is valid — hold it. |
 
 ---
 
@@ -387,56 +140,50 @@ The `defer` attribute stays — it is important for DOM-ready initialization log
 
 | Package | Compatible With | Notes |
 |---------|-----------------|-------|
-| esbuild 0.27.3 | TypeScript 5.x source files | esbuild natively strips TS types; does not require TypeScript installed to transpile |
-| esbuild 0.27.3 | `tsconfig.json` (selected fields) | Reads: `target`, `strict`, `verbatimModuleSyntax`, `experimentalDecorators`, `jsxFactory` |
-| TypeScript 5.8.3 | `isolatedModules: true` | Required; warns on patterns esbuild cannot handle across files |
-| TypeScript 5.8.3 | `lib: ["es2022", "dom", "dom.iterable"]` | DOM types built-in; no `@types/dom` package needed |
-| esbuild IIFE output | Flask `script-src 'self'` CSP | IIFE format produces static code with no dynamic code execution patterns |
-| esbuild `--sourcemap` | Playwright E2E tests | Source maps do not affect test execution; Playwright tests against DOM behavior |
-| esbuild `--target=es2022` | Chromium (Playwright default browser) | Chromium fully supports ES2022 |
+| `dnspython==2.8.0` | Python 3.10+ | Matches SentinelX baseline exactly. Released September 2025. No external dependencies. |
+| `geoip2==5.2.0` | Python 3.10–3.14, `requests>=2.24.0` | `requests==2.32.5` already in requirements.txt — no version conflict. Released November 2025. |
+| `ipwhois==1.3.0` | Python up to 3.12 | Tested through 3.12; no conflicts with Flask 3.1 or existing deps. Released October 2024. Note: last release does not yet formally list 3.13+ but no known breakage. |
 
 ---
 
-## Installation
+## Stack Patterns
 
-```bash
-# 1. Install esbuild standalone binary (no Node.js required)
-mkdir -p tools
-curl -fsSL https://esbuild.github.io/dl/v0.27.3 | sh
-mv esbuild tools/esbuild
-chmod +x tools/esbuild
+**If GeoLite2 databases are not present:**
+- `GeoIpProvider.is_configured()` returns `False`
+- Provider is excluded from enrichment (same pattern as API-key providers with no key set)
+- Settings UI shows a download prompt with MaxMind account link and instructions
 
-# 2. Install TypeScript for type checking (dev only — requires Node.js once)
-npm install -D typescript@5.8.3
-# This creates node_modules/ and package.json
-# Add node_modules/ to .gitignore
+**If DNS lookup times out:**
+- `DnsProvider` returns `EnrichmentError` with `"Timeout"` message (consistent with all existing providers)
+- Set `dns.resolver.Resolver.timeout = 5` and `lifetime = 10` (align with existing `TIMEOUT = (5, 30)` constant in `http_safety.py`)
 
-# 3. Create tsconfig.json (see recommended configuration above)
+**If ipwhois RDAP hits rate limiting:**
+- LACNIC (Latin American IPs) is the only RIR known to impose aggressive rate limits
+- Return `EnrichmentError("Rate limited")` — do not retry automatically
+- Analyst can re-query if needed; this is consistent with existing HTTP 429 handling
 
-# 4. Verify tools
-./tools/esbuild --version       # -> 0.27.3
-npx tsc --version               # -> Version 5.8.3
-```
-
-**Alternative if Node.js is unavailable for `tsc`:** Type checking can be deferred to a CI environment that has Node.js, while the esbuild binary handles local development builds. The `make typecheck` target would be CI-only in that scenario. Source maps still provide debugging support locally.
+**For crt.sh queries:**
+- Add `crt.sh` to `ALLOWED_API_HOSTS` in the SSRF allowlist
+- Apply existing `TIMEOUT`, `read_limited()`, and `allow_redirects=False` controls
+- 404 from crt.sh means no certs found — return `verdict="no_data"`, not an error
 
 ---
 
 ## Sources
 
-- esbuild getting started (esbuild.github.io/getting-started/) — confirmed standalone binary download via curl, v0.27.3 current, no Node.js required (HIGH confidence)
-- esbuild output formats (esbuild.github.io/api/#output-formats) — confirmed IIFE, ESM, CJS formats; browser platform default; IIFE wraps in function expression (HIGH confidence)
-- esbuild TypeScript content types (esbuild.github.io/content-types/#typescript) — confirmed native TS type stripping, isolatedModules requirement, no type checking performed (HIGH confidence)
-- esbuild sourcemap docs (esbuild.github.io/api/#sourcemap) — confirmed linked/inline/external/both modes (HIGH confidence)
-- @esbuild/linux-x64 npm registry — confirmed v0.27.3 is latest stable (HIGH confidence)
-- TypeScript 5.8 release blog (devblogs.microsoft.com/typescript/announcing-typescript-5-8/) — v5.8 released Feb 28 2025 (HIGH confidence)
-- TypeScript 6.0 beta announcement — confirmed 6.0 is in beta as of Feb 2026; 5.9.x is latest stable series (MEDIUM confidence — search result summary)
-- Total TypeScript tsconfig cheat sheet (totaltypescript.com/tsconfig-cheat-sheet) — confirmed `module: "preserve"`, `moduleResolution: "Bundler"`, `noEmit: true` for bundler workflows (HIGH confidence)
-- TypeScript isolatedModules docs (typescriptlang.org/tsconfig/isolatedModules.html) — confirmed required for per-file transpilers like esbuild (HIGH confidence)
-- WebSearch: esbuild vs rollup vs webpack comparison 2025 — confirmed esbuild is fastest, standalone, minimal config; webpack requires Node.js; Rollup better for libraries (MEDIUM confidence — multiple sources agree)
-- WebSearch: DOM types built into TypeScript lib — confirmed DOM types are in lib.dom.d.ts bundled with TypeScript; no separate package needed (HIGH confidence)
+- [dnspython PyPI](https://pypi.org/project/dnspython/) — Version 2.8.0 confirmed, Python 3.10+ (HIGH confidence)
+- [dnspython Resolver docs](https://dnspython.readthedocs.io/en/latest/resolver-class.html) — Resolver API and supported record types (HIGH confidence)
+- [geoip2 PyPI](https://pypi.org/project/geoip2/) — Version 5.2.0 confirmed, Python 3.10+ (HIGH confidence)
+- [geoip2 ReadTheDocs](https://geoip2.readthedocs.io/) — Database reader API (HIGH confidence)
+- [MaxMind GeoLite2 developer docs](https://dev.maxmind.com/geoip/geolite2-free-geolocation-data/) — Free databases confirmed; registration and license key required for download; runtime lookups are offline (HIGH confidence)
+- [ipwhois PyPI](https://pypi.org/project/ipwhois/) — Version 1.3.0 confirmed (HIGH confidence)
+- [ipwhois RDAP docs](https://ipwhois.readthedocs.io/en/latest/RDAP.html) — RDAP lookup API, structured dict output (HIGH confidence)
+- [pycrtsh PyPI](https://pypi.org/project/pycrtsh/) — Version 0.3.14, October 2025, psycopg2-binary + lxml dependencies confirmed (HIGH confidence)
+- [crt.sh JSON API](https://crt.sh/?q=example.com&output=json) — Zero-auth public API, JSON fields confirmed live (HIGH confidence)
+- [GitHub rthalley/dnspython](https://github.com/rthalley/dnspython) — Active maintenance, September 2025 release (HIGH confidence)
+- [GitHub maxmind/GeoIP2-python](https://github.com/maxmind/GeoIP2-python) — Official MaxMind Python client (HIGH confidence)
 
 ---
 
-*Stack research for: SentinelX v3.0 TypeScript Migration*
-*Researched: 2026-02-28*
+*Stack research for: SentinelX v6.0 zero-auth deep analysis capabilities*
+*Researched: 2026-03-11*
