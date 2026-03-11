@@ -13,6 +13,8 @@ from __future__ import annotations
 
 from app.enrichment.adapters.abuseipdb import AbuseIPDBAdapter
 from app.enrichment.adapters.greynoise import GreyNoiseAdapter
+from app.enrichment.adapters.hashlookup import HashlookupAdapter
+from app.enrichment.adapters.ip_api import IPApiAdapter
 from app.enrichment.adapters.malwarebazaar import MBAdapter
 from app.enrichment.adapters.otx import OTXAdapter
 from app.enrichment.adapters.shodan import ShodanAdapter
@@ -88,28 +90,30 @@ def build_registry(
     allowed_hosts: list[str],
     config_store: ConfigStore,
 ) -> ProviderRegistry:
-    """Build and return a ProviderRegistry with all 8 providers registered.
+    """Build and return a ProviderRegistry with all 10 providers registered.
 
-    Reads API keys from ConfigStore for key-requiring providers. Public providers
-    (MalwareBazaar, ThreatFox, Shodan InternetDB) are registered unconditionally —
-    they are always is_configured() == True.
+    Reads API keys from ConfigStore for key-requiring providers. Zero-auth providers
+    (Shodan InternetDB, CIRCL Hashlookup, ip-api.com IP Context) are registered
+    unconditionally — they are always is_configured() == True.
 
     Registered providers:
-        - VirusTotal       (requires key — via get_vt_api_key)
-        - MalwareBazaar    (requires key — via get_provider_key("malwarebazaar"))
-        - ThreatFox        (requires key — via get_provider_key("threatfox"))
+        - VirusTotal        (requires key — via get_vt_api_key)
+        - MalwareBazaar     (requires key — via get_provider_key("malwarebazaar"))
+        - ThreatFox         (requires key — via get_provider_key("threatfox"))
         - Shodan InternetDB (zero-auth — no key required)
-        - URLhaus          (requires key — via get_provider_key("urlhaus"))
-        - OTX AlienVault   (requires key — via get_provider_key("otx"))
-        - GreyNoise        (requires key — via get_provider_key("greynoise"))
-        - AbuseIPDB        (requires key — via get_provider_key("abuseipdb"))
+        - URLhaus           (requires key — via get_provider_key("urlhaus"))
+        - OTX AlienVault    (requires key — via get_provider_key("otx"))
+        - GreyNoise         (requires key — via get_provider_key("greynoise"))
+        - AbuseIPDB         (requires key — via get_provider_key("abuseipdb"))
+        - CIRCL Hashlookup  (zero-auth — NSRL known-good hash detection)
+        - IP Context        (zero-auth — GeoIP/rDNS/proxy flags via ip-api.com)
 
     Args:
         allowed_hosts: SSRF allowlist passed to each adapter for outbound calls.
         config_store: ConfigStore instance used to read provider API keys.
 
     Returns:
-        ProviderRegistry with all 8 providers registered.
+        ProviderRegistry with all 10 providers registered.
     """
     registry = ProviderRegistry()
 
@@ -134,5 +138,9 @@ def build_registry(
 
     abuseipdb_key = config_store.get_provider_key("abuseipdb") or ""
     registry.register(AbuseIPDBAdapter(api_key=abuseipdb_key, allowed_hosts=allowed_hosts))
+
+    # Zero-auth providers — no key needed, always configured
+    registry.register(HashlookupAdapter(allowed_hosts=allowed_hosts))
+    registry.register(IPApiAdapter(allowed_hosts=allowed_hosts))
 
     return registry

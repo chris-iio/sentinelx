@@ -3,9 +3,7 @@
 Verifies that build_registry() returns a ProviderRegistry with all eight
 providers registered, using the correct API key from ConfigStore.
 """
-from unittest.mock import MagicMock, call
-
-import pytest
+from unittest.mock import MagicMock
 
 from app.enrichment.registry import ProviderRegistry
 
@@ -31,6 +29,8 @@ def _make_allowed_hosts() -> list[str]:
         "otx.alienvault.com",
         "api.greynoise.io",
         "api.abuseipdb.com",
+        "ip-api.com",
+        "hashlookup.circl.lu",
     ]
 
 
@@ -47,15 +47,15 @@ class TestBuildRegistry:
         )
         assert isinstance(registry, ProviderRegistry)
 
-    def test_registry_has_eight_providers(self):
-        """build_registry() registers exactly 8 providers."""
+    def test_registry_has_ten_providers(self):
+        """build_registry() registers exactly 10 providers."""
         from app.enrichment.setup import build_registry
 
         registry = build_registry(
             allowed_hosts=_make_allowed_hosts(),
             config_store=_make_config_store(),
         )
-        assert len(registry.all()) == 8
+        assert len(registry.all()) == 10
 
     def test_registry_contains_virustotal(self):
         """build_registry() registers a provider named 'VirusTotal'."""
@@ -155,6 +155,50 @@ class TestBuildRegistry:
         )
         shodan = next(p for p in registry.all() if p.name == "Shodan InternetDB")
         assert shodan.is_configured() is True
+
+    def test_registry_contains_hashlookup(self):
+        """build_registry() registers a provider named 'CIRCL Hashlookup'."""
+        from app.enrichment.setup import build_registry
+
+        registry = build_registry(
+            allowed_hosts=_make_allowed_hosts(),
+            config_store=_make_config_store(),
+        )
+        names = [p.name for p in registry.all()]
+        assert "CIRCL Hashlookup" in names
+
+    def test_registry_contains_ip_context(self):
+        """build_registry() registers a provider named 'IP Context'."""
+        from app.enrichment.setup import build_registry
+
+        registry = build_registry(
+            allowed_hosts=_make_allowed_hosts(),
+            config_store=_make_config_store(),
+        )
+        names = [p.name for p in registry.all()]
+        assert "IP Context" in names
+
+    def test_hashlookup_is_always_configured(self):
+        """HashlookupAdapter is configured even without any API key (zero-auth)."""
+        from app.enrichment.setup import build_registry
+
+        registry = build_registry(
+            allowed_hosts=_make_allowed_hosts(),
+            config_store=_make_config_store(None),
+        )
+        hashlookup = next(p for p in registry.all() if p.name == "CIRCL Hashlookup")
+        assert hashlookup.is_configured() is True
+
+    def test_ip_context_is_always_configured(self):
+        """IPApiAdapter is configured even without any API key (zero-auth)."""
+        from app.enrichment.setup import build_registry
+
+        registry = build_registry(
+            allowed_hosts=_make_allowed_hosts(),
+            config_store=_make_config_store(None),
+        )
+        ip_context = next(p for p in registry.all() if p.name == "IP Context")
+        assert ip_context.is_configured() is True
 
     def test_vt_adapter_receives_api_key_from_config_store(self):
         """VTAdapter in the registry uses the key returned by config_store.get_vt_api_key()."""
