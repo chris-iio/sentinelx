@@ -9,9 +9,9 @@ Requirements for the Analyst Experience milestone. Each maps to roadmap phases.
 
 ### IP Intelligence (Zero-Auth)
 
-- [ ] **IPINT-01**: User can see country, city, and ASN for any IP IOC without configuring an API key
-- [ ] **IPINT-02**: User can see reverse DNS (PTR) hostname for any IP IOC without an API key
-- [ ] **IPINT-03**: User can see proxy/VPN/hosting detection flags for any IP IOC without an API key
+- [x] **IPINT-01**: User can see country, city, and ASN for any IP IOC without configuring an API key
+- [x] **IPINT-02**: User can see reverse DNS (PTR) hostname for any IP IOC without an API key
+- [x] **IPINT-03**: User can see proxy/VPN/hosting detection flags for any IP IOC without an API key
 
 ### Domain Intelligence (Zero-Auth)
 
@@ -21,7 +21,7 @@ Requirements for the Analyst Experience milestone. Each maps to roadmap phases.
 
 ### Hash Intelligence (Zero-Auth)
 
-- [ ] **HINT-01**: User can see whether a file hash is a known-good (NSRL) file via CIRCL hashlookup without an API key
+- [x] **HINT-01**: User can see whether a file hash is a known-good (NSRL) file via CIRCL hashlookup without an API key
 - [x] **HINT-02**: Known-good verdict is visually distinct from malicious/clean/unknown in summary rows and filter bar
 
 ### Enhanced Providers
@@ -69,13 +69,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| IPINT-01 | Phase 01 | Pending |
-| IPINT-02 | Phase 01 | Pending |
-| IPINT-03 | Phase 01 | Pending |
+| IPINT-01 | Phase 01 | Complete |
+| IPINT-02 | Phase 01 | Complete |
+| IPINT-03 | Phase 01 | Complete |
 | DINT-01 | Phase 02 | Pending |
 | DINT-02 | Phase 02 | Pending |
 | DINT-03 | Phase 03 | Pending |
-| HINT-01 | Phase 01 | Pending |
+| HINT-01 | Phase 01 | Complete |
 | HINT-02 | Phase 01 | Complete |
 | EPROV-01 | Phase 01 | Complete |
 | DEEP-01 | Phase 04 | Pending |

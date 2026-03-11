@@ -188,7 +188,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 01. Zero-Auth IP Intelligence + Known-Good | 1/3 | In Progress|  |
+| 01. Zero-Auth IP Intelligence + Known-Good | 2/3 | In Progress|  |
 | 02. Domain Intelligence | 0/TBD | Not started | - |
 | 03. Passive DNS Pivoting | 0/TBD | Not started | - |
 | 04. Deep Analysis View | 0/TBD | Not started | - |
