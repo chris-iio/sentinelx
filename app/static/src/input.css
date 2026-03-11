@@ -1272,6 +1272,13 @@
         color: var(--verdict-malicious-text);
     }
 
+    /* IP Context row — informational separator above verdict rows */
+    .provider-context-row {
+        border-bottom: 1px solid var(--border);
+        padding-bottom: 0.5rem;
+        margin-bottom: 0.25rem;
+    }
+
     /* ---- Provider context fields ---- */
 
     .provider-context {

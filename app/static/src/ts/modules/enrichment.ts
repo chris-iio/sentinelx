@@ -279,6 +279,11 @@ const PROVIDER_CONTEXT_FIELDS: Record<string, ContextFieldDef[]> = {
     { key: "pulse_count", label: "Pulses", type: "text" },
     { key: "reputation", label: "Reputation", type: "text" },
   ],
+  "IP Context": [
+    { key: "geo", label: "Location", type: "text" },
+    { key: "reverse", label: "PTR", type: "text" },
+    { key: "flags", label: "Flags", type: "tags" },
+  ],
 };
 
 /**
@@ -340,6 +345,42 @@ function createContextFields(result: EnrichmentResultItem): HTMLElement | null {
   }
 
   return hasFields ? container : null;
+}
+
+/**
+ * Create the IP Context row — purely informational, no verdict badge.
+ * IP Context is semantically different from all other provider rows:
+ * it carries geo/rDNS/proxy metadata and must not participate in
+ * consensus/attribution or card verdict updates.
+ * All DOM construction uses createElement + textContent (SEC-08).
+ */
+function createContextRow(result: EnrichmentResultItem): HTMLElement {
+  const row = document.createElement("div");
+  row.className = "provider-detail-row provider-context-row";
+  row.setAttribute("data-verdict", "context"); // sentinel for sort pinning
+
+  const nameSpan = document.createElement("span");
+  nameSpan.className = "provider-detail-name";
+  nameSpan.textContent = "IP Context";
+  row.appendChild(nameSpan);
+
+  // NO verdict badge — IP Context is purely informational
+
+  // Add context fields (geo, PTR, flags) using existing createContextFields()
+  const contextEl = createContextFields(result);
+  if (contextEl) {
+    row.appendChild(contextEl);
+  }
+
+  // Cache badge if result was served from cache
+  if (result.cached_at) {
+    const cacheBadge = document.createElement("span");
+    cacheBadge.className = "cache-badge";
+    cacheBadge.textContent = "cached " + formatRelativeTime(result.cached_at);
+    row.appendChild(cacheBadge);
+  }
+
+  return row;
 }
 
 /**
@@ -416,6 +457,14 @@ function sortDetailRows(detailsContainer: HTMLElement, iocValue: string): void {
     });
     for (const row of rows) {
       detailsContainer.appendChild(row);
+    }
+
+    // Pin context rows (IP Context) to top after severity sort
+    const contextRows = Array.from(
+      detailsContainer.querySelectorAll<HTMLElement>('.provider-detail-row[data-verdict="context"]')
+    );
+    for (const cr of contextRows) {
+      detailsContainer.insertBefore(cr, detailsContainer.firstChild);
     }
   }, 100);
   sortTimers.set(iocValue, timer);
@@ -579,6 +628,29 @@ function renderEnrichmentResult(
 
   const slot = card.querySelector<HTMLElement>(".enrichment-slot");
   if (!slot) return;
+
+  // IP Context is purely informational — separate rendering path.
+  // No VerdictEntry accumulation, no consensus/attribution, no card verdict update.
+  if (result.provider === "IP Context") {
+    // Remove spinner on first result
+    const spinnerWrapper = slot.querySelector(".spinner-wrapper");
+    if (spinnerWrapper) slot.removeChild(spinnerWrapper);
+    slot.classList.add("enrichment-slot--loaded");
+
+    // Track result count for pending indicator
+    iocResultCounts[result.ioc_value] = (iocResultCounts[result.ioc_value] ?? 0) + 1;
+
+    // Render context row and PREPEND to details container (first position)
+    const detailsContainer = slot.querySelector<HTMLElement>(".enrichment-details");
+    if (detailsContainer && result.type === "result") {
+      const contextRow = createContextRow(result);
+      detailsContainer.insertBefore(contextRow, detailsContainer.firstChild);
+    }
+
+    // Update pending indicator
+    updatePendingIndicator(slot, card, iocResultCounts[result.ioc_value] ?? 1);
+    return; // Skip all verdict/summary/sort/dashboard logic
+  }
 
   // Remove spinner wrapper on first result for this IOC
   const spinnerWrapper = slot.querySelector(".spinner-wrapper");
