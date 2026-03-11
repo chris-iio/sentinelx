@@ -10,6 +10,7 @@
 - ✅ **v3.0 TypeScript Migration** — Phases 19-22, Phase 23 skipped (shipped 2026-03-01)
 - ✅ **v4.0 Universal Threat Intel Hub** — Phases 1-4 (shipped 2026-03-03)
 - ✅ **v5.0 Quality-of-Life** — Phase 1 retroactive (shipped 2026-03-09)
+- 🚧 **v6.0 Analyst Experience** — Phases 01-04 (in progress)
 
 ## Phases
 
@@ -99,6 +100,75 @@ Ad-hoc work adopted into GSD tracking. See `.planning/phases/01-quality-of-life/
 
 </details>
 
+### 🚧 v6.0 Analyst Experience (In Progress)
+
+**Milestone Goal:** Expand SentinelX from a lookup tool into a genuine analyst workstation — zero-auth enrichment depth for IP/domain/hash IOCs, full Shodan data visibility, passive DNS pivoting, and a bookmarkable per-IOC analysis page with notes, tags, and relationship graphs.
+
+- [ ] **Phase 01: Zero-Auth IP Intelligence + Known-Good** - GeoIP/rDNS/proxy flags for all IPs; NSRL known-good detection for hashes; full Shodan card data visible
+- [ ] **Phase 02: Domain Intelligence** - Live DNS records and certificate transparency history for domain IOCs
+- [ ] **Phase 03: Passive DNS Pivoting** - ThreatMiner passive DNS, related samples, and infrastructure context for all IOC types
+- [ ] **Phase 04: Deep Analysis View** - Per-IOC detail page with tabbed enrichment, analyst notes and tags, IOC relationship graph
+
+## Phase Details
+
+### Phase 01: Zero-Auth IP Intelligence + Known-Good
+**Goal**: Analysts can understand any IP IOC's geography, infrastructure, and threat context without API keys, and can immediately identify known-good file hashes to reduce false-positive workload
+**Depends on**: Nothing (first phase of v6.0)
+**Requirements**: IPINT-01, IPINT-02, IPINT-03, HINT-01, HINT-02, EPROV-01
+**Success Criteria** (what must be TRUE):
+  1. User sees country, city, ASN, and ISP for any IP IOC result card with no API key configured
+  2. User sees PTR hostname in the IP result card for any IP that has a reverse DNS entry
+  3. User sees proxy/VPN/hosting/mobile flags for any IP, allowing instant datacenter vs residential classification
+  4. User sees a "KNOWN GOOD" verdict badge (visually distinct from CLEAN/MALICIOUS/UNKNOWN) on any hash IOC that CIRCL hashlookup confirms is in the NSRL
+  5. User sees ports, CVEs, hostnames, and CPEs in the Shodan InternetDB card (data already fetched, now fully rendered)
+**Plans**: TBD
+
+Plans:
+- [ ] 01-01: TBD
+- [ ] 01-02: TBD
+
+### Phase 02: Domain Intelligence
+**Goal**: Analysts can assess any domain IOC's live infrastructure and certificate history without API keys, transforming domain cards from near-opaque to genuinely informative
+**Depends on**: Phase 01
+**Requirements**: DINT-01, DINT-02
+**Success Criteria** (what must be TRUE):
+  1. User sees live A, MX, NS, and TXT (including SPF and DMARC) records for any domain IOC in the result card
+  2. User sees certificate transparency history for any domain — count of certificates, date range, and enumerated subdomains from SANs
+  3. Domain result cards display DNS and certificate data even when no API keys are configured
+**Plans**: TBD
+
+Plans:
+- [ ] 02-01: TBD
+- [ ] 02-02: TBD
+
+### Phase 03: Passive DNS Pivoting
+**Goal**: Analysts can pivot from any IOC to related infrastructure — what IPs a domain has resolved to, what domains point to an IP, what malware samples are associated with a hash — without API keys
+**Depends on**: Phase 02
+**Requirements**: DINT-03
+**Success Criteria** (what must be TRUE):
+  1. User sees passive DNS history (related hostnames or IPs) for any IP or domain IOC via ThreatMiner
+  2. User sees related malware sample hashes for any hash IOC via ThreatMiner
+  3. ThreatMiner results appear in result cards without blocking other providers — rate limiting is transparent (slow result, not error) when the 10 req/min limit is reached
+**Plans**: TBD
+
+Plans:
+- [ ] 03-01: TBD
+
+### Phase 04: Deep Analysis View
+**Goal**: Analysts can investigate a single IOC in depth — all enrichment in one place, annotated with personal notes and tags, with a visual relationship graph showing IOC-to-provider connections
+**Depends on**: Phase 03
+**Requirements**: DEEP-01, DEEP-02, DEEP-03, DEEP-04
+**Success Criteria** (what must be TRUE):
+  1. User can click any IOC in the results list to open a dedicated detail page at a bookmarkable URL showing all provider results in a tabbed layout
+  2. User can add, edit, and delete free-text notes on any IOC; notes survive page refresh and cache clears (stored in SQLite)
+  3. User can apply and remove custom text tags on any IOC; tags are visible in the results list and filterable
+  4. User can view a relationship graph on the detail page showing which providers returned data for the IOC and what verdict each reported
+**Plans**: TBD
+
+Plans:
+- [ ] 04-01: TBD
+- [ ] 04-02: TBD
+
 ## Progress
 
 | Milestone | Phases | Plans | Status | Shipped |
@@ -111,3 +181,13 @@ Ad-hoc work adopted into GSD tracking. See `.planning/phases/01-quality-of-life/
 | v3.0 TypeScript | 4 | 8 | ✅ Complete | 2026-03-01 |
 | v4.0 Threat Intel Hub | 4 | 9 | ✅ Complete | 2026-03-03 |
 | v5.0 Quality-of-Life | 1 | 0 | ✅ Complete | 2026-03-09 |
+| v6.0 Analyst Experience | 4 | TBD | 🚧 In progress | — |
+
+**v6.0 Phase Progress:**
+
+| Phase | Plans Complete | Status | Completed |
+|-------|----------------|--------|-----------|
+| 01. Zero-Auth IP Intelligence + Known-Good | 0/TBD | Not started | - |
+| 02. Domain Intelligence | 0/TBD | Not started | - |
+| 03. Passive DNS Pivoting | 0/TBD | Not started | - |
+| 04. Deep Analysis View | 0/TBD | Not started | - |

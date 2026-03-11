@@ -69,25 +69,25 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| IPINT-01 | — | Pending |
-| IPINT-02 | — | Pending |
-| IPINT-03 | — | Pending |
-| DINT-01 | — | Pending |
-| DINT-02 | — | Pending |
-| DINT-03 | — | Pending |
-| HINT-01 | — | Pending |
-| HINT-02 | — | Pending |
-| EPROV-01 | — | Pending |
-| DEEP-01 | — | Pending |
-| DEEP-02 | — | Pending |
-| DEEP-03 | — | Pending |
-| DEEP-04 | — | Pending |
+| IPINT-01 | Phase 01 | Pending |
+| IPINT-02 | Phase 01 | Pending |
+| IPINT-03 | Phase 01 | Pending |
+| DINT-01 | Phase 02 | Pending |
+| DINT-02 | Phase 02 | Pending |
+| DINT-03 | Phase 03 | Pending |
+| HINT-01 | Phase 01 | Pending |
+| HINT-02 | Phase 01 | Pending |
+| EPROV-01 | Phase 01 | Pending |
+| DEEP-01 | Phase 04 | Pending |
+| DEEP-02 | Phase 04 | Pending |
+| DEEP-03 | Phase 04 | Pending |
+| DEEP-04 | Phase 04 | Pending |
 
 **Coverage:**
 - v6.0 requirements: 13 total
-- Mapped to phases: 0
-- Unmapped: 13
+- Mapped to phases: 13
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-12*
-*Last updated: 2026-03-12 after initial definition*
+*Last updated: 2026-03-12 after roadmap creation — all requirements mapped*
