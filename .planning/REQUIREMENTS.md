@@ -30,10 +30,10 @@ Requirements for the Analyst Experience milestone. Each maps to roadmap phases.
 
 ### Deep Analysis
 
-- [ ] **DEEP-01**: User can click any IOC to view a dedicated detail page with all enrichment results in a tabbed layout
+- [x] **DEEP-01**: User can click any IOC to view a dedicated detail page with all enrichment results in a tabbed layout
 - [x] **DEEP-02**: User can add, edit, and delete notes on any IOC (persisted in SQLite)
 - [x] **DEEP-03**: User can tag IOCs with custom labels (persisted in SQLite)
-- [ ] **DEEP-04**: User can view a relationship graph showing connections between IOCs on the detail page
+- [x] **DEEP-04**: User can view a relationship graph showing connections between IOCs on the detail page
 
 ## Future Requirements
 
@@ -78,10 +78,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | HINT-01 | Phase 01 | Complete |
 | HINT-02 | Phase 01 | Complete |
 | EPROV-01 | Phase 01 | Complete |
-| DEEP-01 | Phase 04 | Pending |
+| DEEP-01 | Phase 04 | Complete |
 | DEEP-02 | Phase 04 | Complete |
 | DEEP-03 | Phase 04 | Complete |
-| DEEP-04 | Phase 04 | Pending |
+| DEEP-04 | Phase 04 | Complete |
 
 **Coverage:**
 - v6.0 requirements: 13 total

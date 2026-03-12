@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v6.0
 milestone_name: Analyst Experience
 current_phase: 04-deep-analysis-view
-current_plan: 01 (complete)
+current_plan: 02 (complete)
 status: executing
-last_updated: "2026-03-12T20:51:00Z"
+last_updated: "2026-03-12T20:57:11Z"
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 11
-  completed_plans: 9
+  completed_plans: 10
 ---
 
 # Session State
@@ -23,12 +23,12 @@ See: .planning/PROJECT.md
 
 **Milestone:** v6.0 Analyst Experience
 **Current phase:** 04-deep-analysis-view
-**Current plan:** 01 (complete)
+**Current plan:** 02 (complete)
 **Status:** Executing Phase 04
 
 ## Progress
 
-[████████░░] 82% (9/11 plans complete)
+[█████████░] 91% (10/11 plans complete)
 
 ## Decisions
 
@@ -46,6 +46,9 @@ See: .planning/PROJECT.md
 - [Phase 04-01]: AnnotationStore uses separate annotations.db so CacheStore.clear() never erases analyst notes
 - [Phase 04-01]: set_notes/set_tags read existing sibling field before INSERT OR REPLACE to preserve it
 - [Phase 04-01]: Tags stored as JSON string in TEXT column — avoids join table for simple list semantics
+- [Phase 04-02]: path converter (<path:ioc_value>) handles URL IOCs with slashes — bookmarkable deep links
+- [Phase 04-02]: CSS-only tabs via radio inputs + nth-child selectors — no JavaScript required
+- [Phase 04-02]: Graph data (nodes/edges) built in route, not template — clean separation, testable
 
 ## Performance Metrics
 
@@ -57,6 +60,7 @@ See: .planning/PROJECT.md
 | 03-passive-dns-pivoting | 01 | 13min | 1 | 2 |
 | 03-passive-dns-pivoting | 02 | 5min | 2 | 5 |
 | 04-deep-analysis-view | 01 | 2min | 2 | 6 |
+| 04-deep-analysis-view | 02 | 4min | 2 | 7 |
 
 ## Session Log
 
@@ -66,3 +70,4 @@ See: .planning/PROJECT.md
 - 2026-03-12: Phase 03 Plan 01 complete — ThreatMinerAdapter implemented with TDD (69 tests)
 - 2026-03-13: Phase 03 Plan 02 complete — ThreatMiner wired into registry, frontend, allowlist; browser verified
 - 2026-03-12: Phase 04 Plan 01 complete — AnnotationStore + CacheStore.get_all_for_ioc + CSRF meta tag
+- 2026-03-12: Phase 04 Plan 02 complete — IOC detail page, CSS tabs, SVG graph renderer, Detail links
