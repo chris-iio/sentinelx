@@ -177,7 +177,7 @@ Plans:
 |-----------|--------|-------|--------|---------|
 | v1.0 MVP | 5 | 14 | ✅ Complete | 2026-02-24 |
 | v1.1 UX Overhaul | 3 | 6 | ✅ Complete | 2026-02-25 |
-| v1.2 Modern UI | 2 | 2/3 | In Progress|  |
+| v1.2 Modern UI | 2 | 3/3 | Complete   | 2026-03-12 |
 | v1.3 Visual Experience | 3 | — | ✅ Complete | 2026-02-28 |
 | v2.0 Home Page | 1 | 3 | ✅ Complete | 2026-02-28 |
 | v3.0 TypeScript | 4 | 8 | ✅ Complete | 2026-03-01 |
