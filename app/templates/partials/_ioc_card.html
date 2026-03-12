@@ -11,6 +11,11 @@
                 type="button"
                 aria-label="Copy {{ ioc.value }}"
             >Copy</button>
+            <a
+                href="{{ url_for('main.ioc_detail', ioc_type=ioc.type.value, ioc_value=ioc.value) }}"
+                class="btn btn-detail"
+                aria-label="View details for {{ ioc.value }}"
+            >Detail</a>
         </div>
     </div>
 

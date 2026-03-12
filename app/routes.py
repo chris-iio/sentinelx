@@ -9,6 +9,7 @@ Routes:
     GET  /settings  — renders settings.html (multi-provider API key forms)
     POST /settings  — saves provider API key via ConfigStore, redirects back
     GET  /enrichment/status/<job_id> — returns JSON enrichment progress for polling
+    GET  /ioc/<ioc_type>/<path:ioc_value> — renders IOC detail page with tabbed results
 
 Security:
     - SEC-16: ALLOWED_API_HOSTS established in config; enforced by each adapter before calls
@@ -23,9 +24,10 @@ import uuid
 from collections import OrderedDict
 from threading import Lock, Thread
 
-from flask import Blueprint, current_app, flash, jsonify, redirect, render_template, request, url_for
+from flask import Blueprint, abort, current_app, flash, jsonify, redirect, render_template, request, url_for
 
 from app import limiter
+from app.annotations.store import AnnotationStore
 from app.cache.store import CacheStore
 from app.enrichment.config_store import ConfigStore
 from app.enrichment.models import EnrichmentError, EnrichmentResult
@@ -282,6 +284,56 @@ def cache_ttl_set():
     config_store.set_cache_ttl(ttl)
     flash(f"Cache TTL set to {ttl} hours.", "success")
     return redirect(url_for("main.settings_get"))
+
+
+@bp.route("/ioc/<ioc_type>/<path:ioc_value>")
+@limiter.limit("30 per minute")
+def ioc_detail(ioc_type: str, ioc_value: str) -> str:
+    """IOC detail page — shows all cached provider results for a single IOC.
+
+    Uses a path converter (<path:ioc_value>) so URL IOCs containing slashes
+    are captured correctly.
+
+    Validates ioc_type against the IOCType enum; returns 404 for unknown types.
+    Reads provider results from CacheStore (no TTL — detail page shows all history).
+    Reads analyst annotations from AnnotationStore.
+    Builds graph_nodes and graph_edges for the SVG relationship graph.
+    """
+    valid_types = {t.value for t in IOCType}
+    if ioc_type not in valid_types:
+        abort(404)
+
+    cache = CacheStore()
+    provider_results = cache.get_all_for_ioc(ioc_value, ioc_type)
+
+    annotation_store = AnnotationStore()
+    annotations = annotation_store.get(ioc_value, ioc_type)
+
+    # Build graph data: central IOC node + one node per provider
+    graph_nodes = [
+        {"id": "ioc", "label": ioc_value[:20], "verdict": "ioc", "role": "ioc"}
+    ]
+    graph_edges = []
+    for result in provider_results:
+        provider = result.get("provider", "unknown")
+        verdict = result.get("verdict", "no_data")
+        graph_nodes.append({
+            "id": provider,
+            "label": provider[:12],
+            "verdict": verdict,
+            "role": "provider",
+        })
+        graph_edges.append({"from": "ioc", "to": provider, "verdict": verdict})
+
+    return render_template(
+        "ioc_detail.html",
+        ioc_value=ioc_value,
+        ioc_type=ioc_type,
+        provider_results=provider_results,
+        annotations=annotations,
+        graph_nodes=graph_nodes,
+        graph_edges=graph_edges,
+    )
 
 
 @bp.route("/enrichment/status/<job_id>", methods=["GET"])
