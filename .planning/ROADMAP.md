@@ -124,9 +124,9 @@ Ad-hoc work adopted into GSD tracking. See `.planning/phases/01-quality-of-life/
 **Plans**: 3 plans
 
 Plans:
-- [ ] 01-01-PLAN.md — Backend adapters (CIRCL hashlookup + ip-api.com) and provider registration
-- [ ] 01-02-PLAN.md — known_good verdict type system (TS types, CSS, templates) + Shodan EPROV-01 field completion
-- [ ] 01-03-PLAN.md — IP Context row rendering (frontend display of GeoIP/rDNS/proxy flags)
+- [x] 01-01-PLAN.md — Backend adapters (CIRCL hashlookup + ip-api.com) and provider registration
+- [x] 01-02-PLAN.md — known_good verdict type system (TS types, CSS, templates) + Shodan EPROV-01 field completion
+- [x] 01-03-PLAN.md — IP Context row rendering (frontend display of GeoIP/rDNS/proxy flags)
 
 ### Phase 02: Domain Intelligence
 **Goal**: Analysts can assess any domain IOC's live infrastructure and certificate history without API keys, transforming domain cards from near-opaque to genuinely informative
@@ -188,7 +188,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 01. Zero-Auth IP Intelligence + Known-Good | 2/3 | In Progress|  |
+| 01. Zero-Auth IP Intelligence + Known-Good | 3/3 | Complete | 2026-03-12 |
 | 02. Domain Intelligence | 0/TBD | Not started | - |
 | 03. Passive DNS Pivoting | 0/TBD | Not started | - |
 | 04. Deep Analysis View | 0/TBD | Not started | - |
