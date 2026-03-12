@@ -5,9 +5,7 @@ and no-error-caching contract.
 """
 from __future__ import annotations
 
-import json
 import threading
-import time
 from pathlib import Path
 
 import pytest
@@ -125,3 +123,42 @@ class TestGetCachedAt:
         assert result is not None
         assert "cached_at" in result
         assert isinstance(result["cached_at"], str)
+
+
+class TestGetAllForIoc:
+    def test_get_all_for_ioc_returns_all_providers(self, cache: CacheStore) -> None:
+        """get_all_for_ioc returns results from all providers for an IOC."""
+        cache.put("1.2.3.4", "ipv4", "VirusTotal", {"verdict": "malicious"})
+        cache.put("1.2.3.4", "ipv4", "AbuseIPDB", {"verdict": "suspicious"})
+        cache.put("1.2.3.4", "ipv4", "GreyNoise", {"verdict": "clean"})
+
+        results = cache.get_all_for_ioc("1.2.3.4", "ipv4")
+        assert len(results) == 3
+        providers = {r["provider"] for r in results}
+        assert providers == {"VirusTotal", "AbuseIPDB", "GreyNoise"}
+
+    def test_get_all_for_ioc_ignores_ttl(self, cache: CacheStore) -> None:
+        """get_all_for_ioc returns results even if TTL would have expired them."""
+        cache.put("1.2.3.4", "ipv4", "VT", {"verdict": "clean"})
+        # TTL=0 would expire via get(), but get_all_for_ioc ignores TTL
+        results = cache.get_all_for_ioc("1.2.3.4", "ipv4")
+        assert len(results) == 1
+        assert results[0]["verdict"] == "clean"
+
+    def test_get_all_for_ioc_empty(self, cache: CacheStore) -> None:
+        """get_all_for_ioc returns empty list for non-existent IOC."""
+        results = cache.get_all_for_ioc("9.9.9.9", "ipv4")
+        assert results == []
+
+    def test_get_all_for_ioc_includes_cached_at_and_provider(
+        self, cache: CacheStore
+    ) -> None:
+        """Each dict in the returned list has 'cached_at' and 'provider' keys."""
+        cache.put("1.2.3.4", "ipv4", "VT", {"verdict": "malicious"})
+        results = cache.get_all_for_ioc("1.2.3.4", "ipv4")
+        assert len(results) == 1
+        r = results[0]
+        assert "cached_at" in r
+        assert "provider" in r
+        assert isinstance(r["cached_at"], str)
+        assert r["provider"] == "VT"

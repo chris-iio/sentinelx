@@ -111,6 +111,30 @@ class CacheStore:
             conn.execute("DELETE FROM enrichment_cache")
             conn.commit()
 
+    def get_all_for_ioc(self, ioc_value: str, ioc_type: str) -> list[dict]:
+        """Return all cached results for one IOC across all providers.
+
+        No TTL check — the detail page shows all historical data.
+
+        Returns:
+            List of dicts, each with provider, cached_at, and all result fields.
+        """
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT provider, result_json, cached_at FROM enrichment_cache "
+                "WHERE ioc_value = ? AND ioc_type = ?",
+                (ioc_value, ioc_type),
+            ).fetchall()
+
+        results: list[dict] = []
+        for provider, result_json, cached_at in rows:
+            entry: dict = json.loads(result_json)
+            entry["provider"] = provider
+            entry["cached_at"] = cached_at
+            results.append(entry)
+
+        return results
+
     def stats(self) -> dict:
         """Return cache statistics.
 
