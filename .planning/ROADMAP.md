@@ -139,7 +139,7 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 02-01-PLAN.md — DnsAdapter for live DNS record lookups (A/MX/NS/TXT) via dnspython
+- [x] 02-01-PLAN.md — DnsAdapter for live DNS record lookups (A/MX/NS/TXT) via dnspython
 - [ ] 02-02-PLAN.md — CrtShAdapter for certificate transparency history via crt.sh API
 - [ ] 02-03-PLAN.md — Registry wiring, SSRF allowlist, and frontend context row rendering
 
@@ -177,7 +177,7 @@ Plans:
 |-----------|--------|-------|--------|---------|
 | v1.0 MVP | 5 | 14 | ✅ Complete | 2026-02-24 |
 | v1.1 UX Overhaul | 3 | 6 | ✅ Complete | 2026-02-25 |
-| v1.2 Modern UI | 2 | 6 | ✅ Complete | 2026-02-28 |
+| v1.2 Modern UI | 2 | 2/3 | In Progress|  |
 | v1.3 Visual Experience | 3 | — | ✅ Complete | 2026-02-28 |
 | v2.0 Home Page | 1 | 3 | ✅ Complete | 2026-02-28 |
 | v3.0 TypeScript | 4 | 8 | ✅ Complete | 2026-03-01 |
@@ -190,6 +190,6 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 01. Zero-Auth IP Intelligence + Known-Good | 3/3 | Complete | 2026-03-12 |
-| 02. Domain Intelligence | 0/3 | Not started | - |
+| 02. Domain Intelligence | 1/3 | In progress | - |
 | 03. Passive DNS Pivoting | 0/TBD | Not started | - |
 | 04. Deep Analysis View | 0/TBD | Not started | - |

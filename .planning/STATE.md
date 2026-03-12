@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v6.0
 milestone_name: Analyst Experience
 status: executing
-last_updated: "2026-03-12T23:00:00Z"
-last_activity: "2026-03-12 — Phase 01 complete (3/3 plans). Human-verify passed. Ready for Phase 02."
+last_updated: "2026-03-13T00:46:00Z"
+last_activity: 2026-03-13 — Phase 02 Plan 02 complete (CrtShAdapter)
 progress:
   total_phases: 4
   completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
-  percent: 25
+  total_plans: 6
+  completed_plans: 5
+  percent: 83
 ---
 
 # Session State
@@ -24,12 +24,12 @@ See: .planning/PROJECT.md (updated 2026-03-09)
 
 ## Position
 
-Phase: 02 of 04 (Domain Intelligence) — not yet started
-Plan: None active — Phase 02 requires research + planning
-Status: Ready to begin Phase 02
-Last activity: 2026-03-12 — Phase 01 complete, human-verify passed
+Phase: 02 of 04 (Domain Intelligence) — in progress (2/3 plans done)
+Plan: 02-01 complete — 02-02 complete — 02-03 next
+Status: Executing Phase 02 — Plan 01 (DnsAdapter) and Plan 02 (CrtShAdapter) done
+Last activity: 2026-03-13 — 02-02 CrtShAdapter complete (907b2a4)
 
-Progress: [██░░░░░░░░] 25%
+Progress: [████████░░] 83%
 
 ## Performance Metrics
 
@@ -47,6 +47,8 @@ Progress: [██░░░░░░░░] 25%
 | Phase 01 P03 | ~300s | 2 tasks | 2 files |
 
 *Updated after each plan completion*
+| Phase 02-domain-intelligence P01 | 260s | 1 task | 3 files |
+| Phase 02-domain-intelligence P02 | 240 | 1 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -62,6 +64,12 @@ Progress: [██░░░░░░░░] 25%
 - [Phase 01]: ip-api.com uses HTTP not HTTPS — free tier limitation, intentional design
 - [Phase 01]: geo string pre-formatted in Python as 'CC · City · ASN (ISP)' using U+00B7 middle dot
 - [Phase 01]: IP Context uses separate createContextRow() — no verdict badge, data-verdict='context' sentinel for sort pinning
+- [Phase 02 Plan 01]: DnsAdapter uses port 53 directly — no http_safety imports (validate_endpoint/TIMEOUT/read_limited are HTTP-specific, not applicable to DNS)
+- [Phase 02 Plan 01]: resolver.lifetime=5.0 (float) not HTTP TIMEOUT tuple — DNS timeout model differs from HTTP connect/read tuple
+- [Phase 02 Plan 01]: NXDOMAIN and NoAnswer are EnrichmentResult(verdict=no_data) not EnrichmentError — expected DNS outcomes
+- [Phase 02 Plan 01]: allowed_hosts accepted for Provider API compat but ignored — DNS has no SSRF surface
+- [Phase 02-domain-intelligence]: CrtShAdapter verdict always no_data: CT history is analyst context, not a threat signal
+- [Phase 02-domain-intelligence]: read_limited() patched directly in crtsh tests — avoids iter_content mock complexity, handles list return type cleanly
 
 ### Research Flags for Planning
 
@@ -78,6 +86,8 @@ None.
 
 ## Session Log
 
+- 2026-03-13: 02-02 complete — CrtShAdapter (crt.sh CT API, cert_count/dates/subdomains, 37 tests) (commits f94d19d, 907b2a4)
+- 2026-03-12: 02-01 complete — DnsAdapter (A/MX/NS/TXT via dnspython, 52+ tests), dnspython==2.8.0 added
 - 2026-03-12: Phase 01 complete — all 3 plans done, human-verify passed. IP Context rendering, known_good verdict, Shodan EPROV-01 all verified working.
 - 2026-03-12: 01-03 Task 1 complete — IP Context rendering path (createContextRow, renderEnrichmentResult branch, sortDetailRows pin, CSS) (commit 7c5882b); paused at human-verify checkpoint
 - 2026-03-11: 01-01 complete — HashlookupAdapter (NSRL known-good), IPApiAdapter (GeoIP/rDNS/proxy), 10-provider registry (commits 042a966..55c6b91)
