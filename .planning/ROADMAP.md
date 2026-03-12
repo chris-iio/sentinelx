@@ -192,5 +192,5 @@ Plans:
 |-------|----------------|--------|-----------|
 | 01. Zero-Auth IP Intelligence + Known-Good | 3/3 | Complete | 2026-03-12 |
 | 02. Domain Intelligence | 3/3 | Complete    | 2026-03-12 |
-| 03. Passive DNS Pivoting | 2/2 | Complete   | 2026-03-12 |
+| 03. Passive DNS Pivoting | 2/2 | Complete    | 2026-03-12 |
 | 04. Deep Analysis View | 0/TBD | Not started | - |
