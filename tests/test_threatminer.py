@@ -179,6 +179,10 @@ class TestProviderProtocol:
         """IOCType.CVE must NOT be in supported_types."""
         assert IOCType.CVE not in ThreatMinerAdapter.supported_types
 
+    def test_supported_types_has_six_types(self) -> None:
+        """supported_types has exactly 6 entries: IPV4, IPV6, DOMAIN, MD5, SHA1, SHA256."""
+        assert len(ThreatMinerAdapter.supported_types) == 6
+
     def test_unsupported_type_returns_error(self) -> None:
         """URL IOC -> EnrichmentError('Unsupported type') without any network call."""
         ioc = IOC(type=IOCType.URL, value="http://example.com", raw_match="http://example.com")
@@ -191,9 +195,9 @@ class TestProviderProtocol:
         assert result.provider == "ThreatMiner"
         assert "Unsupported" in result.error or "unsupported" in result.error.lower()
 
-    def test_unsupported_type_email_returns_error(self) -> None:
-        """EMAIL IOC -> EnrichmentError without any network call."""
-        ioc = IOC(type=IOCType.EMAIL, value="test@test.com", raw_match="test@test.com")
+    def test_unsupported_type_cve_returns_error(self) -> None:
+        """CVE IOC -> EnrichmentError without any network call."""
+        ioc = IOC(type=IOCType.CVE, value="CVE-2021-44228", raw_match="CVE-2021-44228")
 
         with patch("requests.get") as mock_get:
             mock_get.side_effect = AssertionError("Should not reach network")
