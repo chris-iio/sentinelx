@@ -140,8 +140,8 @@ Plans:
 
 Plans:
 - [x] 02-01-PLAN.md — DnsAdapter for live DNS record lookups (A/MX/NS/TXT) via dnspython
-- [ ] 02-02-PLAN.md — CrtShAdapter for certificate transparency history via crt.sh API
-- [ ] 02-03-PLAN.md — Registry wiring, SSRF allowlist, and frontend context row rendering
+- [x] 02-02-PLAN.md — CrtShAdapter for certificate transparency history via crt.sh API
+- [x] 02-03-PLAN.md — Registry wiring, SSRF allowlist, and frontend context row rendering
 
 ### Phase 03: Passive DNS Pivoting
 **Goal**: Analysts can pivot from any IOC to related infrastructure — what IPs a domain has resolved to, what domains point to an IP, what malware samples are associated with a hash — without API keys
@@ -151,10 +151,11 @@ Plans:
   1. User sees passive DNS history (related hostnames or IPs) for any IP or domain IOC via ThreatMiner
   2. User sees related malware sample hashes for any hash IOC via ThreatMiner
   3. ThreatMiner results appear in result cards without blocking other providers — rate limiting is transparent (slow result, not error) when the 10 req/min limit is reached
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 03-01: TBD
+- [ ] 03-01-PLAN.md — ThreatMinerAdapter with TDD (passive DNS for IP/domain, related samples for hash)
+- [ ] 03-02-PLAN.md — Registry wiring, SSRF allowlist, frontend context row rendering, human verification
 
 ### Phase 04: Deep Analysis View
 **Goal**: Analysts can investigate a single IOC in depth — all enrichment in one place, annotated with personal notes and tags, with a visual relationship graph showing IOC-to-provider connections
@@ -183,13 +184,13 @@ Plans:
 | v3.0 TypeScript | 4 | 8 | ✅ Complete | 2026-03-01 |
 | v4.0 Threat Intel Hub | 4 | 9 | ✅ Complete | 2026-03-03 |
 | v5.0 Quality-of-Life | 1 | 0 | ✅ Complete | 2026-03-09 |
-| v6.0 Analyst Experience | 4 | 6 | 🚧 In progress | — |
+| v6.0 Analyst Experience | 4 | 8 | 🚧 In progress | — |
 
 **v6.0 Phase Progress:**
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 01. Zero-Auth IP Intelligence + Known-Good | 3/3 | Complete | 2026-03-12 |
-| 02. Domain Intelligence | 1/3 | Complete    | 2026-03-12 |
-| 03. Passive DNS Pivoting | 0/TBD | Not started | - |
+| 02. Domain Intelligence | 3/3 | Complete    | 2026-03-12 |
+| 03. Passive DNS Pivoting | 0/2 | Not started | - |
 | 04. Deep Analysis View | 0/TBD | Not started | - |
