@@ -17,7 +17,7 @@ Requirements for the Analyst Experience milestone. Each maps to roadmap phases.
 
 - [x] **DINT-01**: User can see live DNS records (A, MX, NS, TXT) for any domain IOC without an API key
 - [x] **DINT-02**: User can see certificate transparency history for any domain IOC without an API key
-- [ ] **DINT-03**: User can see passive DNS history and related IOCs via ThreatMiner for all IOC types without an API key
+- [x] **DINT-03**: User can see passive DNS history and related IOCs via ThreatMiner for all IOC types without an API key
 
 ### Hash Intelligence (Zero-Auth)
 
@@ -74,7 +74,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | IPINT-03 | Phase 01 | Complete |
 | DINT-01 | Phase 02 | Complete |
 | DINT-02 | Phase 02 | Complete |
-| DINT-03 | Phase 03 | Pending |
+| DINT-03 | Phase 03 | Complete |
 | HINT-01 | Phase 01 | Complete |
 | HINT-02 | Phase 01 | Complete |
 | EPROV-01 | Phase 01 | Complete |
