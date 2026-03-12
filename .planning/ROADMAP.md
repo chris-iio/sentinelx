@@ -154,8 +154,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 03-01-PLAN.md — ThreatMinerAdapter with TDD (passive DNS for IP/domain, related samples for hash)
-- [ ] 03-02-PLAN.md — Registry wiring, SSRF allowlist, frontend context row rendering, human verification
+- [x] 03-01-PLAN.md — ThreatMinerAdapter with TDD (passive DNS for IP/domain, related samples for hash)
+- [x] 03-02-PLAN.md — Registry wiring, SSRF allowlist, frontend context row rendering, human verification
 
 ### Phase 04: Deep Analysis View
 **Goal**: Analysts can investigate a single IOC in depth — all enrichment in one place, annotated with personal notes and tags, with a visual relationship graph showing IOC-to-provider connections
@@ -166,11 +166,12 @@ Plans:
   2. User can add, edit, and delete free-text notes on any IOC; notes survive page refresh and cache clears (stored in SQLite)
   3. User can apply and remove custom text tags on any IOC; tags are visible in the results list and filterable
   4. User can view a relationship graph on the detail page showing which providers returned data for the IOC and what verdict each reported
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 04-01: TBD
-- [ ] 04-02: TBD
+- [ ] 04-01-PLAN.md — Backend data layer: AnnotationStore (notes + tags SQLite), CacheStore.get_all_for_ioc, CSRF meta tag
+- [ ] 04-02-PLAN.md — Detail page route + tabbed provider results + SVG relationship graph + click-to-detail links
+- [ ] 04-03-PLAN.md — Annotation API + annotations.ts client + tags on results page + filter bar tag dimension + human verify
 
 ## Progress
 
@@ -184,7 +185,7 @@ Plans:
 | v3.0 TypeScript | 4 | 8 | ✅ Complete | 2026-03-01 |
 | v4.0 Threat Intel Hub | 4 | 9 | ✅ Complete | 2026-03-03 |
 | v5.0 Quality-of-Life | 1 | 0 | ✅ Complete | 2026-03-09 |
-| v6.0 Analyst Experience | 4 | 8 | 🚧 In progress | — |
+| v6.0 Analyst Experience | 4 | 11 | 🚧 In progress | — |
 
 **v6.0 Phase Progress:**
 
@@ -193,4 +194,4 @@ Plans:
 | 01. Zero-Auth IP Intelligence + Known-Good | 3/3 | Complete | 2026-03-12 |
 | 02. Domain Intelligence | 3/3 | Complete    | 2026-03-12 |
 | 03. Passive DNS Pivoting | 2/2 | Complete    | 2026-03-12 |
-| 04. Deep Analysis View | 0/TBD | Not started | - |
+| 04. Deep Analysis View | 0/3 | Not started | - |
