@@ -106,7 +106,7 @@ Ad-hoc work adopted into GSD tracking. See `.planning/phases/01-quality-of-life/
 
 - [ ] **Phase 01: Zero-Auth IP Intelligence + Known-Good** - GeoIP/rDNS/proxy flags for all IPs; NSRL known-good detection for hashes; full Shodan card data visible
 - [x] **Phase 02: Domain Intelligence** - Live DNS records and certificate transparency history for domain IOCs (completed 2026-03-12)
-- [ ] **Phase 03: Passive DNS Pivoting** - ThreatMiner passive DNS, related samples, and infrastructure context for all IOC types
+- [x] **Phase 03: Passive DNS Pivoting** - ThreatMiner passive DNS, related samples, and infrastructure context for all IOC types (completed 2026-03-12)
 - [ ] **Phase 04: Deep Analysis View** - Per-IOC detail page with tabbed enrichment, analyst notes and tags, IOC relationship graph
 
 ## Phase Details
@@ -192,5 +192,5 @@ Plans:
 |-------|----------------|--------|-----------|
 | 01. Zero-Auth IP Intelligence + Known-Good | 3/3 | Complete | 2026-03-12 |
 | 02. Domain Intelligence | 3/3 | Complete    | 2026-03-12 |
-| 03. Passive DNS Pivoting | 0/2 | Not started | - |
+| 03. Passive DNS Pivoting | 2/2 | Complete   | 2026-03-12 |
 | 04. Deep Analysis View | 0/TBD | Not started | - |

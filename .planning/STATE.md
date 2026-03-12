@@ -3,13 +3,14 @@ gsd_state_version: 1.0
 milestone: v6.0
 milestone_name: Analyst Experience
 current_phase: 03-passive-dns-pivoting
+current_plan: "02 (complete) — phase complete"
 status: in-progress
-last_updated: "2026-03-12T18:31:00.000Z"
+last_updated: "2026-03-13T00:00:00.000Z"
 progress:
   total_phases: 4
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 9
-  completed_plans: 7
+  completed_plans: 9
 ---
 
 # Session State
@@ -22,12 +23,12 @@ See: .planning/PROJECT.md
 
 **Milestone:** v6.0 Analyst Experience
 **Current phase:** 03-passive-dns-pivoting
-**Current plan:** 01 (complete) — next: 02
+**Current plan:** 02 (complete) — phase complete
 **Status:** In progress
 
 ## Progress
 
-[███████░░░] 78% (7/9 plans complete)
+[██████████] 100% (9/9 plans complete)
 
 ## Decisions
 
@@ -41,6 +42,7 @@ See: .planning/PROJECT.md
 - Phase 03-01: ThreatMiner body status_code "404" (string) is no_data, not error — HTTP is always 200
 - Phase 03-01: Domain lookup makes two sequential calls (rt=2 + rt=4), merged into one result
 - Phase 03-01: verdict=no_data always for ThreatMiner — passive DNS is analyst context, not threat signal
+- [Phase 03-02]: ThreatMiner wired following exact CrtShAdapter pattern from Phase 02-03 — zero deviation
 
 ## Performance Metrics
 
@@ -50,6 +52,7 @@ See: .planning/PROJECT.md
 | 02-domain-intelligence | 02 | 4min | 1 | 2 |
 | 02-domain-intelligence | 03 | 5min | 2 | 5 |
 | 03-passive-dns-pivoting | 01 | 13min | 1 | 2 |
+| 03-passive-dns-pivoting | 02 | 5min | 2 | 5 |
 
 ## Session Log
 
@@ -57,3 +60,4 @@ See: .planning/PROJECT.md
 - 2026-03-12: Phase 02 Plans 01-02 complete — DnsAdapter and CrtShAdapter implemented with TDD
 - 2026-03-13: Phase 02 Plan 03 complete — registry wired, frontend rendering, human-verify passed
 - 2026-03-12: Phase 03 Plan 01 complete — ThreatMinerAdapter implemented with TDD (69 tests)
+- 2026-03-13: Phase 03 Plan 02 complete — ThreatMiner wired into registry, frontend, allowlist; browser verified
