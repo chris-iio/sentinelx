@@ -284,7 +284,25 @@ const PROVIDER_CONTEXT_FIELDS: Record<string, ContextFieldDef[]> = {
     { key: "reverse", label: "PTR", type: "text" },
     { key: "flags", label: "Flags", type: "tags" },
   ],
+  "DNS Records": [
+    { key: "a",   label: "A",   type: "tags" },
+    { key: "mx",  label: "MX",  type: "tags" },
+    { key: "ns",  label: "NS",  type: "tags" },
+    { key: "txt", label: "TXT", type: "tags" },
+  ],
+  "Cert History": [
+    { key: "cert_count", label: "Certs",      type: "text" },
+    { key: "earliest",   label: "First seen", type: "text" },
+    { key: "latest",     label: "Latest",     type: "text" },
+    { key: "subdomains", label: "Subdomains", type: "tags" },
+  ],
 };
+
+/**
+ * Providers that use the context row rendering path (no verdict badge, pinned to top).
+ * Extend this set when adding new context-only providers.
+ */
+const CONTEXT_PROVIDERS = new Set(["IP Context", "DNS Records", "Cert History"]);
 
 /**
  * Create a labeled context field element with the provider-context-field class.
@@ -348,10 +366,9 @@ function createContextFields(result: EnrichmentResultItem): HTMLElement | null {
 }
 
 /**
- * Create the IP Context row — purely informational, no verdict badge.
- * IP Context is semantically different from all other provider rows:
- * it carries geo/rDNS/proxy metadata and must not participate in
- * consensus/attribution or card verdict updates.
+ * Create a context row — purely informational, no verdict badge.
+ * Context providers (IP Context, DNS Records, Cert History) carry metadata
+ * and must not participate in consensus/attribution or card verdict updates.
  * All DOM construction uses createElement + textContent (SEC-08).
  */
 function createContextRow(result: EnrichmentResultItem): HTMLElement {
@@ -361,7 +378,7 @@ function createContextRow(result: EnrichmentResultItem): HTMLElement {
 
   const nameSpan = document.createElement("span");
   nameSpan.className = "provider-detail-name";
-  nameSpan.textContent = "IP Context";
+  nameSpan.textContent = result.provider;
   row.appendChild(nameSpan);
 
   // NO verdict badge — IP Context is purely informational
@@ -629,9 +646,10 @@ function renderEnrichmentResult(
   const slot = card.querySelector<HTMLElement>(".enrichment-slot");
   if (!slot) return;
 
-  // IP Context is purely informational — separate rendering path.
-  // No VerdictEntry accumulation, no consensus/attribution, no card verdict update.
-  if (result.provider === "IP Context") {
+  // Context providers (IP Context, DNS Records, Cert History) are purely informational —
+  // separate rendering path. No VerdictEntry accumulation, no consensus/attribution,
+  // no card verdict update.
+  if (CONTEXT_PROVIDERS.has(result.provider)) {
     // Remove spinner on first result
     const spinnerWrapper = slot.querySelector(".spinner-wrapper");
     if (spinnerWrapper) slot.removeChild(spinnerWrapper);

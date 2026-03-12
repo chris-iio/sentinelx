@@ -31,6 +31,7 @@ def _make_allowed_hosts() -> list[str]:
         "api.abuseipdb.com",
         "ip-api.com",
         "hashlookup.circl.lu",
+        "crt.sh",
     ]
 
 
@@ -47,15 +48,15 @@ class TestBuildRegistry:
         )
         assert isinstance(registry, ProviderRegistry)
 
-    def test_registry_has_ten_providers(self):
-        """build_registry() registers exactly 10 providers."""
+    def test_registry_has_twelve_providers(self):
+        """build_registry() registers exactly 12 providers."""
         from app.enrichment.setup import build_registry
 
         registry = build_registry(
             allowed_hosts=_make_allowed_hosts(),
             config_store=_make_config_store(),
         )
-        assert len(registry.all()) == 10
+        assert len(registry.all()) == 12
 
     def test_registry_contains_virustotal(self):
         """build_registry() registers a provider named 'VirusTotal'."""
@@ -307,3 +308,47 @@ class TestBuildRegistry:
         assert config_store.get_provider_key.call_count == 6
         called_names = {c.args[0] for c in config_store.get_provider_key.call_args_list}
         assert called_names == {"malwarebazaar", "threatfox", "urlhaus", "otx", "greynoise", "abuseipdb"}
+
+    def test_registry_contains_dns_records(self):
+        """build_registry() registers a provider named 'DNS Records'."""
+        from app.enrichment.setup import build_registry
+
+        registry = build_registry(
+            allowed_hosts=_make_allowed_hosts(),
+            config_store=_make_config_store(),
+        )
+        names = [p.name for p in registry.all()]
+        assert "DNS Records" in names
+
+    def test_registry_contains_cert_history(self):
+        """build_registry() registers a provider named 'Cert History'."""
+        from app.enrichment.setup import build_registry
+
+        registry = build_registry(
+            allowed_hosts=_make_allowed_hosts(),
+            config_store=_make_config_store(),
+        )
+        names = [p.name for p in registry.all()]
+        assert "Cert History" in names
+
+    def test_dns_records_is_always_configured(self):
+        """DnsAdapter is configured even without any API key (zero-auth)."""
+        from app.enrichment.setup import build_registry
+
+        registry = build_registry(
+            allowed_hosts=_make_allowed_hosts(),
+            config_store=_make_config_store(None),
+        )
+        dns = next(p for p in registry.all() if p.name == "DNS Records")
+        assert dns.is_configured() is True
+
+    def test_cert_history_is_always_configured(self):
+        """CrtShAdapter is configured even without any API key (zero-auth)."""
+        from app.enrichment.setup import build_registry
+
+        registry = build_registry(
+            allowed_hosts=_make_allowed_hosts(),
+            config_store=_make_config_store(None),
+        )
+        cert = next(p for p in registry.all() if p.name == "Cert History")
+        assert cert.is_configured() is True

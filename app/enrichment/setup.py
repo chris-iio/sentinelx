@@ -12,6 +12,8 @@ Usage:
 from __future__ import annotations
 
 from app.enrichment.adapters.abuseipdb import AbuseIPDBAdapter
+from app.enrichment.adapters.crtsh import CrtShAdapter
+from app.enrichment.adapters.dns_lookup import DnsAdapter
 from app.enrichment.adapters.greynoise import GreyNoiseAdapter
 from app.enrichment.adapters.hashlookup import HashlookupAdapter
 from app.enrichment.adapters.ip_api import IPApiAdapter
@@ -90,11 +92,11 @@ def build_registry(
     allowed_hosts: list[str],
     config_store: ConfigStore,
 ) -> ProviderRegistry:
-    """Build and return a ProviderRegistry with all 10 providers registered.
+    """Build and return a ProviderRegistry with all 12 providers registered.
 
     Reads API keys from ConfigStore for key-requiring providers. Zero-auth providers
-    (Shodan InternetDB, CIRCL Hashlookup, ip-api.com IP Context) are registered
-    unconditionally — they are always is_configured() == True.
+    (Shodan InternetDB, CIRCL Hashlookup, ip-api.com IP Context, DNS Records,
+    Cert History) are registered unconditionally — they are always is_configured() == True.
 
     Registered providers:
         - VirusTotal        (requires key — via get_vt_api_key)
@@ -107,13 +109,15 @@ def build_registry(
         - AbuseIPDB         (requires key — via get_provider_key("abuseipdb"))
         - CIRCL Hashlookup  (zero-auth — NSRL known-good hash detection)
         - IP Context        (zero-auth — GeoIP/rDNS/proxy flags via ip-api.com)
+        - DNS Records       (zero-auth — live DNS resolution via dnspython)
+        - Cert History      (zero-auth — certificate transparency via crt.sh)
 
     Args:
         allowed_hosts: SSRF allowlist passed to each adapter for outbound calls.
         config_store: ConfigStore instance used to read provider API keys.
 
     Returns:
-        ProviderRegistry with all 10 providers registered.
+        ProviderRegistry with all 12 providers registered.
     """
     registry = ProviderRegistry()
 
@@ -142,5 +146,7 @@ def build_registry(
     # Zero-auth providers — no key needed, always configured
     registry.register(HashlookupAdapter(allowed_hosts=allowed_hosts))
     registry.register(IPApiAdapter(allowed_hosts=allowed_hosts))
+    registry.register(DnsAdapter(allowed_hosts=allowed_hosts))
+    registry.register(CrtShAdapter(allowed_hosts=allowed_hosts))
 
     return registry
