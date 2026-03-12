@@ -32,6 +32,7 @@ def _make_allowed_hosts() -> list[str]:
         "ip-api.com",
         "hashlookup.circl.lu",
         "crt.sh",
+        "api.threatminer.org",
     ]
 
 
@@ -48,15 +49,15 @@ class TestBuildRegistry:
         )
         assert isinstance(registry, ProviderRegistry)
 
-    def test_registry_has_twelve_providers(self):
-        """build_registry() registers exactly 12 providers."""
+    def test_registry_has_thirteen_providers(self):
+        """build_registry() registers exactly 13 providers."""
         from app.enrichment.setup import build_registry
 
         registry = build_registry(
             allowed_hosts=_make_allowed_hosts(),
             config_store=_make_config_store(),
         )
-        assert len(registry.all()) == 12
+        assert len(registry.all()) == 13
 
     def test_registry_contains_virustotal(self):
         """build_registry() registers a provider named 'VirusTotal'."""
@@ -352,3 +353,25 @@ class TestBuildRegistry:
         )
         cert = next(p for p in registry.all() if p.name == "Cert History")
         assert cert.is_configured() is True
+
+    def test_registry_contains_threatminer(self):
+        """build_registry() registers a provider named 'ThreatMiner'."""
+        from app.enrichment.setup import build_registry
+
+        registry = build_registry(
+            allowed_hosts=_make_allowed_hosts(),
+            config_store=_make_config_store(),
+        )
+        names = [p.name for p in registry.all()]
+        assert "ThreatMiner" in names
+
+    def test_threatminer_is_always_configured(self):
+        """ThreatMinerAdapter is configured even without any API key (zero-auth)."""
+        from app.enrichment.setup import build_registry
+
+        registry = build_registry(
+            allowed_hosts=_make_allowed_hosts(),
+            config_store=_make_config_store(None),
+        )
+        threatminer = next(p for p in registry.all() if p.name == "ThreatMiner")
+        assert threatminer.is_configured() is True

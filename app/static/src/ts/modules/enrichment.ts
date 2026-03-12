@@ -296,13 +296,17 @@ const PROVIDER_CONTEXT_FIELDS: Record<string, ContextFieldDef[]> = {
     { key: "latest",     label: "Latest",     type: "text" },
     { key: "subdomains", label: "Subdomains", type: "tags" },
   ],
+  ThreatMiner: [
+    { key: "passive_dns", label: "Passive DNS", type: "tags" },
+    { key: "samples",     label: "Samples",     type: "tags" },
+  ],
 };
 
 /**
  * Providers that use the context row rendering path (no verdict badge, pinned to top).
  * Extend this set when adding new context-only providers.
  */
-const CONTEXT_PROVIDERS = new Set(["IP Context", "DNS Records", "Cert History"]);
+const CONTEXT_PROVIDERS = new Set(["IP Context", "DNS Records", "Cert History", "ThreatMiner"]);
 
 /**
  * Create a labeled context field element with the provider-context-field class.

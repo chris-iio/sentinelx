@@ -35,6 +35,7 @@ class Config:
     # v6.0 Phase 01-01: ip-api.com GeoIP (zero-auth, HTTP-only free tier)
     # v6.0 Phase 01-01: CIRCL Hashlookup NSRL (zero-auth)
     # v6.0 Phase 02-03: crt.sh Certificate Transparency (zero-auth)
+    # v6.0 Phase 03-01: ThreatMiner passive DNS (zero-auth)
     ALLOWED_API_HOSTS: list[str] = [
         "www.virustotal.com",
         "mb-api.abuse.ch",
@@ -47,6 +48,7 @@ class Config:
         "ip-api.com",              # v6.0 Phase 01-01: ip-api.com GeoIP (zero-auth)
         "hashlookup.circl.lu",     # v6.0 Phase 01-01: CIRCL Hashlookup NSRL (zero-auth)
         "crt.sh",                  # v6.0 Phase 02-03: crt.sh Certificate Transparency (zero-auth)
+        "api.threatminer.org",     # v6.0 Phase 03-01: ThreatMiner passive DNS (zero-auth)
     ]
 
     def validate(self) -> None:

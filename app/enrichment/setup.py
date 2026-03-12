@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from app.enrichment.adapters.abuseipdb import AbuseIPDBAdapter
 from app.enrichment.adapters.crtsh import CrtShAdapter
+from app.enrichment.adapters.threatminer import ThreatMinerAdapter
 from app.enrichment.adapters.dns_lookup import DnsAdapter
 from app.enrichment.adapters.greynoise import GreyNoiseAdapter
 from app.enrichment.adapters.hashlookup import HashlookupAdapter
@@ -92,11 +93,12 @@ def build_registry(
     allowed_hosts: list[str],
     config_store: ConfigStore,
 ) -> ProviderRegistry:
-    """Build and return a ProviderRegistry with all 12 providers registered.
+    """Build and return a ProviderRegistry with all 13 providers registered.
 
     Reads API keys from ConfigStore for key-requiring providers. Zero-auth providers
     (Shodan InternetDB, CIRCL Hashlookup, ip-api.com IP Context, DNS Records,
-    Cert History) are registered unconditionally — they are always is_configured() == True.
+    Cert History, ThreatMiner) are registered unconditionally — they are always
+    is_configured() == True.
 
     Registered providers:
         - VirusTotal        (requires key — via get_vt_api_key)
@@ -111,13 +113,14 @@ def build_registry(
         - IP Context        (zero-auth — GeoIP/rDNS/proxy flags via ip-api.com)
         - DNS Records       (zero-auth — live DNS resolution via dnspython)
         - Cert History      (zero-auth — certificate transparency via crt.sh)
+        - ThreatMiner       (zero-auth — passive DNS and related samples via ThreatMiner)
 
     Args:
         allowed_hosts: SSRF allowlist passed to each adapter for outbound calls.
         config_store: ConfigStore instance used to read provider API keys.
 
     Returns:
-        ProviderRegistry with all 12 providers registered.
+        ProviderRegistry with all 13 providers registered.
     """
     registry = ProviderRegistry()
 
@@ -148,5 +151,6 @@ def build_registry(
     registry.register(IPApiAdapter(allowed_hosts=allowed_hosts))
     registry.register(DnsAdapter(allowed_hosts=allowed_hosts))
     registry.register(CrtShAdapter(allowed_hosts=allowed_hosts))
+    registry.register(ThreatMinerAdapter(allowed_hosts=allowed_hosts))
 
     return registry
