@@ -100,7 +100,7 @@ Ad-hoc work adopted into GSD tracking. See `.planning/phases/01-quality-of-life/
 
 </details>
 
-### 🚧 v6.0 Analyst Experience (In Progress)
+### v6.0 Analyst Experience (In Progress)
 
 **Milestone Goal:** Expand SentinelX from a lookup tool into a genuine analyst workstation — zero-auth enrichment depth for IP/domain/hash IOCs, full Shodan data visibility, passive DNS pivoting, and a bookmarkable per-IOC analysis page with notes, tags, and relationship graphs.
 
@@ -136,11 +136,12 @@ Plans:
   1. User sees live A, MX, NS, and TXT (including SPF and DMARC) records for any domain IOC in the result card
   2. User sees certificate transparency history for any domain — count of certificates, date range, and enumerated subdomains from SANs
   3. Domain result cards display DNS and certificate data even when no API keys are configured
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 02-01: TBD
-- [ ] 02-02: TBD
+- [ ] 02-01-PLAN.md — DnsAdapter for live DNS record lookups (A/MX/NS/TXT) via dnspython
+- [ ] 02-02-PLAN.md — CrtShAdapter for certificate transparency history via crt.sh API
+- [ ] 02-03-PLAN.md — Registry wiring, SSRF allowlist, and frontend context row rendering
 
 ### Phase 03: Passive DNS Pivoting
 **Goal**: Analysts can pivot from any IOC to related infrastructure — what IPs a domain has resolved to, what domains point to an IP, what malware samples are associated with a hash — without API keys
@@ -182,13 +183,13 @@ Plans:
 | v3.0 TypeScript | 4 | 8 | ✅ Complete | 2026-03-01 |
 | v4.0 Threat Intel Hub | 4 | 9 | ✅ Complete | 2026-03-03 |
 | v5.0 Quality-of-Life | 1 | 0 | ✅ Complete | 2026-03-09 |
-| v6.0 Analyst Experience | 4 | 3 | 🚧 In progress | — |
+| v6.0 Analyst Experience | 4 | 6 | 🚧 In progress | — |
 
 **v6.0 Phase Progress:**
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 01. Zero-Auth IP Intelligence + Known-Good | 3/3 | Complete | 2026-03-12 |
-| 02. Domain Intelligence | 0/TBD | Not started | - |
+| 02. Domain Intelligence | 0/3 | Not started | - |
 | 03. Passive DNS Pivoting | 0/TBD | Not started | - |
 | 04. Deep Analysis View | 0/TBD | Not started | - |
