@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v6.0
 milestone_name: Analyst Experience
 current_phase: 04-deep-analysis-view
-current_plan: 02 (complete)
+current_plan: 03 (complete — awaiting human-verify checkpoint)
 status: executing
-last_updated: "2026-03-12T20:57:11Z"
+last_updated: "2026-03-13T14:48:34Z"
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 11
-  completed_plans: 10
+  completed_plans: 11
 ---
 
 # Session State
@@ -23,12 +23,12 @@ See: .planning/PROJECT.md
 
 **Milestone:** v6.0 Analyst Experience
 **Current phase:** 04-deep-analysis-view
-**Current plan:** 02 (complete)
+**Current plan:** 03 (complete — awaiting human-verify checkpoint)
 **Status:** Executing Phase 04
 
 ## Progress
 
-[█████████░] 91% (10/11 plans complete)
+[██████████] 100% (11/11 plans complete — awaiting final human verify)
 
 ## Decisions
 
@@ -49,6 +49,10 @@ See: .planning/PROJECT.md
 - [Phase 04-02]: path converter (<path:ioc_value>) handles URL IOCs with slashes — bookmarkable deep links
 - [Phase 04-02]: CSS-only tabs via radio inputs + nth-child selectors — no JavaScript required
 - [Phase 04-02]: Graph data (nodes/edges) built in route, not template — clean separation, testable
+- [Phase 04-03]: Annotation API routes use AnnotationStore() directly — consistent with CacheStore() pattern in existing routes
+- [Phase 04-03]: annotations.ts clears server-rendered tag pills on load and re-renders from data-tags — avoids duplicates when JS present
+- [Phase 04-03]: Tag dedup on POST: read current list, append only if absent — idempotent, no race condition concern for single-user tool
+- [Phase 04-03]: filter.ts tag pills inserted after .filter-bar using DOM insertBefore — maintains filter bar visual layout
 
 ## Performance Metrics
 
@@ -61,6 +65,7 @@ See: .planning/PROJECT.md
 | 03-passive-dns-pivoting | 02 | 5min | 2 | 5 |
 | 04-deep-analysis-view | 01 | 2min | 2 | 6 |
 | 04-deep-analysis-view | 02 | 4min | 2 | 7 |
+| 04-deep-analysis-view | 03 | 5min | 2 | 7 |
 
 ## Session Log
 
@@ -71,3 +76,4 @@ See: .planning/PROJECT.md
 - 2026-03-13: Phase 03 Plan 02 complete — ThreatMiner wired into registry, frontend, allowlist; browser verified
 - 2026-03-12: Phase 04 Plan 01 complete — AnnotationStore + CacheStore.get_all_for_ioc + CSRF meta tag
 - 2026-03-12: Phase 04 Plan 02 complete — IOC detail page, CSS tabs, SVG graph renderer, Detail links
+- 2026-03-13: Phase 04 Plan 03 complete — Annotation API, annotations.ts, tags on results, tag filter; awaiting human-verify
