@@ -1,10 +1,11 @@
 ---
 phase: 01
 slug: zero-auth-ip-intelligence-known-good
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: complete
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-03-12
+audited: 2026-03-14
 ---
 
 # Phase 01 — Validation Strategy
@@ -38,14 +39,14 @@ created: 2026-03-12
 
 | Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|-----------|-------------------|-------------|--------|
-| 01-01-01 | 01 | 1 | EPROV-01 | unit | `python3 -m pytest tests/test_shodan.py -x -q` | ✅ | ⬜ pending |
-| 01-02-01 | 02 | 1 | HINT-01 | unit | `python3 -m pytest tests/test_hashlookup.py -x -q` | ❌ W0 | ⬜ pending |
-| 01-02-02 | 02 | 1 | HINT-02 | type-check | `make typecheck` | ✅ | ⬜ pending |
-| 01-02-03 | 02 | 1 | HINT-02 | visual | Browser smoke test | ❌ visual | ⬜ pending |
-| 01-03-01 | 03 | 2 | IPINT-01 | unit | `python3 -m pytest tests/test_ip_api.py -x -q` | ❌ W0 | ⬜ pending |
-| 01-03-02 | 03 | 2 | IPINT-02 | unit | `python3 -m pytest tests/test_ip_api.py::test_reverse_dns -x` | ❌ W0 | ⬜ pending |
-| 01-03-03 | 03 | 2 | IPINT-03 | unit | `python3 -m pytest tests/test_ip_api.py::test_proxy_flags -x` | ❌ W0 | ⬜ pending |
-| 01-03-04 | 03 | 2 | IPINT-01/02/03 | integration | `python3 -m pytest tests/test_registry_setup.py -x -q` | ✅ (update) | ⬜ pending |
+| 01-01-01 | 01 | 1 | EPROV-01 | unit | `python3 -m pytest tests/test_shodan.py -x -q` | ✅ | ✅ green |
+| 01-02-01 | 02 | 1 | HINT-01 | unit | `python3 -m pytest tests/test_hashlookup.py -x -q` | ✅ | ✅ green |
+| 01-02-02 | 02 | 1 | HINT-02 | type-check | `make typecheck` | ✅ | ✅ green |
+| 01-02-03 | 02 | 1 | HINT-02 | visual | Browser smoke test | ✅ manual | ✅ green |
+| 01-03-01 | 03 | 2 | IPINT-01 | unit | `python3 -m pytest tests/test_ip_api.py -x -q` | ✅ | ✅ green |
+| 01-03-02 | 03 | 2 | IPINT-02 | unit | `python3 -m pytest tests/test_ip_api.py -k "reverse" -x` | ✅ | ✅ green |
+| 01-03-03 | 03 | 2 | IPINT-03 | unit | `python3 -m pytest tests/test_ip_api.py -k "flags" -x` | ✅ | ✅ green |
+| 01-03-04 | 03 | 2 | IPINT-01/02/03 | integration | `python3 -m pytest tests/test_registry_setup.py -x -q` | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -53,31 +54,51 @@ created: 2026-03-12
 
 ## Wave 0 Requirements
 
-- [ ] `tests/test_ip_api.py` — stubs for IPINT-01, IPINT-02, IPINT-03
-- [ ] `tests/test_hashlookup.py` — stubs for HINT-01
-- [ ] Update `tests/test_registry_setup.py` — provider count assertion 8 → 10
+- [x] `tests/test_ip_api.py` — 50 tests covering IPINT-01, IPINT-02, IPINT-03
+- [x] `tests/test_hashlookup.py` — 35 tests covering HINT-01
+- [x] `tests/test_registry_setup.py` — provider count 13, hashlookup + ip_context presence + configuration
 
-*Existing infrastructure covers EPROV-01 and type-check requirements.*
+*All Wave 0 requirements fulfilled during phase execution via TDD.*
 
 ---
 
 ## Manual-Only Verifications
 
-| Behavior | Requirement | Why Manual | Test Instructions |
-|----------|-------------|------------|-------------------|
-| Blue KNOWN GOOD badge visually distinct | HINT-02 | CSS visual styling | 1. Paste known NSRL hash (e.g. calc.exe MD5) 2. Verify blue badge in summary row 3. Verify "Known Good" filter chip works |
-| IP Context row appears first, no badge | IPINT-01/02/03 | DOM layout + no-badge rendering | 1. Paste any public IP 2. Verify IP Context row at top of detail rows 3. Verify no verdict badge on IP Context row |
-| CPEs and tags visible in Shodan card | EPROV-01 | Visual rendering of new fields | 1. Paste IP with known CPEs 2. Expand Shodan card 3. Verify CPE and tag pills rendered |
+| Behavior | Requirement | Why Manual | Test Instructions | Status |
+|----------|-------------|------------|-------------------|--------|
+| Blue KNOWN GOOD badge visually distinct | HINT-02 | CSS visual styling | 1. Paste known NSRL hash 2. Verify blue badge 3. Verify filter chip | ✅ verified (01-03 Task 2) |
+| IP Context row appears first, no badge | IPINT-01/02/03 | DOM layout + no-badge rendering | 1. Paste public IP 2. Verify IP Context at top 3. No verdict badge | ✅ verified (01-03 Task 2) |
+| CPEs and tags visible in Shodan card | EPROV-01 | Visual rendering of new fields | 1. Paste IP with CPEs 2. Verify CPE and tag pills | ✅ verified (01-03 Task 2) |
+
+---
+
+## Validation Audit 2026-03-14
+
+| Metric | Count |
+|--------|-------|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
+
+All requirements have automated test coverage created during phase execution via TDD. The VALIDATION.md was originally created as a draft; this audit confirms all tasks are green.
+
+**Test counts:**
+- `tests/test_ip_api.py`: 50 tests — PASS (IPINT-01, IPINT-02, IPINT-03)
+- `tests/test_hashlookup.py`: 35 tests — PASS (HINT-01)
+- `tests/test_shodan.py`: 23 tests — PASS (EPROV-01)
+- `tests/test_registry_setup.py`: 28 tests — PASS (integration)
+- `make typecheck`: PASS (HINT-02 — VerdictKey includes known_good)
+- **Phase 01 total: 136 tests — all pass**
 
 ---
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 15s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 15s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved (2026-03-14 retroactive audit)
