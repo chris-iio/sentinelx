@@ -1,5 +1,35 @@
 # Milestones
 
+## v6.0 Analyst Experience (Shipped: 2026-03-14)
+
+**Phases:** 4 (01-04) | **Plans:** 11 | **Tasks:** 13 | **Requirements:** 13/13
+**Timeline:** 3 days (2026-03-11 → 2026-03-14)
+**LOC:** ~4,923 app Python + ~2,459 TS + ~635 templates + ~12,350 tests
+**Commits:** 58 in milestone range
+**Tests:** 757+ unit/integration + 91 E2E (up from 483 at v5.0)
+
+**Delivered:** Expanded SentinelX from a lookup tool into a genuine analyst workstation — 5 new zero-auth providers (ip-api, CIRCL hashlookup, DNS, crt.sh, ThreatMiner) bringing the total from 8 to 13, a bookmarkable per-IOC detail page with tabbed enrichment and SVG relationship graph, and SQLite-persisted analyst annotations (notes + tags) with tag-based filtering.
+
+**Key accomplishments:**
+1. Zero-auth IP intelligence — GeoIP, rDNS, and proxy/VPN/hosting flags for any IP via ip-api.com, no API key needed
+2. Known-good hash detection — CIRCL hashlookup identifies NSRL-listed files with visually distinct "KNOWN GOOD" verdict
+3. Domain intelligence — Live DNS records (A/MX/NS/TXT) via dnspython + certificate transparency history via crt.sh
+4. Passive DNS pivoting — ThreatMiner integration for infrastructure relationships across all IOC types
+5. Deep analysis view — Bookmarkable per-IOC detail page with tabbed provider results and SVG relationship graph
+6. Analyst annotations — SQLite-persisted notes and tags on any IOC, with tag-based filtering in the results list
+
+**Known Gaps:**
+- IPINT-01, IPINT-02, IPINT-03, HINT-01, HINT-02, EPROV-01: Features implemented and tested but Phase 01 missing VERIFICATION.md (documentation gap, not feature gap)
+
+**Git range:** `fded10d` (start v6.0) → `a7fb966` (audit)
+
+**Archives:**
+- `milestones/v6.0-ROADMAP.md`
+- `milestones/v6.0-REQUIREMENTS.md`
+- `milestones/v6.0-MILESTONE-AUDIT.md`
+
+---
+
 ## v5.0 Quality-of-Life (Shipped: 2026-03-09)
 
 **Phases:** 1 (01) | **Plans:** 0 (retroactive adoption) | **Requirements:** 4/4

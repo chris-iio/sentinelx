@@ -10,7 +10,7 @@
 - ✅ **v3.0 TypeScript Migration** — Phases 19-22, Phase 23 skipped (shipped 2026-03-01)
 - ✅ **v4.0 Universal Threat Intel Hub** — Phases 1-4 (shipped 2026-03-03)
 - ✅ **v5.0 Quality-of-Life** — Phase 1 retroactive (shipped 2026-03-09)
-- 🚧 **v6.0 Analyst Experience** — Phases 01-04 (in progress)
+- ✅ **v6.0 Analyst Experience** — Phases 01-04 (shipped 2026-03-14)
 
 ## Phases
 
@@ -100,98 +100,28 @@ Ad-hoc work adopted into GSD tracking. See `.planning/phases/01-quality-of-life/
 
 </details>
 
-### v6.0 Analyst Experience (In Progress)
+<details>
+<summary>✅ v6.0 Analyst Experience (Phases 01-04) — SHIPPED 2026-03-14</summary>
 
-**Milestone Goal:** Expand SentinelX from a lookup tool into a genuine analyst workstation — zero-auth enrichment depth for IP/domain/hash IOCs, full Shodan data visibility, passive DNS pivoting, and a bookmarkable per-IOC analysis page with notes, tags, and relationship graphs.
+- [x] Phase 01: Zero-Auth IP Intelligence + Known-Good (3/3 plans) — completed 2026-03-12
+- [x] Phase 02: Domain Intelligence (3/3 plans) — completed 2026-03-12
+- [x] Phase 03: Passive DNS Pivoting (2/2 plans) — completed 2026-03-12
+- [x] Phase 04: Deep Analysis View (3/3 plans) — completed 2026-03-13
 
-- [ ] **Phase 01: Zero-Auth IP Intelligence + Known-Good** - GeoIP/rDNS/proxy flags for all IPs; NSRL known-good detection for hashes; full Shodan card data visible
-- [x] **Phase 02: Domain Intelligence** - Live DNS records and certificate transparency history for domain IOCs (completed 2026-03-12)
-- [x] **Phase 03: Passive DNS Pivoting** - ThreatMiner passive DNS, related samples, and infrastructure context for all IOC types (completed 2026-03-12)
-- [x] **Phase 04: Deep Analysis View** - Per-IOC detail page with tabbed enrichment, analyst notes and tags, IOC relationship graph (completed 2026-03-13)
+Full details: `milestones/v6.0-ROADMAP.md`
 
-## Phase Details
-
-### Phase 01: Zero-Auth IP Intelligence + Known-Good
-**Goal**: Analysts can understand any IP IOC's geography, infrastructure, and threat context without API keys, and can immediately identify known-good file hashes to reduce false-positive workload
-**Depends on**: Nothing (first phase of v6.0)
-**Requirements**: IPINT-01, IPINT-02, IPINT-03, HINT-01, HINT-02, EPROV-01
-**Success Criteria** (what must be TRUE):
-  1. User sees country, city, ASN, and ISP for any IP IOC result card with no API key configured
-  2. User sees PTR hostname in the IP result card for any IP that has a reverse DNS entry
-  3. User sees proxy/VPN/hosting/mobile flags for any IP, allowing instant datacenter vs residential classification
-  4. User sees a "KNOWN GOOD" verdict badge (visually distinct from CLEAN/MALICIOUS/UNKNOWN) on any hash IOC that CIRCL hashlookup confirms is in the NSRL
-  5. User sees ports, CVEs, hostnames, and CPEs in the Shodan InternetDB card (data already fetched, now fully rendered)
-**Plans**: 3 plans
-
-Plans:
-- [x] 01-01-PLAN.md — Backend adapters (CIRCL hashlookup + ip-api.com) and provider registration
-- [x] 01-02-PLAN.md — known_good verdict type system (TS types, CSS, templates) + Shodan EPROV-01 field completion
-- [x] 01-03-PLAN.md — IP Context row rendering (frontend display of GeoIP/rDNS/proxy flags)
-
-### Phase 02: Domain Intelligence
-**Goal**: Analysts can assess any domain IOC's live infrastructure and certificate history without API keys, transforming domain cards from near-opaque to genuinely informative
-**Depends on**: Phase 01
-**Requirements**: DINT-01, DINT-02
-**Success Criteria** (what must be TRUE):
-  1. User sees live A, MX, NS, and TXT (including SPF and DMARC) records for any domain IOC in the result card
-  2. User sees certificate transparency history for any domain — count of certificates, date range, and enumerated subdomains from SANs
-  3. Domain result cards display DNS and certificate data even when no API keys are configured
-**Plans**: 3 plans
-
-Plans:
-- [x] 02-01-PLAN.md — DnsAdapter for live DNS record lookups (A/MX/NS/TXT) via dnspython
-- [x] 02-02-PLAN.md — CrtShAdapter for certificate transparency history via crt.sh API
-- [x] 02-03-PLAN.md — Registry wiring, SSRF allowlist, and frontend context row rendering
-
-### Phase 03: Passive DNS Pivoting
-**Goal**: Analysts can pivot from any IOC to related infrastructure — what IPs a domain has resolved to, what domains point to an IP, what malware samples are associated with a hash — without API keys
-**Depends on**: Phase 02
-**Requirements**: DINT-03
-**Success Criteria** (what must be TRUE):
-  1. User sees passive DNS history (related hostnames or IPs) for any IP or domain IOC via ThreatMiner
-  2. User sees related malware sample hashes for any hash IOC via ThreatMiner
-  3. ThreatMiner results appear in result cards without blocking other providers — rate limiting is transparent (slow result, not error) when the 10 req/min limit is reached
-**Plans**: 2 plans
-
-Plans:
-- [x] 03-01-PLAN.md — ThreatMinerAdapter with TDD (passive DNS for IP/domain, related samples for hash)
-- [x] 03-02-PLAN.md — Registry wiring, SSRF allowlist, frontend context row rendering, human verification
-
-### Phase 04: Deep Analysis View
-**Goal**: Analysts can investigate a single IOC in depth — all enrichment in one place, annotated with personal notes and tags, with a visual relationship graph showing IOC-to-provider connections
-**Depends on**: Phase 03
-**Requirements**: DEEP-01, DEEP-02, DEEP-03, DEEP-04
-**Success Criteria** (what must be TRUE):
-  1. User can click any IOC in the results list to open a dedicated detail page at a bookmarkable URL showing all provider results in a tabbed layout
-  2. User can add, edit, and delete free-text notes on any IOC; notes survive page refresh and cache clears (stored in SQLite)
-  3. User can apply and remove custom text tags on any IOC; tags are visible in the results list and filterable
-  4. User can view a relationship graph on the detail page showing which providers returned data for the IOC and what verdict each reported
-**Plans**: 3 plans
-
-Plans:
-- [ ] 04-01-PLAN.md — Backend data layer: AnnotationStore (notes + tags SQLite), CacheStore.get_all_for_ioc, CSRF meta tag
-- [ ] 04-02-PLAN.md — Detail page route + tabbed provider results + SVG relationship graph + click-to-detail links
-- [ ] 04-03-PLAN.md — Annotation API + annotations.ts client + tags on results page + filter bar tag dimension + human verify
+</details>
 
 ## Progress
 
 | Milestone | Phases | Plans | Status | Shipped |
 |-----------|--------|-------|--------|---------|
 | v1.0 MVP | 5 | 14 | ✅ Complete | 2026-02-24 |
-| v1.1 UX Overhaul | 3 | 1/2 | In Progress|  |
-| v1.2 Modern UI | 2 | 3/3 | Complete   | 2026-03-12 |
+| v1.1 UX Overhaul | 3 | 6 | ✅ Complete | 2026-02-25 |
+| v1.2 Modern UI | 2 | 6 | ✅ Complete | 2026-02-28 |
 | v1.3 Visual Experience | 3 | — | ✅ Complete | 2026-02-28 |
 | v2.0 Home Page | 1 | 3 | ✅ Complete | 2026-02-28 |
-| v3.0 TypeScript | 4 | 3/3 | Complete   | 2026-03-13 |
+| v3.0 TypeScript | 4 | 8 | ✅ Complete | 2026-03-01 |
 | v4.0 Threat Intel Hub | 4 | 9 | ✅ Complete | 2026-03-03 |
 | v5.0 Quality-of-Life | 1 | 0 | ✅ Complete | 2026-03-09 |
-| v6.0 Analyst Experience | 4 | 11 | 🚧 In progress | — |
-
-**v6.0 Phase Progress:**
-
-| Phase | Plans Complete | Status | Completed |
-|-------|----------------|--------|-----------|
-| 01. Zero-Auth IP Intelligence + Known-Good | 3/3 | Complete | 2026-03-12 |
-| 02. Domain Intelligence | 3/3 | Complete    | 2026-03-12 |
-| 03. Passive DNS Pivoting | 2/2 | Complete    | 2026-03-12 |
-| 04. Deep Analysis View | 0/3 | Complete    | 2026-03-13 |
+| v6.0 Analyst Experience | 4 | 11 | ✅ Complete | 2026-03-14 |

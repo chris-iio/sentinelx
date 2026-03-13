@@ -2,7 +2,7 @@
 
 ## What This Is
 
-A universal threat intelligence hub for SOC analysts. Paste free-form text (alerts, email headers, threat reports, raw IOCs) and the app extracts, normalizes, classifies, and enriches IOCs against 8 providers in parallel — presenting unified summary verdicts with expandable per-provider detail rows. No opaque combined scores.
+A universal threat intelligence hub for SOC analysts. Paste free-form text (alerts, email headers, threat reports, raw IOCs) and the app extracts, normalizes, classifies, and enriches IOCs against 13 providers in parallel — presenting unified summary verdicts with expandable per-provider detail rows, bookmarkable per-IOC detail pages with relationship graphs, and analyst annotations (notes + tags). No opaque combined scores.
 
 ## Core Value
 
@@ -37,14 +37,21 @@ Safe, correct, and transparent IOC extraction and enrichment — never invent sc
 - ✓ Client-side export menu (JSON/CSV/clipboard) replacing single copy button — v5.0
 - ✓ Bulk IOC input mode with one-per-line parser and toggle UI — v5.0
 - ✓ Provider context fields (VT top detections/reputation) with generic field rendering — v5.0
+- ✓ Zero-auth IP intelligence: GeoIP, rDNS, proxy/VPN/hosting flags via ip-api.com — v6.0
+- ✓ Known-good hash detection: CIRCL hashlookup with visually distinct KNOWN GOOD verdict — v6.0
+- ✓ Live DNS records (A/MX/NS/TXT) for domains via dnspython — v6.0
+- ✓ Certificate transparency history for domains via crt.sh — v6.0
+- ✓ Passive DNS pivoting via ThreatMiner for all IOC types — v6.0
+- ✓ Shodan InternetDB full field rendering (ports, CVEs, hostnames, CPEs) — v6.0
+- ✓ Bookmarkable per-IOC detail page with tabbed provider results — v6.0
+- ✓ Analyst notes on IOCs persisted in SQLite — v6.0
+- ✓ Custom tags on IOCs with tag-based filtering — v6.0
+- ✓ SVG relationship graph showing IOC-provider connections and verdicts — v6.0
+- ✓ 13 threat intel providers (5 zero-auth + 1 public + 7 key-auth) — v6.0
 
 ### Active
 
-## Current Milestone: v6.0 Analyst Experience
-
-**Goal:** Research-driven expansion — discover what cybersecurity analysts actually need from threat intel tools and make SentinelX competitive with platforms like VirusTotal.
-
-**Target features:** TBD — research-first approach. Investigating depth of analysis, breadth of capability, and workflow integration.
+(No active milestone — run `/gsd:new-milestone` to start next cycle)
 
 ### Out of Scope
 
@@ -53,24 +60,26 @@ Safe, correct, and transparent IOC extraction and enrichment — never invent sc
 - Historical analysis or trending — single-shot triage tool
 - Automated response/blocking actions — read-only enrichment
 - Mobile or responsive design — desktop browser on analyst workstation
-- WHOIS / RDAP enrichment — high complexity, often privacy-redacted
-- Malware sandbox detonation — fundamentally different capability
-- Persistent session history — requires persistence design decision
+- WHOIS / RDAP enrichment — GDPR redaction returns low-signal "REDACTED FOR PRIVACY" strings
+- Malware sandbox detonation — fundamentally different capability (analysis vs execution)
 - Node.js / npm dependency — esbuild + tsc installed as standalone binaries
 - Framework adoption (React, Vue) — vanilla TS sufficient for this complexity
+- STIX/TAXII threat feed import — deferred to future milestone
+- File upload for hash extraction — deferred to future milestone
 
 ## Context
 
 - **Users:** SOC analysts performing initial triage of alerts, emails, and threat reports
 - **Environment:** Runs on analyst's local machine or an internal jump box (not internet-facing)
-- **Tech stack:** Python 3.10 + Flask 3.1, iocextract + iocsearcher for extraction, requests for HTTP
+- **Tech stack:** Python 3.10 + Flask 3.1, iocextract + iocsearcher for extraction, requests + dnspython for HTTP/DNS
 - **Frontend stack:** TypeScript 5.8 + esbuild (IIFE output), Tailwind CSS standalone CLI, Inter Variable + JetBrains Mono Variable, dark-first zinc/emerald/teal design tokens
-- **Codebase:** ~3,515 LOC Python, ~3,619 LOC frontend (TS+CSS), ~449 LOC templates, ~8,408 LOC tests
-- **Test suite:** 483 unit/integration + E2E suite (up from 224 at v1.0)
-- **Threat intel providers (8):** VirusTotal (API key), MalwareBazaar (public), ThreatFox (public), Shodan InternetDB (zero-auth), URLhaus (free key), OTX AlienVault (free key), GreyNoise Community (free key), AbuseIPDB (free key)
-- **Architecture:** Provider Protocol + ProviderRegistry — adding a provider = one adapter file + one `register()` call
-- **Security posture:** All defenses from v1.0 maintained — CSP, CSRF, SSRF allowlist, host validation, automated regression guards
+- **Codebase:** ~4,923 LOC Python, ~2,459 LOC TypeScript, ~635 LOC templates, ~12,350 LOC tests
+- **Test suite:** 757+ unit/integration + 91 E2E (up from 483 at v5.0)
+- **Threat intel providers (13):** VirusTotal (API key), MalwareBazaar (public), ThreatFox (public), Shodan InternetDB (zero-auth), URLhaus (free key), OTX AlienVault (free key), GreyNoise Community (free key), AbuseIPDB (free key), ip-api.com (zero-auth), CIRCL hashlookup (zero-auth), DNS Records (zero-auth), crt.sh (zero-auth), ThreatMiner (zero-auth)
+- **Architecture:** Provider Protocol + ProviderRegistry — adding a provider = one adapter file + one `register()` call. AnnotationStore for per-IOC notes/tags (separate SQLite DB). CacheStore for enrichment result caching.
+- **Security posture:** All defenses from v1.0 maintained — CSP, CSRF, SSRF allowlist (12 HTTP hosts), host validation, automated regression guards. CSRF meta tag for client-side fetch.
 - **Build:** Makefile targets — `css`, `js`, `js-dev`, `js-watch`, `typecheck`, `build`
+- **Frontend modules:** 14 TypeScript modules (was 12 at v5.0 — added annotations.ts, graph.ts)
 
 ## Constraints
 
@@ -97,6 +106,13 @@ Safe, correct, and transparent IOC extraction and enrichment — never invent sc
 | Provider Protocol (typing.Protocol) | Plugin-style provider addition, zero orchestrator changes | ✓ Good — 5 new providers added with zero route/orchestrator edits |
 | Summary-first results UX | Analyst triage speed — worst verdict + consensus at a glance | ✓ Good — expand for details only when needed |
 | ConfigStore multi-provider | Central `~/.sentinelx/config.ini` for all API keys | ✓ Good — settings page manages all providers dynamically |
+| Zero-auth provider strategy | Maximize value with no API keys | ✓ Good — 5 zero-auth providers give rich context out of the box |
+| known_good verdict type | NSRL files need distinct visual treatment from clean/malicious | ✓ Good — early-return override in computeWorstVerdict, dedicated CSS tokens |
+| Separate AnnotationStore DB | Notes/tags must survive cache clears | ✓ Good — annotations.db independent from cache.db |
+| CSS-only tabs on detail page | No JavaScript needed for tab switching | ✓ Good — radio inputs + adjacent sibling selectors |
+| SVG hub-and-spoke graph | Show IOC-provider relationships visually | ✓ Good — verdict-colored nodes, createElement (SEC-08 safe) |
+| CONTEXT_PROVIDERS set pattern | Route zero-verdict context rows through shared renderer | ✓ Good — generalized createContextRow() for all context providers |
+| path converter for IOC URLs | URL IOCs contain slashes that break standard routing | ✓ Good — `<path:ioc_value>` handles all IOC formats |
 
 ## Shipped Milestones
 
@@ -110,8 +126,9 @@ Safe, correct, and transparent IOC extraction and enrichment — never invent sc
 | v3.0 | TypeScript Migration | 2026-03-01 | 4 | JS→TS with strict types |
 | v4.0 | Universal Threat Intel Hub | 2026-03-03 | 4 | 8 providers + registry + unified UX |
 | v5.0 | Quality-of-Life | 2026-03-09 | 1 | Cache + export + bulk input + context fields |
+| v6.0 | Analyst Experience | 2026-03-14 | 4 | 5 zero-auth providers + detail page + annotations |
 
 See `.planning/MILESTONES.md` for full details.
 
 ---
-*Last updated: 2026-03-09 after v5.0 Quality-of-Life milestone adopted*
+*Last updated: 2026-03-14 after v6.0 Analyst Experience milestone*
