@@ -6,8 +6,6 @@ correctly rejects classes missing required attributes.
 """
 from __future__ import annotations
 
-import pytest
-
 from app.enrichment.provider import Provider
 from app.enrichment.adapters.virustotal import VTAdapter
 from app.enrichment.adapters.malwarebazaar import MBAdapter

@@ -15,8 +15,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
 from app.cache.store import CacheStore
 from app.annotations.store import AnnotationStore
 
@@ -62,7 +60,7 @@ class TestIocDetailRoute:
 
     def test_detail_page_empty_cache(self, client, tmp_path, monkeypatch) -> None:
         """Detail page with no cached data shows 'No enrichment data' message."""
-        import app.routes as routes_module
+        import app.routes  # noqa: F401 — side-effect: registers routes
         import app.cache.store as cache_store_module
         import app.annotations.store as annotations_store_module
 
