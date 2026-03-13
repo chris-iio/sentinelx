@@ -177,6 +177,13 @@ def analyze():
             "provider_coverage": provider_coverage,
         }
 
+    # Read annotations for all extracted IOCs so tags can be displayed on cards
+    if iocs:
+        ioc_pairs = [(ioc.value, ioc.type.value) for ioc in iocs]
+        annotations_map = AnnotationStore().get_all_for_ioc_values(ioc_pairs)
+    else:
+        annotations_map = {}
+
     no_results = total_count == 0
     return render_template(
         "results.html",
@@ -184,6 +191,7 @@ def analyze():
         mode=mode,
         total_count=total_count,
         no_results=no_results,
+        annotations_map=annotations_map,
         **template_extras,
     )
 
