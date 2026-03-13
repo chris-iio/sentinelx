@@ -16,6 +16,7 @@ import { init as initEnrichment } from "./modules/enrichment";
 import { init as initSettings } from "./modules/settings";
 import { init as initUi } from "./modules/ui";
 import { init as initGraph } from "./modules/graph";
+import { init as initAnnotations } from "./modules/annotations";
 
 function init(): void {
   initForm();
@@ -26,6 +27,7 @@ function init(): void {
   initSettings();
   initUi();
   initGraph();
+  initAnnotations();
 }
 
 if (document.readyState === "loading") {

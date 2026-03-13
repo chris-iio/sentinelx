@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="page-ioc-detail" data-ioc-value="{{ ioc_value }}" data-ioc-type="{{ ioc_type }}">
+<div class="page-ioc-detail" data-ioc-value="{{ ioc_value }}" data-ioc-type="{{ ioc_type }}" data-tags="{{ annotations.tags | tojson }}">
 
     {# ---- Header ---- #}
     <div class="detail-header">

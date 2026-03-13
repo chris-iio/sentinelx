@@ -336,6 +336,63 @@ def ioc_detail(ioc_type: str, ioc_value: str) -> str:
     )
 
 
+@bp.route("/api/ioc/<ioc_type>/<path:ioc_value>/notes", methods=["POST"])
+@limiter.limit("30 per minute")
+def api_set_notes(ioc_type: str, ioc_value: str):
+    """Save analyst notes for an IOC.
+
+    Reads "notes" from JSON body, caps at 10000 chars, persists via AnnotationStore.
+    Returns: {"ok": true, "notes": "<saved text>"}
+
+    CSRF: Flask-WTF CSRFProtect accepts X-CSRFToken header automatically for JSON requests.
+    Tests run with WTF_CSRF_ENABLED=False so no token is required in tests.
+    """
+    body = request.get_json(silent=True) or {}
+    notes = str(body.get("notes", ""))
+    notes = notes[:10000]
+    annotation_store = AnnotationStore()
+    annotation_store.set_notes(ioc_value, ioc_type, notes)
+    return jsonify({"ok": True, "notes": notes})
+
+
+@bp.route("/api/ioc/<ioc_type>/<path:ioc_value>/tags", methods=["POST"])
+@limiter.limit("30 per minute")
+def api_add_tag(ioc_type: str, ioc_value: str):
+    """Add a tag to an IOC.
+
+    Reads "tag" from JSON body, strips whitespace, caps at 100 chars, rejects empty.
+    Deduplicates: if tag already exists, returns current list without adding a duplicate.
+    Returns: {"ok": true, "tags": ["tag1", ...]}
+    """
+    body = request.get_json(silent=True) or {}
+    tag = str(body.get("tag", "")).strip()[:100]
+    if not tag:
+        return jsonify({"ok": False, "error": "tag cannot be empty"}), 400
+
+    annotation_store = AnnotationStore()
+    current = annotation_store.get(ioc_value, ioc_type)
+    tags = current["tags"]
+    if tag not in tags:
+        tags = tags + [tag]
+        annotation_store.set_tags(ioc_value, ioc_type, tags)
+    return jsonify({"ok": True, "tags": tags})
+
+
+@bp.route("/api/ioc/<ioc_type>/<path:ioc_value>/tags/<tag>", methods=["DELETE"])
+@limiter.limit("30 per minute")
+def api_delete_tag(ioc_type: str, ioc_value: str, tag: str):
+    """Remove a tag from an IOC.
+
+    Filters the tag out of the stored list and saves. No-op if tag not found.
+    Returns: {"ok": true, "tags": ["remaining", ...]}
+    """
+    annotation_store = AnnotationStore()
+    current = annotation_store.get(ioc_value, ioc_type)
+    tags = [t for t in current["tags"] if t != tag]
+    annotation_store.set_tags(ioc_value, ioc_type, tags)
+    return jsonify({"ok": True, "tags": tags})
+
+
 @bp.route("/enrichment/status/<job_id>", methods=["GET"])
 @limiter.limit("120 per minute")
 def enrichment_status(job_id: str):
