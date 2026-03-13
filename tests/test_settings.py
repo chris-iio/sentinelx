@@ -274,26 +274,3 @@ def test_settings_link_in_nav(client):
     response = client.get("/")
     assert response.status_code == 200
     assert b"/settings" in response.data or b"Settings" in response.data
-
-
-# ---------------------------------------------------------------------------
-# Backward compatibility — old test names preserved
-# ---------------------------------------------------------------------------
-
-
-def test_save_api_key(client, tmp_path):
-    """POST /settings with api_key and provider_id=virustotal saves and redirects."""
-    with patch("app.routes.ConfigStore") as MockStore:
-        mock_instance = MagicMock()
-        mock_instance.get_vt_api_key.return_value = "test123"
-        mock_instance.get_provider_key.return_value = None
-        MockStore.return_value = mock_instance
-
-        response = client.post(
-            "/settings",
-            data={"api_key": "test123", "provider_id": "virustotal"},
-        )
-
-        assert response.status_code == 302
-        assert "/settings" in response.headers["Location"]
-        mock_instance.set_vt_api_key.assert_called_once_with("test123")

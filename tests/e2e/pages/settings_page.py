@@ -14,7 +14,6 @@ class SettingsPage:
 
         # Top-level locators
         self.back_link = page.locator(".page-settings .back-link")
-        self.flash_messages = page.locator("[role='alert']")
 
     def goto(self) -> None:
         """Navigate to the settings page."""
@@ -61,12 +60,6 @@ class SettingsPage:
         if section.get_attribute("data-expanded") is None:
             self.accordion_header(provider_id).click()
 
-    def collapse_provider(self, provider_id: str) -> None:
-        """Collapse a provider's accordion section if expanded."""
-        section = self.provider_section(provider_id)
-        if section.get_attribute("data-expanded") is not None:
-            self.accordion_header(provider_id).click()
-
     def expect_provider_expanded(self, provider_id: str) -> None:
         """Assert a provider's accordion section is expanded."""
         expect(self.provider_section(provider_id)).to_have_attribute(
@@ -95,10 +88,6 @@ class SettingsPage:
     def csrf_token(self, provider_id: str) -> Locator:
         """Return the CSRF token hidden input for a provider's form."""
         return self.provider_section(provider_id).locator("input[name='csrf_token']")
-
-    def form(self, provider_id: str) -> Locator:
-        """Return the form element for a provider."""
-        return self.provider_section(provider_id).locator("form")
 
     # ---- Actions ----
 

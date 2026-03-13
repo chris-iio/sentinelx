@@ -102,12 +102,6 @@ def index_url(live_server: str) -> str:
 
 
 @pytest.fixture()
-def analyze_url(live_server: str) -> str:
-    """URL for the analyze endpoint."""
-    return live_server + "/analyze"
-
-
-@pytest.fixture()
 def settings_url(live_server: str) -> str:
     """URL for the settings page."""
     return live_server + "/settings"

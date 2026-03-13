@@ -40,8 +40,6 @@ from app.enrichment.provider import Provider
 
 ALLOWED_HOSTS = ["otx.alienvault.com"]
 
-OTX_BASE = "https://otx.alienvault.com/api/v1/indicators"
-
 OTX_MALICIOUS_RESPONSE = {
     "indicator": "8.8.8.8",
     "type": "IPv4",
