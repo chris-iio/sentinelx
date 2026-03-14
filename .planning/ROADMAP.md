@@ -134,7 +134,9 @@ Full details: `milestones/v6.0-ROADMAP.md`
   2. The `/api/annotations/*` routes return 404 (routes no longer exist)
   3. `flask --debug run` starts without import errors after annotations module is removed
   4. Full test suite passes with no annotation-related test failures
-**Plans**: TBD
+**Plans:** 1 plan
+Plans:
+- [ ] 01-01-PLAN.md — Complete annotations removal (tests, Python, TypeScript)
 
 ### Phase 02: ASN Intelligence
 **Goal**: Users see ASN/BGP context (CIDR prefix, RIR, allocation date, ASN number and org) for IP IOCs via Team Cymru DNS — zero new dependencies, zero SSRF surface changes
@@ -182,7 +184,7 @@ Full details: `milestones/v6.0-ROADMAP.md`
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 01. Annotations Removal | v7.0 | 0/TBD | Not started | - |
+| 01. Annotations Removal | v7.0 | 0/1 | Planned | - |
 | 02. ASN Intelligence | v7.0 | 0/TBD | Not started | - |
 | 03. Threat Feed Intelligence | v7.0 | 0/TBD | Not started | - |
 | 04. RDAP Design Decision | v7.0 | 0/TBD | Not started | - |
