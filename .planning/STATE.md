@@ -4,10 +4,10 @@ milestone: "v7.0"
 milestone_name: "Free Intel"
 current_phase: null
 current_plan: null
-status: "defining_requirements"
+status: "ready_to_plan"
 last_updated: "2026-03-15"
 progress:
-  total_phases: 0
+  total_phases: 5
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -20,28 +20,52 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-15)
 
 **Core value:** Safe, correct, and transparent IOC extraction and enrichment
-**Current focus:** v7.0 Free Intel — zero-API-key threat intelligence
+**Current focus:** v7.0 Free Intel — Phase 01 ready to plan
 
-## Position
+## Current Position
 
 **Milestone:** v7.0 Free Intel
-**Phase:** Not started (defining requirements)
-**Status:** Defining requirements
-**Last activity:** 2026-03-15 — Milestone v7.0 started
+**Phase:** 0 of 5 (not started)
+**Status:** Ready to plan Phase 01
+**Last activity:** 2026-03-15 — Roadmap created, 7/7 requirements mapped
 
-## Progress
+Progress: [░░░░░░░░░░] 0%
 
-No phases yet. Requirements being defined.
+## Performance Metrics
 
-## Last Milestone Summary
+**Velocity:**
+- Total plans completed: 0
+- Average duration: —
+- Total execution time: —
 
-v6.0 Analyst Experience — 4 phases, 11 plans, 13/13 requirements
-Shipped: 5 zero-auth providers, per-IOC detail page, analyst annotations
+**By Phase:**
+
+| Phase | Plans | Total | Avg/Plan |
+|-------|-------|-------|----------|
+| - | - | - | - |
+
+*Updated after each plan completion*
 
 ## Accumulated Context
 
-- 13 providers currently registered (5 zero-auth + 1 public + 7 key-auth)
-- Provider Protocol pattern: one adapter file + one register() call
-- Zero-auth providers use dnspython for DNS, requests for HTTP
-- Detail page uses CSS-only tabs, SVG relationship graph
-- Annotations feature (notes + tags) being removed in v7.0
+### Decisions
+
+Recent decisions affecting current work:
+
+- [Roadmap]: Phase 01 (Annotations Removal) must complete before any provider work — atomic removal prevents orphaned imports crashing app at startup
+- [Roadmap]: Phases 02 and 03 are independent of each other (both depend only on Phase 01); DNS-native before HTTP
+- [Roadmap]: Phase 04 (RDAP Design Decision) is a gate phase — empirical test of rdap.org redirect vs proxy behavior determines Phase 05 implementation approach
+
+### Blockers/Concerns
+
+- [Phase 04] RDAP SEC-06 conflict unresolved — rdap.org redirect vs proxy behavior requires empirical validation; blocks Phase 05 implementation
+
+### Pending Todos
+
+None yet.
+
+## Session Continuity
+
+Last session: 2026-03-15
+Stopped at: Roadmap created — ready to begin Phase 01 planning
+Resume file: None

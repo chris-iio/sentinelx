@@ -56,19 +56,19 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CLEAN-01 | — | Pending |
-| CLEAN-02 | — | Pending |
-| RDAP-01 | — | Pending |
-| RDAP-02 | — | Pending |
-| RDAP-03 | — | Pending |
-| FEED-01 | — | Pending |
-| ASN-01 | — | Pending |
+| CLEAN-01 | Phase 01 | Pending |
+| CLEAN-02 | Phase 01 | Pending |
+| ASN-01 | Phase 02 | Pending |
+| FEED-01 | Phase 03 | Pending |
+| RDAP-03 | Phase 04 | Pending |
+| RDAP-01 | Phase 05 | Pending |
+| RDAP-02 | Phase 05 | Pending |
 
 **Coverage:**
 - v7.0 requirements: 7 total
-- Mapped to phases: 0
-- Unmapped: 7
+- Mapped to phases: 7
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-15*
-*Last updated: 2026-03-15 after initial definition*
+*Last updated: 2026-03-15 after roadmap creation — 7/7 requirements mapped*
