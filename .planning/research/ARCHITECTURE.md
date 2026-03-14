@@ -1,716 +1,577 @@
 # Architecture Research
 
-**Domain:** Threat intelligence enrichment platform — zero-auth sources, local enrichment, deeper analysis views, relationship graphs (SentinelX v6.0)
-**Researched:** 2026-03-11
-**Confidence:** HIGH for Provider Protocol integration, MEDIUM for graph visualization and local databases
+**Domain:** Threat intelligence enrichment platform — DNSBL checks, public threat feeds, RDAP registration, ASN/BGP intelligence, annotations removal (SentinelX v7.0)
+**Researched:** 2026-03-15
+**Confidence:** HIGH for DNSBL/ASN (DNS-native, same dnspython already in use), HIGH for annotations removal (all touchpoints fully mapped), MEDIUM for RDAP (boot-strapping service stable but rate-limit policies undocumented), MEDIUM for public threat feeds (Feodo datasets currently empty due to takedowns)
 
 ---
 
 ## Context: What This Research Covers
 
-This is a SUBSEQUENT MILESTONE research document. The full existing architecture (Provider Protocol, ProviderRegistry, EnrichmentOrchestrator, CacheStore, Flask routes, TypeScript modules) is locked in. This document covers HOW the new v6.0 capabilities integrate with that architecture — specifically:
+This is a SUBSEQUENT MILESTONE research document. The full existing architecture (Provider Protocol, ProviderRegistry, EnrichmentOrchestrator, CacheStore, Flask routes, 14 TypeScript modules) is locked in. This document covers HOW the v7.0 capabilities integrate with that architecture — specifically:
 
-1. Zero-auth enrichment sources (DNS, GeoIP, WHOIS/ASN, cert transparency)
-2. Local vs remote enrichment distinction
-3. Deeper per-IOC analysis views
-4. Relationship/graph visualization
-5. IOC tagging and notes
+1. DNSBL reputation checks (new zero-auth provider — DNS-native)
+2. Public threat feed lookups (new zero-auth provider — HTTP bulk-feed pattern)
+3. RDAP registration data (new zero-auth provider — HTTP REST)
+4. ASN/BGP intelligence (new zero-auth provider — DNS-native)
+5. Annotations removal (destructive change — all touchpoints fully mapped)
 
-**Existing pipeline (do not change core flow):**
-
-```
-POST /analyze  →  run_pipeline(text)  →  EnrichmentOrchestrator.enrich_all()
-                                              ↓
-                                    ProviderRegistry.providers_for_type()
-                                              ↓
-                                    [adapter.lookup(ioc) × N providers]
-                                              ↓
-                          GET /enrichment/status/<job_id>  →  polling  →  browser renders cards
-```
-
----
-
-## System Overview: Current + New
+**Existing enrichment pipeline (unchanged):**
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        Flask Routes                                  │
-│  ┌──────────────┐  ┌───────────────┐  ┌───────────────────────┐    │
-│  │  /analyze    │  │/enrichment/   │  │  /ioc/<value>  [NEW]  │    │
-│  │  /settings   │  │status/<job>   │  │  /graph/<job>  [NEW]  │    │
-│  └──────┬───────┘  └───────┬───────┘  └────────────┬──────────┘    │
-├─────────┼───────────────────┼─────────────────────────┼─────────────┤
-│         │      Enrichment Pipeline (existing + extended)            │
-│         ↓                   ↓                         ↓             │
-│  ┌─────────────────────────────────────────────────────────────┐   │
-│  │                 ProviderRegistry                              │   │
-│  │  ┌────────────────────────┐  ┌────────────────────────┐     │   │
-│  │  │   Remote Providers     │  │   Local Providers [NEW]│     │   │
-│  │  │   (existing 8)         │  │                         │     │   │
-│  │  │  VirusTotal            │  │  DNSProvider            │     │   │
-│  │  │  MalwareBazaar         │  │  GeoIPProvider          │     │   │
-│  │  │  ThreatFox             │  │  ASNProvider            │     │   │
-│  │  │  Shodan InternetDB     │  │  CertProvider           │     │   │
-│  │  │  URLhaus               │  │                         │     │   │
-│  │  │  OTX AlienVault        │  └────────────────────────┘     │   │
-│  │  │  GreyNoise             │                                   │   │
-│  │  │  AbuseIPDB             │                                   │   │
-│  │  └────────────────────────┘                                   │   │
-│  └─────────────────────────────────────────────────────────────┘   │
-├─────────────────────────────────────────────────────────────────────┤
-│                        Storage Layer                                 │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐             │
-│  │  CacheStore  │  │  NoteStore   │  │  GeoLite2    │             │
-│  │  (existing   │  │  [NEW]       │  │  .mmdb files │             │
-│  │   SQLite)    │  │  SQLite      │  │  [NEW]       │             │
-│  └──────────────┘  └──────────────┘  └──────────────┘             │
-└─────────────────────────────────────────────────────────────────────┘
+POST /analyze  ->  run_pipeline(text)  ->  EnrichmentOrchestrator.enrich_all()
+                                                 |
+                                   ProviderRegistry.providers_for_type()
+                                                 |
+                                   [adapter.lookup(ioc) x N providers]
+                                                 |
+                         GET /enrichment/status/<job_id>  ->  polling  ->  browser renders cards
 ```
 
 ---
 
-## Core Architectural Question: Does the Provider Protocol Fit?
+## Standard Architecture: How New Providers Integrate
 
-**Answer: Yes, with a critical extension for local providers.**
+The Provider Protocol makes new provider addition mechanical. Every new provider is ONE new file + ONE `register()` call. No orchestrator, route, or registry changes needed.
 
-The existing `Provider` protocol has:
-
-```python
-name: str
-supported_types: set[IOCType] | frozenset[IOCType]
-requires_api_key: bool
-
-def lookup(self, ioc: IOC) -> EnrichmentResult | EnrichmentError: ...
-def is_configured(self) -> bool: ...
-```
-
-Zero-auth enrichment sources (DNS, GeoIP, ASN, cert transparency) all satisfy this protocol directly, following the same pattern as the existing `ShodanAdapter` (which is already zero-auth, always `is_configured() == True`). **No protocol changes are needed.**
-
-However, local providers differ from remote providers in three ways that need architectural clarity:
-
-| Dimension | Remote Providers | Local Providers (new) |
-|-----------|-----------------|----------------------|
-| Network calls | Yes — outbound HTTP | No — local library or mmdb file |
-| SSRF allowlist | Required (SEC-16) | Not applicable |
-| Rate limiting | Yes (varies by provider) | None |
-| Setup requirement | API key or zero-auth | Python package + optional data file |
-| Timeout behavior | (5, 30) timeout critical | Near-instant (sub-millisecond) |
-| Caching value | High (API quota conservation) | Lower (local lookups are free) |
-| Failure mode | Network error, HTTP error | Library error, missing file |
-
-### Local Provider Pattern
-
-Local providers implement the exact same protocol but skip `validate_endpoint()` and `http_safety` utilities entirely:
+### Provider Protocol Contract (from `app/enrichment/provider.py`)
 
 ```python
-class DNSProvider:
-    name = "DNS Resolver"
-    supported_types: frozenset[IOCType] = frozenset({IOCType.IPV4, IOCType.IPV6, IOCType.DOMAIN})
-    requires_api_key = False
-    source_type = "local"  # informational — not part of Protocol
+class Provider(Protocol):
+    name: str
+    supported_types: set[IOCType] | frozenset[IOCType]
+    requires_api_key: bool
 
-    def is_configured(self) -> bool:
-        return True  # dnspython always available if installed
-
-    def lookup(self, ioc: IOC) -> EnrichmentResult | EnrichmentError:
-        # No HTTP. No SSRF check. No timeout tuple.
-        # Pure dnspython synchronous resolver call.
-        ...
+    def lookup(self, ioc: IOC) -> EnrichmentResult | EnrichmentError: ...
+    def is_configured(self) -> bool: ...
 ```
 
-The `source_type = "local"` class attribute is informational for the settings page — it is NOT part of the Protocol and is not used by ProviderRegistry or EnrichmentOrchestrator.
+All four new providers satisfy this contract with `requires_api_key = False` and `is_configured()` returning `True` always (zero-auth).
 
-**Confidence: HIGH** — verified against existing ShodanAdapter pattern which is already zero-auth with `is_configured() == True`.
+### System Overview (v7.0 target state)
+
+```
++-------------------------------------------------------------+
+|                     Flask Routes                            |
+|  POST /analyze   GET /settings   GET /ioc/<type>/<value>    |
++------------------------------+------------------------------+
+                               |
++------------------------------v------------------------------+
+|               EnrichmentOrchestrator                        |
+|  enrich_all() -> ThreadPoolExecutor -> cache -> results     |
++------------------------------+------------------------------+
+                               |
++------------------------------v------------------------------+
+|               ProviderRegistry (17 providers)               |
++---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+
+    |   |   |   |   |   |   |   |   |   |   |   |   |   |
+[ existing 13 providers ]  [NEW v7.0 providers]
+                            |           |           |       |
+                      DNSBLAdapter  ThreatFeedAdapter  RDAPAdapter  ASNAdapter
+                      (DNS-native)  (HTTP bulk feed)  (HTTP REST)  (DNS-native)
++-------------------------------------------------------------+
+|                       Data Stores                           |
+|  CacheStore (cache.db)     [AnnotationStore REMOVED]        |
++-------------------------------------------------------------+
+```
 
 ---
 
-## Zero-Auth Enrichment Sources
+## New Components Required
 
-### 1. DNS Resolver (dnspython)
+### 1. DNSBLAdapter — `app/enrichment/adapters/dnsbl.py`
 
-**What it provides:** Forward/reverse DNS lookups, MX records, TXT records (SPF, DMARC)
-**IOC types:** IPv4 (PTR/reverse), IPv6 (PTR), domain (A, AAAA, MX, TXT, NS)
-**Library:** `dnspython` (v2.9.0 as of 2025) — synchronous `dns.resolver.resolve()`
+**What it does:** Checks IPs and domains against DNS-based reputation blocklists (Spamhaus ZEN for IPs, SURBL multi for domains) by constructing reversed DNS queries.
+
+**Mechanism:** Pure DNS — uses the existing `dnspython` dependency. No HTTP calls. No API key. Same pattern as `DnsAdapter` (port 53 direct, `allowed_hosts` accepted but unused for SSRF purposes).
+
+**Supported types:** `{IOCType.IPV4, IOCType.IPV6, IOCType.DOMAIN}`
+
+**Verdict logic:**
+- Any DNSBL hit → `"malicious"` with `detection_count = count_of_listed_zones`
+- All zones return NXDOMAIN → `"clean"` (explicitly checked, not present)
+- DNS timeout / failure → `EnrichmentError`
+
+**Query patterns:**
+
+For IP (`1.2.3.4`):
+```
+# Reverse octets + append zone
+4.3.2.1.zen.spamhaus.org  (A record lookup)
+4.3.2.1.bl.spamhaus.org   (A record lookup)
+```
+
+For domain (`evil.com`):
+```
+# Prepend domain + append zone
+evil.com.multi.surbl.org  (A record lookup)
+evil.com.dbl.spamhaus.org (A record lookup)
+```
+
+**Return codes:** Any `127.x.x.x` A record = listed. NXDOMAIN = not listed.
+
+**DNSBL zones to query (verified):**
+
+| Zone | Covers | Type |
+|------|--------|------|
+| `zen.spamhaus.org` | Combined SBL+XBL+PBL | IPs |
+| `dbl.spamhaus.org` | Domain blocklist | Domains |
+| `multi.surbl.org` | URI DNSBL (phishing/spam domains) | Domains |
+
+**Spamhaus free-tier note:** MEDIUM confidence. Spamhaus operates a fair-use policy for non-commercial, low-volume use. A local analyst tool making per-IOC queries on demand (not bulk automated) is within fair use. The risk is if an analyst pastes very large batches frequently — the system resolver may be rate-limited. Mitigations: cap retries, treat `SERVFAIL` as no-data rather than malicious.
+
+**Implementation pattern (mirrors `DnsAdapter`):**
 
 ```python
-import dns.resolver
-import dns.reversename
-
-class DNSProvider:
+class DNSBLAdapter:
+    name = "DNSBL"
     supported_types = frozenset({IOCType.IPV4, IOCType.IPV6, IOCType.DOMAIN})
-
-    def lookup(self, ioc: IOC) -> EnrichmentResult | EnrichmentError:
-        try:
-            if ioc.type in {IOCType.IPV4, IOCType.IPV6}:
-                rev_name = dns.reversename.from_address(ioc.value)
-                answers = dns.resolver.resolve(rev_name, "PTR")
-                hostnames = [str(r) for r in answers]
-                raw_stats = {"ptr": hostnames, "record_type": "PTR"}
-            else:
-                # Domain: A/AAAA + MX + TXT
-                ...
-            return EnrichmentResult(ioc=ioc, provider=self.name, verdict="no_data",
-                                    detection_count=0, total_engines=0, scan_date=None,
-                                    raw_stats=raw_stats)
-        except dns.exception.DNSException as e:
-            return EnrichmentError(ioc=ioc, provider=self.name, error=str(e))
-```
-
-**Key consideration:** DNS lookups use the system's configured resolver. For a jump box or local analyst machine, this is the correct behavior. No SSRF risk — dnspython does not contact analyst-controlled infrastructure.
-
-**Confidence: HIGH** — dnspython 2.9.0 official docs confirm synchronous `dns.resolver.resolve()` with `dns.reversename.from_address()` for PTR lookups.
-
----
-
-### 2. GeoIP/ASN (geoip2 + GeoLite2 mmdb files)
-
-**What it provides:** Country, city, ASN, organization for IP addresses
-**IOC types:** IPv4, IPv6
-**Library:** `geoip2` Python package + MaxMind GeoLite2 `.mmdb` files
-
-**File placement:** `~/.sentinelx/geoip/GeoLite2-City.mmdb` and `GeoLite2-ASN.mmdb`
-
-This is the most architecturally different new provider because it requires **local database files** that the analyst must provision. This is similar to `requires_api_key` but for files, not keys.
-
-```python
-import geoip2.database
-import geoip2.errors
-
-class GeoIPProvider:
-    name = "GeoIP"
-    supported_types = frozenset({IOCType.IPV4, IOCType.IPV6})
-    requires_api_key = False
-    _db_path = Path.home() / ".sentinelx" / "geoip" / "GeoLite2-City.mmdb"
-
-    def is_configured(self) -> bool:
-        return self._db_path.exists()
-
-    def lookup(self, ioc: IOC) -> EnrichmentResult | EnrichmentError:
-        try:
-            with geoip2.database.Reader(str(self._db_path)) as reader:
-                response = reader.city(ioc.value)
-            ...
-        except geoip2.errors.AddressNotFoundError:
-            return EnrichmentResult(..., verdict="no_data", raw_stats={})
-        except FileNotFoundError:
-            return EnrichmentError(..., error="GeoLite2 database not found")
-```
-
-**Critical issue — Reader lifecycle:** The geoip2 docs warn that Reader creation is expensive. For a lookup-per-request pattern, this means caching the Reader as a class attribute or using `with` lazily. For low-volume analyst use, `with` per lookup is acceptable and simplest. High-frequency would warrant a module-level Reader.
-
-**Database provisioning:** GeoLite2 requires a free MaxMind account for official downloads. The settings page should display `is_configured()` status and instructions. Do NOT bundle the mmdb files in the repo (license restriction: GeoLite2 requires attribution and cannot be redistributed without a license agreement).
-
-**Confidence: HIGH** — geoip2 5.2.0 official docs confirm `geoip2.database.Reader`, `AddressNotFoundError`, and Reader creation cost warning.
-
----
-
-### 3. ASN Lookup (ipwhois)
-
-**What it provides:** ASN number, AS name, AS description, CIDR range, network owner
-**IOC types:** IPv4, IPv6
-**Library:** `ipwhois` — `IPWhois(ip).lookup_rdap()` method
-
-```python
-from ipwhois import IPWhois
-
-class ASNProvider:
-    name = "ASN Lookup"
-    supported_types = frozenset({IOCType.IPV4, IOCType.IPV6})
     requires_api_key = False
 
-    def is_configured(self) -> bool:
-        return True  # pure RDAP — no local files needed
-
-    def lookup(self, ioc: IOC) -> EnrichmentResult | EnrichmentError:
-        try:
-            obj = IPWhois(ioc.value)
-            result = obj.lookup_rdap(depth=1)
-            raw_stats = {
-                "asn": result.get("asn"),
-                "asn_description": result.get("asn_description"),
-                "asn_cidr": result.get("asn_cidr"),
-                "network_name": result.get("network", {}).get("name"),
-            }
-            return EnrichmentResult(ioc=ioc, provider=self.name, verdict="no_data",
-                                    detection_count=0, total_engines=0, scan_date=None,
-                                    raw_stats=raw_stats)
-        except Exception as e:
-            return EnrichmentError(ioc=ioc, provider=self.name, error=str(e))
-```
-
-**Important constraint:** ipwhois performs RDAP lookups against RIR servers (ARIN, RIPE, APNIC, etc.) — these are outbound HTTP calls. The RIR endpoints must be added to `ALLOWED_API_HOSTS` in `config.py`. However, RIR RDAP endpoints have dynamic URLs that vary by IP range, making static allowlisting impractical.
-
-**Architecture decision required:** ASN via ipwhois is effectively a "remote zero-auth" provider with variable endpoints — the SSRF allowlist model cannot safely accommodate it. Two options:
-
-- **Option A:** Include RIR RDAP endpoints in allowlist (complex, fragile)
-- **Option B:** Use Shodan InternetDB's `cpes`/`hostnames` fields (already in raw_stats) for basic ASN-adjacent context
-- **Option C:** Defer ASN to a Cymru WHOIS-style TCP lookup (not HTTP — exempt from SSRF allowlist)
-
-**Recommendation:** Option B for the first phase (extract more from existing Shodan data), Option C research for a subsequent phase. Skip ipwhois for v6.0.
-
-**Confidence: MEDIUM** — ipwhois RDAP pattern confirmed, SSRF allowlist conflict identified from code analysis.
-
----
-
-### 4. Certificate Transparency (crt.sh API)
-
-**What it provides:** Historical SSL/TLS certificates for a domain, subdomain enumeration
-**IOC types:** Domain
-**Endpoint:** `https://crt.sh/?q=<domain>&output=json` — public JSON API, zero-auth
-
-```python
-class CertTransparencyProvider:
-    name = "Cert Transparency"
-    supported_types = frozenset({IOCType.DOMAIN})
-    requires_api_key = False
+    def __init__(self, allowed_hosts: list[str]) -> None:
+        pass  # DNS-native, no SSRF surface
 
     def is_configured(self) -> bool:
-        return True  # zero-auth remote API
+        return True
 
     def lookup(self, ioc: IOC) -> EnrichmentResult | EnrichmentError:
-        url = f"https://crt.sh/?q={ioc.value}&output=json"
-        validate_endpoint(url, self._allowed_hosts)  # must add crt.sh to allowlist
         ...
 ```
 
-**crt.sh endpoint:** `crt.sh` must be added to `ALLOWED_API_HOSTS`. The response can be large (thousands of certificates for popular domains) — the existing 1 MB response cap in `read_limited()` applies. Consider a `?limit=100` or filtering by most recent.
-
-**What analysts get:** Issuer org, subject alt names (subdomains), validity period, issuer CA. Useful for domain IOCs to identify infrastructure relationships.
-
-**Confidence: MEDIUM** — crt.sh JSON API confirmed via multiple sources, endpoint format verified, but response volume for popular domains is a known concern.
+**raw_stats shape:**
+```python
+{
+    "listed_on": ["zen.spamhaus.org"],  # zones that returned a hit
+    "checked": ["zen.spamhaus.org", "dbl.spamhaus.org"],  # all zones queried
+    "lookup_errors": [],  # timeout/failure entries per zone
+}
+```
 
 ---
 
-## Local vs Remote Enrichment: Architectural Distinction
+### 2. ThreatFeedAdapter — `app/enrichment/adapters/threat_feed.py`
 
-The distinction matters for three things:
+**What it does:** Checks IPs against the Feodo Tracker botnet C2 IP blocklist (JSON format). Uses a bulk-download-and-search pattern: downloads the full JSON feed, builds an in-memory set, then answers lookup calls by set membership.
 
-### 1. SSRF Allowlist (`config.py`)
+**Mechanism:** HTTP GET to `https://feodotracker.abuse.ch/downloads/ipblocklist.json` — one download per cache TTL window, not per IOC.
 
-Remote providers add hosts to `ALLOWED_API_HOSTS`. Local providers add nothing:
+**Important context:** The Feodo Tracker JSON feed currently shows empty datasets due to successful law enforcement takedowns (Emotet 2021, Operation Endgame 2024). The feed infrastructure is maintained but active C2 entries are absent at time of research. This means the provider will typically return `"clean"` with no detections — which is a correct and useful signal for analysts (confirms IP is not in a known C2 list). The feed URL and format are stable.
 
-```python
-# New additions for zero-auth remote providers
-ALLOWED_API_HOSTS: list[str] = [
-    ...existing 8 hosts...,
-    "crt.sh",              # cert transparency (if included)
-    # NOT: RIR RDAP endpoints (dynamic, complex)
+**Supported types:** `{IOCType.IPV4}` — Feodo Tracker is IP-only.
+
+**Verdict logic:**
+- IP found in feed → `"malicious"` with `detection_count=1`, `raw_stats` includes malware family + C2 port
+- IP not in feed → `"clean"` (confirmed absent from known C2 list)
+- Feed download failure → `EnrichmentError`
+
+**Feed JSON schema (from research):**
+```json
+[
+  {
+    "ip_address": "1.2.3.4",
+    "port": 443,
+    "malware_malpedia": "Dridex",
+    "as_number": 12345,
+    "as_name": "ISP Name",
+    "country": "US",
+    "first_seen": "2024-01-01 00:00:00",
+    "last_online": "2024-12-01"
+  }
 ]
 ```
 
-Local providers (DNS, GeoIP) make no outbound HTTP calls — no allowlist entry needed.
+**Key architectural decision:** This is NOT a per-call HTTP adapter like the others. It requires a feed-refresh strategy. Two options:
 
-### 2. Cache TTL Strategy
+- **Option A (simpler, recommended):** Download on each `lookup()` call, rely on the existing `CacheStore` to avoid repeated downloads. The result gets cached like any other provider result — the full feed is never stored in app memory, only the per-IOC lookup result is cached. Downside: every cache-miss triggers a full 100KB+ JSON download.
 
-Local lookups (GeoIP mmdb) are near-instant and free — caching provides minimal benefit. Remote zero-auth lookups (DNS, crt.sh) benefit from caching to avoid redundant network calls:
+- **Option B (efficient, complex):** Module-level feed cache with TTL — load the full feed into memory once, refresh every N minutes. Requires a background thread or lazy refresh. Adds shared state that violates the stateless-per-request pattern used by all other adapters.
 
-| Provider | Cache Recommended | Suggested TTL |
-|----------|------------------|---------------|
-| DNS Resolver | Yes | 1 hour (DNS TTLs typically short) |
-| GeoIP (mmdb) | No | — (sub-ms, no quota) |
-| Cert Transparency | Yes | 24 hours (CT logs update slowly) |
-| ASN (deferred) | Yes | 48 hours |
+**Recommendation:** Option A. The `CacheStore` TTL (default 24h) means the full download happens at most once per IOC per day. The feed is ~100KB. The SentinelX "one analyst, local tool" context makes Option B premature optimization. Mark for future optimization if batch-size grows.
 
-The existing `CacheStore` works unchanged — cache lookup is in `EnrichmentOrchestrator._do_lookup()` which wraps all adapters uniformly. Local providers can pass through the cache layer without harm.
+**SSRF allowlist change required:** Add `feodotracker.abuse.ch` to `ALLOWED_API_HOSTS` in `app/config.py`.
 
-### 3. Settings Page Display
-
-The settings page currently shows only key-requiring providers. A new "Local Intelligence" section should show:
-
-- **DNS Resolver:** Always available (green checkmark)
-- **GeoIP:** Shows mmdb file status (configured/not configured with download instructions)
-- **Cert Transparency:** Always available (zero-auth remote)
-
-This requires extending `PROVIDER_INFO` in `setup.py` with a new `"source_type"` field: `"local"` | `"remote"` | `"remote_zero_auth"`.
+**raw_stats shape (hit):**
+```python
+{
+    "malware": "Dridex",
+    "port": 443,
+    "first_seen": "2024-01-01 00:00:00",
+    "last_online": "2024-12-01",
+}
+```
 
 ---
 
-## Deeper Per-IOC Analysis Views
+### 3. RDAPAdapter — `app/enrichment/adapters/rdap.py`
 
-### Architecture Decision: Server-Side Rendering via New Route
+**What it does:** Retrieves registration data (registrar, creation date, nameservers) for domains and IPs via the RDAP protocol using `rdap.org` as a bootstrap service.
 
-**Pattern:** Add a `GET /ioc/<ioc_value>` route that renders a detail page with all enrichment data from cache, plus local enrichment run on-demand.
+**Mechanism:** HTTP GET to `https://rdap.org/domain/{domain}` or `https://rdap.org/ip/{ip}`. The bootstrap service returns a `302 redirect` to the authoritative RDAP server (IANA-registered). The adapter must follow this redirect (one hop only — `allow_redirects=True` or handle manually).
 
-**Why server-side, not client-side modal:**
+**Important design note:** RDAP redirects go to registry-specific servers (e.g., `https://rdap.verisign.com/com/v1/domain/example.com`). These authoritative servers are NOT in `ALLOWED_API_HOSTS`. The redirect-follow requirement conflicts with `SEC-06` (no redirects). Resolution: use `allow_redirects=True` but validate the redirect destination hostname is an `rdap.*` or registry subdomain — OR use the `rdap.org` bootstrap which itself resolves and proxies the response without redirecting to third-party hosts.
 
-1. The existing results page is rendered server-side with enrichment populated via polling. Deep analysis requires its own page-level navigation.
-2. Per-IOC detail can be bookmarked/linked by analysts (copy URL for sharing in tickets).
-3. The current single-page-ish flow doesn't need to change — the detail page is an optional drill-down.
+**Verification needed:** Confirm whether `rdap.org` proxies responses or issues redirects. From research: OpenRDAP's `rdap.net` "will redirect queries to the authoritative RDAP server via a HTTP 302 redirect." The `rdap.org` bootstrap appears to proxy (returns the authoritative response directly). This needs validation during implementation.
 
-**Data flow for detail page:**
+**Rate limits:** `rdap.org` limits clients to 10 requests per 10 seconds (429 on violation). For a single-analyst tool with cache, this is fine.
 
-```
-Analyst clicks "View Details" on IOC card
-    ↓
-GET /ioc/<url-encoded-ioc-value>?type=<ioc_type>
-    ↓
-Route: query CacheStore for all cached results for this IOC
-    ↓
-Route: run local enrichment (DNS/GeoIP) synchronously (fast — sub-second)
-    ↓
-Route: render ioc_detail.html with all data
-    ↓
-Browser renders: tabbed detail view
-```
+**Supported types:** `{IOCType.DOMAIN, IOCType.IPV4, IOCType.IPV6}`
 
-**Tab structure for per-IOC detail:**
+**Verdict logic:** Always `"no_data"` — registration data is informational context, not a threat signal. Domain age is a useful triage indicator (newly registered = higher suspicion) but the adapter does not make that judgment.
 
-| Tab | Content | IOC Types |
-|-----|---------|-----------|
-| Overview | Summary verdict, provider consensus, key stats | All |
-| Network | Reverse DNS, open ports, ASN, GeoIP, hostnames | IP |
-| Certificates | CT log entries, issuer, SANs | Domain, URL |
-| DNS Records | A/AAAA, MX, TXT (SPF/DMARC), NS | Domain |
-| Threat Intel | All provider results, expandable raw data | All |
-| Graph | IOC relationship visualization | All |
-| Notes | Analyst tags and notes | All |
+**RDAP JSON response fields (from RFC 9083):**
+- `events[].eventAction == "registration"` → `eventDate` = creation date
+- `events[].eventAction == "expiration"` → `eventDate` = expiry date
+- `nameservers[].ldhName` → nameserver hostnames
+- `entities[role=="registrar"].vcardArray` → registrar name
 
-**New Flask route:**
+**SSRF allowlist change required:** Add `rdap.org` to `ALLOWED_API_HOSTS`. If redirect-follow is needed, this must also allow the resolved authoritative server hostname — which is registry-dependent and not enumerable. This is a security tradeoff that needs phase-level decision: either use `rdap.org` as a true proxy (single allowlist entry) or flag this as MEDIUM risk and limit to domain RDAP only.
 
+**raw_stats shape:**
 ```python
-@bp.route("/ioc/<path:ioc_value>", methods=["GET"])
-@limiter.limit("30 per minute")
-def ioc_detail(ioc_value: str):
-    ioc_type_str = request.args.get("type", "")
-    # Validate ioc_type_str against IOCType enum — never trust query params
-    # Load cached enrichment results from CacheStore
-    # Run local enrichment synchronously
-    # Render template
-    return render_template("ioc_detail.html", ...)
+{
+    "registrar": "GoDaddy.com, LLC",
+    "created": "2015-03-01",
+    "expires": "2026-03-01",
+    "nameservers": ["ns1.example.com", "ns2.example.com"],
+}
 ```
-
-**Security:** `ioc_value` from URL path must be validated against the same normalization pipeline — never use raw path value in any query, log, or display without validation. Use `IOCType` enum to validate the `type` param.
 
 ---
 
-## Relationship Graph Visualization
+### 4. ASNAdapter — `app/enrichment/adapters/asn.py`
 
-### Architecture Decision: Cytoscape.js via CDN, Graph Data from Flask API
+**What it does:** Returns ASN number, prefix, country, registry, and allocation date for IPs using the Team Cymru DNS-based IP-to-ASN mapping service.
 
-**Why Cytoscape.js over D3.js and Vis.js:**
+**Mechanism:** Pure DNS — uses existing `dnspython` dependency. Zero-auth. Free forever (Team Cymru's stated policy). No HTTP calls. No SSRF surface. Same pattern as `DnsAdapter`.
 
-| Criterion | D3.js | Vis.js | Cytoscape.js |
-|-----------|-------|--------|--------------|
-| Built-in graph algorithms | No | Partial | Yes (BFS, DFS, shortest path) |
-| API complexity | High | Medium | Low |
-| Performance | Medium | Low | High |
-| CDN bundle size | Large | Large | ~87 KB minified |
-| Vanilla JS compatible | Yes | Yes | Yes (no framework needed) |
-| Analyst-appropriate interactivity | Manual | Auto | Auto |
-
-Cytoscape.js is specifically designed for network/relationship graphs, works with vanilla JS (no npm), and is available via jsDelivr CDN. The project constraints exclude npm — Cytoscape.js can be loaded from CDN and included as a `<script>` tag, matching the project's no-Node-dependency philosophy.
-
-**CDN delivery vs self-hosted:**
-
-The project serves fonts from `app/static/fonts/` (self-hosted). For CSP compliance, Cytoscape.js should also be self-hosted:
-
+**Query format (verified):**
 ```
-tools/
-├── esbuild          (existing binary)
-├── tailwindcss      (existing binary)
-app/static/
-├── vendor/
-│   └── cytoscape.min.js   [NEW — downloaded at setup time]
+# IPv4: reverse octets, append .origin.asn.cymru.com, query TXT
+dig +short 31.108.90.216.origin.asn.cymru.com TXT
+# Returns: "23028 | 216.90.108.0/24 | US | arin | 1998-09-25"
+
+# IPv6: reverse nibbles, append .origin6.asn.cymru.com
 ```
 
-Add to `make vendor` target or manual install instructions. This avoids adding an external CDN to the CSP `script-src` directive.
+**ASN description lookup:**
+```
+dig +short AS23028.asn.cymru.com TXT
+# Returns: "23028 | US | arin | 1998-09-25 | TEAM-CYMRU, US"
+```
 
-**Graph data API:**
+**Supported types:** `{IOCType.IPV4, IOCType.IPV6}`
+
+**Verdict logic:** Always `"no_data"` — ASN data is contextual, not a threat verdict. The analyst uses it to identify hosting providers, cloud ASNs (AWS/Azure/GCP = likely cloud/C2 infrastructure), or known-bad ASNs.
+
+**Implementation pattern (mirrors `DnsAdapter`):**
 
 ```python
-@bp.route("/api/graph/<job_id>", methods=["GET"])
-@limiter.limit("30 per minute")
-def graph_data(job_id: str):
-    """Return Cytoscape.js node/edge format for job results."""
-    # Build graph from enrichment results
-    # Nodes: IOC values + provider names
-    # Edges: IOC → provider (with verdict weight)
-    return jsonify({"nodes": [...], "edges": [...]})
+class ASNAdapter:
+    name = "ASN Info"
+    supported_types = frozenset({IOCType.IPV4, IOCType.IPV6})
+    requires_api_key = False
+
+    def __init__(self, allowed_hosts: list[str]) -> None:
+        pass  # DNS-native, no SSRF surface
+
+    def is_configured(self) -> bool:
+        return True
 ```
 
-**Graph node types:**
-
+**raw_stats shape:**
+```python
+{
+    "asn": "AS23028",
+    "prefix": "216.90.108.0/24",
+    "country": "US",
+    "registry": "arin",
+    "allocated": "1998-09-25",
+    "as_name": "TEAM-CYMRU, US",
+}
 ```
-IOC node:      { id: "ioc:<value>", type: "ioc", ioc_type: "ipv4", verdict: "malicious" }
-Provider node: { id: "provider:VirusTotal", type: "provider", name: "VirusTotal" }
-Edge:          { source: "ioc:<value>", target: "provider:VirusTotal", verdict: "malicious" }
-```
 
-**Relationship enrichment for graph (future phase):** When DNS/cert data reveals that two IOCs share infrastructure (same IP, same cert SANs, same ASN), edges between IOC nodes can show these relationships — turning the graph from a "star topology" (IOC → providers) into a genuine relationship map.
-
-**TypeScript module:** Add `modules/graph.ts` that imports Cytoscape.js via a declare module shim and wires the graph container on the detail page. The IIFE bundle approach works — Cytoscape.js is loaded as a global before main.js runs.
-
-**Confidence: MEDIUM** — Cytoscape.js CDN delivery and vanilla JS confirmed. Graph data API pattern is standard Flask JSON pattern (HIGH). Relationship enrichment is future scope.
+**Note on `ip-api.com` overlap:** The existing `IPApiAdapter` already returns `as` (ASN number) and `asname` in its `raw_stats`. The `ASNAdapter` provides BGP-level precision: prefix, registry, allocation date, and peer ASNs — context not available from ip-api.com. These are complementary, not redundant. The analyst sees both.
 
 ---
 
-## IOC Tagging and Notes
+## Annotations Removal: All Touchpoints
 
-### Architecture Decision: New SQLite Table in Separate NoteStore
+This is a destructive change. Every file that imports or uses `AnnotationStore` must be modified. Full touchpoint map:
 
-**Pattern:** A new `NoteStore` class parallel to `CacheStore`, storing analyst annotations per IOC value.
+### Python — Files to Modify or Remove
 
-```python
-# app/notes/store.py
-class NoteStore:
-    _CREATE_TABLE = """
-    CREATE TABLE IF NOT EXISTS ioc_notes (
-        ioc_value   TEXT NOT NULL,
-        ioc_type    TEXT NOT NULL,
-        tags        TEXT NOT NULL DEFAULT '[]',   -- JSON array of tag strings
-        note        TEXT NOT NULL DEFAULT '',
-        updated_at  TEXT NOT NULL,
-        PRIMARY KEY (ioc_value, ioc_type)
-    )
-    """
+| File | Change Type | Detail |
+|------|-------------|--------|
+| `app/annotations/__init__.py` | **Delete module** | Empty init file |
+| `app/annotations/store.py` | **Delete module** | AnnotationStore class |
+| `app/routes.py` | **Modify** | Remove: `from app.annotations.store import AnnotationStore`, all AnnotationStore() calls, `annotations_map` variable, `annotations_map=annotations_map` template arg, `annotations=annotations` in ioc_detail, 3 API routes (`/api/ioc/.../notes`, `/api/ioc/.../tags`, `/api/ioc/.../tags/<tag>`) |
 
-    def get(self, ioc_value: str, ioc_type: str) -> dict | None: ...
-    def put(self, ioc_value: str, ioc_type: str, tags: list[str], note: str) -> None: ...
-    def search_by_tag(self, tag: str) -> list[dict]: ...
+### TypeScript — Files to Remove
+
+| File | Change Type | Detail |
+|------|-------------|--------|
+| `app/static/src/ts/modules/annotations.ts` | **Delete module** | Notes + tags UI logic |
+
+### Templates — Files to Modify
+
+| File | Change Type | Detail |
+|------|-------------|--------|
+| `app/templates/results.html` | **Modify** | Remove: tag display on cards, tag filter bar, `annotations_map` variable references |
+| `app/templates/ioc_detail.html` | **Modify** | Remove: notes textarea, tags section, annotation-related JS calls |
+
+### TypeScript Entry Point
+
+| File | Change Type | Detail |
+|------|-------------|--------|
+| `app/static/src/ts/main.ts` | **Modify** | Remove `annotations.ts` import/initialization |
+
+### Tests to Remove
+
+- All unit tests in `tests/unit/test_annotations_store.py` (or equivalent)
+- All E2E tests testing notes/tags UI
+- Integration tests calling `/api/ioc/.../notes` and `/api/ioc/.../tags`
+
+**Impact on detail page:** `ioc_detail()` in `routes.py` passes `annotations=annotations` to `ioc_detail.html`. After removal, this variable disappears from both the route and template. The graph and tabbed provider results remain unchanged.
+
+---
+
+## Data Flow Changes
+
+### Existing Flow (v6.0)
+
+```
+POST /analyze
+   -> run_pipeline()
+   -> AnnotationStore().get_all_for_ioc_values()   [READ: annotations for tag display]
+   -> render results.html with annotations_map
+
+GET /ioc/<type>/<value>
+   -> CacheStore.get_all_for_ioc()                  [READ: cached results]
+   -> AnnotationStore().get()                        [READ: notes + tags]
+   -> render ioc_detail.html with annotations
+
+POST /api/ioc/.../notes                             [WRITE: save notes]
+POST /api/ioc/.../tags                              [WRITE: add tag]
+DELETE /api/ioc/.../tags/<tag>                      [WRITE: remove tag]
 ```
 
-**Database path:** `~/.sentinelx/notes.db` — separate from `cache.db` to allow independent clearing.
+### New Flow (v7.0)
 
-**Why separate from CacheStore:** Cache is ephemeral (TTL-driven, clearable). Notes are intentional analyst annotations — clearing cache must not destroy notes. Separate files make this semantically clear and operationally safe.
+```
+POST /analyze
+   -> run_pipeline()
+   -> render results.html                            [annotations_map REMOVED]
 
-**API surface:** Notes are saved via a POST from the IOC detail page, displayed inline on results cards (tag badges), and searchable from a future notes/history page.
+GET /ioc/<type>/<value>
+   -> CacheStore.get_all_for_ioc()                  [unchanged]
+   -> render ioc_detail.html                         [annotations REMOVED]
 
-```python
-@bp.route("/api/ioc/<path:ioc_value>/notes", methods=["POST"])
-@limiter.limit("20 per minute")
-def save_note(ioc_value: str): ...
+[notes/tags API routes: ALL DELETED]
 ```
 
-**Inline display on results cards:** Add a `data-tags` attribute to `.ioc-card` elements populated from NoteStore at `/analyze` render time (for IOCs that have cached enrichment results with existing notes). The TypeScript `cards.ts` module renders tag badges from this attribute.
+### Provider Lookup Flow (same as before, new providers added)
 
-**Confidence: MEDIUM** — Pattern is a direct extension of the existing CacheStore architecture; SQLite schema is straightforward; API design is standard Flask POST.
+```
+EnrichmentOrchestrator.enrich_all(job_id, iocs)
+   -> for each ioc:
+        providers = registry.providers_for_type(ioc.type)
+        for provider in providers:
+            result = provider.lookup(ioc)           [new: DNSBL, ThreatFeed, RDAP, ASN]
+            cache.set(ioc.value, provider.name, result)
+```
+
+---
+
+## SSRF Allowlist Changes Required
+
+`app/config.py` `ALLOWED_API_HOSTS` must be updated:
+
+| New Entry | Provider | Notes |
+|-----------|----------|-------|
+| `feodotracker.abuse.ch` | ThreatFeedAdapter | HTTP bulk feed |
+| `rdap.org` | RDAPAdapter | Bootstrap RDAP service |
+
+DNS-based adapters (DNSBLAdapter, ASNAdapter) do NOT require allowlist entries — they use port 53 directly and have no SSRF surface, matching the DnsAdapter pattern.
+
+**RDAP redirect concern:** If `rdap.org` issues a 302 redirect to registry-specific servers (e.g., `rdap.verisign.com`), the allowlist cannot enumerate all possible registry hostnames. Recommended resolution: test empirically during implementation. If `rdap.org` proxies responses (likely), one entry suffices. If it redirects, consider disabling RDAP domain lookups and restricting to IP-only via a known set of RIR RDAP servers (ARIN, RIPE, APNIC, LACNIC, AFRINIC — 5 known hostnames).
 
 ---
 
 ## Recommended Project Structure (New Files Only)
 
 ```
-app/
-├── enrichment/
-│   └── adapters/
-│       ├── dns_resolver.py         # DNSProvider — dnspython
-│       ├── geoip.py                # GeoIPProvider — geoip2 + mmdb
-│       └── cert_transparency.py    # CertTransparencyProvider — crt.sh
-├── notes/                          # [NEW module]
-│   ├── __init__.py
-│   └── store.py                    # NoteStore — SQLite ioc_notes table
-├── templates/
-│   ├── ioc_detail.html             # [NEW] per-IOC deep analysis page
-│   └── graph.html                  # [NEW] or section in ioc_detail.html
-└── static/
-    ├── vendor/
-    │   └── cytoscape.min.js        # [NEW] self-hosted Cytoscape.js
-    └── src/ts/modules/
-        ├── graph.ts                # [NEW] Cytoscape.js wiring
-        └── notes.ts                # [NEW] inline tag/note UI
+app/enrichment/adapters/
+├── dnsbl.py          # NEW: DNSBLAdapter (IP+domain DNSBL via DNS)
+├── threat_feed.py    # NEW: ThreatFeedAdapter (Feodo C2 bulk JSON)
+├── rdap.py           # NEW: RDAPAdapter (domain+IP registration via HTTP)
+└── asn.py            # NEW: ASNAdapter (IP ASN/BGP via DNS)
+
+app/enrichment/
+└── setup.py          # MODIFY: add 4 new register() calls
+app/config.py         # MODIFY: add 2 new ALLOWED_API_HOSTS entries
+app/routes.py         # MODIFY: strip all AnnotationStore references + 3 API routes
+app/annotations/      # DELETE: entire module
+app/static/src/ts/modules/
+└── annotations.ts    # DELETE: annotations TypeScript module
 ```
 
 ---
 
-## Data Flow: Full v6.0 Enrichment
+## Architectural Patterns
 
-### Primary Flow (unchanged)
+### Pattern 1: DNS-Native Provider (for DNSBLAdapter and ASNAdapter)
 
-```
-POST /analyze
-    ↓
-run_pipeline(text) → [IOC, ...]
-    ↓
-EnrichmentOrchestrator.enrich_all(job_id, iocs)
-    → [VirusTotal, MalwareBazaar, ThreatFox, Shodan, URLhaus,
-       OTX, GreyNoise, AbuseIPDB,
-       DNSProvider, GeoIPProvider, CertTransparencyProvider]  ← new providers in registry
-    ↓
-GET /enrichment/status/<job_id>  (polling, 750ms interval)
-    ↓
-Browser renders cards with enrichment data (existing TypeScript pipeline)
-```
+**What:** Use `dnspython` for all query logic — no HTTP, no `http_safety.py`, `allowed_hosts` accepted but unused.
+**When to use:** Any provider that communicates via DNS (port 53) rather than HTTP/HTTPS.
+**Precedent:** `DnsAdapter` (dns_lookup.py) — already in codebase.
 
-### Detail View Flow (new)
+**Key implementation notes:**
+- Create a fresh `dns.resolver.Resolver(configure=True)` per `lookup()` call — no shared state
+- Set `resolver.lifetime = 5.0` for consistent timeout
+- `NXDOMAIN` = negative result (not listed) — never an error
+- `SERVFAIL` / timeout = `EnrichmentError` or `lookup_errors` entry (partial failure)
 
-```
-Analyst clicks "View Details" link on IOC card
-    ↓
-GET /ioc/<value>?type=<type>
-    ↓
-CacheStore.get_all_for_ioc(value, type)  → existing enrichment results
-NoteStore.get(value, type)               → analyst annotations
-    ↓
-Render ioc_detail.html with tabbed sections
-    ↓
-Browser: Cytoscape.js renders graph in "Graph" tab (lazy-loaded)
-```
+### Pattern 2: HTTP Bulk-Feed Provider (for ThreatFeedAdapter)
 
----
+**What:** Download a full feed JSON file, extract the relevant record by set membership or dict lookup.
+**When to use:** Provider has no per-IOC query API, only bulk downloads.
+**Trade-off:** Full feed downloaded on each cache-miss. Acceptable for local single-user tool with 24h cache TTL.
 
-## Security Implications
+**Key implementation notes:**
+- Follow standard HTTP safety pattern: `TIMEOUT`, `read_limited()`, `validate_endpoint()`, `allow_redirects=False`
+- Parse feed into a `dict[str, dict]` keyed by IP for O(1) lookups after parsing
+- If feed body exceeds `MAX_RESPONSE_BYTES` (1 MB), return `EnrichmentError` — do NOT increase the cap for this provider
+- Feodo feed is ~100KB — within existing 1 MB cap with room to grow
 
-### New Attack Surface: URL Path IOC Value
+### Pattern 3: HTTP REST Provider (for RDAPAdapter)
 
-The `/ioc/<path:ioc_value>` route exposes IOC values in URLs. **Never trust path values** — always re-validate through the existing normalization pipeline before any use.
+**What:** Standard single-resource HTTP GET, parse structured JSON response.
+**When to use:** Provider has a per-resource REST endpoint.
+**Precedent:** Every existing HTTP adapter (ip_api.py, crtsh.py, hashlookup.py, etc.)
 
-```python
-# WRONG: use ioc_value directly
-cache_results = cache.get_all_for_ioc(ioc_value, ...)  # path injection risk
-
-# CORRECT: validate first
-try:
-    ioc_type = IOCType(ioc_type_str)  # validates against enum
-    iocs = run_pipeline(ioc_value)   # runs full normalization
-    if not iocs:
-        abort(400)
-    canonical = iocs[0].value        # use only the normalized form
-except ValueError:
-    abort(400)
-```
-
-### DNS Lookups: No SSRF Risk, But Timing
-
-DNS resolution is synchronous in dnspython. The system resolver is used (no HTTP), so the SSRF allowlist is not relevant. However, DNS lookups can block the worker thread for up to the resolver timeout (typically 5 seconds per query). Since EnrichmentOrchestrator uses ThreadPoolExecutor, each DNS lookup consumes a thread slot. Keep the ThreadPoolExecutor `max_workers` consistent — DNS providers should not inflate thread count requirements significantly given their speed.
-
-### GeoIP mmdb: File Path Validation
-
-The GeoIP database path is configurable (future settings UI). Validate that any configurable path is under `~/.sentinelx/` — never allow arbitrary filesystem paths.
-
-### Cytoscape.js: Self-Hosted, CSP Compliant
-
-Loading Cytoscape.js from CDN would require adding `cdn.jsdelivr.net` to `script-src` in the CSP header — a security regression. Self-host the minified bundle at `app/static/vendor/cytoscape.min.js` and serve via Flask's existing static file handler. No CSP changes needed.
-
-### NoteStore: User Input in SQLite
-
-Tags and notes are analyst-controlled free text. Always use parameterized queries (existing CacheStore pattern). Never render notes via `innerHTML` — use `textContent` (SEC-08 pattern). Validate tag strings (length limit, character set) before storing.
+**Key implementation notes:**
+- Follow standard HTTP safety pattern exactly
+- RDAP response is deeply nested — extract fields defensively with `.get()` at every level
+- `events` is a list — must filter by `eventAction`, not index by position
+- `entities` is a list — filter by `roles` list containing `"registrar"`
+- `vcard` inside entities is a nested array-of-arrays format — use `vcardArray` carefully
 
 ---
 
-## Build Order Considerations
+## Build Order
 
-Given inter-dependencies, phases should be ordered:
+The four providers are largely independent of each other. The build order is driven by:
+1. Annotations removal first — eliminates dead code before adding new code
+2. DNS-native providers first — zero new dependencies, same pattern as existing `DnsAdapter`
+3. HTTP providers after — require SSRF allowlist changes
 
-1. **Local enrichment providers** (DNS + GeoIP) — they integrate with existing ProviderRegistry/setup.py. No UI changes needed. Tests can verify `lookup()` behavior immediately.
+**Recommended phase order:**
 
-2. **Settings page extension** — add "Local Intelligence" section showing provider status. Requires `source_type` metadata in `PROVIDER_INFO`.
+| Phase | Work | Rationale |
+|-------|------|-----------|
+| 1 | Annotations removal | Clean slate — removes ~500 LOC, 3 API routes, 1 TS module, DB coupling |
+| 2 | ASNAdapter | Pure DNS, no new deps, supplements existing ip-api.com data |
+| 3 | DNSBLAdapter | Pure DNS, verdict-producing (first new malicious-capable zero-auth provider) |
+| 4 | ThreatFeedAdapter | HTTP bulk-feed, SSRF allowlist change, new download pattern |
+| 5 | RDAPAdapter | HTTP REST, SSRF concern to resolve, most complex JSON parsing |
 
-3. **Cert transparency provider** — requires `ALLOWED_API_HOSTS` update and SSRF validation wiring. Straightforward adapter following existing ShodanAdapter pattern.
-
-4. **NoteStore + tags API** — independent module, no dependencies on new providers. Can be parallelized with provider work.
-
-5. **Per-IOC detail page** — depends on NoteStore (for notes tab) and local providers (for DNS/GeoIP content). Server-rendered template.
-
-6. **Graph visualization** — depends on per-IOC detail page (the graph lives within it) and Cytoscape.js vendoring. TypeScript module addition.
-
-**Deferred:** ASN lookup via ipwhois (SSRF allowlist conflict), MISP/STIX feed integration (high complexity, separate architectural pattern from Provider Protocol).
-
----
-
-## Anti-Patterns to Avoid
-
-### Anti-Pattern 1: Treating Local Providers as "Not Real Providers"
-
-**What people do:** Implement DNS/GeoIP as utility functions called directly in routes, bypassing the Provider Protocol.
-
-**Why it's wrong:** Loses caching, loses the parallel execution model, loses the unified results rendering pipeline. DNS results would need separate rendering logic.
-
-**Do this instead:** Implement as full Provider Protocol adapters registered in `build_registry()`. They integrate with the orchestrator and cache automatically.
+**Reasoning:**
+- Phase 1 (annotations) is purely destructive — low risk of breaking enrichment flow, high payoff in code clarity
+- Phases 2-3 (DNS providers) can be built and tested without any allowlist or HTTP changes
+- Phase 4 (threat feed) introduces the bulk-download pattern — new territory but simpler JSON than RDAP
+- Phase 5 (RDAP) is last because it has the most uncertainty (redirect behavior, nested JSON, registry variability)
 
 ---
 
-### Anti-Pattern 2: Blocking the Main Thread with DNS Lookups
+## Anti-Patterns
 
-**What people do:** Call `dns.resolver.resolve()` directly in a Flask route handler.
+### Anti-Pattern 1: Per-IOC Feed Download
 
-**Why it's wrong:** Flask's threaded mode can handle this (each request is its own thread), but DNS timeouts (NXDOMAIN, SERVFAIL) block that thread. The existing pattern of background thread + polling handles this correctly.
+**What people do:** Call `requests.get(FEODO_FEED_URL)` inside every `ThreatFeedAdapter.lookup()` call regardless of cache status.
+**Why it's wrong:** Each enrichment batch downloads the full feed N times (once per IP IOC). At 100KB per download, a 20-IP paste downloads 2MB unnecessarily.
+**Do this instead:** Accept CacheStore's TTL as the feed refresh mechanism. Each unique IOC is only looked up once per TTL window. The feed is downloaded once per cache-miss per IOC, not once per IOC per request.
 
-**Do this instead:** DNS lookups run inside `EnrichmentOrchestrator.enrich_all()` via ThreadPoolExecutor — same as all other providers. The polling model already handles latency.
+### Anti-Pattern 2: Treating NXDOMAIN as an Error in DNSBL
 
----
+**What people do:** Catch `dns.resolver.NXDOMAIN` and return `EnrichmentError`.
+**Why it's wrong:** NXDOMAIN in a DNSBL context means "not listed" — it is the expected clean-result response. Treating it as an error produces false negatives and floods error logs.
+**Do this instead:** NXDOMAIN in DNSBL queries = clean result. Only `SERVFAIL`, `NoNameservers`, and `Timeout` are errors.
 
-### Anti-Pattern 3: Adding WHOIS to `ALLOWED_API_HOSTS` with Wildcard
+### Anti-Pattern 3: Allowing Unlimited Redirects for RDAP
 
-**What people do:** Add `"*.rdap.arin.net"`, `"rdap.ripe.net"` etc. to allowlist to support ipwhois RDAP.
+**What people do:** Set `allow_redirects=True` without validation to handle RDAP bootstrap redirects.
+**Why it's wrong:** Violates SEC-06. A malicious RDAP response could redirect to an internal network host, bypassing the SSRF allowlist.
+**Do this instead:** Either (a) use `rdap.org` if it proxies without redirecting, or (b) allow exactly one redirect to a hostname that matches a whitelist of known RIR RDAP servers. Never allow unlimited redirects.
 
-**Why it's wrong:** RDAP endpoints are dynamic — different RIRs handle different IP ranges, and ipwhois performs redirects. Wildcards in the allowlist break the SEC-16 guarantee. The allowlist is a hostname check, not a wildcard matcher.
+### Anti-Pattern 4: Using `innerHTML` for RDAP/DNSBL Results
 
-**Do this instead:** Defer ASN enrichment to Cymru WHOIS (TCP port 43) which is exempt from the HTTP SSRF model, or extract ASN data from Shodan InternetDB's existing `cpes` field.
+**What people do:** Insert registration data or DNSBL listings directly into DOM with innerHTML.
+**Why it's wrong:** RDAP responses include registrar names and nameservers from untrusted third parties (registries, registrars). These could contain XSS payloads.
+**Do this instead:** The existing `createContextRow()` / `textContent` pattern already handles this correctly. Use it.
 
----
+### Anti-Pattern 5: Module-Level Mutable State for Feed Cache
 
-### Anti-Pattern 4: CDN Script Tag for Cytoscape.js
-
-**What people do:** Add `<script src="https://cdn.jsdelivr.net/npm/cytoscape@3.x/dist/cytoscape.min.js">` to the template.
-
-**Why it's wrong:** Requires `script-src cdn.jsdelivr.net` in the CSP header — weakens the `script-src 'self'` guarantee. Also breaks offline usage.
-
-**Do this instead:** Download the minified bundle once (`make vendor-install` target) to `app/static/vendor/cytoscape.min.js`. Flask serves it from `'self'`. No CSP change needed.
-
----
-
-### Anti-Pattern 5: Using `innerHTML` for Graph Node Labels
-
-**What people do:** Use Cytoscape.js tooltip HTML with `innerHTML` to display IOC values in graph nodes.
-
-**Why it's wrong:** IOC values come from analyst paste input, which is untrusted. Rendering via `innerHTML` breaks SEC-08.
-
-**Do this instead:** Use Cytoscape.js `data()` method with `textContent` for any DOM elements showing IOC values. Cytoscape's built-in label rendering uses SVG/Canvas text — not HTML — so node labels are inherently safe.
+**What people do:** Add a module-level `_feed_cache: dict = {}` and `_feed_loaded_at: datetime` to ThreatFeedAdapter to avoid repeated downloads.
+**Why it's wrong:** Creates shared mutable state across threads (Flask runs in threaded mode). Requires a lock, a TTL check, and a manual invalidation mechanism. All this complexity exists to optimize a 100KB download that CacheStore already handles.
+**Do this instead:** Let CacheStore handle cache invalidation. Keep adapters stateless.
 
 ---
 
 ## Integration Points
 
-### Modified Existing Files
+### New Providers → ProviderRegistry
 
-| File | Change | Risk |
-|------|--------|------|
-| `app/enrichment/setup.py` | Add 3 new adapter registrations + PROVIDER_INFO entries | Low — additive |
-| `app/config.py` | Add `crt.sh` to `ALLOWED_API_HOSTS` | Low — additive |
-| `app/routes.py` | Add `/ioc/<value>`, `/api/graph/<job_id>`, `/api/ioc/<value>/notes` routes | Medium — new routes, new imports |
-| `app/templates/results.html` | Add "View Details" link on each IOC card | Low — template addition |
-| `app/static/src/ts/modules/enrichment.ts` | Add `PROVIDER_CONTEXT_FIELDS` entries for new providers | Low — additive |
+All four adapters registered in `app/enrichment/setup.py` in `build_registry()`:
 
-### New Files
+```python
+# v7.0: DNSBL, Threat Feed, RDAP, ASN
+registry.register(DNSBLAdapter(allowed_hosts=allowed_hosts))
+registry.register(ThreatFeedAdapter(allowed_hosts=allowed_hosts))
+registry.register(RDAPAdapter(allowed_hosts=allowed_hosts))
+registry.register(ASNAdapter(allowed_hosts=allowed_hosts))
+```
 
-| File | Purpose |
-|------|---------|
-| `app/enrichment/adapters/dns_resolver.py` | DNS Provider adapter |
-| `app/enrichment/adapters/geoip.py` | GeoIP Provider adapter |
-| `app/enrichment/adapters/cert_transparency.py` | Cert Transparency adapter |
-| `app/notes/__init__.py` | Notes module init |
-| `app/notes/store.py` | NoteStore — SQLite ioc_notes |
-| `app/templates/ioc_detail.html` | Per-IOC deep analysis page |
-| `app/static/vendor/cytoscape.min.js` | Self-hosted Cytoscape.js |
-| `app/static/src/ts/modules/graph.ts` | Cytoscape.js graph wiring |
-| `app/static/src/ts/modules/notes.ts` | Inline tag/note UI |
+No other orchestrator or route code changes for enrichment.
 
-### Scaling Considerations
+### New Providers → Frontend Rendering
 
-This is a single-user local tool. The relevant scaling concern is result volume, not concurrent users:
+New providers return `raw_stats` in the same shape as existing context providers. The existing `createContextRow()` function in the TypeScript layer handles arbitrary `raw_stats` key-value pairs. No TypeScript changes are needed to display the new provider data.
 
-| IOC Count | Architecture Impact |
-|-----------|---------------------|
-| 1-10 IOCs | No change — existing ThreadPoolExecutor handles comfortably |
-| 10-50 IOCs | DNS lookups add ~50 × N lookup latency — still within polling tolerance |
-| 50+ IOCs | DNS lookups may saturate ThreadPoolExecutor slots — consider separate DNS thread pool with higher `max_workers` for local providers |
+**Verdict-producing providers (DNSBL, ThreatFeed)** will participate in the `computeWorstVerdict()` consensus logic automatically — no TypeScript changes needed.
 
-For the IOC detail page, all data is synchronous and local — no pagination or streaming needed at analyst-realistic volumes (< 1000 certs from crt.sh).
+**Context-only providers (RDAP, ASN)** will use the existing `CONTEXT_PROVIDERS` set pattern — add their names to `CONTEXT_PROVIDERS` in the orchestrator or frontend to route them through `createContextRow()`.
+
+### Annotations Removal → `ioc_detail` Route
+
+After removal, `ioc_detail()` no longer needs `AnnotationStore`. The route simplifies to:
+
+```python
+@bp.route("/ioc/<ioc_type>/<path:ioc_value>")
+def ioc_detail(ioc_type, ioc_value):
+    cache = CacheStore()
+    provider_results = cache.get_all_for_ioc(ioc_value, ioc_type)
+    # [graph node/edge building unchanged]
+    return render_template("ioc_detail.html", ...)  # annotations vars removed
+```
+
+### Annotations Removal → TypeScript Module Count
+
+14 modules → 13 modules. `annotations.ts` deleted, `main.ts` updated to remove its initialization call.
 
 ---
 
 ## Sources
 
-- [dnspython 2.9.0 documentation — resolver-class](https://dnspython.readthedocs.io/en/latest/resolver-class.html) — synchronous resolve() and reversename.from_address() confirmed (HIGH confidence — official docs)
-- [geoip2 5.2.0 Python API documentation](https://geoip2.readthedocs.io/) — Reader creation cost, AddressNotFoundError, city() method (HIGH confidence — official docs)
-- [MaxMind GeoLite2 Free Geolocation Data](https://dev.maxmind.com/geoip/geolite2-free-geolocation-data/) — GeoLite2 license requires signup, cannot redistribute mmdb files (HIGH confidence — official MaxMind developer portal)
-- [ipwhois RDAP documentation](https://ipwhois.readthedocs.io/en/latest/RDAP.html) — IPWhois.lookup_rdap() method, RDAP endpoint behavior (MEDIUM confidence — library docs, SSRF conflict is author's analysis)
-- [Cytoscape.js — graph theory library](https://js.cytoscape.org/) — CDN availability, vanilla JS usage, built-in graph algorithms (HIGH confidence — official site)
-- [Cytoscape.js 3.33.0 release blog](https://blog.js.cytoscape.org/2025/07/28/3.33.0-release/) — confirms active maintenance in 2025 (MEDIUM confidence — official blog)
-- [crt.sh certificate transparency search](https://www.crt.sh/) — JSON API endpoint `?output=json` confirmed (MEDIUM confidence — public service, no formal API docs)
-- [SentinelX existing code analysis] — Provider Protocol, ShodanAdapter zero-auth pattern, CacheStore pattern, SSRF allowlist, http_safety utilities (HIGH confidence — direct codebase inspection)
+- Team Cymru IP-to-ASN DNS service: https://www.team-cymru.com/ip-asn-mapping (HIGH confidence — verified format and free-forever policy)
+- SURBL implementation guidelines: https://surbl.org/guidelines (HIGH confidence — verified query format for domains)
+- Spamhaus ZEN DNSBL: https://www.spamhaus.org/blocklists/zen-blocklist/ (HIGH confidence — verified zone name and return code format)
+- Spamhaus fair use policy: https://www.spamhaus.org/blocklists/dnsbl-fair-use-policy/ (MEDIUM confidence — page failed to load, policy stated as non-commercial fair use from secondary sources)
+- Feodo Tracker blocklist: https://feodotracker.abuse.ch/blocklist/ (HIGH confidence for URL/format, MEDIUM confidence for feed activity — currently empty due to takedowns)
+- RDAP.org bootstrap service: https://about.rdap.org/ (MEDIUM confidence — rate limits documented, redirect vs proxy behavior unconfirmed)
+- OpenRDAP API: https://openrdap.org/api (MEDIUM confidence — confirmed redirect behavior, not proxy)
+- RFC 9083 (RDAP JSON responses): https://datatracker.ietf.org/doc/rfc9083/ (HIGH confidence — authoritative spec for response structure)
+- Existing SentinelX codebase: `app/enrichment/adapters/dns_lookup.py`, `ip_api.py`, `crtsh.py`, `hashlookup.py` (HIGH confidence — direct code inspection)
 
 ---
-
-*Architecture research for: v6.0 Analyst Experience — zero-auth enrichment, local providers, deeper analysis views*
-*Researched: 2026-03-11*
+*Architecture research for: SentinelX v7.0 Free Intel*
+*Researched: 2026-03-15*

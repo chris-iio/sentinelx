@@ -1,318 +1,322 @@
 # Pitfalls Research
 
-**Domain:** Expanding a local IOC enrichment tool into a deeper analyst experience platform (zero-auth sources, bundled databases, open feeds)
-**Researched:** 2026-03-11
-**Confidence:** HIGH — sourced from MaxMind official docs, dnspython official docs, verified GitHub issues, community post-mortems, and direct codebase audit of SentinelX v5.0
+**Domain:** Threat intelligence enrichment — adding DNSBL, public threat feeds, RDAP, and ASN/BGP to existing Python/Flask SOC tool; removing annotations feature
+**Researched:** 2026-03-15
+**Confidence:** HIGH — codebase reviewed directly for integration points; external findings verified against Spamhaus official docs, RFC 9224, RDAP.org, and ipinfo.io documentation
 
 ---
 
 ## Context: What This Research Covers
 
-SentinelX v5.0 is a working, security-first, 8-provider enrichment tool running on Python 3.10 + Flask 3.1.
-The v6.0 expansion adds **zero-auth enrichment** (DNS, GeoIP, WHOIS, ASN, certificate transparency),
-**bundled databases** (GeoLite2/ASN MMDB files), and **richer results UX**. The existing system has
-strict security posture: SSRF allowlist, CSP, CSRF, no subprocess, no innerHTML, and a Provider Protocol
-(`typing.Protocol`) that governs all adapters.
+SentinelX v6.0 is a working, security-first, 13-provider enrichment tool with a strict security posture:
+SSRF hostname allowlist (`ALLOWED_API_HOSTS` in `app/config.py`), SEC-06 (`allow_redirects=False`),
+SEC-08 (no `innerHTML`), and a Provider Protocol (`typing.Protocol`) governing all adapters.
 
-The pitfalls below are calibrated for this exact context — not a generic enrichment tool.
+v7.0 adds DNSBL reputation checks, public threat feed lookups, RDAP registration data, and ASN/BGP
+intelligence while removing the annotations feature (notes, tags, `AnnotationStore`).
+
+The pitfalls below are calibrated for this exact system and these exact features.
 
 ---
 
 ## Critical Pitfalls
 
-### Pitfall 1: GeoLite2 License Requires Free-But-Not-Anonymous Signup
+### Pitfall 1: New Provider Hostname Not Added to SSRF Allowlist
 
 **What goes wrong:**
-Developers assume "free database" means "download and ship it." GeoLite2 databases are free but
-require a MaxMind account and license key to download since December 30, 2019. Users who try to
-bundle a pre-downloaded MMDB in the repo will violate the license if they do not personally own
-the file. Users who discover the download requires a MaxMind account at install time feel misled
-by documentation that said "zero-auth."
+Every new HTTP-based provider adapter (ipinfo.io for ASN, rdap.org or an authoritative RIR for RDAP,
+feodotracker.abuse.ch or other feed endpoints) must have its hostname added to `ALLOWED_API_HOSTS`
+in `app/config.py`. If the hostname is absent, `http_safety.validate_endpoint()` raises `ValueError`
+at runtime. Every lookup for that provider silently returns `EnrichmentError`. Tests pass because
+they mock `requests.get` — the SSRF guard is bypassed by mocking and the failure is invisible until
+the app is run live.
 
 **Why it happens:**
-The `maxminddb-geolite2` Python convenience package on PyPI was once a widely-cited workaround —
-it bundled the database directly. That package now has **inactive maintenance status** and the bundled
-database is severely stale (Snyk Advisory). Developers find it in blog posts from before 2019 and
-treat it as current best practice.
+Developers write the adapter, wire it into `setup.py`, write tests that mock the HTTP layer, see
+green — and ship. The SSRF allowlist in `config.py` is a separate config file that is not part of
+the adapter pattern itself. Nothing in the code scaffolding forces you to remember it.
 
 **How to avoid:**
-- Do NOT bundle the MMDB files in the repository
-- Do NOT use `maxminddb-geolite2` from PyPI — it is unmaintained and stale
-- Use the official `geoip2` library + MaxMind's `geoipupdate` tool for database management
-- Document that GeoIP/ASN features require a (free) MaxMind account during first-run setup
-- Present GeoIP features as "optional enhanced enrichment — requires one-time MaxMind signup"
-  rather than "zero-auth" to avoid user frustration
-- Store MMDB path in `~/.sentinelx/config.ini` under `[local_databases]` — same pattern as API keys
+Add the provider hostname to `ALLOWED_API_HOSTS` as the very first step before writing any adapter
+code. Include at least one unit test that calls `validate_endpoint()` directly (without mocking it)
+to confirm the hostname passes. Better: write an integration test that makes a real request to the
+provider endpoint in a CI environment.
 
 **Warning signs:**
-- Any reference to `maxminddb-geolite2` as the installation path
-- MMDB files appearing in `.gitignore` exemption or tracked in the repo
-- Documentation that says "no signup needed" for GeoIP features
+- Provider always returns `EnrichmentError` in production but passes all tests
+- Error message contains "not in allowed_hosts" or "SSRF allowlist SEC-16"
+- Provider row shows "Error" in UI with no matching exception in Flask logs
 
 **Phase to address:**
-GeoIP/ASN phase — document the MaxMind signup requirement explicitly in the feature plan and
-in any first-run setup message. Treat this as a soft dependency with graceful degradation.
+Every new provider phase — add hostname to `ALLOWED_API_HOSTS` first, before the adapter.
 
 ---
 
-### Pitfall 2: Bundled MMDB Files Become Stale — Lookups Return Wrong Country/ASN Data
+### Pitfall 2: DNSBL Queries Via Public Resolvers Return False Positives (`127.255.255.254` Sentinel)
 
 **What goes wrong:**
-MaxMind updates GeoLite2 databases weekly (every Tuesday). IP allocations change as ISPs acquire,
-reassign, or return CIDR blocks. A bundled MMDB that is 3+ months old can misidentify the country
-or ASN for a significant fraction of IP addresses. An analyst sees "Germany" for a Russian IP and
-draws a wrong conclusion. Worse, the tool shows confident geolocation with no indication the data
-is stale — the analyst trusts it.
+DNSBL lookups use `dnspython` with `configure=True`, which reads the system resolver
+(`/etc/resolv.conf`). On analyst workstations and corporate jump boxes, the system resolver is
+commonly Cloudflare (1.1.1.1), Google (8.8.8.8), or another public recursive resolver. Spamhaus
+actively blocks queries originating from these resolvers and returns `127.255.255.254` as a sentinel
+error code. An adapter that treats any `127.0.0.x` response as "listed" will interpret this sentinel
+as a positive blacklist hit — meaning every IP appears to be on the Spamhaus blacklist regardless of
+whether it actually is.
 
 **Why it happens:**
-The database is included once at development time and never updated. There is no automatic
-refresh mechanism. The developer tests with one or two IPs they know and the results look correct
-(because common major-provider IPs rarely change registrations).
+DNSBL response interpretation is non-obvious. The DNSBL protocol is historically email-centric;
+most documentation describes it from a mail server perspective, not from an analyst tool perspective.
+The `127.255.255.254` sentinel is documented in Spamhaus FAQs but not prominently in general DNS
+programming resources. Developers test DNSBL logic from a development machine where the system
+resolver may be a local caching resolver that is not blocked.
 
 **How to avoid:**
-- Never commit MMDB files to the repository — document the required path and update cadence
-- Check MMDB file modification time at startup; warn if the file is older than 30 days
-- Display data age next to every GeoIP result: "GeoIP data from [file date]"
-- Document in setup instructions: "Run `geoipupdate` weekly or set a cron job"
-- Use `mmdb_file_path` in config; if absent, skip GeoIP enrichment with a clear "not configured"
-  status rather than using a stale bundled file
-- MaxMind's EULA actually **requires** deletion of databases older than 30 days after a new
-  release — violating this is a license compliance issue, not just an accuracy concern
+Always check for `127.255.255.254` in DNSBL response A records before interpreting a response as a
+listing. Map it to `EnrichmentError("DNSBL queries blocked — public resolver in use; configure a
+local resolver")` or a `no_data` result with an explanatory note. Do not surface this as a positive
+listing to the analyst. Document the resolver requirement: Spamhaus DNSBL requires queries to
+originate from a resolver with attributable rDNS (your own resolver on your own network). As an
+alternative, use the Spamhaus Data Query Service (DQS) HTTP API which is not resolver-dependent.
 
 **Warning signs:**
-- GeoIP results are shown without a "data as of" date
-- MMDB file is present in the repo, not in `.gitignore`
-- No check for file modification time before use
+- Every IP returns a DNSBL hit regardless of reputation
+- DNSBL A record is `127.255.255.254` in debug output
+- Results differ dramatically between development machine and analyst workstation
 
 **Phase to address:**
-GeoIP/ASN phase — implement a freshness check at adapter initialization time. If file is older
-than 30 days, log a warning and surface it in the UI alongside results.
+DNSBL provider implementation phase — the sentinel check is part of the response parser, not a
+post-hoc fix.
 
 ---
 
-### Pitfall 3: DNS Lookups Block the ThreadPoolExecutor — Silent Performance Cliff
+### Pitfall 3: DNSBL IPv4 Octet Reversal Missing — All IPs Appear Clean (Silent Failure)
 
 **What goes wrong:**
-The existing `EnrichmentOrchestrator` uses `ThreadPoolExecutor(max_workers=4)`. Adding DNS lookups
-via `dnspython` or Python's `socket.getaddrinfo()` to the same pool means DNS resolution competes
-with HTTP provider calls for the 4 worker slots. A single slow DNS server (timeout: 5+ seconds) or
-DNS NXDOMAIN for a domain with many NS records can stall the entire pool. The analyst sees the
-progress bar freeze, not time out — there is no per-DNS-query timeout visible to the orchestrator.
-
-Python's `socket.getaddrinfo()` (used by default DNS resolution) is **not thread-safe** and has
-no reliable per-call timeout. The `dnspython` library IS thread-safe for `resolve()` calls on a
-shared `Resolver` instance, but the default `lifetime` parameter (the total time allowed across
-all DNS servers for a single query) defaults to a generous value.
+DNSBL queries for IPv4 require reversing the octets before appending the DNSBL zone. For IP
+`1.2.3.4`, the DNS query must be `4.3.2.1.zen.spamhaus.org`. Querying `1.2.3.4.zen.spamhaus.org`
+always returns NXDOMAIN (domain not found), which is indistinguishable from a clean IP response.
+The adapter appears to work correctly — it returns "not listed" for every IP. But it is wrong for
+every IP.
 
 **Why it happens:**
-DNS lookups feel like cheap, fast operations in development (local resolver responds in <10ms).
-Under production conditions — split-brain DNS, corporate resolvers with SERVFAIL cascades, or
-resolving malicious domains that have intentionally flaky authoritative servers — DNS can take
-30+ seconds per query before the resolver gives up.
+DNSBL is an email filtering protocol pattern. Developers coming from REST API backgrounds implement
+it as "append the IP to the zone name" without realizing the reversal is required. The failure mode
+is a false negative (clean) rather than an error, so it passes tests and does not crash.
 
 **How to avoid:**
-- Use `dnspython` (`dns.resolver`), NOT `socket.getaddrinfo()` for all DNS enrichment — it
-  supports per-resolver timeout configuration
-- Create a module-level shared `dns.resolver.Resolver` instance — it is safe for concurrent
-  `resolve()` calls from multiple threads
-- Set `resolver.lifetime = 5.0` (seconds) — this is the total per-query budget across all
-  nameservers; default is much higher
-- Set `resolver.timeout = 2.0` (seconds) — per-nameserver attempt timeout
-- Wrap all DNS exceptions explicitly:
-  ```python
-  except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):   # legitimate no-data
-      verdict = "no_data"
-  except dns.exception.Timeout:                             # slow/unresponsive NS
-      return EnrichmentError(...)
-  except dns.resolver.NoNameservers:                        # all NS unreachable
-      return EnrichmentError(...)
-  ```
-- Consider a separate, higher `max_workers` value for DNS-only lookups since they are I/O-bound
-  and fast when they succeed — or implement a DNS-specific timeout wrapper
-- Add a hardened `supported_types` set: a DNS adapter should only accept `domain` IOC types to
-  avoid unexpected lookup attempts on IPs or hashes
+Implement a test fixture using `127.0.0.2` — Spamhaus's canonical test IP that always returns listed
+on `zen.spamhaus.org`. If the test IP returns NXDOMAIN, the reversal is missing. Use
+`".".join(reversed(ip.split(".")))` for IPv4. The `pydnsbl` library handles reversal automatically.
+Never test DNSBL logic only against IPs expected to be clean.
 
 **Warning signs:**
-- DNS lookup uses `socket.getaddrinfo()` instead of `dnspython`
-- No `lifetime` or `timeout` set on the `dns.resolver.Resolver` instance
-- DNS lookups share the same `max_workers=4` pool as HTTP provider calls without consideration
-- No explicit `except dns.exception.Timeout` in the adapter
+- No test against a known-listed IP or test fixture address
+- DNSBL consistently returns "not listed" for all IPs including obvious threat actors
+- `127.0.0.2` lookup returns NXDOMAIN instead of `127.0.0.2`
 
 **Phase to address:**
-DNS enrichment phase — implement timeout guards before wiring into the orchestrator. Add a
-unit test that simulates DNS timeout by mocking `dns.resolver.Resolver.resolve` to raise
-`dns.exception.Timeout` and verifies the adapter returns `EnrichmentError`, not a hang.
+DNSBL provider implementation phase — write the `127.0.0.2` test first (TDD red).
 
 ---
 
-### Pitfall 4: WHOIS Returns "REDACTED FOR PRIVACY" — Parsed as Empty, Treated as Error
+### Pitfall 4: Domain DNSBL Reversal Applied Incorrectly (SURBL/URIBL Format)
 
 **What goes wrong:**
-Since GDPR enforcement (2018), the majority of WHOIS records for gTLDs return PII fields with
-literal text like `"REDACTED FOR PRIVACY"`, `"DATA REDACTED"`, or entirely empty fields. The
-`python-whois` library parses these as legitimate registrant/email values — so `result.registrant_email`
-returns `"REDACTED FOR PRIVACY"` as a string, not `None`. Code that checks `if result.registrant_email:`
-treats this as success and shows "REDACTED FOR PRIVACY" as the registrant email in the analyst UI.
-This is technically correct but confusing — it looks like a bug.
-
-Worse: many WHOIS servers rate-limit aggressively. `python-whois` can **hang indefinitely** on
-rate-limited connections (no timeout by default). A domain whose WHOIS server is rate-limiting
-will silently stall the lookup thread until the connection eventually fails.
+For domain DNSBL checks (SURBL, URIBL), the query format is `example.com.multi.surbl.org` — the
+domain name is prepended to the DNSBL zone without octet reversal. Developers who implement IP DNSBL
+first and build a shared query constructor may apply the same reversal logic to domains, producing
+queries like `com.example.multi.surbl.org`. This always returns NXDOMAIN; all domains appear clean.
 
 **Why it happens:**
-WHOIS was designed before GDPR. The `python-whois` library does not normalize privacy strings.
-Developers test with a few hand-picked domains during development and never see a rate-limited
-or fully-redacted response.
+IP DNSBL reversal (required for IPv4) and domain DNSBL non-reversal (domain prepended as-is) are
+easy to conflate when building a unified DNSBL checking function. The formats look similar at a
+glance but have opposite logic.
 
 **How to avoid:**
-- Use `python-whois` with explicit socket timeout: wrap the lookup in a thread with a timeout,
-  or patch the socket timeout before calling — `python-whois` does not expose a timeout parameter
-  directly; use `socket.setdefaulttimeout(10)` before the call and restore it after
-- Alternatively, use `whoisit` (RDAP-based, `pip install whoisit`) which provides structured JSON
-  via IANA's RDAP service — rate limits are less severe and data is machine-readable
-- Normalize privacy strings: if a field value contains "REDACTED", "PRIVACY", or "WITHHELD",
-  treat it as `None` and display "Redacted (GDPR)" in the UI
-- WHOIS enrichment is explicitly listed as "Out of Scope" in `PROJECT.md` for v6.0 — if
-  reconsidering, treat it as a high-risk feature requiring its own research phase
-- Display WHOIS fields with a "data quality" indicator: "Registration date", "Registrar",
-  and "Domain age" are reliably available; registrant contact fields are frequently redacted
+Separate the query construction logic into distinct code paths for `IOCType.IPV4` (reverse octets)
+and `IOCType.DOMAIN` (prepend as-is). Test each with official test fixtures: `127.0.0.2` for
+Spamhaus, `test.surbl.org` for SURBL (always returns listed).
 
 **Warning signs:**
-- WHOIS lookup has no timeout
-- `result.registrant_email` displayed directly without privacy-string normalization
-- WHOIS included in the main enrichment pool (it should be a separate, optional call due to
-  rate limit risk)
+- All domain DNSBL results are "not listed" regardless of domain reputation
+- `test.surbl.org` returns NXDOMAIN
 
 **Phase to address:**
-If WHOIS is added: implement it as a **separate, isolated lookup** — not wired into the main
-`EnrichmentOrchestrator` pool. Timeout wrapper is mandatory. Privacy normalization is mandatory.
-Given the "Out of Scope" note in `PROJECT.md`, treat this as a Phase N+ feature, not v6.0.
+DNSBL provider implementation phase — separate IP and domain query construction from the start.
 
 ---
 
-### Pitfall 5: Certificate Transparency Lookup Returns Hundreds of Subdomain Records — UI Overload
+### Pitfall 5: RDAP Returns Mostly "REDACTED FOR PRIVACY" for Malicious Domains
 
 **What goes wrong:**
-`crt.sh` is the canonical CT log search API. A query for a domain like `google.com` returns
-thousands of certificate records — wildcard certs, expired certs, subdomains at every level.
-An adapter that naively presents "certificates found" as a count and a list will overwhelm the
-analyst with hundreds of rows in an already-dense results UI.
-
-The `crt.sh` HTTP JSON API (via `https://crt.sh/?q=domain&output=json`) is public and zero-auth
-but **has no documented rate limit** — it silently starts returning 504 Gateway Timeout errors
-under heavy load. The direct PostgreSQL access (`psql -h crt.sh -p 5432`) provides more
-flexibility but has strict session idle timeout (connection drops quickly) and is not appropriate
-for a production Flask route.
+RDAP was previously listed as "Out of Scope" in `PROJECT.md` specifically because of GDPR redaction.
+As of January 2024, 58.2% of gTLD domains use proxy-protection services, and only 10.8% of domain
+records identify the actual registrant (per Interisle Consulting data). Malicious domains — the ones
+analysts care most about — almost universally use privacy protection. An RDAP adapter that surfaces
+registrant name, email, phone, and address will show "REDACTED FOR PRIVACY" for the majority of
+interesting IOCs. RFC 9537 (March 2024) formalizes this redaction pattern. WHOIS was sunsetted on
+January 28, 2025; RDAP is now the sole protocol and inherits all the same GDPR constraints.
 
 **Why it happens:**
-CT data is inherently wide — certificates exist for every subdomain. Developers test with a
-private or small domain that has only 3-4 certificates and design the UI for that scale.
+RDAP looks more promising than WHOIS in documentation because it offers structured JSON and is
+designed to replace WHOIS. The redaction reality is buried in privacy/GDPR discussions rather than
+in the RDAP technical spec. Developers build an adapter, test it against a few domains, see some
+data for non-privacy-protected domains, and conclude it works — not realizing that production usage
+on threat intelligence IOCs will almost exclusively hit redacted records.
 
 **How to avoid:**
-- Aggregate CT results, not list them: show "X unique subdomains, Y certificates found,
-  oldest [date], newest [date]" rather than individual certificate rows
-- Limit API response processing: cap at 50 or 100 records for display purposes; show "X+ more"
-- Wrap crt.sh HTTP call with a strict timeout (8-10 seconds) and treat 504 as a soft failure
-  (`verdict="no_data"` with error note "CT log temporarily unavailable")
-- Use `https://crt.sh/?q=%.domain.tld&output=json` (leading `%` for subdomain wildcard) — note
-  that the bare `q=domain.tld` also returns certs for parent domains which may not be wanted
-- Only support `domain` IOC type — CT lookups make no sense for IPs or hashes
-- Show CT data as "passive DNS / subdomain intelligence" rather than a verdict
+Scope the RDAP adapter to fields that are NOT redacted under GDPR: `registration creation date`,
+`expiry date`, `last updated date`, `registrar name`, `nameservers`, and `domain status codes`
+(e.g., `clientHold`, `serverDeleteProhibited`). These fields are reliably populated and provide
+genuine triage signal (newly registered = higher suspicion, registrar identity, NS provider for
+infrastructure correlation). Never extract or display contact entity blocks (registrant, admin,
+tech contacts). The adapter data model must be scoped to structural/temporal fields before
+implementation begins.
 
 **Warning signs:**
-- CT adapter returns raw list of certificate objects to the UI
-- No response size cap on the crt.sh API call (SEC-05 `read_limited` pattern must apply)
-- CT lookup included for all IOC types rather than domain-only
+- RDAP result rows show "REDACTED FOR PRIVACY" for most domains during testing
+- Adapter extracts `registrant`, `email`, `phone`, `address` fields
+- Feature designed after testing with a domain that happens to have unredacted WHOIS data
 
 **Phase to address:**
-CT log phase — design the UI aggregation layer before writing the adapter. The data shape
-drives the adapter output schema; do not write the adapter first and retrofit the UI.
+RDAP design phase — define the data model (structural/temporal fields only) before writing any code.
 
 ---
 
-### Pitfall 6: Zero-Auth Provider That Always Returns `is_configured() = True` Becomes Noise
+### Pitfall 6: RDAP Redirect Following Conflicts With SEC-06 (`allow_redirects=False`)
 
 **What goes wrong:**
-Zero-auth providers (DNS, GeoIP, Shodan InternetDB) implement `is_configured()` returning `True`
-always. This works correctly for Shodan InternetDB because the API is unconditionally available.
-But for GeoIP/ASN (requires local MMDB file) or DNS (requires `dnspython` installed), returning
-`True` when the underlying resource is missing means the adapter runs, fails with an unexpected
-error, and returns `EnrichmentError("MMDB file not found")` — which appears in the UI alongside
-real results.
-
-The existing `setup.py` registers all configured providers. If a zero-auth provider is always
-registered and never checks its actual preconditions, it adds noise to every result set regardless
-of whether the analyst expected it.
+RDAP requires following HTTP redirects to work correctly. When querying an authoritative RIR (ARIN,
+RIPE, APNIC, LACNIC, AFRINIC) for an IP block, or when using `rdap.org` as a proxy, the server
+returns HTTP 301 or 302 pointing to the authoritative registry. The current project security policy
+(SEC-06) sets `allow_redirects=False` on all `requests` calls. With redirects disabled, RDAP
+lookups always fail silently — the 301/302 response has no body to parse, and the adapter may
+misinterpret the status code as an error.
 
 **Why it happens:**
-The SentinelX Provider Protocol's `is_configured()` contract was designed for API-key providers:
-"True if you have a key, False if you don't." Zero-auth providers inherit this design but have
-different readiness conditions (file exists, library installed, etc.).
+SEC-06 was established as a blanket rule to prevent redirect-based SSRF attacks. RDAP is the first
+protocol in the project that legitimately requires redirect following. The conflict is not obvious
+until the adapter is tested against a live RDAP endpoint and returns empty results.
 
 **How to avoid:**
-- For MMDB-based providers (GeoIP, ASN): `is_configured()` should check that the configured
-  MMDB path exists and is readable, not just that the path is non-empty in config:
-  ```python
-  def is_configured(self) -> bool:
-      path = self._mmdb_path
-      return bool(path) and os.path.isfile(path)
-  ```
-- For DNS: `is_configured()` should verify `dnspython` is importable (it is an optional dep)
-- The orchestrator already gates on `is_configured()` before dispatch — this pattern is correct;
-  the adapter must be honest about its readiness
-- Distinguish between "not configured" (user hasn't set it up) and "configured but file missing"
-  in error messages — they require different user actions
+Two valid approaches: (1) Use a Python RDAP library (`rdap` or `python-rdap` on PyPI) that handles
+bootstrap and redirects internally, allowing the adapter to avoid raw redirect logic entirely.
+(2) Implement manual redirect following with strict target hostname validation — after receiving a
+301/302, extract the `Location` header, verify the redirect target hostname against a curated list
+of known RDAP servers (IANA bootstrap list), then make the redirected request. Never follow an
+open redirect. Document the SEC-06 exception clearly in the adapter.
 
 **Warning signs:**
-- Zero-auth adapter `is_configured()` returns `True` unconditionally
-- `EnrichmentError("MMDB file not found")` appearing in normal result sets
-- No MMDB path validation at adapter initialization or at `is_configured()` time
+- RDAP lookups return empty results for most domains and all IPs
+- HTTP 301 or 302 responses in debug output with no follow-through
+- Adapter appears to work against `rdap.org` in testing (it returns 302, not the data)
 
 **Phase to address:**
-Each local-database adapter phase — establish the `is_configured()` contract for file-backed
-providers before wiring into the registry.
+RDAP implementation phase — resolve the SEC-06 conflict in the design doc before writing code.
 
 ---
 
-### Pitfall 7: DNS Rebinding Attack Against the SSRF Allowlist
+### Pitfall 7: Annotations Removal Leaves Orphaned Imports and Crashes App at Startup
 
 **What goes wrong:**
-The existing SSRF allowlist (`http_safety.py`) validates hostnames against `ALLOWED_API_HOSTS`
-before every network call. A DNS-based enrichment adapter introduces a new attack surface:
-**DNS rebinding**. The attack flow: malicious IOC `evil.attacker.com` resolves to a public IP
-(passes the `is_safe_url()` check), but the attacker's DNS server then returns `127.0.0.1`
-for the second resolution (the actual HTTP connection). This bypasses hostname-based allowlists.
-
-This attack is most relevant if SentinelX ever accepts IOC values from untrusted sources and
-makes outbound HTTP calls to domains derived from those values. For the DNS enrichment adapter
-itself (which looks up analyst-provided domains), the risk is lower — but the existing SSRF
-allowlist pattern assumes HTTP calls, not DNS lookups.
+`AnnotationStore` is currently imported and used in `app/routes.py`. `app/templates/ioc_detail.html`
+and `app/templates/partials/_ioc_card.html` reference annotation template variables. The TypeScript
+module `annotations.ts` is compiled into the IIFE bundle. `annotations.db` is initialized somewhere
+in `app/__init__.py` or app setup. Removing only the `app/annotations/` directory without updating
+all reference sites causes `ModuleNotFoundError: No module named 'app.annotations'` at Flask startup
+— every page crashes.
 
 **Why it happens:**
-The SSRF protection in `http_safety.py` validates the URL before the HTTP call. DNS rebinding
-exploits the time gap between validation and connection. This is a Time-Of-Check/Time-Of-Use
-(TOCTOU) vulnerability pattern.
+Annotations are woven through four layers (Python, templates, TypeScript, SQLite init). The feature
+feels like a single unit but its dependencies are spread across independent files. Removing the
+obvious entry point (the `annotations/` directory) does not remove the import in `routes.py` or the
+template variables in `ioc_detail.html`.
 
 **How to avoid:**
-- DNS enrichment adapters do DNS **lookups** of IOC values — they do not make HTTP calls to
-  those domains; the DNS lookup itself is safe (it calls the configured resolver, not the target)
-- Ensure DNS adapters never use the resolved IP to make subsequent HTTP connections — lookups
-  should terminate at the DNS response
-- For any feature that resolves a domain and then connects to the resolved IP (e.g., banner
-  grabbing, HTTP header checks), implement a double-resolution check:
-  1. Resolve the domain before connection attempt
-  2. Verify the resolved IP is not in RFC1918/loopback/link-local space
-  3. Make the connection to the explicit IP (not the hostname) to prevent re-resolution
-- Add RFC1918 + loopback IP check to `http_safety.py` for any IPs derived from DNS resolution
+Before touching any files, run a full grep audit:
+```
+grep -rn "annotation\|AnnotationStore\|annotations_db" app/ --include="*.py"
+grep -rn "annotation" app/templates/ --include="*.html"
+grep -rn "annotation" app/static/src/ts/ --include="*.ts"
+```
+Remove in dependency order: TypeScript module first (remove from esbuild entry points in Makefile),
+then template references, then `routes.py` imports and usages, then the `app/annotations/` package,
+then `annotations.db` initialization. Run `flask --debug run` after each layer removal to catch
+import errors early. Run the full test suite after the complete removal.
 
 **Warning signs:**
-- Any adapter that resolves a domain and then makes an HTTP call to that domain
-- HTTP calls to analyst-provided URLs without IP-level validation
-- Feature involving "fetch HTTP headers" or "check HTTP response" for IOC domains
+- `ModuleNotFoundError` at Flask startup
+- Jinja `UndefinedError` for template variables
+- TypeScript build error after removing `annotations.ts` if other modules still reference it
+- E2E tests failing on annotation UI elements that no longer exist
 
 **Phase to address:**
-Any network-enrichment phase that touches analyst-provided domain values — add IP validation
-to `http_safety.py` as a shared utility before building features that depend on it.
+Annotations removal phase (Phase 1 of v7.0) — must be a standalone phase with full test run before
+adding any new provider features.
+
+---
+
+### Pitfall 8: RDAP Bootstrap Fetched on Every Lookup (Performance and Reliability)
+
+**What goes wrong:**
+Proper RDAP requires consulting the IANA bootstrap registry to find the authoritative RDAP server
+for a given TLD or IP prefix. The IANA bootstrap files are JSON documents served at well-known URLs
+(`https://data.iana.org/rdap/dns.json`, `asn.json`, `ipv4.json`, `ipv6.json`). An implementation
+that fetches the bootstrap file on every `lookup()` call adds one extra HTTP round-trip per IOC,
+doubles latency, and risks rate-limiting on IANA's infrastructure. RFC 9224 explicitly states that
+clients SHOULD cache the bootstrap registry and SHOULD NOT fetch it on every request.
+
+**Why it happens:**
+Developers implement the simplest path first: fetch bootstrap, find server URL, query server. The
+caching requirement is in the RFC spec, not in the library README. Under single-IOC testing, the
+extra 100-200ms is not noticeable. Under bulk IOC submission (50+ IOCs), the bootstrap fetches
+compound and the IANA endpoint may 429.
+
+**How to avoid:**
+Use a Python RDAP library that handles bootstrap caching internally (e.g., `rdap` package on PyPI).
+If implementing directly, store the bootstrap data in a module-level dict with an `expires_at`
+timestamp, refresh only when expired (the IANA files include HTTP `Expires` headers indicating
+roughly 24-hour cache lifetime), and share the cached bootstrap across all `lookup()` calls.
+
+**Warning signs:**
+- RDAP lookup time consistently 2x or more longer than other HTTP providers
+- IANA bootstrap URL appearing in request logs on every enrichment job
+- HTTP 429 from IANA infrastructure under bulk IOC submission
+
+**Phase to address:**
+RDAP implementation phase — bootstrap caching is part of the initial design, not a later
+optimization.
+
+---
+
+### Pitfall 9: Serial DNSBL Zone Queries Multiply Lookup Time by Number of Lists
+
+**What goes wrong:**
+A naive DNSBL implementation queries each zone serially: query `zen.spamhaus.org`, wait for
+response, query `dbl.spamhaus.org`, wait, query `multi.surbl.org`, wait. Each zone adds up to
+3-5 seconds of timeout surface. With 5 DNSBL zones, worst-case lookup time per IP is 15-25 seconds.
+The analyst UI shows the enrichment spinner for an unacceptable duration. The existing
+`EnrichmentOrchestrator` uses `ThreadPoolExecutor` for parallel HTTP providers; DNSBL adapter
+running serially within its `lookup()` call blocks one thread for the entire duration.
+
+**Why it happens:**
+`lookup()` is a synchronous function in the Provider Protocol. DNS queries are naturally sequential
+when using `resolver.resolve()` in a loop. Developers write the simplest implementation (for-loop
+over zones) and do not profile multi-zone latency under adversarial conditions.
+
+**How to avoid:**
+Use `concurrent.futures.ThreadPoolExecutor` within the `lookup()` call to query DNSBL zones in
+parallel, or use `pydnsbl` (async/aiodns-based DNSBL library) that handles parallel queries
+natively. Set a short per-query timeout (`resolver.lifetime = 3.0`) so each zone contributes at
+most 3 seconds to the total. Target total DNSBL lookup time under 5 seconds for 5+ zones.
+
+**Warning signs:**
+- DNSBL lookup time scales linearly with the number of zones checked
+- Single-IOC enrichment takes over 10 seconds when any DNSBL zone is slow
+- Performance degrades noticeably under bulk IOC submission
+
+**Phase to address:**
+DNSBL implementation phase — design for parallel zone queries before writing the lookup loop.
 
 ---
 
@@ -322,93 +326,101 @@ Shortcuts that seem reasonable but create long-term problems.
 
 | Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
 |----------|-------------------|----------------|-----------------|
-| Bundle GeoLite2 MMDB in repo | Simple install, no setup friction | License violation, stale data, large repo size | Never — document the download path instead |
-| Use `maxminddb-geolite2` PyPI package | One-line install, no signup | Unmaintained, database is 1+ year stale | Never — use official `geoip2` + `geoipupdate` |
-| Use `socket.getaddrinfo()` for DNS | Standard library, no extra deps | No per-call timeout, not thread-safe, no fine-grained error handling | Never for production enrichment paths |
-| Share a single `requests.Session` across DNS+HTTP adapters | Slightly lower overhead | Connection pool pollution, session state leaks between adapter types | Never — DNS adapters don't use HTTP sessions anyway |
-| Show all CT certificate records raw | Simple implementation | Hundreds of rows in UI, analyst cognitive overload | Never — aggregate before display |
-| Register zero-auth providers unconditionally | Simple setup.py | Errors in results when MMDB missing, no graceful degradation | Never — `is_configured()` must check actual readiness |
-| Add WHOIS in main enrichment pool | Feature completeness | Rate limit hangs stall all other results | Never — WHOIS must be isolated if added at all |
-| Accept `any` IOC type in DNS/GeoIP adapters | Broader coverage appearance | Silent errors for hash/URL/CVE types that can't be DNS-queried | Never — `supported_types` must be precise |
+| Using `rdap.org` as universal RDAP proxy | No bootstrap implementation needed | Rate-limited at 10 req/10 sec (Cloudflare 429); single point of failure | Never — use library with bootstrap caching |
+| Querying DNSBL zones serially in a loop | Simple implementation, easy to read | Total lookup time = N * timeout per zone; blocks enrichment thread | Never for user-facing tool — parallelize zone queries |
+| Treating any `127.0.0.x` DNSBL response as "listed" | Simple: any A record = listed | `127.255.255.254` means "resolver blocked"; causes universal false positives | Never — always check for sentinel values |
+| Keeping `AnnotationStore` import during incremental removal | Avoids crash mid-refactor | Dead code, stale test fixtures, confusing codebase state | Only as a single-commit transition |
+| Querying DNSBL from Cloudflare/Google DNS (system resolver) | No infrastructure needed | Spamhaus blocks these resolvers; results are unreliable | Only for DNSBL lists that do not enforce resolver attribution |
+| Extracting RDAP contact/registrant fields | More data visible | Returns "REDACTED FOR PRIVACY" for majority of malicious domains; analyst noise | Never — scope to structural/temporal fields only |
+| Fetching IANA RDAP bootstrap on every lookup | Simpler code; no cache management | Extra round-trip per IOC; IANA 429 under bulk submission; violates RFC 9224 | Never in production path |
+| Building RDAP without addressing SEC-06 (`allow_redirects=False`) | Works in limited testing | All RDAP lookups silently fail in production when redirects required | Never — resolve SEC-06 conflict before shipping |
 
 ---
 
 ## Integration Gotchas
 
-Common mistakes when connecting zero-auth and local enrichment sources.
+Common mistakes when connecting to these specific services.
 
 | Integration | Common Mistake | Correct Approach |
 |-------------|----------------|------------------|
-| MaxMind GeoLite2 | Use `maxminddb-geolite2` package or bundle MMDB in repo | Use official `geoip2` library; store MMDB at `~/.sentinelx/GeoLite2-*.mmdb`; check file freshness |
-| `dnspython` resolver | Create a new `Resolver()` per lookup call | Create one module-level `Resolver` with `lifetime=5.0` and `timeout=2.0`; it is thread-safe for `resolve()` |
-| `dnspython` NXDOMAIN | Treat `NXDOMAIN` as an error → `EnrichmentError` | `NXDOMAIN` is a valid DNS response meaning "no record" → `verdict="no_data"` |
-| `dnspython` NoAnswer | Treat `NoAnswer` as error | `NoAnswer` means the record type doesn't exist for that domain → `verdict="no_data"` |
-| crt.sh API | Query `q=domain.tld` and display all results | Query `q=%.domain.tld`, cap at 100 results, aggregate into subdomain count + date range |
-| crt.sh 504 | Propagate as HTTP error to analyst | Treat as soft failure: `verdict="no_data"`, note "CT log temporarily unavailable" |
-| pyasn / BGPView | Use BGPView REST API for ASN lookups | BGPView blocks user agents and rate-limits aggressively; use `pyasn` with local BGP dump or ipwhois RDAP for ASN data |
-| WHOIS timeout | Call `python-whois` directly in enrichment thread | Use `socket.setdefaulttimeout(10)` wrapper or isolate in a separate timed thread; never block enrichment pool |
-| Provider Protocol with MMDB | `is_configured()` returns `True` if config key exists | `is_configured()` must verify `os.path.isfile(configured_path)` — config key presence is not sufficient |
+| Spamhaus DNSBL (`zen.spamhaus.org`) | Querying via Cloudflare/Google DNS | Use system resolver with attributable rDNS, or switch to Spamhaus DQS HTTP API |
+| DNSBL (any) | Not checking for `127.255.255.254` sentinel | Always check: if A record is `127.255.255.254`, emit `EnrichmentError("resolver blocked")` not a listing |
+| DNSBL IPv4 | Missing octet reversal | `".".join(reversed(ip.split(".")))` before appending zone; test with `127.0.0.2` |
+| DNSBL domain (SURBL/URIBL) | Applying IP octet reversal to domain names | Domains prepend directly: `example.com` → `example.com.multi.surbl.org`, no reversal |
+| RDAP | Using `allow_redirects=False` (SEC-06) with raw requests | Either use a RDAP library that handles redirects internally, or validate redirect targets against IANA bootstrap list |
+| RDAP | Querying `rdap.org` without 429 handling | `rdap.org` rate-limits at 10 req/10 sec via Cloudflare; add retry-on-429 with backoff |
+| RDAP | Extracting contact/registrant fields | 58%+ of gTLD domains have privacy protection; contact fields return "REDACTED FOR PRIVACY" — skip them |
+| ipinfo.io (ASN) | No API token (unauthenticated) | Unauthenticated: 1000 req/day limit shared by IP. Register free token for 50k/month. Handle 429 as `EnrichmentError`. |
+| BGPView (any) | Using as ASN data source | BGPView shut down November 26, 2025 — do not use. ipinfo.io or Team Cymru are current alternatives. |
+| ip-api.com (existing) | Adding separate ASN provider for data already available | `ip-api.com` already returns `as` and `asname` fields in existing `IPApiAdapter`; extend it rather than adding a new provider for duplicate data |
+| Public threat feeds (Feodo Tracker, etc.) | Fetching full blocklist on every IOC lookup | Use point-query APIs where available; if downloading lists, cache with TTL — never fetch MB-scale files per IOC |
 
 ---
 
 ## Performance Traps
 
-Patterns that work fine for 1-2 IOCs but degrade with realistic analyst workloads (10-50 IOCs).
+Patterns that work at small scale but fail under realistic analyst usage.
 
 | Trap | Symptoms | Prevention | When It Breaks |
 |------|----------|------------|----------------|
-| DNS lookup per IOC on main pool (max_workers=4) | Progress stalls when any DNS server is slow; HTTP providers queued behind DNS | Increase `max_workers` for DNS-heavy workloads, or give DNS adapters a dedicated executor | 5+ domains with at least one slow nameserver |
-| Opening MMDB file on every `lookup()` call | GeoIP lookups are slow, CPU spikes | Open `maxminddb.open_database()` once at adapter init; store as `self._reader` | Every lookup call |
-| WHOIS in main enrichment pool | One rate-limited WHOIS hangs entire job | Isolate WHOIS calls with per-call timeout; run after primary enrichment completes | First rate-limited domain (~5% of queries) |
-| CT log query blocking on crt.sh unavailability | All domain lookups stall for 8-10 seconds while CT times out | Wrap with strict timeout; treat 504 as immediate soft failure | crt.sh intermittent outages (happens monthly) |
-| Loading GeoIP + ASN MMDB readers from disk on every request | Slow first lookup, high I/O | Initialize readers at Flask app startup or adapter singleton init | Concurrent requests |
-| No caching for DNS results | Same domain looked up 8x (once per provider) and also via DNS adapter | DNS results are cacheable — the existing `CacheStore` (SQLite) should apply | Any IOC list with repeated domains |
+| Serial DNSBL zone queries | Lookup takes 5-30 seconds per IP with 5+ zones | Use `ThreadPoolExecutor` within `lookup()` or `pydnsbl` for parallel zone queries | From first IOC — each zone adds full timeout overhead |
+| Uncached IANA RDAP bootstrap | RDAP lookup time 2x other providers; IANA 429 under bulk submission | Cache bootstrap JSON in-memory, respect `Expires` header (~24h refresh) | First bulk IOC submission (10+ IOCs) |
+| New `dns.resolver.Resolver` created per DNSBL zone per query | CPU overhead from repeated configuration; inconsistent lifetime enforcement | Create one `Resolver` per `lookup()` call, reuse across all DNSBL zones for that IOC | At scale with bulk IOC inputs |
+| RDAP applied to hash and CVE IOC types | Lookups return immediate errors for every hash/CVE | Set `supported_types = frozenset({IOCType.DOMAIN, IOCType.IPV4})` | First hash or CVE submission |
+| No DNSBL result caching | Same IP queried multiple times in one session hits DNSBL N times | Existing `CacheStore` (SQLite) should apply to DNSBL results at the same TTL as other providers | Any re-submission of the same IOC |
+| Parallel enrichment saturated by slow RDAP bootstrap | Other providers complete but overall job waits on RDAP | Bootstrap caching ensures RDAP latency matches other HTTP providers | Any bulk submission without cached bootstrap |
 
 ---
 
 ## Security Mistakes
 
-Domain-specific security issues beyond general web security, specific to zero-auth enrichment expansion.
+Domain-specific security issues beyond general web security.
 
 | Mistake | Risk | Prevention |
 |---------|------|------------|
-| DNS rebinding via resolved-then-HTTP pattern | SSRF bypass to internal services | Never make HTTP connections to domains derived from analyst IOC values without IP validation; DNS lookups (not HTTP) are safe |
-| Displaying raw MMDB data without sanitization | GeoIP city/org names in MMDB can contain arbitrary Unicode/HTML-like strings | All MMDB string fields go through `textContent` (never `innerHTML`) — existing SEC-08 pattern |
-| Logging IOC values from failed DNS lookups | Analyst IPs and internal hostnames appear in server logs | Log only error type and provider name, never IOC value in error logs |
-| Using `subprocess` to call `whois` binary | Violates PROJECT.md constraint (no subprocess); potential injection if IOC value reaches shell | Never use subprocess; use `python-whois` (pure Python) or `whoisit` (HTTP/RDAP) |
-| Bundling MMDB with insecure permissions | MMDB file readable by other local users on shared jump box | Document that MMDB files should be stored with 600 permissions in `~/.sentinelx/` |
-| ipwhois/python-whois making outbound connections to IOC nameservers | DNS provider could log the query, revealing analyst investigation focus | Acceptable risk for a SOC tool; document this in threat model; ensure analyst awareness |
+| New provider hostname missing from `ALLOWED_API_HOSTS` | SSRF allowlist enforcement bypassed; any future code that constructs URLs from input could call arbitrary hosts | Add hostname to `app/config.py` as first step; test `validate_endpoint()` without mocking |
+| RDAP open redirect following | RDAP 301/302 could point to internal services if redirect target not validated | Never follow redirects without validating target hostname against IANA bootstrap allowlist |
+| Rendering raw RDAP `remarks` or `notices` fields via `innerHTML` | RDAP JSON can contain arbitrary text in free-form fields; XSS if rendered unsafely | All RDAP fields go through `createElement + textContent` — existing SEC-08 pattern; never `innerHTML` |
+| DNS-based DNSBL bypassing the HTTP SSRF allowlist | DNSBL uses port 53 DNS, not HTTP; `validate_endpoint()` does not cover DNS | Acceptable — DNS queries go to system resolver, not to analyst-controlled hosts; no SSRF surface from DNS queries |
+| ASN lookup revealing analyst investigation focus to third-party | `ipinfo.io` receives and logs the IP being queried | Document this; it applies equally to all 13 existing providers; analysts should be aware external enrichment logs IOC values |
+| Annotating the SQLite `annotations.db` path in logs during removal | File path visible in logs could assist local privilege escalation on shared jump box | Remove all annotation-related log statements before removing the feature; ensure no `annotations.db` path leaks |
 
 ---
 
 ## UX Pitfalls
 
-Common user experience mistakes when expanding from "simple results" to "deep analysis."
+Common user experience mistakes when adding these features.
 
 | Pitfall | User Impact | Better Approach |
 |---------|-------------|-----------------|
-| Adding GeoIP/ASN/DNS columns to existing result cards | Cards become wide tables; analyst loses the "at a glance" verdict clarity established in v4.0 | Add enrichment data as a new expandable section within existing card — preserve summary row |
-| Showing "no data" for every zero-auth source on every IOC | Result grid fills with grey "no data" badges for GeoIP on hash IOCs, DNS on IP IOCs | Suppress zero-auth providers from result display when `supported_types` makes them irrelevant (e.g., GeoIP on hashes) |
-| Treating GeoIP country as a verdict | Analyst may misinterpret "Russia" as "malicious" | GeoIP is context, not verdict — display as metadata, never as a colored verdict badge |
-| CT "found X certificates" displayed prominently | Suggests the domain is suspicious due to having certificates (all HTTPS sites do) | Label CT data as "certificate history" — normalize it as neutral context |
-| DNS resolution showing "resolved" as green/clean | Successful DNS resolution is not a positive indicator | DNS resolution is infrastructure data, not threat intel — use neutral grey display |
-| New enrichment sources showing "Loading..." indefinitely | Analyst confusion when MMDB is not configured or dnspython not installed | Show "Not configured" state clearly for each optional source; link to setup instructions |
-| Info-dumping: showing all enrichment sections expanded by default | Analyst cognitive overload — they came to triage, not read a thesis | New enrichment sections start collapsed; only expand automatically for suspicious/malicious findings |
+| Showing "REDACTED FOR PRIVACY" RDAP fields prominently | Analyst questions why the feature exists; trust in tool decreases | Only surface creation date, registrar, nameservers, status codes — omit contact blocks entirely |
+| Displaying DNSBL "listed" without naming the zone | Analyst cannot act on "listed on a blocklist" — needs to know which list and why | Include DNSBL zone name (e.g., `zen.spamhaus.org`) and a human-readable description of that list |
+| Treating DNSBL `no_data` (NXDOMAIN) as the same as CLEAN | NXDOMAIN = not listed, but DNSBL is spam-focused; "not on spam list" is not "known clean" | Use `no_data` verdict for NXDOMAIN (correct); never surface it as "CLEAN" |
+| Showing raw DNSBL return codes like `127.0.0.2` to analysts | Meaningless without explanation ("what is 127.0.0.2?") | Map return codes to human-readable descriptions per zone (e.g., `127.0.0.2` on Spamhaus SBL = "Spamhaus Block List") |
+| Adding DNSBL/RDAP/ASN rows for hash and CVE IOC types | Empty rows add visual noise for every hash lookup | `supported_types` restrictions must prevent providers from appearing for irrelevant IOC types |
+| ASN shown as duplicate of existing ip-api.com output | Analyst sees same AS number twice from two providers | Either extend `IPApiAdapter` with richer ASN fields or deduplicate at the orchestrator level |
 
 ---
 
 ## "Looks Done But Isn't" Checklist
 
-- [ ] **GeoIP adapter:** `is_configured()` returns True — but verify it calls `os.path.isfile(path)` not just `bool(path)`
-- [ ] **GeoIP freshness:** Results are displaying — but verify file modification time is checked and surfaced in the UI
-- [ ] **DNS adapter:** Lookups succeed in dev — but verify `lifetime` and `timeout` are set on the Resolver and tested with a simulated timeout
-- [ ] **DNS adapter:** NXDOMAIN returns no data — but verify it returns `EnrichmentResult(verdict="no_data")` not `EnrichmentError`
-- [ ] **CT log adapter:** Domain returns results — but test with a major domain (e.g., `microsoft.com`) to verify response capping at 100 records
-- [ ] **CT log adapter:** Results display — but verify the `read_limited()` SEC-05 pattern is applied (crt.sh responses can be very large)
-- [ ] **Zero-auth providers:** All pass unit tests — but test the "MMDB file missing" code path to verify clean degradation
-- [ ] **maxminddb reader:** GeoIP lookups are fast — but verify the `maxminddb.open_database()` call happens once at init, not on every `lookup()` call
-- [ ] **ThreadPool:** All providers complete — but verify DNS lookups do not stall the pool by timing a 50-domain batch
-- [ ] **Results UX:** New sections added — but verify they are collapsed by default and do not break existing verdict/filter summary row layout
+Things that appear complete but are missing critical pieces.
+
+- [ ] **DNSBL provider:** Verify `127.0.0.2` (Spamhaus test address) returns "listed" — confirms IPv4 octet reversal works
+- [ ] **DNSBL provider:** Verify `test.surbl.org` returns "listed" on SURBL — confirms domain query format works
+- [ ] **DNSBL provider:** Verify `127.255.255.254` response is mapped to `EnrichmentError` (resolver blocked), not a listing
+- [ ] **DNSBL provider:** Hostname added to `ALLOWED_API_HOSTS` if using HTTP-based DNSBL (e.g., DQS); DNS path confirmed exempt from SSRF guard
+- [ ] **RDAP adapter:** Bootstrap caching verified — two sequential lookups for different domains fetch bootstrap exactly once
+- [ ] **RDAP adapter:** Only non-GDPR-redacted fields in data model (creation date, registrar, nameservers, status) — no contact entity fields
+- [ ] **RDAP adapter:** Redirect handling tested with a live RDAP endpoint; SEC-06 conflict documented and resolved
+- [ ] **ASN provider (if separate):** Hostname added to `ALLOWED_API_HOSTS`; 429 returns `EnrichmentError` not a crash; not duplicating ip-api.com output
+- [ ] **Annotations removal:** `grep -rn "AnnotationStore\|annotation" app/` returns zero results
+- [ ] **Annotations removal:** `annotations.ts` removed from esbuild Makefile entry points
+- [ ] **Annotations removal:** `annotations.db` initialization removed from `app/__init__.py` or app setup
+- [ ] **Annotations removal:** All E2E tests referencing annotation UI elements removed or replaced
+- [ ] **DNSBL + RDAP combined:** Single IP enrichment (all providers) completes in under 10 seconds
+- [ ] **Public threat feeds:** Point-query APIs used (not full blocklist downloads) — no megabyte-scale responses per IOC
+- [ ] **RDAP:** `supported_types` restricted to `{IOCType.DOMAIN, IOCType.IPV4}` — no hashes, CVEs, or URLs
 
 ---
 
@@ -418,13 +430,16 @@ When pitfalls occur despite prevention, how to recover.
 
 | Pitfall | Recovery Cost | Recovery Steps |
 |---------|---------------|----------------|
-| Stale bundled MMDB discovered | MEDIUM | Remove from repo, add to .gitignore, document download path, add freshness check to adapter |
-| DNS pool starvation stalling other providers | MEDIUM | Increase `max_workers` or add separate DNS executor; add `lifetime` timeout; re-test with 50-domain batch |
-| WHOIS hanging enrichment pool | HIGH | Remove WHOIS from main pool, implement isolated timeout wrapper, redeploy — stale in-flight jobs must time out |
-| CT results overwhelming analyst (thousands of rows) | LOW | Add server-side cap to 100 results + aggregation; no UX re-architecture needed |
-| `maxminddb-geolite2` stale data discovered | LOW | Replace with official `geoip2` library + fresh MMDB download; update config |
-| Zero-auth provider showing spurious errors | LOW | Fix `is_configured()` to check actual readiness; errors disappear from results |
-| GeoIP/ASN reader opened per-call (slow) | LOW | Move `maxminddb.open_database()` to adapter `__init__`; restart Flask |
+| SSRF allowlist missing for new provider | LOW | Add hostname to `ALLOWED_API_HOSTS` in `config.py`; restart Flask; no code change to adapter needed |
+| Spamhaus resolver block (`127.255.255.254`) returning false positives | MEDIUM | Add sentinel check to DNSBL response parser; re-run tests; no DB migration needed |
+| RDAP returning mostly redacted data | LOW | Narrow `raw_stats` keys in adapter to structural fields only; update frontend template; no schema change |
+| RDAP bootstrap re-fetched on every lookup | LOW | Add module-level cache dict with expiry timestamp; single-file change to adapter |
+| Annotations removal crashes app at startup | MEDIUM | Temporarily restore import; work through grep-audit checklist layer by layer; test after each layer |
+| DNSBL octet reversal missing (all IPs appear clean) | LOW | Fix reversal in query builder; add `127.0.0.2` fixture test; no data migration needed |
+| Domain DNSBL reversal applied (all domains appear clean) | LOW | Remove reversal from domain code path; add `test.surbl.org` fixture test |
+| BGPView included as ASN source | LOW | BGPView shut down November 2025; replace with ipinfo.io or Team Cymru; one adapter file change |
+| RDAP SEC-06 conflict found after implementation | MEDIUM | Switch to RDAP library that handles redirects internally; or implement manual redirect with target validation |
+| Serial DNSBL queries too slow for analyst | MEDIUM | Refactor `lookup()` to use `ThreadPoolExecutor` for parallel zone queries; add timing test |
 
 ---
 
@@ -434,40 +449,38 @@ How roadmap phases should address these pitfalls.
 
 | Pitfall | Prevention Phase | Verification |
 |---------|------------------|--------------|
-| GeoLite2 license/signup requirement (Pitfall 1) | GeoIP/ASN phase planning | Setup docs state MaxMind account is required; no MMDB in repo |
-| Stale bundled MMDB (Pitfall 2) | GeoIP adapter implementation | File freshness check exists; `.gitignore` includes `*.mmdb`; UI shows data age |
-| DNS blocking thread pool (Pitfall 3) | DNS enrichment phase | `Resolver.lifetime=5.0` set; unit test for timeout behavior; 50-domain batch completes in <30s |
-| WHOIS privacy/hang (Pitfall 4) | Defer to post-v6.0 | WHOIS remains "Out of Scope" in v6.0; revisit only with dedicated research |
-| CT log UI overload (Pitfall 5) | CT log phase | Adapter caps at 100 records; test with `microsoft.com`; SEC-05 applied |
-| Zero-auth always-True is_configured (Pitfall 6) | Each local-DB adapter phase | `is_configured()` verifies `os.path.isfile()`; test missing-file code path |
-| DNS rebinding / SSRF expansion (Pitfall 7) | Any network-enrichment phase | No adapter makes HTTP calls to IOC-derived hostnames; IP validation added to `http_safety.py` if needed |
+| SSRF allowlist not extended (Pitfall 1) | Every new provider phase — hostname added first | Unit test that calls `validate_endpoint()` without mocking |
+| Spamhaus resolver block false positive (Pitfall 2) | DNSBL implementation phase | Mock DNS response `127.255.255.254`; assert `EnrichmentError` returned, not a listing |
+| DNSBL IPv4 octet reversal missing (Pitfall 3) | DNSBL implementation phase | Unit test with `127.0.0.2`; assert listed result; this is the first test written (TDD red) |
+| Domain DNSBL reversal applied incorrectly (Pitfall 4) | DNSBL implementation phase | Unit test with `test.surbl.org`; assert listed result |
+| RDAP GDPR redaction noise (Pitfall 5) | RDAP design phase (before implementation) | Data model review: no contact/email/phone/address fields present |
+| RDAP redirect vs. SEC-06 conflict (Pitfall 6) | RDAP design phase | Decision documented before writing adapter; integration test against live endpoint |
+| Annotations removal incomplete (Pitfall 7) | Phase 1: Annotations removal | `grep -rn "AnnotationStore\|annotation" app/` returns zero; full test suite passes |
+| RDAP bootstrap uncached (Pitfall 8) | RDAP implementation phase | Two sequential lookups; verify bootstrap fetched exactly once |
+| Serial DNSBL query latency (Pitfall 9) | DNSBL implementation phase | Timing test: 5 DNSBL zones for one IP completes in under 5 seconds total |
 
 ---
 
 ## Sources
 
-- MaxMind GeoLite2 licensing changes (December 2019, account required): https://blog.maxmind.com/2019/12/significant-changes-to-accessing-and-using-geolite2-databases/
-- MaxMind GeoLite2 EULA (30-day deletion requirement): https://www.maxmind.com/en/geolite2/eula
-- MaxMind GeoLite2 developer docs (update frequency, download): https://dev.maxmind.com/geoip/geolite2-free-geolocation-data/
-- maxminddb-geolite2 PyPI inactive maintenance status: https://snyk.io/advisor/python/maxminddb-geolite2
-- dnspython thread safety docs: https://dnspython.readthedocs.io/en/latest/threads.html
-- dnspython resolver class (lifetime, timeout parameters): https://dnspython.readthedocs.io/en/latest/resolver-class.html
-- dnspython exceptions reference: https://dnspython.readthedocs.io/en/latest/exceptions.html
-- python-whois "not found" parsing issues: https://github.com/DannyCork/python-whois/issues/89
-- python-whois rate limit behavior: https://github.com/DannyCork/python-whois/issues/167
-- whoisit RDAP library (structured alternative to python-whois): https://github.com/meeb/whoisit
-- WHOIS GDPR redaction impact on cybersecurity: https://main.whoisxmlapi.com/privacy-or-accountability-what-the-redaction-of-whois-data-means-for-cybersecurity
-- crt.sh architecture and HTTP API availability: https://www.lukeshu.com/blog/crt-sh-architecture.html
-- BGPView rate limiting and user-agent blocking: community reports + https://bgpview.docs.apiary.io/
-- pyasn local lookup approach: https://github.com/hadiasghari/pyasn
-- DNS rebinding SSRF bypass pattern: https://www.clear-gate.com/blog/ssrf-with-dns-rebinding-2/
-- OWASP SSRF prevention (allow-lists over deny-lists): https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html
-- SentinelX codebase: `app/enrichment/provider.py` (Provider Protocol — `is_configured()` contract)
-- SentinelX codebase: `app/enrichment/http_safety.py` (SSRF allowlist, SEC-04 through SEC-07 patterns)
-- SentinelX codebase: `app/enrichment/adapters/shodan.py` (zero-auth adapter reference implementation)
-- SentinelX codebase: `.planning/PROJECT.md` (WHOIS "Out of Scope" note; no-subprocess constraint)
+- Spamhaus DNSBL FAQ and open resolver blocking: https://www.spamhaus.org/faqs/dnsbl-usage/
+- Spamhaus Cloudflare resolver advisory (127.255.255.254 sentinel): https://www.spamhaus.com/resource-center/successfully-accessing-spamhauss-free-block-lists-using-a-public-dns/
+- Spamhaus Microsoft resolver advisory: https://www.spamhaus.com/resource-center/query-the-spamhaus-projects-legacy-dnsbls-via-microsoft/
+- RDAP.org rate limiting (Cloudflare 429 at 10 req/10 sec): https://about.rdap.org/
+- RFC 9224 — RDAP bootstrap registry and caching requirement (SHOULD NOT fetch on every request): https://datatracker.ietf.org/doc/html/rfc9224
+- RDAP redirect server behavior (301 to authoritative RIR): https://rdap.rcode3.com/server_implementations/redirect.html
+- RDAP GDPR redaction statistics (10.8% registrant visibility, 58.2% proxy protection as of Jan 2024): https://domaindetails.com/kb/security-privacy/whois-privacy-after-gdpr
+- RFC 9537 — RDAP Redacted Fields specification (March 2024): https://datatracker.ietf.org/doc/rfc9537/
+- WHOIS sunset date (January 28, 2025): https://domaindetails.com/kb/technical-guides/rdap-explained
+- BGPView shutdown (November 26, 2025): confirmed via pfBlockerNG community migration reports
+- ipinfo.io free tier limits (50k/month with token, 1k/day unauthenticated): https://ipinfo.io/faq/article/61-usage-limit-free-plan
+- DNSBL octet reversal and response codes: https://en.wikipedia.org/wiki/Domain_Name_System_blocklist
+- pydnsbl async DNSBL library (parallel zone queries with aiodns): https://pypi.org/project/pydnsbl/
+- RFC 6471 — DNSBL operational best practices: https://datatracker.ietf.org/doc/html/rfc6471
+- DNS rebinding SSRF bypass patterns: https://ghostsecurity.com/blog/how-to-prevent-ssrf-attacks-in-2025
+- SentinelX codebase: `app/config.py` (ALLOWED_API_HOSTS), `app/enrichment/http_safety.py` (SEC-04 through SEC-07), `app/enrichment/adapters/dns_lookup.py` (existing DNS pattern), `app/enrichment/adapters/ip_api.py` (existing ASN fields in ip-api.com response), `app/routes.py` (AnnotationStore import location)
 
 ---
 
-*Pitfalls research for: v6.0 analyst experience expansion — zero-auth enrichment, bundled databases, open feeds*
-*Researched: 2026-03-11*
+*Pitfalls research for: SentinelX v7.0 Free Intel — DNSBL, public threat feeds, RDAP, ASN/BGP, annotations removal*
+*Researched: 2026-03-15*

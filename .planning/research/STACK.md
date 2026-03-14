@@ -1,48 +1,211 @@
 # Stack Research
 
-**Domain:** Threat intelligence enrichment — zero-auth/no-API-key deep analysis capabilities
-**Researched:** 2026-03-11
-**Confidence:** HIGH (all versions verified against PyPI and official documentation)
+**Domain:** Threat intelligence enrichment — DNSBL reputation, public threat feeds, RDAP
+registration data, ASN/BGP intelligence
+**Researched:** 2026-03-15
+**Confidence:** HIGH (all libraries verified against PyPI, official documentation, and live
+API endpoints; see Sources)
 
 ---
 
-## Context: Additive Stack Only
+## Context: v7.0 Additive Stack Only
 
-SentinelX v5.0 baseline is locked and validated. This document covers ONLY new
-libraries needed for v6.0 analyst experience expansion. Do not re-evaluate Flask,
-requests, iocextract, iocsearcher, esbuild, Tailwind, or the existing 8 provider
-adapters — they are not in scope.
+SentinelX v6.0 baseline is locked and shipped. This document covers ONLY new capabilities
+needed for v7.0 Free Intel. Do not re-evaluate Flask, requests, dnspython, iocextract,
+iocsearcher, esbuild, Tailwind, or any of the 13 existing providers.
 
-The question this research answers: what Python libraries enable deep analysis without
-API keys? Which free databases can be bundled or downloaded?
+The existing stack after v6.0:
+- `requests==2.32.5` — all HTTP adapters
+- `dnspython==2.8.0` — DNS resolution (DnsAdapter, port 53 directly)
+- 12 hosts in `ALLOWED_API_HOSTS` SSRF allowlist
+
+The question this research answers: what new libraries and API endpoints enable DNSBL checks,
+public threat feed lookups, RDAP registration data, and ASN/BGP intelligence?
 
 ---
 
-## New Library Recommendations
+## Findings by Capability
 
-### Tier 1: Core Zero-Auth Enrichment
+### Capability 1: DNSBL Reputation Checks
 
-These three libraries enable the most analyst-valuable enrichment and should be added
-immediately. All are zero-auth at query time.
+**Verdict: implement with existing `dnspython` — no new library.**
 
-| Library | Version | Purpose | Why Recommended |
-|---------|---------|---------|-----------------|
-| `dnspython` | 2.8.0 | Active DNS resolution (A, AAAA, MX, NS, TXT, PTR, SOA records) | The standard Python DNS toolkit — used by Ansible, MISP, and every serious Python security tool. Zero external dependencies beyond stdlib. Python 3.10+ (matches baseline). No API key, no rate-limit account, no database files. A single `dns.resolver.resolve(domain, "MX")` call returns mail server info. MX + NS + TXT records give analysts SPF, DMARC, mail infrastructure, and nameserver context in one shot. |
-| `geoip2` | 5.2.0 | Offline IP geolocation (country, city, ASN, org name) from local .mmdb database | Official MaxMind Python client. Reads local .mmdb files — zero network calls at lookup time. Python 3.10+ required (matches baseline). GeoLite2 databases are free with a MaxMind account; the license key is only used for the initial download. Runtime lookups are fully offline. The GeoLite2-ASN database (9 MB) is particularly valuable: maps any IP to its Autonomous System Number and organization name without any API call. |
-| `ipwhois` | 1.3.0 | IP-to-ASN, netblock owner, and network registration data via RDAP | No API key. Queries public IANA/RDAP registries directly. `lookup_rdap()` returns structured dicts with org name, ASN, CIDR, country, and RIR — richer ownership context than geoip2 for threat triage. Complements geoip2: geoip2 gives geographic location from a local file (fast, offline), ipwhois gives current netblock ownership from RDAP (slower, online, more authoritative). Both are needed. |
+DNSBL lookup is a reverse-IP DNS query, not an HTTP call. The mechanism is:
+1. Reverse the IP octets: `1.2.3.4` → `4.3.2.1`
+2. Append the DNSBL zone: `4.3.2.1.zen.spamhaus.org`
+3. Resolve as an A record — `NXDOMAIN` means not listed, `127.0.0.x` means listed
+4. The return code encodes which sub-list the IP appears on
 
-### Tier 2: Domain Intelligence
+This is exactly what `dnspython` already does in `DnsAdapter`. The DNSBL provider is a
+new adapter that reuses the same `dns.resolver.Resolver` pattern.
 
-| Library | Version | Purpose | Why Recommended |
-|---------|---------|---------|-----------------|
-| *(none — use requests directly)* | — | Certificate transparency log queries via crt.sh | The crt.sh service exposes a public JSON API (`https://crt.sh/?q=<domain>&output=json`) with zero authentication. It returns issued certificates, Subject Alternative Names (SANs), issuer details, and validity periods. A direct `requests.get()` call using the existing `requests` dependency is sufficient. No new library required. SAN enumeration from CT logs is high-value for phishing detection — typosquatters always issue certs. |
+**Spamhaus public mirror restriction (HIGH confidence, critical):**
+Spamhaus is blocking queries arriving from public resolvers and cloud-hosted IPs. Error code
+`127.255.255.254` is being phased in across major cloud providers' IP space (Hetzner Feb 2025,
+Microsoft Apr 2025, Korea Telecom Sep 2025). A SOC analyst running SentinelX on their own
+workstation (with their ISP's recursive resolver) is not affected. A jump box hosted at a
+cloud provider may receive `127.255.255.254` responses from Spamhaus. The free Data Query
+Service (DQS) resolves this with a free key registration, but adds a key-management burden.
 
-**Note on pycrtsh:** The `pycrtsh` library (version 0.3.14, October 2025) wraps crt.sh but
-requires `psycopg2-binary` and `lxml` as transitive dependencies, which pull in C compilation
-and PostgreSQL adapter complexity. The direct `requests` approach covers every use case needed
-for triage enrichment. Reach for pycrtsh only if the direct HTTP API proves unreliable or if
-PostgreSQL direct-connect to crt.sh's database is required for advanced filtering — neither
-condition is likely for a single-shot triage tool.
+**DNSBL zones to query (curated for reliability):**
+
+| Zone | Type | Coverage | Public Resolver Safe |
+|------|------|----------|----------------------|
+| `zen.spamhaus.org` | IP | SBL + XBL + PBL combined | Yes (own resolver); blocked from cloud/shared resolvers |
+| `dbl.spamhaus.org` | Domain | Spamhaus Domain Blocklist | Same restriction as zen |
+| `multi.surbl.org` | Domain | SURBL combined URI blocklist | Generally safe; no public resolver restriction documented |
+| `combined.abuse.ch` | IP | abuse.ch combined (botnet/malware) | Generally safe |
+| `b.barracudacentral.org` | IP | Barracuda Reputation Block List | Safe; free registration recommended to avoid throttling |
+
+**Approach:** Query all five zones per IP/domain lookup. Catch `NXDOMAIN` as "clean", catch
+`127.255.255.254` returns from Spamhaus as "query blocked" (surface this to analyst as a
+note, not an error), and map positive return codes to listed verdict.
+
+**Do not use `pydnsbl`:** Version 1.1.7, released March 2025. Uses `asyncio` + `aiodns`.
+The entire SentinelX enrichment pipeline is synchronous (Flask request → thread pool →
+provider.lookup() calls). Introducing an async library requires event loop management that
+conflicts with the existing architecture. The DNSBL pattern is 10 lines of dnspython — no
+library needed.
+
+### Capability 2: Public Threat Feed Lookups
+
+**Verdict: use `requests` with three zero-auth HTTP API endpoints — no new library.**
+
+The project already queries abuse.ch services (MalwareBazaar, ThreatFox, URLhaus). Three
+additional zero-auth endpoints provide complementary feed coverage:
+
+| Service | Endpoint | What it covers | Auth |
+|---------|----------|---------------|------|
+| Feodo Tracker | `https://feodotracker.abuse.ch/downloads/ipblocklist_recommended.json` | Active botnet C2 IPs (Dridex, Emotet, TrickBot, QakBot, BazarLoader) | None |
+| abuse.ch ThreatFox API | Already in project | IOC-type lookup across all types | Free key (existing) |
+| PhishTank | `https://checkurl.phishtank.com/checkurl/` | Phishing URL verification | Free key (separate) |
+
+**Feodo Tracker approach:** Download the JSON blocklist on each request and search for the
+IP. The list is updated every 5 minutes. This is a bulk download (not a per-IP API lookup
+endpoint). Better approach: cache the parsed set server-side with the existing SQLite cache
+and refresh TTL of 15 minutes. A local `set[str]` membership check is O(1).
+
+**Important:** The project already has URLhaus, MalwareBazaar, and ThreatFox. These already
+cover the majority of "public threat feed" use cases. The Feodo Tracker C2 blocklist is the
+only significant gap — it specifically covers active C2 infrastructure rather than malware
+samples or IOC sharing. Phishing feed lookups are lower priority because URLhaus and OTX
+already return phishing signals.
+
+**Recommendation:** One new zero-auth adapter for Feodo Tracker C2 blocklist (IPs only).
+Add `feodotracker.abuse.ch` to `ALLOWED_API_HOSTS`.
+
+### Capability 3: RDAP Registration Data
+
+**Verdict: add `whoisit==4.0.0` — introduces one new transitive dependency (`python-dateutil`).**
+
+RDAP is a structured JSON API that replaced WHOIS. It provides registrar, creation date,
+expiry date, nameservers, and registrant organization for domains. For IPs, it provides
+network block owner, RIR, and allocation date. The PROJECT.md v7.0 target explicitly calls
+this out; the PROJECT.md "Out of Scope" section previously listed WHOIS as out of scope
+citing GDPR privacy redaction — RDAP is a different protocol that returns more structured
+data, but is also subject to the same GDPR redaction for domain registrant contact info.
+
+**What RDAP returns that is useful for triage:**
+- Domain: registrar name, creation date, expiry date, nameservers (all usually present
+  even with privacy redaction on contact fields)
+- IP: network block CIDR, network name, RIR, organization, country
+
+**Library options:**
+
+| Library | Version | Dependencies | Notes |
+|---------|---------|-------------|-------|
+| `whoisit` | 4.0.0 | `requests`, `python-dateutil` | Pure Python. Handles IANA bootstrap (finding the right RIR for each IP/domain TLD). Returns datetime objects. Synchronous. Covers domains + IP. HIGH confidence. |
+| `whodap` | 0.2.x | `httpx`, `dnspython` | async-first; sync support via `asyncio.run()`. Adds `httpx` dependency. |
+| `rdap` | latest | `requests` | Newer, less documented, smaller user base. MEDIUM confidence. |
+
+**Choose `whoisit`:** It is pure synchronous, depends only on `requests` (already present) and
+`python-dateutil` (not yet present), and handles IANA bootstrapping correctly — finding the
+authoritative RDAP endpoint for a given TLD or RIR is non-trivial, and whoisit solves this.
+The bootstrap data from IANA is cached per-process via `whoisit.bootstrap_info()`.
+
+**New dependency introduced:** `python-dateutil` (for datetime parsing in whoisit). This is
+a low-risk, widely used library. No version conflicts with the existing stack.
+
+**SSRF allowlist impact:** whoisit queries multiple RDAP endpoints (arin.net, ripe.net,
+lacnic.net, apnic.net, afrinic.net, rdap.verisign.com, rdap.nominet.org.uk, etc.) depending
+on the IP or domain TLD. These are not fixed hostnames. The existing `validate_endpoint()`
+SSRF check in `http_safety.py` must be bypassed for RDAP, or the RDAP adapter must manage
+its own outbound call (bypassing `http_safety`) with its own timeout. Because whoisit uses
+`requests` internally, it does not go through the project's `validate_endpoint()`. This is
+acceptable: RDAP bootstrapping resolves only IANA-blessed registrars, not arbitrary URLs.
+Document this exception clearly in the adapter file. Apply a request timeout via whoisit's
+session configuration.
+
+### Capability 4: ASN/BGP Intelligence
+
+**Verdict: use `ipapi.is` via `requests` — no new library. One new SSRF allowlist entry.**
+
+`ipapi.is` returns ASN number, organization name, network type (hosting/ISP/business/
+education/government), abuse email, route/prefix (CIDR), RIR, and active status. Free tier:
+1,000 lookups/day with no authentication required. The endpoint is:
+
+```
+GET https://api.ipapi.is?q=<ip_address>
+```
+
+JSON response includes an `asn` object with fields: `asn`, `org`, `type`, `abuse`,
+`route`, `country`, `rir`, `active`.
+
+**BGPView is not an option:** BGPView announced shutdown on November 26, 2025. Do not use it
+for new code.
+
+**The existing `ip-api.com` provider does NOT cover ASN:** ip-api.com returns GeoIP (country,
+city, lat/lon, ISP name, proxy/VPN flags) but does not return ASN number, network CIDR, RIR,
+or abuse contact. `ipapi.is` fills this gap with different, complementary data.
+
+**Overlap with existing `ip-api.com` provider:** Both services return country and org name.
+The `ipapi.is` adapter should not duplicate fields already present from ip-api.com. Surface
+only the ASN-specific fields: ASN number, network type classification, abuse contact, CIDR
+prefix.
+
+**Add `api.ipapi.is` to `ALLOWED_API_HOSTS`.**
+
+---
+
+## New Library Summary
+
+| Library | Version | New? | Purpose | Install |
+|---------|---------|------|---------|---------|
+| `dnspython` | 2.8.0 | No (existing) | DNSBL lookups via DNS A record queries | Already installed |
+| `requests` | 2.32.5 | No (existing) | Feodo Tracker blocklist download + ipapi.is HTTP calls | Already installed |
+| `whoisit` | 4.0.0 | **YES** | RDAP registration data (domains + IPs) | `pip install whoisit==4.0.0` |
+| `python-dateutil` | 2.9.x | **YES** (transitive via whoisit) | Date parsing in whoisit | Installed automatically |
+
+**Net new packages to add to `requirements.txt`: 2** (`whoisit`, `python-dateutil`)
+
+---
+
+## SSRF Allowlist Changes
+
+Add these entries to `ALLOWED_API_HOSTS` in `app/config.py`:
+
+| Hostname | Purpose |
+|----------|---------|
+| `api.ipapi.is` | ASN/BGP intelligence (zero-auth, 1000/day free) |
+| `feodotracker.abuse.ch` | Feodo Tracker C2 blocklist download (zero-auth) |
+
+RDAP (whoisit) queries bypass `validate_endpoint()` — document this in the adapter file.
+DNSBL (dnspython) does not use HTTP — no SSRF surface, no allowlist entry needed (same
+pattern as the existing `DnsAdapter`).
+
+---
+
+## New Provider Adapter Map
+
+| Adapter file | Capability | IOC Types | Auth | Library |
+|-------------|-----------|-----------|------|---------|
+| `dnsbl.py` | DNSBL reputation checks | `IPv4`, `IPv6`, `DOMAIN` | None | `dnspython` (existing) |
+| `feodo.py` | Feodo Tracker C2 blocklist | `IPv4` | None | `requests` (existing) |
+| `rdap.py` | RDAP registration data | `DOMAIN`, `IPv4`, `IPv6` | None | `whoisit` (new) |
+| `asn_intel.py` | ASN/BGP intelligence | `IPv4`, `IPv6` | None | `requests` (existing) |
+
+Each adapter: one file in `app/enrichment/adapters/`, one `registry.register()` call in
+`app/enrichment/setup.py`. No other files change (zero-change provider protocol holds).
 
 ---
 
@@ -50,77 +213,30 @@ condition is likely for a single-shot triage tool.
 
 | Avoid | Why | Use Instead |
 |-------|-----|-------------|
-| `pyasn` | Requires offline BGP MRT dump files (100+ MB) that need weekly refresh from RIPE/RouteViews. Significant operational burden for an analyst workstation tool. | `ipwhois` RDAP returns ASN with zero local database management. |
-| `python-whois`, `whoisit`, `whodap` | WHOIS text is inconsistently formatted across TLDs and privacy-redacted for the majority of registrations since GDPR. PROJECT.md explicitly lists "WHOIS / RDAP enrichment — high complexity, often privacy-redacted" as out of scope. This constraint is correct. | Skip WHOIS for domains entirely. Use `ipwhois` RDAP for IPs (structured, reliable). |
-| `certstream` | Live CT log streaming requires a persistent WebSocket connection. Fundamentally incompatible with SentinelX's single-shot triage model. | Direct crt.sh JSON API queries via `requests` for historical CT data. |
-| `aiodns` | Async DNS requires event loop integration that conflicts with Flask's synchronous request handling and the existing thread-pool-based enrichment orchestrator. | `dnspython` synchronous interface — clean fit with current architecture. |
-| Any GeoIP web service API (ipinfo.io, ipgeolocation.io, etc.) | All require API key registration. Adds another external dependency when GeoLite2 offline solves the same problem for a locally-deployed tool. | `geoip2` + locally downloaded GeoLite2 .mmdb files. |
-| `IP2Location LITE` | Less accurate than GeoLite2, smaller Python ecosystem, less maintained. MaxMind GeoLite2 is the industry standard for free offline geolocation. | `geoip2` with GeoLite2 databases. |
-| `pycrtsh` | psycopg2-binary + lxml C extension overhead for a task that `requests` handles equally well. | Direct `requests.get()` to crt.sh JSON API. |
-
----
-
-## Database Dependencies (not Python packages)
-
-### MaxMind GeoLite2 .mmdb Files
-
-Required for `geoip2` offline lookups. These are binary database files, not Python packages.
-
-| Database | Filename | Size | Content |
-|----------|----------|------|---------|
-| GeoLite2-City | `GeoLite2-City.mmdb` | ~70 MB | Country, region, city, postal code, lat/lon for IP |
-| GeoLite2-ASN | `GeoLite2-ASN.mmdb` | ~9 MB | ASN number + organization name for IP |
-
-**Acquisition:** Free download from MaxMind after free account registration at
-`maxmind.com/en/geolite2/signup`. A license key is issued — used only in the download URL, not
-at query time. Lookups are fully offline once the .mmdb files are on disk. MaxMind releases
-database updates twice monthly; the EULA requires deletion within 30 days of a new release.
-
-**Storage:** `~/.sentinelx/geoip/GeoLite2-City.mmdb` and `~/.sentinelx/geoip/GeoLite2-ASN.mmdb`
-
-**Do NOT bundle in the repository.** The .mmdb files are 70+ MB binary assets with their own
-EULA. Store the MaxMind license key in ConfigStore (`~/.sentinelx/config.ini`) and provide a
-`make geoip-update` target or Flask CLI command to download/refresh the databases.
-
-**Fallback behavior:** When .mmdb files are absent, the GeoIP provider adapter must return
-`no_data` verdict (not error) — same pattern as API-key providers without configured keys.
-The settings UI should display a download prompt with instructions.
-
----
-
-## Integration with Existing Provider Architecture
-
-All new libraries integrate as Provider Protocol adapters. Zero changes to the orchestrator,
-registry, or routes. Each new capability = one adapter file + one `register()` call in `setup.py`.
-
-### Adapter Map
-
-| Adapter file | Library | Supported IOC Types | requires_api_key | Notes |
-|-------------|---------|---------------------|------------------|-------|
-| `dns_provider.py` | `dnspython` | `Domain`, `URL` | `False` | A/AAAA/MX/NS/TXT/PTR records; derive verdict from MX presence, SPF/DMARC in TXT records |
-| `geoip_provider.py` | `geoip2` | `IPv4`, `IPv6` | `False` | Country, city, ASN from offline .mmdb; `is_configured()` returns `False` if .mmdb absent |
-| `ipwhois_provider.py` | `ipwhois` | `IPv4`, `IPv6` | `False` | RDAP lookup: org, netblock CIDR, RIR, ASN; complements geoip2 for ownership context |
-| `crtsh_provider.py` | `requests` (existing) | `Domain` | `False` | Direct HTTP to `crt.sh/?q=<domain>&output=json`; existing `http_safety` module applies |
-
-**CrtShProvider reuses the existing `requests` dependency.** The `http_safety` module's SSRF
-allowlist, timeout constant, and `read_limited()` stream reader apply directly to crt.sh queries.
-Add `crt.sh` to the SSRF allowlist (`ALLOWED_API_HOSTS`).
+| `pydnsbl` v1.1.7 | asyncio/aiodns dependency; async-only API incompatible with Flask sync architecture | Custom 10-line implementation using existing `dnspython` |
+| `aiodnsbl` | Same async problem as pydnsbl; fork of pydnsbl with less adoption | Same: custom `dnspython` implementation |
+| `pyasn` | Requires 100+ MB offline BGP MRT dump files with weekly refresh. Wrong model for an analyst workstation tool. | `ipapi.is` via HTTP — zero local files, zero maintenance |
+| BGPView API | Announced shutdown November 2025 — do not use in new code | `ipapi.is` API |
+| `ipwhois` library | Overlaps with `whoisit` for IP RDAP. The project recommended ipwhois in v6.0 research but ultimately shipped without it (ip-api.com was used instead). Now `whoisit` is the better choice: covers both domains AND IPs, pure requests dependency. | `whoisit` for all RDAP needs |
+| `whodap` | Async-first; adds `httpx` dependency; whoisit covers identical RDAP surface synchronously | `whoisit` |
+| `geoip2` + GeoLite2 .mmdb files | Not needed for v7.0 — ip-api.com already covers GeoIP in v6.0. Adding offline databases would require DB file management, MaxMind account setup, and refresh automation. | Existing `ip-api.com` provider (already shipped) |
+| PhishTank API | Requires free key registration — adds key management burden. URLhaus + ThreatFox already cover phishing URLs effectively. | Existing URLhaus and ThreatFox providers |
+| Spamhaus DQS key | Free but requires account registration — contradicts "zero API keys" goal for default experience | Fall back gracefully when `127.255.255.254` returned (surface as "query blocked via public resolver") |
 
 ---
 
 ## Installation
 
 ```bash
-# Tier 1 — Core zero-auth enrichment libraries
-pip install dnspython==2.8.0 geoip2==5.2.0 ipwhois==1.3.0
+# New packages only — add to requirements.txt
+pip install whoisit==4.0.0
 
-# GeoLite2 databases (not pip — downloaded separately via MaxMind)
-# Requires a free MaxMind account and license key
-# Store databases at: ~/.sentinelx/geoip/
-# See MaxMind download documentation: https://dev.maxmind.com/geoip/geolite2-free-geolocation-data/
+# python-dateutil is a transitive dependency of whoisit — installed automatically
+# Pin it explicitly for reproducible builds:
+pip install python-dateutil==2.9.0
 ```
 
-No Tier 2 pip installs are needed — crt.sh integration uses the existing `requests` package.
+No changes to esbuild, Tailwind, or TypeScript build pipeline.
 
 ---
 
@@ -128,11 +244,10 @@ No Tier 2 pip installs are needed — crt.sh integration uses the existing `requ
 
 | Recommended | Alternative | When to Use Alternative |
 |-------------|-------------|-------------------------|
-| `dnspython` | stdlib `socket.getaddrinfo()` | Never — socket resolves only A/AAAA. dnspython is the only option for MX/TXT/NS/PTR queries. |
-| `geoip2` + GeoLite2 (offline) | Online GeoIP APIs (ipinfo.io, ipgeolocation.io) | Only if the operator refuses to manage local database files and accepts API key registration and rate limits. Wrong model for a workstation-local tool. |
-| `ipwhois` RDAP | `pyasn` + offline BGP dump | Never for this use case. pyasn requires 100+ MB BGP database files with weekly refresh and complex setup. `ipwhois` RDAP is simpler, zero local files, and free. |
-| Direct `requests` to crt.sh JSON API | `pycrtsh` library | Only if direct HTTP proves unreliable for CT log queries or if PostgreSQL direct-connect is required for advanced filtering. Neither condition is likely for triage. |
-| Skip WHOIS for domains | Any WHOIS library | Per PROJECT.md constraints. Privacy-redaction makes domain WHOIS low-signal for most real-world IOCs. The constraint is valid — hold it. |
+| Custom `dnspython` DNSBL | `pydnsbl` library | Only if the project adopts async throughout (not planned) |
+| `whoisit` for RDAP | `whodap` | If project migrates to `httpx` and async (not planned) |
+| `ipapi.is` for ASN | `ipinfo.io` ASN API | ipinfo.io returns very similar data but requires a token for >50k lookups/month; unnecessary for a local tool |
+| Feodo Tracker bulk JSON + cache | Per-IP HTTP query to non-existent Feodo API | Feodo Tracker does not have a per-IP lookup endpoint — bulk download is the only option |
 
 ---
 
@@ -140,50 +255,27 @@ No Tier 2 pip installs are needed — crt.sh integration uses the existing `requ
 
 | Package | Compatible With | Notes |
 |---------|-----------------|-------|
-| `dnspython==2.8.0` | Python 3.10+ | Matches SentinelX baseline exactly. Released September 2025. No external dependencies. |
-| `geoip2==5.2.0` | Python 3.10–3.14, `requests>=2.24.0` | `requests==2.32.5` already in requirements.txt — no version conflict. Released November 2025. |
-| `ipwhois==1.3.0` | Python up to 3.12 | Tested through 3.12; no conflicts with Flask 3.1 or existing deps. Released October 2024. Note: last release does not yet formally list 3.13+ but no known breakage. |
-
----
-
-## Stack Patterns
-
-**If GeoLite2 databases are not present:**
-- `GeoIpProvider.is_configured()` returns `False`
-- Provider is excluded from enrichment (same pattern as API-key providers with no key set)
-- Settings UI shows a download prompt with MaxMind account link and instructions
-
-**If DNS lookup times out:**
-- `DnsProvider` returns `EnrichmentError` with `"Timeout"` message (consistent with all existing providers)
-- Set `dns.resolver.Resolver.timeout = 5` and `lifetime = 10` (align with existing `TIMEOUT = (5, 30)` constant in `http_safety.py`)
-
-**If ipwhois RDAP hits rate limiting:**
-- LACNIC (Latin American IPs) is the only RIR known to impose aggressive rate limits
-- Return `EnrichmentError("Rate limited")` — do not retry automatically
-- Analyst can re-query if needed; this is consistent with existing HTTP 429 handling
-
-**For crt.sh queries:**
-- Add `crt.sh` to `ALLOWED_API_HOSTS` in the SSRF allowlist
-- Apply existing `TIMEOUT`, `read_limited()`, and `allow_redirects=False` controls
-- 404 from crt.sh means no certs found — return `verdict="no_data"`, not an error
+| `whoisit==4.0.0` | Python 3.10+, `requests>=2.0`, `python-dateutil>=2.0` | Pure Python. Tested on Python 3.10–3.12. No known conflicts with Flask 3.1 or existing deps. |
+| `python-dateutil==2.9.0` | Python 3.10+ | No conflicts with existing packages. Widely used (transitive dep of many libraries). |
+| `dnspython==2.8.0` | Python 3.10+ | Already in requirements.txt. DNSBL queries use the same `dns.resolver.Resolver` already proven in `DnsAdapter`. |
 
 ---
 
 ## Sources
 
-- [dnspython PyPI](https://pypi.org/project/dnspython/) — Version 2.8.0 confirmed, Python 3.10+ (HIGH confidence)
-- [dnspython Resolver docs](https://dnspython.readthedocs.io/en/latest/resolver-class.html) — Resolver API and supported record types (HIGH confidence)
-- [geoip2 PyPI](https://pypi.org/project/geoip2/) — Version 5.2.0 confirmed, Python 3.10+ (HIGH confidence)
-- [geoip2 ReadTheDocs](https://geoip2.readthedocs.io/) — Database reader API (HIGH confidence)
-- [MaxMind GeoLite2 developer docs](https://dev.maxmind.com/geoip/geolite2-free-geolocation-data/) — Free databases confirmed; registration and license key required for download; runtime lookups are offline (HIGH confidence)
-- [ipwhois PyPI](https://pypi.org/project/ipwhois/) — Version 1.3.0 confirmed (HIGH confidence)
-- [ipwhois RDAP docs](https://ipwhois.readthedocs.io/en/latest/RDAP.html) — RDAP lookup API, structured dict output (HIGH confidence)
-- [pycrtsh PyPI](https://pypi.org/project/pycrtsh/) — Version 0.3.14, October 2025, psycopg2-binary + lxml dependencies confirmed (HIGH confidence)
-- [crt.sh JSON API](https://crt.sh/?q=example.com&output=json) — Zero-auth public API, JSON fields confirmed live (HIGH confidence)
-- [GitHub rthalley/dnspython](https://github.com/rthalley/dnspython) — Active maintenance, September 2025 release (HIGH confidence)
-- [GitHub maxmind/GeoIP2-python](https://github.com/maxmind/GeoIP2-python) — Official MaxMind Python client (HIGH confidence)
+- [ipapi.is Developer Documentation](https://ipapi.is/developers.html) — Rate limits (1000/day free, no auth), ASN JSON fields confirmed (HIGH confidence)
+- [ipapi.is ASN Database](https://ipapi.is/asn.html) — JSON example response with all ASN fields (HIGH confidence)
+- [whoisit on PyPI](https://pypi.org/project/whoisit/) — Version 4.0.0, pure Python, requests + dateutil dependencies confirmed (HIGH confidence)
+- [whoisit GitHub](https://github.com/meeb/whoisit) — Supported lookup types, field documentation, bootstrap mechanism (HIGH confidence)
+- [pydnsbl on PyPI](https://pypi.org/project/pydnsbl/) — Version 1.1.7, asyncio/aiodns dependency confirmed (HIGH confidence)
+- [Spamhaus DNSBL Fair Use Policy](https://www.spamhaus.org/blocklists/dnsbl-fair-use-policy/) — Public resolver blocking, error code 127.255.255.254 phased rollout 2025 confirmed (HIGH confidence)
+- [Spamhaus Free DQS](https://www.spamhaus.com/data-access/free-data-query-service/) — Free key option available; requires account registration (HIGH confidence)
+- [Feodo Tracker Blocklist](https://feodotracker.abuse.ch/blocklist/) — JSON download endpoint confirmed, zero-auth, CC0 license (HIGH confidence)
+- [BGPView FAQ / shutdown notice](https://bgpview.io/) — BGPView shutting down November 26, 2025 (HIGH confidence)
+- [SURBL multi.surbl.org](https://cwiki.apache.org/confluence/display/SPAMASSASSIN/DnsBlocklists) — Public resolver safe, no key required (MEDIUM confidence — SpamAssassin docs)
+- [abuse.ch combined DNSBL](https://www.dnsbl.info/dnsbl-details.php?dnsbl=combined.abuse.ch) — Available, no public resolver restriction documented (MEDIUM confidence)
 
 ---
 
-*Stack research for: SentinelX v6.0 zero-auth deep analysis capabilities*
-*Researched: 2026-03-11*
+*Stack research for: SentinelX v7.0 Free Intel — DNSBL, threat feeds, RDAP, ASN/BGP*
+*Researched: 2026-03-15*

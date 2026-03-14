@@ -1,197 +1,186 @@
 # Project Research Summary
 
-**Project:** SentinelX v6.0 — Analyst Experience Expansion
-**Domain:** Threat intelligence enrichment platform — zero-auth deep analysis
-**Researched:** 2026-03-11
+**Project:** SentinelX v7.0 Free Intel
+**Domain:** Threat intelligence enrichment — DNSBL reputation, public threat feeds, RDAP registration data, ASN/BGP intelligence; annotations removal
+**Researched:** 2026-03-15
 **Confidence:** HIGH
 
 ## Executive Summary
 
-SentinelX v6.0 expands a working 8-provider threat intelligence tool into a richer analyst workstation platform by adding zero-auth enrichment depth, local offline databases, and a deeper per-IOC analysis experience. The core insight from research is that the analyst complaint ("can't we do more without API keys?") has a concrete, high-quality answer: seven additional data sources covering IP geolocation/ASN, reverse DNS, live DNS records, certificate transparency, NSRL known-good hash detection, and passive DNS pivoting — all zero-auth at query time, all fitting the existing Provider Protocol without model changes. After v6.0, a fully configured instance with zero API keys rivals what VirusTotal shows on its free public lookup page for most triage scenarios.
+SentinelX v7.0 adds four zero-auth enrichment capabilities to a mature 13-provider threat intelligence platform: DNSBL reputation checks, Feodo Tracker C2 feed lookups, RDAP domain/IP registration data, and Team Cymru ASN/BGP intelligence. It simultaneously removes the annotations feature (notes, tags, AnnotationStore) to simplify the codebase. All four new capabilities integrate directly into the existing Provider Protocol — each is one new adapter file plus one `registry.register()` call — with no orchestrator, route, or TypeScript rendering changes required. The stack addition is minimal: only `whoisit==4.0.0` (plus its `python-dateutil` transitive dependency) is new. DNSBL and ASN/BGP both run over DNS via the already-installed `dnspython`, and Feodo Tracker uses the already-installed `requests`.
 
-The recommended approach is additive and low-risk: all new capabilities are new Provider Protocol adapter files plus one `register()` call each. The existing orchestrator, cache, and TypeScript rendering pipeline are unchanged. The three new Python libraries required (`dnspython`, `geoip2`, `ipwhois`) have verified compatibility with the Python 3.10 baseline. The one significant setup wrinkle is GeoLite2: the databases are free but require a MaxMind account signup and cannot be bundled in the repository — this must be surfaced honestly in UX as "optional enhanced enrichment requiring one-time setup" rather than presented as seamlessly zero-auth.
+The recommended implementation order is: annotations removal first (eliminates ~500 LOC and three API routes before adding new code), then DNS-native providers (ASNAdapter via Team Cymru, DNSBLAdapter via Spamhaus/SURBL — zero new dependencies), then HTTP providers (ThreatFeedAdapter for Feodo C2 bulk-list, RDAPAdapter for registration data). This order minimizes risk at every stage: the destructive removal is contained and verified before new code is introduced, the DNS providers validate the Provider Protocol extension flow with no SSRF surface changes, and the HTTP providers with their allowlist updates come last. P1 features for v7.0 are: annotations removal, DNSBL for IPs, RDAP domain creation date/registrar/nameservers, and Feodo Tracker. P2 features are RDAP for IPs, DNSBL for domains, and Team Cymru ASN/BGP.
 
-The key risks are operational rather than architectural: GeoLite2 staleness (MaxMind EULA requires deletion of databases older than 30 days after a new release), DNS lookup timeouts stalling the ThreadPoolExecutor (mitigated by `dnspython` with explicit `lifetime=5.0` and `timeout=2.0`), and certificate transparency response volume (crt.sh returns thousands of records for popular domains — must be capped and aggregated before display). The security posture remains strong: new providers follow existing SSRF allowlist patterns, GeoIP lookups are offline (no HTTP), and DNS resolution does not introduce new SSRF surface. The `ipwhois` RDAP path should be deferred because its dynamic RIR endpoint URLs are incompatible with the static SSRF allowlist model.
+The primary risks are specific and well-understood. Spamhaus blocks queries from public DNS resolvers (Cloudflare/Google) and returns a `127.255.255.254` sentinel that must not be interpreted as a positive listing. RDAP's SEC-06 conflict (`allow_redirects=False`) means the adapter design must resolve redirect behavior before a line of code is written — `rdap.org` redirect-vs-proxy behavior is the one unconfirmed item in the research and needs empirical validation during Phase 5. The annotations removal spans four layers (Python, templates, TypeScript, SQLite init) and must be completed atomically with a full test run before any new provider work begins. All other aspects of the milestone have HIGH confidence grounded in direct codebase inspection and verified external documentation.
 
 ## Key Findings
 
 ### Recommended Stack
 
-The v5.0 stack (Python 3.10 + Flask 3.1, TypeScript + esbuild, Tailwind, SQLite) is not changing. Three libraries are additive for v6.0 zero-auth enrichment, all verified against PyPI and official documentation at Python 3.10+ compatibility.
+The v7.0 stack addition is as lean as possible: two new pip packages. `whoisit==4.0.0` handles RDAP bootstrapping (finding the correct RIR/registry RDAP server for any TLD or IP prefix) using only `requests` and `python-dateutil`. All other new capabilities reuse the existing `dnspython==2.8.0` (for DNSBL and Team Cymru ASN) and `requests==2.32.5` (for Feodo Tracker). `pydnsbl` was explicitly rejected for its async/aiodns dependency conflicting with Flask's synchronous pipeline. BGPView was rejected because it shut down November 2025. `pyasn` was rejected for requiring 100+ MB offline BGP dump files. See STACK.md for full alternatives analysis.
 
-**Core new libraries:**
-- `dnspython==2.8.0`: Active DNS resolution (A, AAAA, MX, NS, TXT, PTR) — the only option for MX/TXT/NS queries; thread-safe with configurable `lifetime`/`timeout`; zero external dependencies
-- `geoip2==5.2.0`: Offline IP geolocation (country, city, ASN, org) from local MaxMind `.mmdb` files — fully offline at query time; compatible with existing `requests==2.32.5`; official MaxMind Python client
-- `ipwhois==1.3.0`: RDAP-based IP-to-ASN and netblock data — **deferred from v6.0** due to SSRF allowlist incompatibility with dynamic RIR endpoint URLs
+**Core technologies:**
+- `dnspython==2.8.0` (existing): DNSBL A-record queries + Team Cymru TXT-record ASN lookups — no new library needed for either capability
+- `requests==2.32.5` (existing): Feodo Tracker bulk JSON download — no new library needed
+- `whoisit==4.0.0` (NEW): RDAP registration data for domains and IPs — handles IANA bootstrap automatically, synchronous, pure Python
+- `python-dateutil==2.9.x` (NEW, transitive via whoisit): Date parsing — no conflicts with existing stack
 
-**No new library needed for certificate transparency:** direct `requests.get()` to the crt.sh JSON API (`https://crt.sh/?q=<domain>&output=json`) covers all triage use cases. `pycrtsh` adds `psycopg2-binary` + `lxml` overhead for no additional benefit.
-
-**Database dependencies (not Python packages):**
-- `GeoLite2-City.mmdb` (~70 MB): country, region, city, lat/lon — stored at `~/.sentinelx/geoip/`
-- `GeoLite2-ASN.mmdb` (~9 MB): ASN + organization name — stored at `~/.sentinelx/geoip/`
-- Requires free MaxMind account registration; license key used for download only; runtime lookups are fully offline
+**SSRF allowlist additions required:** `feodotracker.abuse.ch` and `rdap.org` (or individual RIR hostnames if rdap.org issues redirects rather than proxying). DNSBL and ASN providers use DNS (port 53) and have no SSRF surface — same as the existing `DnsAdapter`.
 
 ### Expected Features
 
-**Must have (table stakes) — analysts expect these in any "robust" IP/domain lookup tool:**
-- GeoIP + ASN + ISP enrichment (ip-api.com zero-auth for instant country/city/ISP/ASN/proxy flags)
-- Reverse DNS / PTR record lookup (standard IP context, zero network dependency beyond system resolver)
-- Live DNS resolution for domains (A/MX/NS/TXT records via Cloudflare DoH — zero-auth)
-- NSRL known-good hash detection (CIRCL hashlookup — reduces false-positive workload significantly)
-- Enhanced Shodan card rendering (ports/CVEs/hostnames already in `raw_stats` — frontend-only, zero backend)
+The v7.0 milestone has one removal and four new provider capabilities. Every feature has been prioritized against analyst triage value and implementation cost.
 
-**Should have (competitive differentiators):**
-- GeoIP proxy/VPN/hosting detection flags (ip-api.com includes `proxy`, `hosting`, `mobile` booleans at no extra cost)
-- Certificate transparency via crt.sh (domain cert history + subdomain enumeration from SANs — MEDIUM complexity, powerful for infrastructure analysis)
-- DNS record depth: MX, NS, TXT/SPF/DMARC (extends DNS provider — high value for phishing triage)
-- ThreatMiner passive DNS (IP/domain/hash — the feature that turns SentinelX from lookup tool to investigation tool — MEDIUM complexity, 10 req/min rate limit)
-- "KNOWN GOOD" badge treatment for CIRCL trust score >= 70 (unique differentiator — no competitor offers this)
+**Must have (P1 — required for v7.0 launch):**
+- Remove annotations entirely (notes, tags, AnnotationStore, tag filter UI, annotations.ts, /api/annotations routes) — simplifies the tool, eliminates case-management scope creep
+- DNSBL for IPs: Spamhaus ZEN + Barracuda + SpamCop; verdict `malicious` on any hit naming which zones, `clean` when all NXDOMAIN
+- RDAP for domains: creation date formatted as "registered N days ago", registrar name, nameservers; verdict `no_data`
+- Feodo Tracker C2 feed for IPs: bulk JSON download with SQLite-cached result; verdict `malicious` with malware family on hit, `clean` when confirmed absent
 
-**Defer to future milestone:**
-- STIX/TAXII export (niche for triage tool; current JSON export covers most MISP workflows)
-- Provider capability matrix UI in settings (low analyst data value)
-- urlscan.io integration (URL screenshot/DOM scanning; requires API key for reliable access)
-- WHOIS/RDAP domain registration data (explicitly out of scope in PROJECT.md — privacy redaction makes 90%+ of gTLD WHOIS useless post-2018)
-- AI/LLM verdict explanation (hallucination risk, external service dependency, violates "no opaque scores" principle)
-- `ipwhois` ASN enrichment (SSRF allowlist incompatibility — defer to Cymru WHOIS TCP approach in a later phase)
+**Should have (P2 — include in v7.0 if schedule allows):**
+- RDAP for IPs: network block name, org, CIDR, country from IP RDAP response
+- DNSBL for domains: Spamhaus DBL + SURBL multi; same DNS pattern as IP DNSBL
+- ASN/BGP via Team Cymru: CIDR prefix, RIR, allocation date via DNS TXT query; supplements existing ip-api.com ASN field without duplicating it
+
+**Defer (v7.x / v8+):**
+- DNSBL listed-count summary badge "Listed 2/5" (UX polish, low complexity)
+- IPv6 DNSBL (nibble reversal required; IPv6 IOCs rare in analyst triage)
+- RDAP abuse contact email extraction (complex entity traversal in RFC 9083)
+- Additional threat feeds beyond Feodo (diminishing returns over existing URLhaus, MalwareBazaar, ThreatFox coverage)
+
+**Explicit anti-features (do not build):**
+- WHOIS in any form — sunsetted by ICANN January 2025; RDAP is the sole standard
+- RDAP registrant contact fields — 58%+ of malicious domains return "REDACTED FOR PRIVACY"; surfaces noise not signal
+- BGP path visualization — dynamic data misleading as static snapshot; high frontend cost for low triage value
+- PhishTank — new user registration closed since 2020; cannot obtain API key
 
 ### Architecture Approach
 
-All new capabilities integrate through the existing Provider Protocol (`typing.Protocol`) as new adapter files with a single `register()` call in `setup.py`. The orchestrator, registry, cache, and TypeScript pipeline are unchanged. Local providers (DNS via dnspython, GeoIP via geoip2) differ from remote providers only in that they skip `http_safety` SSRF validation (no outbound HTTP) and have near-instant execution. Remote zero-auth providers (crt.sh, ip-api.com) follow the existing ShodanAdapter pattern. Two new Flask routes are needed for the deeper per-IOC analysis view (`GET /ioc/<value>` and `GET /api/graph/<job_id>`), and a new `NoteStore` SQLite module parallel to `CacheStore` handles analyst annotations.
+All four new providers conform to the existing `typing.Protocol` Provider contract: one file in `app/enrichment/adapters/`, one `register()` call in `app/enrichment/setup.py`, `requires_api_key = False`, `is_configured()` always returns `True`. The ProviderRegistry grows from 13 to 17 providers. No orchestrator, route, or TypeScript rendering changes are needed — the existing `createContextRow()` and `computeWorstVerdict()` functions already handle arbitrary new providers. Verdict-producing providers (DNSBL, ThreatFeed) participate in consensus automatically; context-only providers (RDAP, ASN) need their names added to the `CONTEXT_PROVIDERS` set.
 
 **Major new components:**
-1. **Zero-auth provider adapters** (3-4 files): `dns_resolver.py`, `geoip.py`, `cert_transparency.py` — each ~150-250 LOC, following existing ShodanAdapter pattern
-2. **NoteStore** (`app/notes/store.py`): SQLite `ioc_notes` table, separate from cache (notes survive cache clear), stores analyst tags and free-text notes per IOC
-3. **Per-IOC detail page** (`GET /ioc/<value>`): server-rendered tabbed view aggregating all cached enrichment + local enrichment + notes; allows bookmarkable URLs for analyst ticket sharing
-4. **Graph visualization** (`app/static/vendor/cytoscape.min.js` + `modules/graph.ts`): Cytoscape.js self-hosted (not CDN — CSP constraint), renders IOC-to-provider relationship topology; lazy-loaded within detail page
+1. `DNSBLAdapter` (`dnsbl.py`) — pure DNS, mirrors `DnsAdapter` pattern, parallel zone queries via `ThreadPoolExecutor`, IOCType.IPV4 + IOCType.DOMAIN
+2. `ThreatFeedAdapter` (`threat_feed.py`) — HTTP bulk-feed pattern, downloads Feodo JSON, per-IP dict lookup, relies on `CacheStore` TTL, IOCType.IPV4 only
+3. `RDAPAdapter` (`rdap.py`) — HTTP REST via rdap.org or whoisit library, parses RFC 9083 JSON, must resolve SEC-06 redirect conflict in design before implementation, IOCType.DOMAIN + IOCType.IPV4 + IOCType.IPV6
+4. `ASNAdapter` (`asn.py`) — pure DNS TXT record to Team Cymru `origin.asn.cymru.com`, mirrors `DnsAdapter` pattern, IOCType.IPV4 + IOCType.IPV6
+5. Annotations removal — deletes `app/annotations/` module, 3 API routes from routes.py, `annotations.ts`, annotation sections from `results.html` and `ioc_detail.html`, all annotation tests; 14 TS modules → 13
 
 ### Critical Pitfalls
 
-1. **GeoLite2 license and staleness** — Never bundle `.mmdb` files in the repo (license violation) and never use `maxminddb-geolite2` from PyPI (unmaintained, stale database). Implement `is_configured()` to check `os.path.isfile(path)`. Display "GeoIP data from [file date]" on every result. Check file modification time at adapter init and warn if older than 30 days (MaxMind EULA requires deletion after 30 days post-release).
+1. **SSRF allowlist missing for new HTTP providers** — add `feodotracker.abuse.ch` and `rdap.org` to `ALLOWED_API_HOSTS` in `config.py` as the very first step of each respective provider phase; include a unit test calling `validate_endpoint()` without mocking to confirm the hostname passes; this failure mode is invisible in tests that mock `requests.get` and only manifests in live runs
 
-2. **DNS lookups blocking ThreadPoolExecutor** — Never use `socket.getaddrinfo()` (not thread-safe, no timeout). Create one module-level `dns.resolver.Resolver` instance with `lifetime=5.0` and `timeout=2.0`. Treat `NXDOMAIN` and `NoAnswer` as `verdict="no_data"` (not errors). Treat `dns.exception.Timeout` as `EnrichmentError`. Validate with a simulated-timeout unit test and a 50-domain batch timing test.
+2. **Spamhaus `127.255.255.254` sentinel misread as a positive listing** — Spamhaus returns this sentinel when queries arrive from public resolvers (Cloudflare 1.1.1.1, Google 8.8.8.8); the DNSBL response parser must check for this value and emit `EnrichmentError("resolver blocked")` not a malicious verdict; test with a mocked `127.255.255.254` DNS response to verify correct handling
 
-3. **Certificate transparency response volume** — crt.sh returns thousands of records for popular domains. Cap adapter response processing at 100 records. Aggregate to "X unique subdomains, Y certificates, date range" — never display raw certificate list. Apply existing `read_limited()` SEC-05 pattern. Treat crt.sh 504 as soft failure (`verdict="no_data"`).
+3. **DNSBL IPv4 octet reversal absent — silent clean failure** — querying `1.2.3.4.zen.spamhaus.org` instead of `4.3.2.1.zen.spamhaus.org` always returns NXDOMAIN, making every IP appear clean; write the `127.0.0.2` test (Spamhaus canonical test address, always listed) first as TDD red; the failure mode produces no errors, only wrong results
 
-4. **Zero-auth `is_configured()` must check actual readiness** — A provider that returns `is_configured() = True` unconditionally when its MMDB is missing will produce `EnrichmentError("MMDB file not found")` in normal result sets. `is_configured()` must call `os.path.isfile(configured_path)`, not just check config key presence.
+4. **RDAP redirect vs. SEC-06 conflict** — the project security policy (`allow_redirects=False`) and RDAP's requirement to follow HTTP 302 redirects are in direct conflict; this must be resolved in the adapter design before writing code: either confirm empirically that `rdap.org` proxies responses (preferred), or use `whoisit` which handles bootstrapping internally and bypasses `validate_endpoint()` entirely (document the exception)
 
-5. **ipwhois SSRF allowlist incompatibility** — `ipwhois` makes RDAP queries to dynamic RIR endpoints (ARIN, RIPE, APNIC) that vary by IP range and include redirects. These cannot be statically allowlisted in `ALLOWED_API_HOSTS`. Defer ASN enrichment; extract what's available from existing Shodan `raw_stats`, or research a Cymru WHOIS TCP approach for a later phase.
+5. **Annotations removal crashes app at startup if incomplete** — `AnnotationStore` is imported in `routes.py`; template variables are referenced in `ioc_detail.html` and `results.html`; `annotations.ts` is compiled into the esbuild bundle; run `grep -rn "AnnotationStore\|annotation" app/` to audit all touchpoints before touching any file, remove in dependency order (TS → templates → routes → module directory), verify `flask --debug run` succeeds after each layer
 
 ## Implications for Roadmap
 
-Based on research, the natural phase structure follows three dependency boundaries: (1) IP enrichment providers are independent of domain/hash providers, (2) domain providers (DNS, crt.sh) can be built in parallel with IP providers, (3) the per-IOC detail page depends on both provider sets and NoteStore, and (4) graph visualization depends on the detail page.
+Based on combined research, the milestone maps to 5 phases driven by dependency order and risk profile. The Provider Protocol makes phases 2-5 largely independent of each other once phase 1 is complete.
 
-### Phase 1: Zero-Auth IP Enrichment + NSRL Known-Good
+### Phase 1: Annotations Removal
 
-**Rationale:** Directly addresses the primary analyst complaint. All four deliverables fit the existing Provider Protocol with zero model changes, except for the new `known_good` verdict type required by CIRCL. Enhanced Shodan rendering is frontend-only and can be completed independently within this phase. These are the highest user-value, lowest implementation-risk items in the feature set.
+**Rationale:** Purely destructive — eliminates dead code before adding new code. Completing this first means the test suite baseline is accurate for all subsequent provider work. If done last, failing annotation tests would obscure new provider test failures.
+**Delivers:** Clean codebase with no annotation-related Python, TypeScript, routes, or templates. App startup and full test suite pass cleanly. A fresh baseline for v7.0 development.
+**Addresses:** FEATURES.md "remove annotations" (P1); reduces test surface noise for all subsequent phases
+**Avoids:** Pitfall 7 (orphaned imports crashing app at startup) — mitigated by grep-audit-first approach before touching any file
 
-**Delivers:** Country/city/ASN/ISP/proxy+hosting flags for all IP IOCs (via ip-api.com), PTR hostname for all IP IOCs (system resolver via dnspython), NSRL known-good detection for hashes (CIRCL hashlookup), and full Shodan data visible in UI (ports, CVEs, hostnames).
+### Phase 2: ASNAdapter (Team Cymru DNS)
 
-**Addresses:** GeoIP + ASN, rDNS, CIRCL hashlookup, Enhanced Shodan rendering (all P1 from FEATURES.md)
+**Rationale:** Zero new dependencies (dnspython already present), zero SSRF allowlist changes (DNS port 53, not HTTP), direct precedent in existing `DnsAdapter`. Lowest-risk new provider — validates the Provider Protocol extension flow in isolation before any HTTP complexity is introduced.
+**Delivers:** Per-IP CIDR prefix, RIR, allocation date, ASN number and org name via DNS TXT query to Team Cymru `origin.asn.cymru.com`. Supplements existing ip-api.com ASN field with BGP-precision data (CIDR prefix, RIR, allocation date) without duplicating what ip-api.com already shows.
+**Uses:** `dnspython==2.8.0` (existing), `typing.Protocol` adapter pattern (existing)
+**Implements:** ASNAdapter — IOCType.IPV4 + IOCType.IPV6, verdict `no_data`, added to CONTEXT_PROVIDERS
 
-**Avoids:** GeoLite2 bundling pitfall (use ip-api.com, not MaxMind, for IP geolocation in this phase — MaxMind offline approach is a Phase 1 optional add-on), zero-auth `is_configured()` pitfall, DNS thread-pool starvation (PTR via dnspython with timeout guards)
+### Phase 3: DNSBLAdapter
 
-**New verdict:** `known_good` verdict level — requires update to verdict severity ordering in both backend models and frontend badge rendering; budget for this cross-cutting change early
+**Rationale:** Also DNS-native (no new deps, no SSRF changes), but more complex than ASNAdapter: two IOC types with different query construction (IP octet reversal vs. domain prepend-as-is), multiple zones queried in parallel, and three response categories (listed, clean, sentinel error). The first verdict-producing zero-auth provider — high analyst value for direct reputation signal.
+**Delivers:** IP reputation against Spamhaus ZEN + Barracuda + SpamCop; domain reputation against Spamhaus DBL + SURBL multi. Verdict `malicious` on any zone hit (naming the zones), `clean` on all NXDOMAIN, `EnrichmentError` on `127.255.255.254` sentinel.
+**Uses:** `dnspython==2.8.0` (existing), `ThreadPoolExecutor` within `lookup()` for parallel zone queries (target: 5 zones in under 5 seconds)
+**Implements:** DNSBLAdapter — IOCType.IPV4 + IOCType.DOMAIN; IPv6 DNSBL deferred to v7.x (nibble reversal complexity, rare in triage)
+**Avoids:** Pitfalls 2 (sentinel check), 3 (IPv4 reversal), 4 (domain format), 9 (serial zone latency)
 
-### Phase 2: Domain Intelligence (DNS + Certificate Transparency)
+### Phase 4: ThreatFeedAdapter (Feodo Tracker)
 
-**Rationale:** Domains are currently the weakest IOC type in zero-auth context — they get only the 8 existing key-based providers. DNS resolution and cert transparency together transform domain cards from near-opaque to genuinely informative. Both providers cover `domain` IOC type exclusively and can be built in parallel without conflicts.
+**Rationale:** First HTTP provider in the milestone — introduces SSRF allowlist change (`feodotracker.abuse.ch`) and the new bulk-feed download pattern (download full JSON, dict lookup, rely on CacheStore TTL). Simpler JSON structure than RDAP (flat list, not deeply nested RFC 9083). Natural second verdict-producing provider, complementing DNSBL with botnet C2 family attribution.
+**Delivers:** Per-IP C2 reputation from Feodo Tracker botnet blocklist. Verdict `malicious` with malware family (Dridex, Emotet, QakBot, etc.) on hit; `clean` when confirmed absent. Note: feed is currently sparse due to law enforcement takedowns — `clean` verdicts are correct and informative, not a bug.
+**Uses:** `requests==2.32.5` (existing), `CacheStore` (existing) for feed TTL
+**Implements:** ThreatFeedAdapter — IOCType.IPV4 only; HTTP bulk-feed pattern; feed parsed into `dict[str, dict]` for O(1) IP lookup after download
+**Avoids:** Anti-Pattern 1 (per-IOC full download) — CacheStore 24h TTL handles refresh; Anti-Pattern 5 (module-level mutable feed state — keep adapters stateless)
 
-**Delivers:** Live A/AAAA/MX/NS/TXT (SPF, DMARC) records for domain IOCs (Cloudflare DoH), cert history + subdomain enumeration from SANs for domain IOCs (crt.sh). SSRF allowlist additions: `1.1.1.1` (Cloudflare DoH) and `crt.sh`.
+### Phase 5: RDAPAdapter
 
-**Addresses:** DNS Resolution Provider, crt.sh Certificate Provider (P2 from FEATURES.md)
-
-**Avoids:** CT response volume pitfall (aggregate before display — design UI shape before writing adapter), `read_limited()` application to crt.sh, crt.sh 504 soft failure handling
-
-**Note:** `crt.sh` queries use the existing `requests` dependency; no new library needed. Cloudflare DoH also uses `requests`.
-
-### Phase 3: Infrastructure Pivoting (ThreatMiner Passive DNS)
-
-**Rationale:** ThreatMiner is the most architecturally complex new provider: multiple endpoints per IOC type (different `rt=` parameter values for passive DNS vs related hashes vs subdomains), a strict 10 req/min rate limit requiring graceful throttling, and richer response data needing more complex rendering. It is also the highest-value differentiator — passive DNS pivoting is what distinguishes a "lookup tool" from an "investigation tool." Build after Phase 1 and 2 stabilize.
-
-**Delivers:** Passive DNS history (what other domains pointed to this IP? what IPs has this domain used?), related malware samples for hashes, related infrastructure context for IPs and domains. Covers IP, domain, and hash IOC types.
-
-**Addresses:** ThreatMiner Passive DNS Provider (P2 from FEATURES.md)
-
-**Avoids:** Rate limit hang (10 req/min — implement per-request throttling or exponential backoff, not silent blocking), IOC-type-specific endpoint routing (different `rt=` values per type)
-
-### Phase 4: Deeper Analysis View + Analyst Notes
-
-**Rationale:** Once the zero-auth provider set is complete (Phases 1-3), the per-IOC detail page becomes the integration surface. This phase adds the `GET /ioc/<value>` route (server-rendered tabbed view aggregating all cached enrichment), NoteStore (analyst annotations), and graph visualization (Cytoscape.js topology). These are UI and persistence features that depend on all providers being present to show full value.
-
-**Delivers:** Bookmarkable per-IOC detail page with tabbed sections (Network, DNS, Certificates, Threat Intel, Graph, Notes), analyst tag and note persistence in `~/.sentinelx/notes.db`, IOC-to-provider relationship graph via Cytoscape.js (self-hosted for CSP compliance).
-
-**Addresses:** Per-IOC deep analysis views, IOC tagging and notes, relationship graph (from ARCHITECTURE.md)
-
-**Avoids:** CDN Cytoscape.js pitfall (self-host at `app/static/vendor/` — no CSP change needed), `innerHTML` for IOC values in graph nodes (Cytoscape SVG/Canvas rendering is inherently safe), URL path IOC value injection (validate through normalization pipeline before any use)
+**Rationale:** Last because it has the most uncertainty: `rdap.org` redirect-vs-proxy behavior must be confirmed empirically before the design is finalized, RFC 9083 JSON requires defensive parsing at every nested level, and the SEC-06 conflict (`allow_redirects=False`) must be explicitly resolved in a design decision before implementation begins. Highest analyst value of the context providers — domain age ("registered 2 days ago") is the single most actionable triage signal for newly-registered malicious domains.
+**Delivers:** Domain registration data (creation date as "registered N days ago", registrar, nameservers, status codes) and IP registration data (network block name, org, CIDR, country). Verdict `no_data` — registration context is informational.
+**Uses:** `whoisit==4.0.0` (NEW) — preferred if rdap.org issues redirects; `requests` to rdap.org — preferred if rdap.org proxies; `python-dateutil==2.9.x` (NEW transitive)
+**Implements:** RDAPAdapter — IOCType.DOMAIN + IOCType.IPV4 + IOCType.IPV6; GDPR-scoped data model (no registrant contact fields)
+**Avoids:** Pitfall 5 (GDPR noise — contact fields excluded from data model before coding), Pitfall 6 (SEC-06 conflict — resolved in design doc first), Pitfall 8 (bootstrap uncached — whoisit handles per-process caching internally)
 
 ### Phase Ordering Rationale
 
-- Phases 1 and 2 are largely independent and could be parallelized by a team; for a solo developer, Phase 1 first because GeoIP + PTR (P1) has higher analyst impact than DNS/CT (P2)
-- Phase 3 (ThreatMiner) should not precede Phase 2 (DNS/CT) because its response rendering complexity is easier to tackle after the simpler DNS adapter patterns are established
-- Phase 4 (detail page) must come last — it is the integration surface for all prior phases and has little value before provider data exists
-- The `known_good` verdict introduced in Phase 1 is the only cross-cutting change that touches both backend models and frontend badge rendering; address it first within Phase 1 to avoid retrofitting later
-- GeoLite2 offline GeoIP (MaxMind) can be treated as a Phase 1 optional enhancement — ip-api.com covers the immediate zero-auth need; GeoLite2 adds offline capability for air-gapped deployments and richer city-level data
+- Phase 1 before all others: destructive removal creates a clean test baseline; annotation test failures would mask provider failures in later phases
+- Phases 2-3 before 4-5: DNS-native providers validate the Provider Protocol extension flow with zero SSRF risk; HTTP providers with allowlist changes come after the DNS pattern is proven
+- Phase 3 (DNSBL) before Phase 4 (ThreatFeed): both are verdict-producing, but DNSBL is DNS-native and has no HTTP complexity; building DNSBL first ensures the verdict-producing path is working before introducing HTTP bulk-feed pattern
+- Phase 5 (RDAP) last: most uncertain phase benefits from having all other providers working as reference implementations; also contains the one design decision (redirect vs. proxy) that cannot be resolved from research alone
 
 ### Research Flags
 
-Phases likely needing deeper research during planning:
+Phases needing implementation-time validation before writing adapter code:
 
-- **Phase 3 (ThreatMiner):** Rate limit behavior (10 req/min) needs concrete throttling strategy — decide whether to use a semaphore, a token bucket, or a simple sleep-based approach compatible with the ThreadPoolExecutor model. ThreatMiner has no SLA; downtime handling needs definition.
-- **Phase 4 (Graph visualization):** Cytoscape.js layout algorithm selection (which of the 10+ built-in layouts renders a star/bipartite IOC-to-provider graph most clearly) needs a spike. NoteStore tag search UI is underspecified — decide between a dedicated search page and inline filtering before implementation.
+- **Phase 5 (RDAP):** Confirm empirically whether `rdap.org` proxies responses (returns 200 with the authoritative registry's data) or issues 302 redirects to authoritative servers. Test: `GET https://rdap.org/domain/google.com` with `allow_redirects=False`, inspect response status. If 200: single allowlist entry, standard SEC-06 behavior preserved. If 302: use `whoisit` library (handles bootstrapping internally, bypasses `validate_endpoint()` — document this exception) or implement manual redirect following limited to known IANA-blessed RDAP hostnames.
 
-Phases with standard patterns (skip research-phase):
+Phases with standard well-understood patterns (no additional research needed):
 
-- **Phase 1 (IP enrichment + NSRL):** All four adapters follow the existing ShodanAdapter pattern. ip-api.com, dnspython PTR, and CIRCL hashlookup are well-documented. The `known_good` verdict is additive and well-defined.
-- **Phase 2 (DNS + CT):** Cloudflare DoH is a standard JSON HTTP call. crt.sh response aggregation is a data-shaping problem, not an architecture problem. Both follow documented adapter patterns in ARCHITECTURE.md.
+- **Phase 1 (Annotations Removal):** All touchpoints fully mapped in ARCHITECTURE.md. The grep-audit checklist is complete. No unknowns.
+- **Phase 2 (ASNAdapter):** Team Cymru DNS TXT format verified, stable, free forever. Direct precedent in existing `DnsAdapter`. No unknowns.
+- **Phase 3 (DNSBLAdapter):** DNS A-record DNSBL mechanism fully documented. Test fixtures (`127.0.0.2` for IPs, `test.surbl.org` for domains) are official and stable. Spamhaus sentinel behavior confirmed from primary Spamhaus advisory documents. No unknowns beyond runtime resolver configuration (handled by sentinel check).
+- **Phase 4 (ThreatFeedAdapter):** Feodo Tracker URL and JSON schema stable and verified. Bulk-feed caching pattern is simple. Feed sparseness (law enforcement takedowns) is a known condition, not a code concern.
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | All versions verified against PyPI and official docs. Python 3.10 compatibility confirmed for all three new libraries. Version conflicts checked against existing `requirements.txt`. |
-| Features | HIGH | Zero-auth service endpoints verified live. Analyst workflow patterns sourced from multiple vendor guides (ANY.RUN, SentinelOne, SOCRadar). Competitor feature matrix cross-checked against VirusTotal public docs. |
-| Architecture | HIGH | Provider Protocol integration pattern verified against existing ShodanAdapter (zero-auth reference). SSRF allowlist conflict for ipwhois identified from direct codebase audit. Cytoscape.js vanilla JS + self-hosting confirmed. |
-| Pitfalls | HIGH | MaxMind license terms confirmed from official MaxMind blog (2019 changes) and EULA. dnspython thread safety confirmed from official docs. Python-whois rate limit and hang issues confirmed from GitHub issue tracker. |
+| Stack | HIGH | All libraries verified against PyPI and official docs; version compatibility confirmed; alternatives analyzed and rejected with documented rationale; only 2 net-new packages |
+| Features | HIGH | P1/P2/P3 prioritization grounded in analyst triage workflow; anti-features documented with concrete technical reasons; MVP scope is tight and well-bounded |
+| Architecture | HIGH (DNS + ThreatFeed + annotations removal), MEDIUM (RDAP) | DNSBL, ASN, ThreatFeed, and annotations removal fully mapped; RDAP has one open design question (redirect vs. proxy) requiring empirical validation |
+| Pitfalls | HIGH | 9 pitfalls identified from direct codebase inspection + verified primary sources; Spamhaus sentinel, DNSBL reversal patterns, annotations removal scope, RDAP redirect conflict are all confirmed real failure modes with recovery paths |
 
-**Overall confidence:** HIGH
+**Overall confidence:** HIGH with one known gap (RDAP redirect behavior at rdap.org)
 
 ### Gaps to Address
 
-- **ip-api.com vs GeoLite2 for Phase 1:** Research recommends ip-api.com (zero-auth, no setup) for immediate impact. MaxMind GeoLite2 adds offline capability. The plan should decide whether Phase 1 implements both (ip-api.com as primary, GeoLite2 as optional offline fallback) or one at a time. This is a scope/ordering decision, not a technical uncertainty.
+- **`rdap.org` redirect vs. proxy behavior (Phase 5):** Research produced conflicting signals — rdap.org documentation implies proxying, but rdap.net and similar services confirm redirect behavior. During Phase 5, this must be resolved empirically before the adapter design is committed. Decision tree is clear: proxy → use `requests` + standard allowlist; redirect → use `whoisit` library with documented SEC-06 exception. This is the only unresolved item.
 
-- **ThreadPoolExecutor `max_workers` for DNS:** The existing executor handles 8 remote providers. Adding DNS lookups that can be near-instant or block for 5 seconds introduces a new profile. The plan should decide whether to increase `max_workers` globally, add a DNS-specific executor, or accept shared pool (acceptable for typical 1-20 IOC batch sizes).
+- **Feodo Tracker feed sparseness (Phase 4):** The feed is currently nearly empty (law enforcement takedowns of Emotet 2021, Operation Endgame 2024). ThreatFeedAdapter will typically return `clean` verdicts. This is technically correct but may cause analysts to question the provider's value. Consider adding a `last_updated` timestamp from the feed JSON to `raw_stats` so analysts can see the feed was recently checked. This is a UX enhancement, not a correctness issue.
 
-- **ThreatMiner throttling approach:** 10 req/min is a hard community-reported limit with no SLA. Options are: (a) token bucket in the adapter, (b) semaphore limiting concurrent ThreatMiner lookups, or (c) a dedicated single-worker executor making ThreatMiner sequential. Option (c) is simplest but makes ThreatMiner always the last provider to complete.
-
-- **Cytoscape.js vendoring:** ARCHITECTURE.md references v3.33.0 (July 2025). The plan needs a `make vendor` or `make vendor-install` target. Confirm the download source URL and add `cytoscape.min.js` to `.gitignore`.
+- **System resolver on analyst workstations (Phase 3):** SentinelX uses `dns.resolver.Resolver(configure=True)` which reads the system resolver. On a cloud jump box configured with Cloudflare/Google DNS, Spamhaus returns `127.255.255.254`. The sentinel check handles this gracefully (surfaces as "resolver blocked" note, not a false positive), but analysts running from cloud hosts lose Spamhaus DNSBL signal. Document this limitation in the UI help text and release notes.
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- [dnspython PyPI + ReadTheDocs](https://dnspython.readthedocs.io/en/latest/) — v2.8.0 confirmed, thread safety, `Resolver` lifecycle, exception hierarchy
-- [geoip2 ReadTheDocs](https://geoip2.readthedocs.io/) — v5.2.0 confirmed, Reader creation cost, `AddressNotFoundError`
-- [MaxMind GeoLite2 developer docs](https://dev.maxmind.com/geoip/geolite2-free-geolocation-data/) — free database confirmed; account + license key required for download; runtime offline
-- [MaxMind GeoLite2 EULA](https://www.maxmind.com/en/geolite2/eula) — 30-day deletion requirement after new release
-- [MaxMind blog — 2019 license changes](https://blog.maxmind.com/2019/12/significant-changes-to-accessing-and-using-geolite2-databases/) — account requirement since Dec 30, 2019
-- [CIRCL hashlookup service](https://www.circl.lu/services/hashlookup/) — no auth required; NSRL + OS packages; trust score field confirmed
-- [Cloudflare DoH API](https://developers.cloudflare.com/1.1.1.1/encryption/dns-over-https/make-api-requests/) — no auth for DNS queries; JSON format confirmed
-- [ip-api.com documentation](https://ip-api.com/) — no key required; 45 req/min; proxy/hosting/mobile fields confirmed
-- [Cytoscape.js official site](https://js.cytoscape.org/) — CDN availability, vanilla JS usage, built-in graph algorithms; v3.33.0 release July 2025
-- [SentinelX codebase audit] — Provider Protocol, ShodanAdapter zero-auth pattern, CacheStore, SSRF allowlist (`http_safety.py`), existing `ALLOWED_API_HOSTS`
+- Spamhaus DNSBL zones and fair-use policy — zone names, return codes, `127.255.255.254` sentinel rollout confirmed from official Spamhaus advisories
+- Team Cymru IP-to-ASN DNS service — query format (`origin.asn.cymru.com` TXT), response format, free-forever policy verified
+- ICANN RDAP announcement January 2025 — WHOIS sunset confirmed; RDAP now the sole authoritative protocol for gTLD registrations
+- RFC 9083 (RDAP JSON responses) — response field structure, events array, entities array format
+- RFC 9224 (RDAP bootstrap registry) — caching requirement (SHOULD NOT fetch on every request) confirmed
+- RFC 9537 (RDAP Redacted Fields) — GDPR redaction formalization March 2024; explains why registrant contact fields return "REDACTED FOR PRIVACY"
+- Feodo Tracker blocklist — URL, JSON schema, CC0 license, zero-auth confirmed; feed activity MEDIUM (sparse due to takedowns)
+- `whoisit` v4.0.0 on PyPI — pure Python, synchronous, only `requests` + `python-dateutil` dependencies confirmed
+- BGPView shutdown November 2025 — confirmed; do not use in new code
+- SentinelX codebase direct inspection — `app/config.py`, `app/enrichment/http_safety.py`, `app/enrichment/adapters/dns_lookup.py`, `app/enrichment/adapters/ip_api.py`, `app/routes.py` all reviewed for integration points
 
 ### Secondary (MEDIUM confidence)
-- [ThreatMiner API reference](https://www.threatminer.org/api.php) — no-auth public API; 10 req/min rate limit; endpoint parameters; community-operated, no formal SLA
-- [crt.sh architecture and HTTP API](https://crt.sh/) — zero-auth JSON via `?output=json`; no formal rate limits; 504 behavior under load
-- [ANY.RUN SOC triage analyst guide](https://any.run/cybersecurity-blog/triage-analyst-guide/) — analyst 2-minute triage workflow, escalation pattern
-- [SOCRadar Top 20 Free Cybersecurity APIs](https://socradar.io/blog/top-20-free-apis-for-cybersecurity/) — zero-auth API landscape survey
-- [ipwhois RDAP documentation](https://ipwhois.readthedocs.io/en/latest/RDAP.html) — RDAP endpoint behavior; SSRF conflict identified from ARCHITECTURE.md codebase analysis
+- `rdap.org` rate limiting (10 req/10 sec via Cloudflare 429) — documented at about.rdap.org; redirect vs. proxy behavior requires empirical validation
+- SURBL `multi.surbl.org` public resolver safety — no explicit restriction documented in primary sources
+- `combined.abuse.ch` DNSBL — no public resolver restriction documented
+- RDAP GDPR redaction statistics (58.2% proxy protection, 10.8% registrant visibility as of January 2024) — Interisle Consulting data via domain privacy research sources
 
-### Tertiary (MEDIUM-LOW confidence)
-- [ipwho.is API](https://www.ipwho.org/) — alternative zero-auth GeoIP; viable backup if ip-api.com rate limits become a problem
-- [Cytoscape.js 3.33.0 release blog](https://blog.js.cytoscape.org/2025/07/28/3.33.0-release/) — active maintenance confirmed 2025
-- [DNS rebinding SSRF bypass pattern](https://www.clear-gate.com/blog/ssrf-with-dns-rebinding-2/) — TOCTOU pattern; low risk for SentinelX given DNS adapters do not make HTTP to resolved IPs
+### Tertiary (LOW confidence)
+- Spamhaus fair-use policy page content — page failed to load during research; sentinel behavior is HIGH confidence from primary Spamhaus advisories; fair-use rate limit policy stated from secondary sources only
 
 ---
-*Research completed: 2026-03-11*
+*Research completed: 2026-03-15*
 *Ready for roadmap: yes*
