@@ -51,7 +51,13 @@ Safe, correct, and transparent IOC extraction and enrichment — never invent sc
 
 ### Active
 
-(No active milestone — run `/gsd:new-milestone` to start next cycle)
+**v7.0 Free Intel** — Actionable threat intelligence with zero API keys
+
+- [ ] Remove annotations feature entirely (notes, tags, tag filtering, AnnotationStore)
+- [ ] DNSBL reputation checks for IPs and domains via DNS lookups (Spamhaus, SURBL, etc.)
+- [ ] Public threat feed lookups via free APIs (blocklists, C2 lists, phishing URLs)
+- [ ] RDAP registration data for domains and IPs (registrar, creation date, nameservers)
+- [ ] ASN/BGP intelligence for IPs (hosting network, provider type, abuse contacts)
 
 ### Out of Scope
 
@@ -114,6 +120,17 @@ Safe, correct, and transparent IOC extraction and enrichment — never invent sc
 | CONTEXT_PROVIDERS set pattern | Route zero-verdict context rows through shared renderer | ✓ Good — generalized createContextRow() for all context providers |
 | path converter for IOC URLs | URL IOCs contain slashes that break standard routing | ✓ Good — `<path:ioc_value>` handles all IOC formats |
 
+## Current Milestone: v7.0 Free Intel
+
+**Goal:** Provide actionable threat intelligence out of the box — useful triage with zero API keys configured, via DNSBL checks, public threat feeds, RDAP registration data, and ASN/BGP intelligence.
+
+**Target features:**
+- DNSBL reputation checks (Spamhaus, SURBL, etc.) — "is this IP/domain on a blocklist?"
+- Public threat feed queries — C2 lists, phishing databases, known-bad indicators
+- RDAP registration data — registrar, creation date, nameservers (age = triage signal)
+- ASN/BGP intelligence — hosting provider, network type, abuse contacts
+- Remove annotations — strip notes, tags, tag filtering, AnnotationStore
+
 ## Shipped Milestones
 
 | Version | Name | Shipped | Phases | Key Feature |
@@ -131,4 +148,4 @@ Safe, correct, and transparent IOC extraction and enrichment — never invent sc
 See `.planning/MILESTONES.md` for full details.
 
 ---
-*Last updated: 2026-03-14 after v6.0 Analyst Experience milestone*
+*Last updated: 2026-03-15 after v7.0 Free Intel milestone started*
