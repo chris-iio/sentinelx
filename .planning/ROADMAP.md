@@ -136,7 +136,7 @@ Full details: `milestones/v6.0-ROADMAP.md`
   4. Full test suite passes with no annotation-related test failures
 **Plans:** 1/1 plans complete
 Plans:
-- [ ] 01-01-PLAN.md — Complete annotations removal (tests, Python, TypeScript)
+- [x] 01-01-PLAN.md — Complete annotations removal (tests, Python, TypeScript)
 
 ### Phase 02: ASN Intelligence
 **Goal**: Users see ASN/BGP context (CIDR prefix, RIR, allocation date, ASN number and org) for IP IOCs via Team Cymru DNS — zero new dependencies, zero SSRF surface changes
@@ -146,7 +146,9 @@ Plans:
   1. Submitting an IP IOC in online mode shows an ASN context row with CIDR prefix, ASN number, org name, and RIR
   2. The ASN provider appears in the provider coverage dashboard as a zero-auth provider
   3. The ASN adapter has no `requires_api_key` and `is_configured()` always returns True
-**Plans**: TBD
+**Plans:** 1 plan
+Plans:
+- [ ] 02-01-PLAN.md — CymruASNAdapter + registration + frontend wiring
 
 ### Phase 03: Threat Feed Intelligence
 **Goal**: Users see Feodo Tracker C2 blocklist verdict for IP IOCs — malicious with malware family name on hit, clean when confirmed absent from the feed
@@ -185,7 +187,7 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 01. Annotations Removal | 1/1 | Complete    | 2026-03-14 | - |
-| 02. ASN Intelligence | v7.0 | 0/TBD | Not started | - |
+| 02. ASN Intelligence | v7.0 | 0/1 | Planning complete | - |
 | 03. Threat Feed Intelligence | v7.0 | 0/TBD | Not started | - |
 | 04. RDAP Design Decision | v7.0 | 0/TBD | Not started | - |
 | 05. RDAP Registration Data | v7.0 | 0/TBD | Not started | - |
