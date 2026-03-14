@@ -117,7 +117,7 @@ Full details: `milestones/v6.0-ROADMAP.md`
 
 **Milestone Goal:** Provide actionable threat intelligence out of the box — useful triage with zero API keys configured, via annotations removal (codebase cleanup), ASN/BGP context, Feodo Tracker C2 feed, and RDAP registration data.
 
-- [ ] **Phase 01: Annotations Removal** — Strip notes, tags, AnnotationStore, and annotation API routes for a clean v7.0 baseline
+- [x] **Phase 01: Annotations Removal** — Strip notes, tags, AnnotationStore, and annotation API routes for a clean v7.0 baseline (completed 2026-03-14)
 - [ ] **Phase 02: ASN Intelligence** — Team Cymru DNS-based ASN/BGP context (CIDR prefix, RIR, allocation date) for IP IOCs
 - [ ] **Phase 03: Threat Feed Intelligence** — Feodo Tracker C2 blocklist for IP IOCs (malicious with malware family on hit)
 - [ ] **Phase 04: RDAP Design Decision** — Resolve SEC-06 redirect conflict empirically before writing any RDAP adapter code
@@ -134,7 +134,7 @@ Full details: `milestones/v6.0-ROADMAP.md`
   2. The `/api/annotations/*` routes return 404 (routes no longer exist)
   3. `flask --debug run` starts without import errors after annotations module is removed
   4. Full test suite passes with no annotation-related test failures
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 Plans:
 - [ ] 01-01-PLAN.md — Complete annotations removal (tests, Python, TypeScript)
 
@@ -184,7 +184,7 @@ Plans:
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 01. Annotations Removal | v7.0 | 0/1 | Planned | - |
+| 01. Annotations Removal | 1/1 | Complete   | 2026-03-14 | - |
 | 02. ASN Intelligence | v7.0 | 0/TBD | Not started | - |
 | 03. Threat Feed Intelligence | v7.0 | 0/TBD | Not started | - |
 | 04. RDAP Design Decision | v7.0 | 0/TBD | Not started | - |

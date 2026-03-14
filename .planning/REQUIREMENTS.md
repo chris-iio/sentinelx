@@ -9,8 +9,8 @@ Requirements for v7.0 Free Intel. Each maps to roadmap phases.
 
 ### Cleanup
 
-- [ ] **CLEAN-01**: Annotations feature (notes, tags, tag filtering, AnnotationStore) is fully removed — no notes/tags UI on any page
-- [ ] **CLEAN-02**: Annotation API routes (/api/annotations/*) no longer exist
+- [x] **CLEAN-01**: Annotations feature (notes, tags, tag filtering, AnnotationStore) is fully removed — no notes/tags UI on any page
+- [x] **CLEAN-02**: Annotation API routes (/api/annotations/*) no longer exist
 
 ### RDAP Registration
 
@@ -56,8 +56,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CLEAN-01 | Phase 01 | Pending |
-| CLEAN-02 | Phase 01 | Pending |
+| CLEAN-01 | Phase 01 | Complete |
+| CLEAN-02 | Phase 01 | Complete |
 | ASN-01 | Phase 02 | Pending |
 | FEED-01 | Phase 03 | Pending |
 | RDAP-03 | Phase 04 | Pending |
