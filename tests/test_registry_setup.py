@@ -49,15 +49,15 @@ class TestBuildRegistry:
         )
         assert isinstance(registry, ProviderRegistry)
 
-    def test_registry_has_thirteen_providers(self):
-        """build_registry() registers exactly 13 providers."""
+    def test_registry_has_fourteen_providers(self):
+        """build_registry() registers exactly 14 providers."""
         from app.enrichment.setup import build_registry
 
         registry = build_registry(
             allowed_hosts=_make_allowed_hosts(),
             config_store=_make_config_store(),
         )
-        assert len(registry.all()) == 13
+        assert len(registry.all()) == 14
 
     def test_registry_contains_virustotal(self):
         """build_registry() registers a provider named 'VirusTotal'."""
@@ -375,3 +375,38 @@ class TestBuildRegistry:
         )
         threatminer = next(p for p in registry.all() if p.name == "ThreatMiner")
         assert threatminer.is_configured() is True
+
+    def test_registry_contains_asn_intel(self):
+        """build_registry() registers a provider named 'ASN Intel'."""
+        from app.enrichment.setup import build_registry
+
+        registry = build_registry(
+            allowed_hosts=_make_allowed_hosts(),
+            config_store=_make_config_store(),
+        )
+        names = [p.name for p in registry.all()]
+        assert "ASN Intel" in names
+
+    def test_asn_intel_is_always_configured(self):
+        """CymruASNAdapter is configured even without any API key (zero-auth)."""
+        from app.enrichment.setup import build_registry
+
+        registry = build_registry(
+            allowed_hosts=_make_allowed_hosts(),
+            config_store=_make_config_store(None),
+        )
+        asn_intel = next(p for p in registry.all() if p.name == "ASN Intel")
+        assert asn_intel.is_configured() is True
+
+    def test_asn_intel_supports_ipv4_and_ipv6(self):
+        """CymruASNAdapter supports IPV4 and IPV6 IOC types (zero-auth, DNS-based)."""
+        from app.enrichment.setup import build_registry
+        from app.pipeline.models import IOCType
+
+        registry = build_registry(
+            allowed_hosts=_make_allowed_hosts(),
+            config_store=_make_config_store(None),
+        )
+        asn_intel = next(p for p in registry.all() if p.name == "ASN Intel")
+        assert IOCType.IPV4 in asn_intel.supported_types
+        assert IOCType.IPV6 in asn_intel.supported_types

@@ -300,13 +300,19 @@ const PROVIDER_CONTEXT_FIELDS: Record<string, ContextFieldDef[]> = {
     { key: "passive_dns", label: "Passive DNS", type: "tags" },
     { key: "samples",     label: "Samples",     type: "tags" },
   ],
+  "ASN Intel": [
+    { key: "asn",       label: "ASN",       type: "text" },
+    { key: "prefix",    label: "Prefix",    type: "text" },
+    { key: "rir",       label: "RIR",       type: "text" },
+    { key: "allocated", label: "Allocated", type: "text" },
+  ],
 };
 
 /**
  * Providers that use the context row rendering path (no verdict badge, pinned to top).
  * Extend this set when adding new context-only providers.
  */
-const CONTEXT_PROVIDERS = new Set(["IP Context", "DNS Records", "Cert History", "ThreatMiner"]);
+const CONTEXT_PROVIDERS = new Set(["IP Context", "DNS Records", "Cert History", "ThreatMiner", "ASN Intel"]);
 
 /**
  * Create a labeled context field element with the provider-context-field class.
