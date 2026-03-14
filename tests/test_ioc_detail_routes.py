@@ -7,16 +7,14 @@ Tests cover:
 - URL IOCs with slashes route correctly via path converter
 - Invalid type returns 404
 - Graph data attributes present when provider results exist
-- Annotation API routes (notes CRUD, tags CRUD, CSRF-free test client)
-- Tags on results page via annotations_map
+- Annotation API routes return 404 (CLEAN-02)
+- No annotation UI on detail page or results page (CLEAN-01)
 """
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from app.cache.store import CacheStore
-from app.annotations.store import AnnotationStore
 
 
 # ---------------------------------------------------------------------------
@@ -62,11 +60,9 @@ class TestIocDetailRoute:
         """Detail page with no cached data shows 'No enrichment data' message."""
         import app.routes  # noqa: F401 — side-effect: registers routes
         import app.cache.store as cache_store_module
-        import app.annotations.store as annotations_store_module
 
-        # Patch DEFAULT_DB_PATH so the route instantiates isolated DBs
+        # Patch DEFAULT_DB_PATH so the route instantiates an isolated DB
         monkeypatch.setattr(cache_store_module, "DEFAULT_DB_PATH", tmp_path / "cache.db")
-        monkeypatch.setattr(annotations_store_module, "DEFAULT_ANNOTATIONS_PATH", tmp_path / "annotations.db")
 
         response = client.get("/ioc/ipv4/10.20.30.40")
         assert response.status_code == 200
@@ -76,10 +72,8 @@ class TestIocDetailRoute:
     def test_detail_page_with_results(self, client, tmp_path, monkeypatch) -> None:
         """Detail page with cached results shows provider tab labels."""
         import app.cache.store as cache_store_module
-        import app.annotations.store as annotations_store_module
 
         monkeypatch.setattr(cache_store_module, "DEFAULT_DB_PATH", tmp_path / "cache.db")
-        monkeypatch.setattr(annotations_store_module, "DEFAULT_ANNOTATIONS_PATH", tmp_path / "annotations.db")
 
         _seed_cache(tmp_path, "1.2.3.4", "ipv4")
 
@@ -93,10 +87,8 @@ class TestIocDetailRoute:
     def test_detail_url_ioc(self, client, tmp_path, monkeypatch) -> None:
         """GET /ioc/url/https://evil.com/beacon routes correctly via path converter."""
         import app.cache.store as cache_store_module
-        import app.annotations.store as annotations_store_module
 
         monkeypatch.setattr(cache_store_module, "DEFAULT_DB_PATH", tmp_path / "cache.db")
-        monkeypatch.setattr(annotations_store_module, "DEFAULT_ANNOTATIONS_PATH", tmp_path / "annotations.db")
 
         response = client.get("/ioc/url/https://evil.com/beacon")
         assert response.status_code == 200
@@ -104,10 +96,8 @@ class TestIocDetailRoute:
     def test_graph_data_in_context(self, client, tmp_path, monkeypatch) -> None:
         """Detail page with cached results includes data-graph-nodes and data-graph-edges attributes."""
         import app.cache.store as cache_store_module
-        import app.annotations.store as annotations_store_module
 
         monkeypatch.setattr(cache_store_module, "DEFAULT_DB_PATH", tmp_path / "cache.db")
-        monkeypatch.setattr(annotations_store_module, "DEFAULT_ANNOTATIONS_PATH", tmp_path / "annotations.db")
 
         _seed_cache(tmp_path, "1.2.3.4", "ipv4")
 
@@ -117,152 +107,58 @@ class TestIocDetailRoute:
         assert "data-graph-nodes" in html
         assert "data-graph-edges" in html
 
-    def test_detail_annotations_prepopulated(self, client, tmp_path, monkeypatch) -> None:
-        """Existing notes are pre-populated in the textarea."""
+    def test_ioc_detail_no_annotation_ui(self, client, tmp_path, monkeypatch) -> None:
+        """Detail page must not contain any annotation UI elements (CLEAN-01)."""
         import app.cache.store as cache_store_module
-        import app.annotations.store as annotations_store_module
 
         monkeypatch.setattr(cache_store_module, "DEFAULT_DB_PATH", tmp_path / "cache.db")
-        monkeypatch.setattr(annotations_store_module, "DEFAULT_ANNOTATIONS_PATH", tmp_path / "annotations.db")
 
-        ann = AnnotationStore(db_path=tmp_path / "annotations.db")
-        ann.set_notes("1.2.3.4", "ipv4", "Seen in incident #42")
+        _seed_cache(tmp_path, "1.2.3.4", "ipv4")
 
         response = client.get("/ioc/ipv4/1.2.3.4")
         assert response.status_code == 200
         html = response.data.decode()
-        assert "Seen in incident #42" in html
+        assert "detail-annotations" not in html
+        assert "ioc-notes" not in html
+        assert "tag-input" not in html
+        assert "Add tag" not in html
 
 
-class TestAnnotationApiRoutes:
-    """Tests for the annotation API routes (notes and tags CRUD)."""
+class TestAnnotationRoutes404:
+    """Verify annotation API routes no longer exist (CLEAN-02)."""
 
-    def _patch_stores(self, monkeypatch, tmp_path: Path) -> None:
-        """Monkeypatch both store default paths to tmp_path-isolated DBs."""
-        import app.cache.store as cache_store_module
-        import app.annotations.store as annotations_store_module
+    def test_annotation_notes_route_gone(self, client) -> None:
+        response = client.post("/api/ioc/ipv4/1.2.3.4/notes",
+                               json={"notes": "test"})
+        assert response.status_code == 404
 
-        monkeypatch.setattr(cache_store_module, "DEFAULT_DB_PATH", tmp_path / "cache.db")
-        monkeypatch.setattr(annotations_store_module, "DEFAULT_ANNOTATIONS_PATH", tmp_path / "annotations.db")
+    def test_annotation_tags_route_gone(self, client) -> None:
+        response = client.post("/api/ioc/ipv4/1.2.3.4/tags",
+                               json={"tag": "apt29"})
+        assert response.status_code == 404
 
-    def test_api_set_notes(self, client, tmp_path, monkeypatch) -> None:
-        """POST /api/ioc/ipv4/1.2.3.4/notes returns {"ok": true, "notes": "test"}."""
-        self._patch_stores(monkeypatch, tmp_path)
-        response = client.post(
-            "/api/ioc/ipv4/1.2.3.4/notes",
-            data=json.dumps({"notes": "test"}),
-            content_type="application/json",
-        )
-        assert response.status_code == 200
-        data = response.get_json()
-        assert data["ok"] is True
-        assert data["notes"] == "test"
-
-    def test_api_notes_size_cap(self, client, tmp_path, monkeypatch) -> None:
-        """POST with notes > 10000 chars truncates to 10000."""
-        self._patch_stores(monkeypatch, tmp_path)
-        big_notes = "x" * 15000
-        response = client.post(
-            "/api/ioc/ipv4/1.2.3.4/notes",
-            data=json.dumps({"notes": big_notes}),
-            content_type="application/json",
-        )
-        assert response.status_code == 200
-        data = response.get_json()
-        assert len(data["notes"]) == 10000
-
-    def test_api_add_tag(self, client, tmp_path, monkeypatch) -> None:
-        """POST /api/ioc/ipv4/1.2.3.4/tags with {"tag": "apt29"} returns {"ok": true, "tags": ["apt29"]}."""
-        self._patch_stores(monkeypatch, tmp_path)
-        response = client.post(
-            "/api/ioc/ipv4/1.2.3.4/tags",
-            data=json.dumps({"tag": "apt29"}),
-            content_type="application/json",
-        )
-        assert response.status_code == 200
-        data = response.get_json()
-        assert data["ok"] is True
-        assert data["tags"] == ["apt29"]
-
-    def test_api_add_tag_empty_rejected(self, client, tmp_path, monkeypatch) -> None:
-        """POST with {"tag": ""} returns 400."""
-        self._patch_stores(monkeypatch, tmp_path)
-        response = client.post(
-            "/api/ioc/ipv4/1.2.3.4/tags",
-            data=json.dumps({"tag": ""}),
-            content_type="application/json",
-        )
-        assert response.status_code == 400
-
-    def test_api_delete_tag(self, client, tmp_path, monkeypatch) -> None:
-        """DELETE /api/ioc/ipv4/1.2.3.4/tags/apt29 returns {"ok": true, "tags": []}."""
-        self._patch_stores(monkeypatch, tmp_path)
-        # First add a tag
-        client.post(
-            "/api/ioc/ipv4/1.2.3.4/tags",
-            data=json.dumps({"tag": "apt29"}),
-            content_type="application/json",
-        )
-        # Then delete it
+    def test_annotation_tag_delete_route_gone(self, client) -> None:
         response = client.delete("/api/ioc/ipv4/1.2.3.4/tags/apt29")
-        assert response.status_code == 200
-        data = response.get_json()
-        assert data["ok"] is True
-        assert data["tags"] == []
-
-    def test_api_duplicate_tag_not_stored(self, client, tmp_path, monkeypatch) -> None:
-        """POST same tag twice returns only one instance in tags list."""
-        self._patch_stores(monkeypatch, tmp_path)
-        client.post(
-            "/api/ioc/ipv4/1.2.3.4/tags",
-            data=json.dumps({"tag": "apt29"}),
-            content_type="application/json",
-        )
-        response = client.post(
-            "/api/ioc/ipv4/1.2.3.4/tags",
-            data=json.dumps({"tag": "apt29"}),
-            content_type="application/json",
-        )
-        assert response.status_code == 200
-        data = response.get_json()
-        assert data["tags"].count("apt29") == 1
-
-    def test_api_notes_persist_refresh(self, client, tmp_path, monkeypatch) -> None:
-        """POST notes, then GET detail page shows notes in textarea."""
-        self._patch_stores(monkeypatch, tmp_path)
-        client.post(
-            "/api/ioc/ipv4/1.2.3.4/notes",
-            data=json.dumps({"notes": "persisted note"}),
-            content_type="application/json",
-        )
-        response = client.get("/ioc/ipv4/1.2.3.4")
-        assert response.status_code == 200
-        html = response.data.decode()
-        assert "persisted note" in html
+        assert response.status_code == 404
 
 
-class TestTagsOnResultsPage:
-    """Tests for tags appearing on the results page via annotations_map."""
+class TestResultsPageNoAnnotationData:
+    """Verify no annotation data appears on the results page (CLEAN-01)."""
 
-    def test_tags_on_results_page(self, client, tmp_path, monkeypatch) -> None:
-        """POST /analyze with IOCs that have tags, verify response HTML contains data-tags."""
-        import app.annotations.store as annotations_store_module
-
-        monkeypatch.setattr(
-            annotations_store_module,
-            "DEFAULT_ANNOTATIONS_PATH",
-            tmp_path / "annotations.db",
-        )
-
-        # Seed a tag for the IOC we will analyze
-        ann = AnnotationStore(db_path=tmp_path / "annotations.db")
-        ann.set_tags("1.2.3.4", "ipv4", ["apt29"])
-
+    def test_results_page_no_tag_data(self, client) -> None:
+        """POST /analyze with offline mode must not produce data-tags attributes."""
         response = client.post(
             "/analyze",
             data={"text": "1.2.3.4", "mode": "offline"},
         )
         assert response.status_code == 200
         html = response.data.decode()
-        assert 'data-tags' in html
-        assert "apt29" in html
+        assert 'data-tags="' not in html
+
+
+def test_app_creates_without_import_error() -> None:
+    """Flask app creates without ImportError after annotations module is removed."""
+    from app import create_app
+    app = create_app({"TESTING": True, "WTF_CSRF_ENABLED": False,
+                      "SERVER_NAME": "localhost"})
+    assert app is not None
