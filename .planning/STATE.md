@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v7.0
 milestone_name: Free Intel
 status: planning
-stopped_at: Completed 01-annotations-removal-01-PLAN.md
-last_updated: "2026-03-14T18:57:12.135Z"
+stopped_at: Completed 02-asn-intelligence-01-PLAN.md
+last_updated: "2026-03-14T22:06:31.215Z"
 last_activity: 2026-03-15 — Roadmap created, 7/7 requirements mapped
 progress:
   total_phases: 5
@@ -47,6 +47,7 @@ Progress: [░░░░░░░░░░] 0%
 
 *Updated after each plan completion*
 | Phase 01-annotations-removal P01 | 284 | 3 tasks | 11 files |
+| Phase 02-asn-intelligence P01 | 4 | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -59,6 +60,8 @@ Recent decisions affecting current work:
 - [Roadmap]: Phase 04 (RDAP Design Decision) is a gate phase — empirical test of rdap.org redirect vs proxy behavior determines Phase 05 implementation approach
 - [Phase 01-annotations-removal]: routes.py edited before annotations/ deleted — prevents ImportError during removal sequence
 - [Phase 01-annotations-removal]: Two pre-existing test failures deferred (E2E title case, deduplication count) — confirmed out-of-scope, logged to deferred-items.md
+- [Phase 02-asn-intelligence]: NXDOMAIN for private/RFC-1918 IPs returns EnrichmentResult(no_data) not EnrichmentError — consistent with IPApiAdapter private IP handling
+- [Phase 02-asn-intelligence]: Country code excluded from CymruASNAdapter raw_stats — RIR region != geolocation, ip-api.com already provides geolocation via IP Context
 
 ### Blockers/Concerns
 
@@ -70,6 +73,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-14T18:54:14.006Z
-Stopped at: Completed 01-annotations-removal-01-PLAN.md
+Last session: 2026-03-14T22:06:31.214Z
+Stopped at: Completed 02-asn-intelligence-01-PLAN.md
 Resume file: None

@@ -118,7 +118,7 @@ Full details: `milestones/v6.0-ROADMAP.md`
 **Milestone Goal:** Provide actionable threat intelligence out of the box — useful triage with zero API keys configured, via annotations removal (codebase cleanup), ASN/BGP context, Feodo Tracker C2 feed, and RDAP registration data.
 
 - [x] **Phase 01: Annotations Removal** — Strip notes, tags, AnnotationStore, and annotation API routes for a clean v7.0 baseline (completed 2026-03-14)
-- [ ] **Phase 02: ASN Intelligence** — Team Cymru DNS-based ASN/BGP context (CIDR prefix, RIR, allocation date) for IP IOCs
+- [x] **Phase 02: ASN Intelligence** — Team Cymru DNS-based ASN/BGP context (CIDR prefix, RIR, allocation date) for IP IOCs (completed 2026-03-14)
 - [ ] **Phase 03: Threat Feed Intelligence** — Feodo Tracker C2 blocklist for IP IOCs (malicious with malware family on hit)
 - [ ] **Phase 04: RDAP Design Decision** — Resolve SEC-06 redirect conflict empirically before writing any RDAP adapter code
 - [ ] **Phase 05: RDAP Registration Data** — Domain and IP registration data (registrar, creation date, network block) via RDAP
@@ -146,7 +146,7 @@ Plans:
   1. Submitting an IP IOC in online mode shows an ASN context row with CIDR prefix, ASN number, org name, and RIR
   2. The ASN provider appears in the provider coverage dashboard as a zero-auth provider
   3. The ASN adapter has no `requires_api_key` and `is_configured()` always returns True
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 Plans:
 - [ ] 02-01-PLAN.md — CymruASNAdapter + registration + frontend wiring
 
@@ -187,7 +187,7 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 01. Annotations Removal | 1/1 | Complete    | 2026-03-14 | - |
-| 02. ASN Intelligence | v7.0 | 0/1 | Planning complete | - |
+| 02. ASN Intelligence | 1/1 | Complete   | 2026-03-14 | - |
 | 03. Threat Feed Intelligence | v7.0 | 0/TBD | Not started | - |
 | 04. RDAP Design Decision | v7.0 | 0/TBD | Not started | - |
 | 05. RDAP Registration Data | v7.0 | 0/TBD | Not started | - |

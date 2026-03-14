@@ -24,7 +24,7 @@ Requirements for v7.0 Free Intel. Each maps to roadmap phases.
 
 ### ASN/BGP Intelligence
 
-- [ ] **ASN-01**: User sees ASN/BGP context (CIDR prefix, RIR, allocation date) for IP IOCs via Team Cymru DNS
+- [x] **ASN-01**: User sees ASN/BGP context (CIDR prefix, RIR, allocation date) for IP IOCs via Team Cymru DNS
 
 ## Future Requirements
 
@@ -58,7 +58,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 |-------------|-------|--------|
 | CLEAN-01 | Phase 01 | Complete |
 | CLEAN-02 | Phase 01 | Complete |
-| ASN-01 | Phase 02 | Pending |
+| ASN-01 | Phase 02 | Complete |
 | FEED-01 | Phase 03 | Pending |
 | RDAP-03 | Phase 04 | Pending |
 | RDAP-01 | Phase 05 | Pending |
