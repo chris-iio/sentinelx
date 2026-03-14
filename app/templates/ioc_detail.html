@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="page-ioc-detail" data-ioc-value="{{ ioc_value }}" data-ioc-type="{{ ioc_type }}" data-tags="{{ annotations.tags | tojson }}">
+<div class="page-ioc-detail" data-ioc-value="{{ ioc_value }}" data-ioc-type="{{ ioc_type }}">
 
     {# ---- Header ---- #}
     <div class="detail-header">
@@ -15,44 +15,6 @@
         <div class="detail-title-group">
             <code class="detail-ioc-value">{{ ioc_value }}</code>
             <span class="ioc-type-badge ioc-type-badge--{{ ioc_type }}">{{ ioc_type | upper }}</span>
-        </div>
-    </div>
-
-    {# ---- Annotations ---- #}
-    <div class="detail-annotations">
-        <div class="detail-notes">
-            <label for="ioc-notes" class="detail-label">Notes</label>
-            <textarea
-                id="ioc-notes"
-                class="detail-textarea"
-                rows="4"
-                placeholder="Add analyst notes…"
-                data-ioc-value="{{ ioc_value }}"
-                data-ioc-type="{{ ioc_type }}"
-            >{{ annotations.notes }}</textarea>
-            <button type="button" class="btn btn-save-notes" aria-label="Save notes">Save</button>
-        </div>
-        <div class="detail-tags">
-            <label class="detail-label">Tags</label>
-            <div class="tag-pills" id="tag-pills">
-                {% for tag in annotations.tags %}
-                <span class="tag-pill" data-tag="{{ tag }}">
-                    {{ tag }}
-                    <button type="button" class="tag-remove" aria-label="Remove tag {{ tag }}">&times;</button>
-                </span>
-                {% endfor %}
-            </div>
-            <div class="tag-input-group">
-                <input
-                    type="text"
-                    id="tag-input"
-                    class="detail-tag-input"
-                    placeholder="Add tag…"
-                    aria-label="New tag"
-                    maxlength="100"
-                >
-                <button type="button" class="btn btn-add-tag" aria-label="Add tag">Add</button>
-            </div>
         </div>
     </div>
 

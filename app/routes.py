@@ -19,6 +19,7 @@ Security:
     - Host header validated by TRUSTED_HOSTS middleware (SEC-11)
     - Background enrichment runs in daemon thread — does not block Flask (Pitfall 4)
 """
+
 import json
 import uuid
 from collections import OrderedDict
@@ -27,7 +28,6 @@ from threading import Lock, Thread
 from flask import Blueprint, abort, current_app, flash, jsonify, redirect, render_template, request, url_for
 
 from app import limiter
-from app.annotations.store import AnnotationStore
 from app.cache.store import CacheStore
 from app.enrichment.config_store import ConfigStore
 from app.enrichment.models import EnrichmentError, EnrichmentResult
@@ -177,13 +177,6 @@ def analyze():
             "provider_coverage": provider_coverage,
         }
 
-    # Read annotations for all extracted IOCs so tags can be displayed on cards
-    if iocs:
-        ioc_pairs = [(ioc.value, ioc.type.value) for ioc in iocs]
-        annotations_map = AnnotationStore().get_all_for_ioc_values(ioc_pairs)
-    else:
-        annotations_map = {}
-
     no_results = total_count == 0
     return render_template(
         "results.html",
@@ -191,7 +184,6 @@ def analyze():
         mode=mode,
         total_count=total_count,
         no_results=no_results,
-        annotations_map=annotations_map,
         **template_extras,
     )
 
@@ -304,7 +296,6 @@ def ioc_detail(ioc_type: str, ioc_value: str) -> str:
 
     Validates ioc_type against the IOCType enum; returns 404 for unknown types.
     Reads provider results from CacheStore (no TTL — detail page shows all history).
-    Reads analyst annotations from AnnotationStore.
     Builds graph_nodes and graph_edges for the SVG relationship graph.
     """
     valid_types = {t.value for t in IOCType}
@@ -313,9 +304,6 @@ def ioc_detail(ioc_type: str, ioc_value: str) -> str:
 
     cache = CacheStore()
     provider_results = cache.get_all_for_ioc(ioc_value, ioc_type)
-
-    annotation_store = AnnotationStore()
-    annotations = annotation_store.get(ioc_value, ioc_type)
 
     # Build graph data: central IOC node + one node per provider
     graph_nodes = [
@@ -338,67 +326,9 @@ def ioc_detail(ioc_type: str, ioc_value: str) -> str:
         ioc_value=ioc_value,
         ioc_type=ioc_type,
         provider_results=provider_results,
-        annotations=annotations,
         graph_nodes=graph_nodes,
         graph_edges=graph_edges,
     )
-
-
-@bp.route("/api/ioc/<ioc_type>/<path:ioc_value>/notes", methods=["POST"])
-@limiter.limit("30 per minute")
-def api_set_notes(ioc_type: str, ioc_value: str):
-    """Save analyst notes for an IOC.
-
-    Reads "notes" from JSON body, caps at 10000 chars, persists via AnnotationStore.
-    Returns: {"ok": true, "notes": "<saved text>"}
-
-    CSRF: Flask-WTF CSRFProtect accepts X-CSRFToken header automatically for JSON requests.
-    Tests run with WTF_CSRF_ENABLED=False so no token is required in tests.
-    """
-    body = request.get_json(silent=True) or {}
-    notes = str(body.get("notes", ""))
-    notes = notes[:10000]
-    annotation_store = AnnotationStore()
-    annotation_store.set_notes(ioc_value, ioc_type, notes)
-    return jsonify({"ok": True, "notes": notes})
-
-
-@bp.route("/api/ioc/<ioc_type>/<path:ioc_value>/tags", methods=["POST"])
-@limiter.limit("30 per minute")
-def api_add_tag(ioc_type: str, ioc_value: str):
-    """Add a tag to an IOC.
-
-    Reads "tag" from JSON body, strips whitespace, caps at 100 chars, rejects empty.
-    Deduplicates: if tag already exists, returns current list without adding a duplicate.
-    Returns: {"ok": true, "tags": ["tag1", ...]}
-    """
-    body = request.get_json(silent=True) or {}
-    tag = str(body.get("tag", "")).strip()[:100]
-    if not tag:
-        return jsonify({"ok": False, "error": "tag cannot be empty"}), 400
-
-    annotation_store = AnnotationStore()
-    current = annotation_store.get(ioc_value, ioc_type)
-    tags = current["tags"]
-    if tag not in tags:
-        tags = tags + [tag]
-        annotation_store.set_tags(ioc_value, ioc_type, tags)
-    return jsonify({"ok": True, "tags": tags})
-
-
-@bp.route("/api/ioc/<ioc_type>/<path:ioc_value>/tags/<tag>", methods=["DELETE"])
-@limiter.limit("30 per minute")
-def api_delete_tag(ioc_type: str, ioc_value: str, tag: str):
-    """Remove a tag from an IOC.
-
-    Filters the tag out of the stored list and saves. No-op if tag not found.
-    Returns: {"ok": true, "tags": ["remaining", ...]}
-    """
-    annotation_store = AnnotationStore()
-    current = annotation_store.get(ioc_value, ioc_type)
-    tags = [t for t in current["tags"] if t != tag]
-    annotation_store.set_tags(ioc_value, ioc_type, tags)
-    return jsonify({"ok": True, "tags": tags})
 
 
 @bp.route("/enrichment/status/<job_id>", methods=["GET"])

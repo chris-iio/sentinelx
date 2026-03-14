@@ -1,6 +1,4 @@
-{% set ann_key = ioc.value ~ "|" ~ ioc.type.value %}
-{% set card_tags = annotations_map.get(ann_key, {}).get("tags", []) if annotations_map is defined else [] %}
-<div class="ioc-card" data-ioc-value="{{ ioc.value }}" data-ioc-type="{{ ioc.type.value }}" data-verdict="no_data" data-tags="{{ card_tags | tojson }}">
+<div class="ioc-card" data-ioc-value="{{ ioc.value }}" data-ioc-type="{{ ioc.type.value }}" data-verdict="no_data">
     <div class="ioc-card-header">
         <code class="ioc-value">{{ ioc.value }}</code>
         <span class="ioc-type-badge ioc-type-badge--{{ ioc.type.value }}">{{ ioc.type.value | upper }}</span>
@@ -20,14 +18,6 @@
             >Detail</a>
         </div>
     </div>
-
-    {% if card_tags %}
-    <div class="ioc-card-tags">
-        {% for tag in card_tags %}
-        <span class="tag-pill tag-pill--sm">{{ tag }}</span>
-        {% endfor %}
-    </div>
-    {% endif %}
 
     {% if ioc.raw_match != ioc.value %}
     <div class="ioc-original">Original: {{ ioc.raw_match }}</div>
