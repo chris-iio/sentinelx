@@ -184,7 +184,7 @@ Plans:
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 01. Annotations Removal | 1/1 | Complete   | 2026-03-14 | - |
+| 01. Annotations Removal | 1/1 | Complete    | 2026-03-14 | - |
 | 02. ASN Intelligence | v7.0 | 0/TBD | Not started | - |
 | 03. Threat Feed Intelligence | v7.0 | 0/TBD | Not started | - |
 | 04. RDAP Design Decision | v7.0 | 0/TBD | Not started | - |
