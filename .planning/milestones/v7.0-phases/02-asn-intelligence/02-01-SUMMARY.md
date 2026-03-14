@@ -75,7 +75,7 @@ Each task was committed atomically:
 1. **Task 1: Create CymruASNAdapter with TDD tests** - `e878b47` (feat — RED+GREEN TDD)
 2. **Task 2: Register adapter, update tests, wire frontend** - `671090c` (feat)
 
-**Plan metadata:** `[metadata commit hash — populated after final commit]` (docs: complete plan)
+**Plan metadata:** `6159ab4` (docs: complete plan)
 
 _Note: Task 1 used TDD: failing tests committed first, then implementation._
 
