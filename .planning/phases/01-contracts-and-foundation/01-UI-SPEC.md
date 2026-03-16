@@ -57,11 +57,11 @@ Phase 1 changes no typography.
 | Role | Size | Weight | Line Height | Font |
 |------|------|--------|-------------|------|
 | Body | 15px (base) | 400 (`--weight-body`) | 1.6 (`--line-height-body`) | Inter Variable |
-| Label / Caption | 13px (0.867rem) | 500 (`--weight-caption`) | 1.5 | Inter Variable |
+| Label / Caption | 13px (0.867rem) | 400 | 1.5 | Inter Variable |
 | Heading | 18–20px (component-defined) | 600 (`--weight-heading`) | 1.2 (`--tracking-heading: -0.02em`) | Inter Variable |
 | Mono / IOC values | 15px (matches base) | 400 | 1.5 | JetBrains Mono Variable |
 
-Maximum declared type sizes: 4 (body, label, heading, mono). Two weights in use: 400 and 600 (500 is caption-only).
+Maximum declared type sizes: 4 (body, label, heading, mono). Two weights declared: 400 and 600. Labels are differentiated from body by size (13px vs 15px) rather than weight.
 
 ---
 
