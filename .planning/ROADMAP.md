@@ -2,125 +2,89 @@
 
 ## Milestones
 
-- ✅ **v1.0 MVP** — Phases 1-4 (shipped 2026-02-24)
-- ✅ **v1.1 UX Overhaul** — Phases 6-8 (shipped 2026-02-25, reduced scope)
-- ✅ **v1.2 Modern UI Redesign** — Phases 11-12 (shipped 2026-02-28)
-- ✅ **v1.3 Visual Experience Overhaul** — Phases 15-17 (shipped 2026-02-28)
-- ✅ **v2.0 Home Page Modernization** — Phase 18 (shipped 2026-02-28)
-- ✅ **v3.0 TypeScript Migration** — Phases 19-22, Phase 23 skipped (shipped 2026-03-01)
-- ✅ **v4.0 Universal Threat Intel Hub** — Phases 1-4 (shipped 2026-03-03)
-- ✅ **v5.0 Quality-of-Life** — Phase 1 retroactive (shipped 2026-03-09)
-- ✅ **v6.0 Analyst Experience** — Phases 01-04 (shipped 2026-03-14)
-- ⚠️ **v7.0 Free Intel** — Phases 01-02 completed, 03-05 abandoned (2026-03-16)
+- ✅ **v1.0 Foundation** — All prior work (shipped 2026-03-14)
+- 🚧 **v1.1 Results Page Redesign** — Phases 1-5 (in progress)
 
 ## Phases
 
 <details>
-<summary>✅ v1.0 MVP (Phases 1-4) — SHIPPED 2026-02-24</summary>
+<summary>✅ v1.0 Foundation — SHIPPED 2026-03-14</summary>
 
-- [x] Phase 1: Foundation and Offline Pipeline (4/4 plans) — completed 2026-02-21
-- [x] Phase 2: Core Enrichment (4/4 plans) — completed 2026-02-21
-- [x] Phase 3: Additional TI Providers (3/3 plans) — completed 2026-02-21
-- [x] Phase 3.1: Integration Fixes and Git Hygiene (1/1 plan) — completed 2026-02-22 *(INSERTED)*
-- [x] Phase 4: UX Polish and Security Verification (2/2 plans) — completed 2026-02-24
+All prior milestones (v1.0 MVP through v7.0 partial) collapsed into v1.0 Foundation at version reset.
+Includes: IOC extraction, 14 providers, results page, detail pages, cache, export, bulk input, ASN intel, relationship graphs, security hardening.
 
-Full details: `milestones/v1.0-ROADMAP.md`
+See `.planning/MILESTONES.md` for full internal milestone history.
 
 </details>
 
-<details>
-<summary>✅ v1.1 UX Overhaul (Phases 6-8) — SHIPPED 2026-02-25</summary>
+### 🚧 v1.1 Results Page Redesign (In Progress)
 
-- [x] Phase 6: Foundation — Tailwind + Alpine + Card Layout — completed 2026-02-24
-- [x] Phase 7: Filtering & Search — completed 2026-02-25
-- [x] Phase 8: Input Page Polish — completed 2026-02-25
+**Milestone Goal:** Make 14 providers feel like one cohesive intelligence report instead of 14 separate search results stapled together.
 
-Phases 9-10 dropped: EXPORT and POLISH requirements superseded by v1.2 full redesign.
+## Phase Details
 
-Full details: `milestones/v1.1-ROADMAP.md`
+### Phase 1: Contracts and Foundation
+**Goal**: All preservation contracts are documented and enforced before a single line of visual code changes
+**Depends on**: Nothing (first phase)
+**Requirements**: (none — foundation work that enables all other phases safely)
+**Success Criteria** (what must be TRUE):
+  1. Every CSS class used by E2E selectors is catalogued with a "do not rename" rule and the catalog is committed to the repo
+  2. The `data-ioc-value`, `data-ioc-type`, and `data-verdict` attribute contract on `.ioc-card` is documented in code comments in the template
+  3. Information density acceptance criteria are written out (IOC value visible, verdict label always visible, consensus count not hover-only)
+  4. A CSS layer ownership rule exists: component classes own all visual properties for existing elements; Tailwind utilities for new layout structures only
+**Plans**: TBD
 
-</details>
+### Phase 2: TypeScript Module Extractions
+**Goal**: `enrichment.ts` is split into three focused modules with zero behavioral change — visual redesign work is now isolated to `row-factory.ts`
+**Depends on**: Phase 1
+**Requirements**: (none — architectural refactor that isolates the visual redesign)
+**Success Criteria** (what must be TRUE):
+  1. `verdict-compute.ts` exists (~80 LOC) with pure functions `computeWorstVerdict`, `computeConsensus`, `computeAttribution`, `findWorstEntry` and no DOM access
+  2. `row-factory.ts` exists (~150 LOC) with unified `createProviderRow(result, kind, statText)` owning the `CONTEXT_PROVIDERS` set and all row-building DOM code
+  3. `enrichment.ts` is trimmed to ~300 LOC as the polling orchestrator and state owner only
+  4. All 91 E2E tests pass unchanged after extraction — zero behavioral change
+**Plans**: TBD
 
-<details>
-<summary>✅ v1.2 Modern UI Redesign (Phases 11-12) — SHIPPED 2026-02-28</summary>
+### Phase 3: Visual Redesign
+**Goal**: Provider rows display a clear visual hierarchy with verdict prominence, a breakdown micro-bar, category labels, and no-data rows collapsed by default
+**Depends on**: Phase 2
+**Requirements**: VIS-01, VIS-02, VIS-03, GRP-02
+**Success Criteria** (what must be TRUE):
+  1. The worst verdict badge is the dominant visual element in each IOC card header — noticeably larger and higher-contrast than provider row verdicts (VIS-01)
+  2. The summary row shows a visual count bar of malicious/suspicious/clean/no-data providers — the `[2/5]` text consensus badge is gone and replaced by the micro-bar (VIS-02)
+  3. Provider rows within the Reputation and Infrastructure sections display a distinct category label so analysts can tell at a glance which section they are reading (VIS-03)
+  4. No-data providers are collapsed by default — only a count summary ("5 had no record") is visible without interaction (GRP-02)
+  5. All 91 E2E tests pass; no information density regression (all content visible without hover)
+**Plans**: TBD
 
-- [x] Phase 11: Foundation — Design Tokens & Base CSS (3/3 plans) — completed 2026-02-28
-- [x] Phase 12: Shared Component Elevation (3/3 plans) — completed 2026-02-27
+### Phase 4: Template Restructuring
+**Goal**: The HTML template delivers three explicit sections — Reputation, Infrastructure Context, No Data — as the structural backbone of each IOC card
+**Depends on**: Phase 3
+**Requirements**: GRP-01
+**Success Criteria** (what must be TRUE):
+  1. Each IOC card visibly organizes provider results under three labeled sections: Reputation, Infrastructure Context, and No Data (GRP-01)
+  2. All `data-ioc-value`, `data-ioc-type`, and `data-verdict` attributes remain on the `.ioc-card` root element — filtering, verdict updates, and card sorting all function correctly
+  3. URL IOC detail links resolve correctly — `/ioc/url/https://evil.com/beacon` returns 200 (the `<path:>` route contract is preserved)
+  4. All 91 E2E tests pass at zero failures after template restructuring
+**Plans**: TBD
 
-Phases 13-14 superseded by v1.3 Visual Experience Overhaul.
+### Phase 5: Context and Staleness
+**Goal**: Key context fields and cache age are visible in the IOC card header without requiring any accordion expansion
+**Depends on**: Phase 4
+**Requirements**: CTX-01, CTX-02
+**Success Criteria** (what must be TRUE):
+  1. For IP IOCs, GeoIP country and ASN org are visible in the card header before the analyst expands any section (CTX-01)
+  2. For domain IOCs, the registrar is visible in the card header before the analyst expands any section (CTX-01)
+  3. IOC cards with cached results show a staleness indicator (e.g., "data from 4h ago") in the summary row without requiring any interaction (CTX-02)
+  4. All 91 E2E tests pass; context fields degrade gracefully when data is unavailable (no layout shift, no blank UI slots)
+**Plans**: TBD
 
-</details>
+## Progress
 
-<details>
-<summary>✅ v1.3 Visual Experience Overhaul (Phases 15-17) — SHIPPED 2026-02-28</summary>
-
-- [x] Phase 15: Results Page Visual Overhaul — completed 2026-02-28
-- [x] Phase 16: Input Page and Global Motion — completed 2026-02-28
-- [x] Phase 17: Settings Page Polish — completed 2026-02-28
-
-</details>
-
-<details>
-<summary>✅ v2.0 Home Page Modernization (Phase 18) — SHIPPED 2026-02-28</summary>
-
-- [x] Phase 18: Home Page Modernization — completed 2026-02-28
-
-</details>
-
-<details>
-<summary>✅ v3.0 TypeScript Migration (Phases 19-22) — SHIPPED 2026-03-01</summary>
-
-- [x] Phase 19: Build Pipeline Infrastructure (2/2 plans) — completed 2026-02-28
-- [x] Phase 20: Type Definitions Foundation (1/1 plan) — completed 2026-02-28
-- [x] Phase 21: Simple Module Extraction (3/3 plans) — completed 2026-02-28
-- [x] Phase 22: Enrichment Module and Entry Point (2/2 plans) — completed 2026-03-01
-- [ ] Phase 23: Type Hardening and Verification — skipped (SAFE-01, SAFE-02 deferred)
-
-Full details: `milestones/v3.0-ROADMAP.md`
-
-</details>
-
-<details>
-<summary>✅ v4.0 Universal Threat Intel Hub (Phases 1-4) — SHIPPED 2026-03-03</summary>
-
-- [x] Phase 1: Provider Registry Refactor (2/2 plans) — completed 2026-03-02
-- [x] Phase 2: Shodan InternetDB (2/2 plans) — completed 2026-03-02
-- [x] Phase 3: Free-Key Providers (3/3 plans) — completed 2026-03-03
-- [x] Phase 4: Results UX Upgrade (2/2 plans) — completed 2026-03-03
-
-Full details: `milestones/v4.0-ROADMAP.md`
-
-</details>
-
-<details>
-<summary>✅ v5.0 Quality-of-Life (Phase 1) — SHIPPED 2026-03-09</summary>
-
-- [x] Phase 1: Quality-of-Life Features (retroactive, no PLANs) — completed 2026-03-09
-
-Ad-hoc work adopted into GSD tracking. See `.planning/phases/01-quality-of-life/01-SUMMARY.md`.
-
-</details>
-
-<details>
-<summary>✅ v6.0 Analyst Experience (Phases 01-04) — SHIPPED 2026-03-14</summary>
-
-- [x] Phase 01: Zero-Auth IP Intelligence + Known-Good (3/3 plans) — completed 2026-03-12
-- [x] Phase 02: Domain Intelligence (3/3 plans) — completed 2026-03-12
-- [x] Phase 03: Passive DNS Pivoting (2/2 plans) — completed 2026-03-12
-- [x] Phase 04: Deep Analysis View (3/3 plans) — completed 2026-03-13
-
-Full details: `milestones/v6.0-ROADMAP.md`
-
-</details>
-
-### v7.0 Free Intel (Abandoned — Partial)
-
-**Milestone Goal:** Provide actionable threat intelligence out of the box.
-
-- [x] **Phase 01: Annotations Removal** — completed 2026-03-14
-- [x] **Phase 02: ASN Intelligence** — completed 2026-03-14
-- ~~Phase 03: Threat Feed Intelligence~~ — abandoned
-- ~~Phase 04: RDAP Design Decision~~ — abandoned
-- ~~Phase 05: RDAP Registration Data~~ — abandoned
-
-Full details: `milestones/v7.0-abandoned/`
+| Phase | Milestone | Plans Complete | Status | Completed |
+|-------|-----------|----------------|--------|-----------|
+| 1. Contracts and Foundation | v1.1 | 0/TBD | Not started | - |
+| 2. TypeScript Module Extractions | v1.1 | 0/TBD | Not started | - |
+| 3. Visual Redesign | v1.1 | 0/TBD | Not started | - |
+| 4. Template Restructuring | v1.1 | 0/TBD | Not started | - |
+| 5. Context and Staleness | v1.1 | 0/TBD | Not started | - |

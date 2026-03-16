@@ -60,19 +60,19 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| VIS-01 | — | Pending |
-| VIS-02 | — | Pending |
-| VIS-03 | — | Pending |
-| GRP-01 | — | Pending |
-| GRP-02 | — | Pending |
-| CTX-01 | — | Pending |
-| CTX-02 | — | Pending |
+| VIS-01 | Phase 3 | Pending |
+| VIS-02 | Phase 3 | Pending |
+| VIS-03 | Phase 3 | Pending |
+| GRP-01 | Phase 4 | Pending |
+| GRP-02 | Phase 3 | Pending |
+| CTX-01 | Phase 5 | Pending |
+| CTX-02 | Phase 5 | Pending |
 
 **Coverage:**
 - v1.1 requirements: 7 total
-- Mapped to phases: 0
-- Unmapped: 7
+- Mapped to phases: 7
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-16*
-*Last updated: 2026-03-16 after initial definition*
+*Last updated: 2026-03-16 — traceability populated after roadmap creation*
