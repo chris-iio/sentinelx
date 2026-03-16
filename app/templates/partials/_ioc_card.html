@@ -1,3 +1,32 @@
+{#
+  ================================================================
+  CONTRACT: .ioc-card root element attributes — DO NOT MOVE
+  ================================================================
+  The following attributes MUST remain on the .ioc-card root div:
+    - data-ioc-value
+    - data-ioc-type
+    - data-verdict
+
+  They are read by FOUR independent consumers:
+
+  1. CSS attribute selectors (input.css):
+     .ioc-card[data-verdict="malicious"] { border-left-color: ... }
+     Used for verdict-colored left border on the card.
+
+  2. enrichment.ts — updateCardVerdict():
+     Reads card via data-ioc-value, writes data-verdict as enrichment arrives.
+
+  3. filter.ts — initFilterBar():
+     data-verdict: verdict filter buttons hide/show cards
+     data-ioc-type: type pill filter hides/shows cards
+     data-ioc-value: text search filters cards by IOC value substring
+
+  4. E2E tests (tests/e2e/pages/results_page.py):
+     cards_for_type(), ioc_values(), verdict_labels(), etc.
+
+  See .planning/phases/01-contracts-and-foundation/CSS-CONTRACTS.md
+  ================================================================
+#}
 <div class="ioc-card" data-ioc-value="{{ ioc.value }}" data-ioc-type="{{ ioc.type.value }}" data-verdict="no_data">
     <div class="ioc-card-header">
         <code class="ioc-value">{{ ioc.value }}</code>

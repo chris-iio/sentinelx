@@ -21,6 +21,26 @@
 /* ================================================================
    SentinelX — CSS Custom Properties + Component Styles
    Built via Tailwind CSS standalone CLI (no Node.js required).
+   ================================================================
+
+   CSS LAYER OWNERSHIP RULE — v1.1 (enforced from Phase 1 onward)
+   ================================================================
+
+   COMPONENT CLASSES own ALL visual properties for existing elements:
+     - Background, border, color, font, padding, display, etc.
+     - Examples: .ioc-card, .verdict-label, .filter-btn, .provider-detail-row
+     - Defined inside @layer components (lower specificity than utilities)
+
+   TAILWIND UTILITIES are reserved for NEW layout structures only:
+     - Grid wrappers, flex containers for new sections (e.g., provider group headers)
+     - Never back-apply utilities to elements that already have component class styles
+     - Adding Tailwind utilities alongside component classes causes specificity conflicts
+
+   WHY: Component classes in @layer components have lower specificity than
+   unbounded Tailwind utilities. Mixing them on the same element causes
+   unpredictable override behavior.
+
+   See .planning/phases/01-contracts-and-foundation/CSS-CONTRACTS.md
    ================================================================ */
 
 /* --- Design tokens (CSS custom properties) --- */
