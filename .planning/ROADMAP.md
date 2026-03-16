@@ -32,7 +32,9 @@ See `.planning/MILESTONES.md` for full internal milestone history.
   2. The `data-ioc-value`, `data-ioc-type`, and `data-verdict` attribute contract on `.ioc-card` is documented in code comments in the template
   3. Information density acceptance criteria are written out (IOC value visible, verdict label always visible, consensus count not hover-only)
   4. A CSS layer ownership rule exists: component classes own all visual properties for existing elements; Tailwind utilities for new layout structures only
-**Plans**: TBD
+**Plans**: 1 plan
+Plans:
+- [ ] 01-01-PLAN.md — CSS contract catalog, inline source annotations, and E2E baseline confirmation
 
 ### Phase 2: TypeScript Module Extractions
 **Goal**: `enrichment.ts` is split into three focused modules with zero behavioral change — visual redesign work is now isolated to `row-factory.ts`
@@ -83,7 +85,7 @@ See `.planning/MILESTONES.md` for full internal milestone history.
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 1. Contracts and Foundation | v1.1 | 0/TBD | Not started | - |
+| 1. Contracts and Foundation | v1.1 | 0/1 | Planning complete | - |
 | 2. TypeScript Module Extractions | v1.1 | 0/TBD | Not started | - |
 | 3. Visual Redesign | v1.1 | 0/TBD | Not started | - |
 | 4. Template Restructuring | v1.1 | 0/TBD | Not started | - |
