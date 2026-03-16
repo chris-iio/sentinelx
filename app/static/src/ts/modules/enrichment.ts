@@ -1,16 +1,11 @@
 /**
- * Enrichment polling module — polling loop, progress bar, result rendering,
- * warning banner, and export button.
+ * Enrichment polling orchestrator — polling loop, progress tracking,
+ * result dispatch, and module state.
  *
- * Extracted from main.js lines 316-643.
- * This is a direct behavioral translation: DOM mutations, fetch calls,
- * and timing are byte-for-byte equivalent to the original.
- *
- * Depends on:
- *   - cards.ts    for findCardForIoc, updateCardVerdict, updateDashboardCounts, sortCardsBySeverity
- *   - types/api.ts for EnrichmentItem, EnrichmentStatus
- *   - types/ioc.ts for VerdictKey, VERDICT_LABELS, verdictSeverityIndex, getProviderCounts
- *   - utils/dom.ts for attr
+ * Verdict computation lives in verdict-compute.ts.
+ * DOM row construction lives in row-factory.ts.
+ * This module owns the polling interval, dedup map, per-IOC state,
+ * and coordinates rendering through imported functions.
  */
 
 import type { EnrichmentItem, EnrichmentStatus } from "../types/api";
