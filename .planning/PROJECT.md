@@ -12,48 +12,19 @@ Safe, correct, and transparent IOC extraction and enrichment — never invent sc
 
 ### Validated
 
-- ✓ Single-page web interface with large paste input, submit button, and offline/online toggle — v1.0
-- ✓ IOC extraction from free-form text (alert snippets, email headers/body, raw IOCs) — v1.0
-- ✓ Defanging normalization (hxxp, [.], {.}, and 20 common obfuscation patterns) — v1.0
-- ✓ Deterministic IOC classification: IPv4, IPv6, domain, URL, MD5, SHA1, SHA256, CVE — v1.0
-- ✓ Offline mode: extraction + classification only, zero network calls — v1.0
-- ✓ Online mode: parallel queries to threat intelligence providers — v1.0
-- ✓ Structured results page grouped by IOC type — v1.0
-- ✓ Clear source attribution on every enrichment result — v1.0
-- ✓ No opaque combined "threat score" — show provider verdicts as-is — v1.0
-- ✓ Verdict clarity: "NO RECORD" vs "CLEAN" instantly distinguishable — v1.0
-- ✓ Card-based results layout with severity borders and summary dashboard — v1.1
-- ✓ Verdict/type/text filtering with sticky filter bar — v1.1
-- ✓ Dark-first design token system (zinc/emerald/teal) with WCAG AA contrast — v1.2
-- ✓ Self-hosted Inter Variable + JetBrains Mono Variable fonts — v1.2
-- ✓ Minimal header bar, compact auto-growing textarea, tighter controls — v2.0
-- ✓ TypeScript build pipeline (esbuild + tsc) with strict type checking — v3.0
-- ✓ 11 typed ES modules extracted from monolithic JS IIFE — v3.0
-- ✓ Provider protocol + registry architecture for plugin-style provider addition — v4.0
-- ✓ 8 threat intel providers: VirusTotal, MalwareBazaar, ThreatFox, Shodan, URLhaus, OTX, GreyNoise, AbuseIPDB — v4.0
-- ✓ Unified results UX: summary rows with consensus badges, expandable per-provider details — v4.0
-- ✓ Multi-provider settings page with dynamic provider cards and API key management — v4.0
-- ✓ SQLite-backed enrichment result cache with configurable TTL and settings UI — v5.0
-- ✓ Client-side export menu (JSON/CSV/clipboard) replacing single copy button — v5.0
-- ✓ Bulk IOC input mode with one-per-line parser and toggle UI — v5.0
-- ✓ Provider context fields (VT top detections/reputation) with generic field rendering — v5.0
-- ✓ Zero-auth IP intelligence: GeoIP, rDNS, proxy/VPN/hosting flags via ip-api.com — v6.0
-- ✓ Known-good hash detection: CIRCL hashlookup with visually distinct KNOWN GOOD verdict — v6.0
-- ✓ Live DNS records (A/MX/NS/TXT) for domains via dnspython — v6.0
-- ✓ Certificate transparency history for domains via crt.sh — v6.0
-- ✓ Passive DNS pivoting via ThreatMiner for all IOC types — v6.0
-- ✓ Shodan InternetDB full field rendering (ports, CVEs, hostnames, CPEs) — v6.0
-- ✓ Bookmarkable per-IOC detail page with tabbed provider results — v6.0
-- ✓ Analyst notes on IOCs persisted in SQLite — v6.0
-- ✓ Custom tags on IOCs with tag-based filtering — v6.0
-- ✓ SVG relationship graph showing IOC-provider connections and verdicts — v6.0
-- ✓ 13 threat intel providers (5 zero-auth + 1 public + 7 key-auth) — v6.0
-- ✓ Annotations feature removed (notes, tags, tag filtering, AnnotationStore) — v7.0 partial
-- ✓ ASN/BGP intelligence for IP IOCs via Team Cymru DNS (CIDR, RIR, allocation date) — v7.0 partial
+Everything built through 9 milestones (2026-02-21 to 2026-03-14). See `.planning/MILESTONES.md` for full history.
+
+- ✓ IOC extraction from free-form text with 20-pattern defanging normalizer and 8-type classifier
+- ✓ 14 threat intel providers (6 zero-auth, 1 public, 7 key-auth) via Provider Protocol + Registry
+- ✓ Results page: summary rows with worst verdict + consensus badges, expandable per-provider details
+- ✓ Bookmarkable per-IOC detail page with tabbed provider results + SVG relationship graph
+- ✓ Dark-first design system (zinc/emerald/teal), TypeScript 5.8 + esbuild, Tailwind CSS standalone
+- ✓ SQLite cache, client-side export (JSON/CSV/clipboard), bulk input mode
+- ✓ Security-first: CSP, CSRF, SSRF allowlist, textContent-only DOM, no innerHTML
 
 ### Active
 
-(None — between milestones)
+<!-- v1.1 Results Page Redesign — scope defined in REQUIREMENTS.md -->
 
 ### Out of Scope
 
@@ -68,6 +39,8 @@ Safe, correct, and transparent IOC extraction and enrichment — never invent sc
 - Framework adoption (React, Vue) — vanilla TS sufficient for this complexity
 - STIX/TAXII threat feed import — deferred to future milestone
 - File upload for hash extraction — deferred to future milestone
+- New providers — v1.1 is about refining presentation, not adding data sources
+- New features — v1.1 is refinement only
 
 ## Context
 
@@ -116,25 +89,22 @@ Safe, correct, and transparent IOC extraction and enrichment — never invent sc
 | CONTEXT_PROVIDERS set pattern | Route zero-verdict context rows through shared renderer | ✓ Good — generalized createContextRow() for all context providers |
 | path converter for IOC URLs | URL IOCs contain slashes that break standard routing | ✓ Good — `<path:ioc_value>` handles all IOC formats |
 
-## Current Milestone
+## Current Milestone: v1.1 Results Page Redesign
 
-(None — v7.0 abandoned after phases 01-02, starting fresh)
+**Goal:** Make 14 providers feel like one cohesive intelligence report instead of 14 separate search results stapled together.
+
+**Target features:**
+- Uniform information architecture across all provider types (verdict, context, no-data)
+- Cohesive visual presentation that matches the value of the data
+- Results page that embodies the "meta-search engine" identity
 
 ## Shipped Milestones
 
-| Version | Name | Shipped | Phases | Key Feature |
-|---------|------|---------|--------|-------------|
-| v1.0 | MVP | 2026-02-24 | 5 | Core IOC extraction + enrichment |
-| v1.1 | UX Overhaul | 2026-02-25 | 3 | Card layout + filtering |
-| v1.2 | Modern UI Redesign | 2026-02-28 | 2 | Design tokens + components |
-| v1.3 | Visual Experience | 2026-02-28 | 3 | Page-level polish + animations |
-| v2.0 | Home Page Modernization | 2026-02-28 | 1 | Minimal header + compact controls |
-| v3.0 | TypeScript Migration | 2026-03-01 | 4 | JS→TS with strict types |
-| v4.0 | Universal Threat Intel Hub | 2026-03-03 | 4 | 8 providers + registry + unified UX |
-| v5.0 | Quality-of-Life | 2026-03-09 | 1 | Cache + export + bulk input + context fields |
-| v6.0 | Analyst Experience | 2026-03-14 | 4 | 5 zero-auth providers + detail page + annotations |
+| Version | Name | Shipped | Key Feature |
+|---------|------|---------|-------------|
+| v1.0 | Foundation | 2026-03-14 | 14 providers, detail pages, cache, export, bulk input, relationship graphs |
 
-See `.planning/MILESTONES.md` for full details.
+See `.planning/MILESTONES.md` for full history.
 
 ---
-*Last updated: 2026-03-16 after v7.0 abandoned (phases 01-02 kept), preparing new milestone*
+*Last updated: 2026-03-16 after version reset, starting v1.1 Results Page Redesign*

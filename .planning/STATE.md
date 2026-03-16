@@ -1,11 +1,11 @@
 ---
 gsd_state_version: 1.0
-milestone: none
-milestone_name: idle
-status: idle
-stopped_at: v7.0 abandoned, ready for new milestone
+milestone: v1.1
+milestone_name: Results Page Redesign
+status: defining_requirements
+stopped_at: milestone initialized, defining requirements
 last_updated: "2026-03-16"
-last_activity: 2026-03-16 — v7.0 abandoned after phases 01-02, starting fresh
+last_activity: 2026-03-16 — Milestone v1.1 started
 progress:
   total_phases: 0
   completed_phases: 0
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-16)
 
 **Core value:** Safe, correct, and transparent IOC extraction and enrichment
-**Current focus:** Between milestones — defining next milestone
+**Current focus:** v1.1 Results Page Redesign — nail the results presentation
 
 ## Current Position
 
-**Milestone:** None (idle)
-**Phase:** —
-**Status:** Ready for new milestone
-**Last activity:** 2026-03-16 — v7.0 abandoned after phases 01-02, starting fresh
+**Milestone:** v1.1 Results Page Redesign
+**Phase:** Not started (defining requirements)
+**Status:** Defining requirements
+**Last activity:** 2026-03-16 — Milestone v1.1 started
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -43,9 +43,8 @@ Progress: [░░░░░░░░░░] 0%
 
 ### Decisions
 
-- [v7.0-partial]: Annotations removal completed — codebase no longer has notes/tags/AnnotationStore
-- [v7.0-partial]: ASN Intelligence (Team Cymru DNS) is live as 14th provider — zero-auth, always configured
-- [v7.0-abandoned]: Feodo Tracker, RDAP design decision, and RDAP registration data abandoned — user chose to start fresh
+- [v1.0]: Version reset — all previous milestones (v1.0–v7.0 partial) collapsed into v1.0 Foundation
+- [v1.0]: Annotations removed, ASN Intelligence added as 14th provider (from v7.0 partial work)
 
 ### Blockers/Concerns
 
@@ -58,5 +57,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-16
-Stopped at: v7.0 abandoned, proceeding to new milestone definition
+Stopped at: Milestone v1.1 initialized, defining requirements
 Resume file: None
