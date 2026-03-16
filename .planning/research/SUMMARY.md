@@ -1,186 +1,221 @@
 # Project Research Summary
 
-**Project:** SentinelX v7.0 Free Intel
-**Domain:** Threat intelligence enrichment — DNSBL reputation, public threat feeds, RDAP registration data, ASN/BGP intelligence; annotations removal
-**Researched:** 2026-03-15
+**Project:** SentinelX v1.1 Results Page Redesign
+**Domain:** Multi-source threat intelligence aggregation UI — presentation layer refinement
+**Researched:** 2026-03-16
 **Confidence:** HIGH
 
 ## Executive Summary
 
-SentinelX v7.0 adds four zero-auth enrichment capabilities to a mature 13-provider threat intelligence platform: DNSBL reputation checks, Feodo Tracker C2 feed lookups, RDAP domain/IP registration data, and Team Cymru ASN/BGP intelligence. It simultaneously removes the annotations feature (notes, tags, AnnotationStore) to simplify the codebase. All four new capabilities integrate directly into the existing Provider Protocol — each is one new adapter file plus one `registry.register()` call — with no orchestrator, route, or TypeScript rendering changes required. The stack addition is minimal: only `whoisit==4.0.0` (plus its `python-dateutil` transitive dependency) is new. DNSBL and ASN/BGP both run over DNS via the already-installed `dnspython`, and Feodo Tracker uses the already-installed `requests`.
+SentinelX v1.1 is a presentation-only redesign of a working SOC triage tool. The codebase ships 14 enrichment providers, per-IOC detail pages, a full filter bar, and 848+ tests. The core problem is not missing data or features — it is that 14 provider rows displayed in a flat accordion feel like 14 separate search results stapled together rather than one unified intelligence report. Research into how VirusTotal, Hybrid Analysis, Shodan, IntelOwl, and URLScan solve this same problem yields a clear consensus: separate verdict assessment from contextual intelligence, group findings by signal type rather than by source name, and make the synthesized judgment the most visually dominant element in each card.
 
-The recommended implementation order is: annotations removal first (eliminates ~500 LOC and three API routes before adding new code), then DNS-native providers (ASNAdapter via Team Cymru, DNSBLAdapter via Spamhaus/SURBL — zero new dependencies), then HTTP providers (ThreatFeedAdapter for Feodo C2 bulk-list, RDAPAdapter for registration data). This order minimizes risk at every stage: the destructive removal is contained and verified before new code is introduced, the DNS providers validate the Provider Protocol extension flow with no SSRF surface changes, and the HTTP providers with their allowlist updates come last. P1 features for v7.0 are: annotations removal, DNSBL for IPs, RDAP domain creation date/registrar/nameservers, and Feodo Tracker. P2 features are RDAP for IPs, DNSBL for domains, and Team Cymru ASN/BGP.
+The recommended approach is a three-section accordion structure — Reputation (verdict-producing providers), Infrastructure Context (CONTEXT_PROVIDERS), and No Data (collapsed by default) — combined with a promoted worst-verdict headline element and a verdict breakdown micro-bar replacing the current text consensus badge. All of this is achievable without new Python routes, new TypeScript modules beyond two planned extractions (`verdict-compute.ts`, `row-factory.ts`), or any new libraries. The full native CSS toolbox (CSS Grid subgrid, `@container` queries, `@starting-style`, View Transitions API) is available at the current browser target, and the existing motion primitive system (`--card-index` stagger, `fadeSlideUp`, shimmer skeleton) is already sufficient.
 
-The primary risks are specific and well-understood. Spamhaus blocks queries from public DNS resolvers (Cloudflare/Google) and returns a `127.255.255.254` sentinel that must not be interpreted as a positive listing. RDAP's SEC-06 conflict (`allow_redirects=False`) means the adapter design must resolve redirect behavior before a line of code is written — `rdap.org` redirect-vs-proxy behavior is the one unconfirmed item in the research and needs empirical validation during Phase 5. The annotations removal spans four layers (Python, templates, TypeScript, SQLite init) and must be completed atomically with a full test run before any new provider work begins. All other aspects of the milestone have HIGH confidence grounded in direct codebase inspection and verified external documentation.
+The key risk is the existing test surface: 91 E2E tests contain 20+ hard-coded CSS class selectors, and the TypeScript modules rely on a documented DOM attribute contract (`data-ioc-value`, `data-ioc-type`, `data-verdict` on the `.ioc-card` root element). Any template restructuring that renames CSS classes or moves these attributes will cause silent failures. The mitigation is to establish preservation contracts before touching any template and run the full E2E suite after every template change — not at the end.
 
 ## Key Findings
 
 ### Recommended Stack
 
-The v7.0 stack addition is as lean as possible: two new pip packages. `whoisit==4.0.0` handles RDAP bootstrapping (finding the correct RIR/registry RDAP server for any TLD or IP prefix) using only `requests` and `python-dateutil`. All other new capabilities reuse the existing `dnspython==2.8.0` (for DNSBL and Team Cymru ASN) and `requests==2.32.5` (for Feodo Tracker). `pydnsbl` was explicitly rejected for its async/aiodns dependency conflicting with Flask's synchronous pipeline. BGPView was rejected because it shut down November 2025. `pyasn` was rejected for requiring 100+ MB offline BGP dump files. See STACK.md for full alternatives analysis.
+The existing stack is fully sufficient. No new libraries, no npm packages, no new standalone binaries are required. TypeScript 5.8, esbuild 0.27.3, Tailwind CSS v3.4.17 standalone, and the existing `input.css` design system handle everything the redesign needs.
+
+The relevant CSS capabilities are native browser features already available at the es2022 build target: CSS Grid subgrid (97%+ support) for aligned card sections across the grid, `@container` queries (95%+ support) for card-internal layout adaptation, `@starting-style` (Chrome 117+, Firefox 129+, Safari 17.5+) for zero-JS provider row entry animations, and `document.startViewTransition()` (Baseline Oct 2025) for animated card reordering. Scroll-driven `animation-timeline: view()` is explicitly deferred — Firefox does not support it as of March 2026; use `IntersectionObserver` instead.
 
 **Core technologies:**
-- `dnspython==2.8.0` (existing): DNSBL A-record queries + Team Cymru TXT-record ASN lookups — no new library needed for either capability
-- `requests==2.32.5` (existing): Feodo Tracker bulk JSON download — no new library needed
-- `whoisit==4.0.0` (NEW): RDAP registration data for domains and IPs — handles IANA bootstrap automatically, synchronous, pure Python
-- `python-dateutil==2.9.x` (NEW, transitive via whoisit): Date parsing — no conflicts with existing stack
-
-**SSRF allowlist additions required:** `feodotracker.abuse.ch` and `rdap.org` (or individual RIR hostnames if rdap.org issues redirects rather than proxying). DNSBL and ASN providers use DNS (port 53) and have no SSRF surface — same as the existing `DnsAdapter`.
+- TypeScript 5.8: DOM manipulation, polling, card reordering — already proven across 13 modules
+- esbuild 0.27.3: compiles to single IIFE bundle; `--target=es2022` enables all needed native APIs
+- Tailwind CSS v3.4.17 standalone: utility classes; no Node.js dependency; v4 upgrade is a follow-on milestone, not this one
+- Custom CSS (`input.css`): motion primitives, design tokens, component classes — redesign extends, does not replace
 
 ### Expected Features
 
-The v7.0 milestone has one removal and four new provider capabilities. Every feature has been prioritized against analyst triage value and implementation cost.
+Research into VirusTotal, Hybrid Analysis, Shodan, IntelOwl, and URLScan reveals consistent patterns: separate verdict providers from context providers, make the synthesized judgment visually dominant, and suppress zero-data rows as visual noise. These platforms all treat source as an attribute within a category group, not as the organizing principle.
 
-**Must have (P1 — required for v7.0 launch):**
-- Remove annotations entirely (notes, tags, AnnotationStore, tag filter UI, annotations.ts, /api/annotations routes) — simplifies the tool, eliminates case-management scope creep
-- DNSBL for IPs: Spamhaus ZEN + Barracuda + SpamCop; verdict `malicious` on any hit naming which zones, `clean` when all NXDOMAIN
-- RDAP for domains: creation date formatted as "registered N days ago", registrar name, nameservers; verdict `no_data`
-- Feodo Tracker C2 feed for IPs: bulk JSON download with SQLite-cached result; verdict `malicious` with malware family on hit, `clean` when confirmed absent
+**Must have (table stakes — P1 for v1.1):**
+- Worst-verdict as report headline — make the verdict badge the dominant element in the card header (CSS-only, highest ROI of any single change)
+- Category-grouped provider sections — Reputation / Infrastructure Context / No Data structure (backbone change from which all other improvements follow)
+- No-data section collapsed by default — removes flat visual noise from zero-data provider rows
+- Verdict breakdown micro-bar — visual malicious/suspicious/clean/no-data count replaces `[2/5]` text badge
+- Provider category labels — distinct visual treatment for Reputation vs Infrastructure sections
 
-**Should have (P2 — include in v7.0 if schedule allows):**
-- RDAP for IPs: network block name, org, CIDR, country from IP RDAP response
-- DNSBL for domains: Spamhaus DBL + SURBL multi; same DNS pattern as IP DNSBL
-- ASN/BGP via Team Cymru: CIDR prefix, RIR, allocation date via DNS TXT query; supplements existing ip-api.com ASN field without duplicating it
+**Should have (differentiators — P2 for v1.1.x):**
+- Inline context summary always visible in card header — 2-3 key fields (GeoIP country, ASN org) without requiring accordion expansion
+- Staleness indicator on summary row — `cached_at` already exists in `EnrichmentResultItem`; surface it
+- Scan date on summary row — `scan_date` already in the data model; display it
 
-**Defer (v7.x / v8+):**
-- DNSBL listed-count summary badge "Listed 2/5" (UX polish, low complexity)
-- IPv6 DNSBL (nibble reversal required; IPv6 IOCs rare in analyst triage)
-- RDAP abuse contact email extraction (complex entity traversal in RFC 9083)
-- Additional threat feeds beyond Feodo (diminishing returns over existing URLhaus, MalwareBazaar, ThreatFox coverage)
+**Defer (v1.2+):**
+- Per-category expand/collapse toggle — collapse Infrastructure for clean IOCs
+- IOC card sort by IOC type as alternative to severity sort
+- Tailwind v4 upgrade — natural follow-on cleanup milestone after v1.1 ships
 
-**Explicit anti-features (do not build):**
-- WHOIS in any form — sunsetted by ICANN January 2025; RDAP is the sole standard
-- RDAP registrant contact fields — 58%+ of malicious domains return "REDACTED FOR PRIVACY"; surfaces noise not signal
-- BGP path visualization — dynamic data misleading as static snapshot; high frontend cost for low triage value
-- PhishTank — new user registration closed since 2020; cannot obtain API key
+**Anti-features (do not implement):**
+- Composite threat score — conflicts with SentinelX "never invent scores" design philosophy
+- Tabs per IOC card — breaks at-a-glance comparison across IOCs; accordion is correct for this use case
+- Auto-expand all cards — 140 rows simultaneously with 10 IOCs is catastrophic for cognitive load
+- Inline verdict override / annotations — removed in v7.0 for good reasons; do not reintroduce
+- Any new Python routes or TypeScript functions not driven by the visual restructuring — v1.1 is refinement only
 
 ### Architecture Approach
 
-All four new providers conform to the existing `typing.Protocol` Provider contract: one file in `app/enrichment/adapters/`, one `register()` call in `app/enrichment/setup.py`, `requires_api_key = False`, `is_configured()` always returns `True`. The ProviderRegistry grows from 13 to 17 providers. No orchestrator, route, or TypeScript rendering changes are needed — the existing `createContextRow()` and `computeWorstVerdict()` functions already handle arbitrary new providers. Verdict-producing providers (DNSBL, ThreatFeed) participate in consensus automatically; context-only providers (RDAP, ASN) need their names added to the `CONTEXT_PROVIDERS` set.
+The redesign requires two TypeScript module extractions from `enrichment.ts` (currently 928 LOC) before any visual work begins. These extractions make the visual redesign isolated to `row-factory.ts` and `input.css` — without them, every row visual change requires touching an interleaved 928-LOC file where computation and DOM mutation are entangled.
 
-**Major new components:**
-1. `DNSBLAdapter` (`dnsbl.py`) — pure DNS, mirrors `DnsAdapter` pattern, parallel zone queries via `ThreadPoolExecutor`, IOCType.IPV4 + IOCType.DOMAIN
-2. `ThreatFeedAdapter` (`threat_feed.py`) — HTTP bulk-feed pattern, downloads Feodo JSON, per-IP dict lookup, relies on `CacheStore` TTL, IOCType.IPV4 only
-3. `RDAPAdapter` (`rdap.py`) — HTTP REST via rdap.org or whoisit library, parses RFC 9083 JSON, must resolve SEC-06 redirect conflict in design before implementation, IOCType.DOMAIN + IOCType.IPV4 + IOCType.IPV6
-4. `ASNAdapter` (`asn.py`) — pure DNS TXT record to Team Cymru `origin.asn.cymru.com`, mirrors `DnsAdapter` pattern, IOCType.IPV4 + IOCType.IPV6
-5. Annotations removal — deletes `app/annotations/` module, 3 API routes from routes.py, `annotations.ts`, annotation sections from `results.html` and `ioc_detail.html`, all annotation tests; 14 TS modules → 13
+The key architectural seam is the existing `CONTEXT_PROVIDERS` set and the rendering fork in `renderEnrichmentResult`. This fork correctly separates context rows from verdict rows today; the redesign promotes this distinction into the visual structure without changing any backend data model.
+
+**Major components:**
+1. `verdict-compute.ts` (NEW, ~80 LOC) — pure functions: `computeWorstVerdict`, `computeConsensus`, `computeAttribution`, `findWorstEntry`; no DOM access, no side effects; extracted from `enrichment.ts`
+2. `row-factory.ts` (NEW, ~150 LOC) — unified `createProviderRow(result, kind, statText)` with `RowKind = "verdict" | "context"` discriminant; owns `CONTEXT_PROVIDERS` set and all row-building DOM code
+3. `enrichment.ts` (MODIFIED, ~300 LOC after extraction) — polling orchestrator and state owner; calls into new modules; continues to own `iocVerdicts`, `iocResultCounts`, `allResults`, `sortTimers`
+4. `input.css` (MAJOR CSS CHANGES) — new component CSS for redesigned row, card, and summary layout; existing motion primitives preserved
+5. Templates: `_ioc_card.html`, `_enrichment_slot.html` — HTML shell changes; all `data-*` attribute contracts preserved verbatim
+
+**Key constraints that must not change:**
+- State stays in `enrichment.ts` — new helper modules receive values as parameters; no shared state store
+- No backend changes — `rowKindFor(result.provider)` derives kind at render time using the existing `CONTEXT_PROVIDERS` set; row classification is a display concern, not a data concern
+- `createElement + textContent` only — SEC-08 hard constraint; `innerHTML` and `insertAdjacentHTML` are prohibited throughout
 
 ### Critical Pitfalls
 
-1. **SSRF allowlist missing for new HTTP providers** — add `feodotracker.abuse.ch` and `rdap.org` to `ALLOWED_API_HOSTS` in `config.py` as the very first step of each respective provider phase; include a unit test calling `validate_endpoint()` without mocking to confirm the hostname passes; this failure mode is invisible in tests that mock `requests.get` and only manifests in live runs
+1. **CSS class rename breaks 91 E2E tests silently** — E2E page object (`tests/e2e/pages/results_page.py`) has 20+ hard-coded class selectors; failures manifest as timeout errors (looks like a network problem, not a selector mismatch). Prevention: two-class strategy — keep existing class as test anchor with no visual styles, add new class for visual redesign; or migrate page object to `data-testid` anchors before renaming any class.
 
-2. **Spamhaus `127.255.255.254` sentinel misread as a positive listing** — Spamhaus returns this sentinel when queries arrive from public resolvers (Cloudflare 1.1.1.1, Google 8.8.8.8); the DNSBL response parser must check for this value and emit `EnrichmentError("resolver blocked")` not a malicious verdict; test with a mocked `127.255.255.254` DNS response to verify correct handling
+2. **`data-*` attribute contract broken by template restructuring** — `filter.ts`, `cards.ts`, and `enrichment.ts` all read/write `data-ioc-value`, `data-ioc-type`, `data-verdict` on the `.ioc-card` root element. Moving these to a wrapper or child element silently breaks filtering, verdict updates, and card sorting. Prevention: treat these attributes as an interface contract before any template restructuring begins.
 
-3. **DNSBL IPv4 octet reversal absent — silent clean failure** — querying `1.2.3.4.zen.spamhaus.org` instead of `4.3.2.1.zen.spamhaus.org` always returns NXDOMAIN, making every IP appear clean; write the `127.0.0.2` test (Spamhaus canonical test address, always listed) first as TDD red; the failure mode produces no errors, only wrong results
+3. **Scope creep converts refinement into feature work** — v1.1 is refinement-only; any change requiring new Jinja context variables, new TypeScript functions, or a growing unit test count has crossed the scope boundary. Prevention: maintain a deferred features list; anything not achievable within existing route context and TypeScript module signatures goes on the list.
 
-4. **RDAP redirect vs. SEC-06 conflict** — the project security policy (`allow_redirects=False`) and RDAP's requirement to follow HTTP 302 redirects are in direct conflict; this must be resolved in the adapter design before writing code: either confirm empirically that `rdap.org` proxies responses (preferred), or use `whoisit` which handles bootstrapping internally and bypasses `validate_endpoint()` entirely (document the exception)
+4. **Information density regression in pursuit of "cleaner" design** — SOC analysts scan, not browse; consumer web design patterns (whitespace, hover reveals, collapsed defaults) force more clicks per IOC and multiply across a 50-IOC triage session. Prevention: write information density acceptance criteria (IOC value fully visible, verdict label always visible, consensus count not hover-only) before touching any CSS.
 
-5. **Annotations removal crashes app at startup if incomplete** — `AnnotationStore` is imported in `routes.py`; template variables are referenced in `ioc_detail.html` and `results.html`; `annotations.ts` is compiled into the esbuild bundle; run `grep -rn "AnnotationStore\|annotation" app/` to audit all touchpoints before touching any file, remove in dependency order (TS → templates → routes → module directory), verify `flask --debug run` succeeds after each layer
+5. **`innerHTML` introduced during row-factory refactoring** — SEC-08 is a hard constraint; provider names, IOC values, and `raw_stats` arrive from untrusted API responses. Prevention: `createElement + textContent` is the only permitted DOM construction pattern; run `grep -rn "innerHTML\|insertAdjacentHTML" app/static/src/ts/` as a pre-merge gate.
 
 ## Implications for Roadmap
 
-Based on combined research, the milestone maps to 5 phases driven by dependency order and risk profile. The Provider Protocol makes phases 2-5 largely independent of each other once phase 1 is complete.
+Based on combined research, the redesign decomposes cleanly into four sequential phases. The ordering is non-negotiable: each phase creates the stable foundation the next phase requires.
 
-### Phase 1: Annotations Removal
+### Phase 1: Foundation and Contracts
 
-**Rationale:** Purely destructive — eliminates dead code before adding new code. Completing this first means the test suite baseline is accurate for all subsequent provider work. If done last, failing annotation tests would obscure new provider test failures.
-**Delivers:** Clean codebase with no annotation-related Python, TypeScript, routes, or templates. App startup and full test suite pass cleanly. A fresh baseline for v7.0 development.
-**Addresses:** FEATURES.md "remove annotations" (P1); reduces test surface noise for all subsequent phases
-**Avoids:** Pitfall 7 (orphaned imports crashing app at startup) — mitigated by grep-audit-first approach before touching any file
+**Rationale:** Establish all preservation contracts before a single line of visual code changes. Pitfall research shows E2E failures, data attribute breaks, and scope drift all originate from skipping this setup. This phase has no visual output but eliminates the highest-risk failure modes upfront.
 
-### Phase 2: ASNAdapter (Team Cymru DNS)
+**Delivers:** Pre-merge checklist with CSS class preservation rules, data attribute contracts documented in code comments, information density acceptance criteria written out, CSS layer ownership rule established (component classes own all visual properties for existing elements; Tailwind utilities for new layout structures only), accessibility attribute catalog (`aria-*`, `role`, `id` per element), deferred features list initialized.
 
-**Rationale:** Zero new dependencies (dnspython already present), zero SSRF allowlist changes (DNS port 53, not HTTP), direct precedent in existing `DnsAdapter`. Lowest-risk new provider — validates the Provider Protocol extension flow in isolation before any HTTP complexity is introduced.
-**Delivers:** Per-IP CIDR prefix, RIR, allocation date, ASN number and org name via DNS TXT query to Team Cymru `origin.asn.cymru.com`. Supplements existing ip-api.com ASN field with BGP-precision data (CIDR prefix, RIR, allocation date) without duplicating what ip-api.com already shows.
-**Uses:** `dnspython==2.8.0` (existing), `typing.Protocol` adapter pattern (existing)
-**Implements:** ASNAdapter — IOCType.IPV4 + IOCType.IPV6, verdict `no_data`, added to CONTEXT_PROVIDERS
+**Addresses:** Pitfalls 1 (E2E class contract), 2 (data attribute contract), 4 (scope discipline), 5 (density requirements), 6 (CSS specificity), 7 (accessibility)
 
-### Phase 3: DNSBLAdapter
+**Research flag:** None — standard pre-refactor discipline. Skip `/gsd:research-phase`.
 
-**Rationale:** Also DNS-native (no new deps, no SSRF changes), but more complex than ASNAdapter: two IOC types with different query construction (IP octet reversal vs. domain prepend-as-is), multiple zones queried in parallel, and three response categories (listed, clean, sentinel error). The first verdict-producing zero-auth provider — high analyst value for direct reputation signal.
-**Delivers:** IP reputation against Spamhaus ZEN + Barracuda + SpamCop; domain reputation against Spamhaus DBL + SURBL multi. Verdict `malicious` on any zone hit (naming the zones), `clean` on all NXDOMAIN, `EnrichmentError` on `127.255.255.254` sentinel.
-**Uses:** `dnspython==2.8.0` (existing), `ThreadPoolExecutor` within `lookup()` for parallel zone queries (target: 5 zones in under 5 seconds)
-**Implements:** DNSBLAdapter — IOCType.IPV4 + IOCType.DOMAIN; IPv6 DNSBL deferred to v7.x (nibble reversal complexity, rare in triage)
-**Avoids:** Pitfalls 2 (sentinel check), 3 (IPv4 reversal), 4 (domain format), 9 (serial zone latency)
+---
 
-### Phase 4: ThreatFeedAdapter (Feodo Tracker)
+### Phase 2: TypeScript Module Extractions
 
-**Rationale:** First HTTP provider in the milestone — introduces SSRF allowlist change (`feodotracker.abuse.ch`) and the new bulk-feed download pattern (download full JSON, dict lookup, rely on CacheStore TTL). Simpler JSON structure than RDAP (flat list, not deeply nested RFC 9083). Natural second verdict-producing provider, complementing DNSBL with botnet C2 family attribution.
-**Delivers:** Per-IP C2 reputation from Feodo Tracker botnet blocklist. Verdict `malicious` with malware family (Dridex, Emotet, QakBot, etc.) on hit; `clean` when confirmed absent. Note: feed is currently sparse due to law enforcement takedowns — `clean` verdicts are correct and informative, not a bug.
-**Uses:** `requests==2.32.5` (existing), `CacheStore` (existing) for feed TTL
-**Implements:** ThreatFeedAdapter — IOCType.IPV4 only; HTTP bulk-feed pattern; feed parsed into `dict[str, dict]` for O(1) IP lookup after download
-**Avoids:** Anti-Pattern 1 (per-IOC full download) — CacheStore 24h TTL handles refresh; Anti-Pattern 5 (module-level mutable feed state — keep adapters stateless)
+**Rationale:** Extract `verdict-compute.ts` and `row-factory.ts` from `enrichment.ts` before any visual redesign. Architecture research is unambiguous: redesigning rows while computation and rendering are interleaved means touching everything simultaneously. Extraction first isolates the visual redesign to `row-factory.ts` and `input.css` only.
 
-### Phase 5: RDAPAdapter
+**Delivers:** `verdict-compute.ts` (pure computation, no DOM, ~80 LOC), `row-factory.ts` (unified `createProviderRow` with `RowKind` discriminant, ~150 LOC), `enrichment.ts` trimmed to ~300 LOC orchestrator. Zero behavioral change — existing E2E suite passes unchanged after this phase.
 
-**Rationale:** Last because it has the most uncertainty: `rdap.org` redirect-vs-proxy behavior must be confirmed empirically before the design is finalized, RFC 9083 JSON requires defensive parsing at every nested level, and the SEC-06 conflict (`allow_redirects=False`) must be explicitly resolved in a design decision before implementation begins. Highest analyst value of the context providers — domain age ("registered 2 days ago") is the single most actionable triage signal for newly-registered malicious domains.
-**Delivers:** Domain registration data (creation date as "registered N days ago", registrar, nameservers, status codes) and IP registration data (network block name, org, CIDR, country). Verdict `no_data` — registration context is informational.
-**Uses:** `whoisit==4.0.0` (NEW) — preferred if rdap.org issues redirects; `requests` to rdap.org — preferred if rdap.org proxies; `python-dateutil==2.9.x` (NEW transitive)
-**Implements:** RDAPAdapter — IOCType.DOMAIN + IOCType.IPV4 + IOCType.IPV6; GDPR-scoped data model (no registrant contact fields)
-**Avoids:** Pitfall 5 (GDPR noise — contact fields excluded from data model before coding), Pitfall 6 (SEC-06 conflict — resolved in design doc first), Pitfall 8 (bootstrap uncached — whoisit handles per-process caching internally)
+**Addresses:** Architecture "Separate Computation from DOM Mutation" pattern; enables Phase 3 to be visually isolated with compiler verification
+
+**Test gate:** `tsc` compilation passes; all 91 E2E tests pass unchanged; all provider rows render with correct verdict CSS classes.
+
+**Research flag:** None — mechanical extractions with compiler verification. Skip `/gsd:research-phase`.
+
+---
+
+### Phase 3: Visual Redesign — CSS and Row Structure
+
+**Rationale:** With `row-factory.ts` extracted, all visual changes to rows are isolated to one file. CSS changes in `input.css` carry no TypeScript risk. This is the highest creative content of the milestone and the phase that directly addresses the "14 results stapled together" problem.
+
+**Delivers:** Category-grouped provider sections (Reputation / Infrastructure Context / No Data) in `row-factory.ts` and `input.css`, worst-verdict as headline element (CSS sizing in `.ioc-card-header`), verdict breakdown micro-bar (additive JS in `updateSummaryRow` + CSS), no-data section collapsed by default, provider category labels/icons, `@starting-style` entry animation for provider rows, `document.startViewTransition()` wrapping `doSortCards()` for animated card reorder.
+
+**Addresses:** All P1 features from FEATURES.md; uses CSS Grid subgrid, `@container` queries, `@starting-style`, View Transitions API — all in existing stack
+
+**Avoids:** Pitfall 5 (information density), Pitfall 6 (CSS specificity — component classes own existing element properties)
+
+**Test gate:** E2E suite passes; visual inspection of all verdict states (malicious, suspicious, clean, known_good, no_data, error) and all context providers; information density acceptance criteria verified.
+
+**Research flag:** None — CSS patterns verified with HIGH confidence against MDN/caniuse. Skip `/gsd:research-phase`.
+
+---
+
+### Phase 4: HTML Template Restructuring
+
+**Rationale:** HTML shell changes come last because: (a) CSS must be finalized first so template structure reflects confirmed layout decisions, (b) template changes carry the highest risk of breaking the DOM attribute contract — doing them last minimizes time with a broken contract.
+
+**Delivers:** Updated `_ioc_card.html` and `_enrichment_slot.html` for new visual design, all `data-*` attributes preserved on `.ioc-card` root element, detail link Jinja expression preserved verbatim (`url_for('main.ioc_detail', ioc_type=ioc.type.value, ioc_value=ioc.value)`), all `aria-*` and `role` attributes preserved.
+
+**Addresses:** Pitfall 3 (detail link `<path:>` contract), Pitfall 7 (accessibility attributes)
+
+**Pre-merge gate:** Full DOM attribute contract checklist; URL IOC detail link smoke test (`/ioc/url/https://evil.com/beacon` returns 200); full E2E suite at zero failures; `grep` for `innerHTML`.
+
+**Research flag:** None — HTML restructuring follows documented contracts. Skip `/gsd:research-phase`.
+
+---
+
+### Phase 5 (conditional): Inline Context Summary
+
+**Rationale:** The inline context summary (always-visible GeoIP country + ASN org in card header) is a P2 feature architecturally independent of the P1 category grouping changes but higher-complexity. It requires `enrichment.ts` to route context provider results into a new DOM slot above the accordion rather than only into the expanded details container. Execute this phase only if Phases 3-4 deliver cleanly within scope.
+
+**Delivers:** 2-3 key context fields visible in card header without requiring accordion expansion; staleness indicator for cached results in summary row; scan date on summary row.
+
+**Addresses:** P2 features from FEATURES.md (inline context summary, staleness indicator, scan date)
+
+**Research flag:** LOW complexity, but the timing dependency needs targeted analysis before implementation. Context providers may arrive after the card's initial summary row render; confirm whether `updatePendingIndicator` handles this correctly for the new inline slot.
+
+---
 
 ### Phase Ordering Rationale
 
-- Phase 1 before all others: destructive removal creates a clean test baseline; annotation test failures would mask provider failures in later phases
-- Phases 2-3 before 4-5: DNS-native providers validate the Provider Protocol extension flow with zero SSRF risk; HTTP providers with allowlist changes come after the DNS pattern is proven
-- Phase 3 (DNSBL) before Phase 4 (ThreatFeed): both are verdict-producing, but DNSBL is DNS-native and has no HTTP complexity; building DNSBL first ensures the verdict-producing path is working before introducing HTTP bulk-feed pattern
-- Phase 5 (RDAP) last: most uncertain phase benefits from having all other providers working as reference implementations; also contains the one design decision (redirect vs. proxy) that cannot be resolved from research alone
+- Phase 1 must be first: contract violations are the most expensive failure mode; establish the insurance before doing any work.
+- Phase 2 before Phase 3: the 928-LOC `enrichment.ts` monolith makes visual isolation impossible without extraction; it is the necessary precondition for the redesign.
+- Phase 3 (CSS/JS) before Phase 4 (HTML): once CSS is stable, template changes are mechanical; reversing this order means iterating HTML structure while CSS is still changing.
+- Phase 5 conditional: avoids forcing scope expansion on the core redesign; inline context summary is achievable but not required to solve the "14 results stapled together" problem.
 
 ### Research Flags
 
-Phases needing implementation-time validation before writing adapter code:
+Phases needing deeper targeted research during planning:
+- **Phase 5 (Inline Context Summary):** Timing dependency — context providers may complete after the card's initial summary row render; needs targeted analysis of enrichment polling flow before implementation to confirm whether enrichment.ts handles partial results correctly for the new inline DOM slot.
 
-- **Phase 5 (RDAP):** Confirm empirically whether `rdap.org` proxies responses (returns 200 with the authoritative registry's data) or issues 302 redirects to authoritative servers. Test: `GET https://rdap.org/domain/google.com` with `allow_redirects=False`, inspect response status. If 200: single allowlist entry, standard SEC-06 behavior preserved. If 302: use `whoisit` library (handles bootstrapping internally, bypasses `validate_endpoint()` — document this exception) or implement manual redirect following limited to known IANA-blessed RDAP hostnames.
-
-Phases with standard well-understood patterns (no additional research needed):
-
-- **Phase 1 (Annotations Removal):** All touchpoints fully mapped in ARCHITECTURE.md. The grep-audit checklist is complete. No unknowns.
-- **Phase 2 (ASNAdapter):** Team Cymru DNS TXT format verified, stable, free forever. Direct precedent in existing `DnsAdapter`. No unknowns.
-- **Phase 3 (DNSBLAdapter):** DNS A-record DNSBL mechanism fully documented. Test fixtures (`127.0.0.2` for IPs, `test.surbl.org` for domains) are official and stable. Spamhaus sentinel behavior confirmed from primary Spamhaus advisory documents. No unknowns beyond runtime resolver configuration (handled by sentinel check).
-- **Phase 4 (ThreatFeedAdapter):** Feodo Tracker URL and JSON schema stable and verified. Bulk-feed caching pattern is simple. Feed sparseness (law enforcement takedowns) is a known condition, not a code concern.
+Phases with standard patterns (skip `/gsd:research-phase`):
+- **Phase 1:** Pre-refactor contract documentation — standard discipline; no unknowns.
+- **Phase 2:** TypeScript module extraction — mechanical with compiler verification; extraction boundaries are clear.
+- **Phase 3:** CSS patterns all verified with HIGH confidence against MDN/caniuse and the existing codebase.
+- **Phase 4:** HTML template restructuring — follows documented DOM attribute contracts.
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | All libraries verified against PyPI and official docs; version compatibility confirmed; alternatives analyzed and rejected with documented rationale; only 2 net-new packages |
-| Features | HIGH | P1/P2/P3 prioritization grounded in analyst triage workflow; anti-features documented with concrete technical reasons; MVP scope is tight and well-bounded |
-| Architecture | HIGH (DNS + ThreatFeed + annotations removal), MEDIUM (RDAP) | DNSBL, ASN, ThreatFeed, and annotations removal fully mapped; RDAP has one open design question (redirect vs. proxy) requiring empirical validation |
-| Pitfalls | HIGH | 9 pitfalls identified from direct codebase inspection + verified primary sources; Spamhaus sentinel, DNSBL reversal patterns, annotations removal scope, RDAP redirect conflict are all confirmed real failure modes with recovery paths |
+| Stack | HIGH | Existing codebase directly inspected; CSS feature browser support verified against MDN/caniuse and Can I Use; all native API targets confirmed at the es2022 build target |
+| Features | HIGH | Primary sources: VirusTotal docs, live Shodan and Hybrid Analysis inspection, IntelOwl official docs; design recommendations have strong cross-platform consensus from five independent platforms |
+| Architecture | HIGH | Full source code review of all 13 TypeScript modules and 6 templates; extraction boundaries are mechanically verifiable with `tsc`; DOM attribute contracts directly confirmed from E2E test selectors |
+| Pitfalls | HIGH | Derived entirely from direct codebase inspection (E2E selectors, TypeScript dependency graph, CSS layer structure); not theoretical — these are structural facts about the existing system with recovery paths |
 
-**Overall confidence:** HIGH with one known gap (RDAP redirect behavior at rdap.org)
+**Overall confidence:** HIGH
 
 ### Gaps to Address
 
-- **`rdap.org` redirect vs. proxy behavior (Phase 5):** Research produced conflicting signals — rdap.org documentation implies proxying, but rdap.net and similar services confirm redirect behavior. During Phase 5, this must be resolved empirically before the adapter design is committed. Decision tree is clear: proxy → use `requests` + standard allowlist; redirect → use `whoisit` library with documented SEC-06 exception. This is the only unresolved item.
+- **Inline context summary timing (Phase 5):** When a context provider result arrives via polling, the card may already have rendered its summary row with no context slot. Whether `enrichment.ts` handles writing into a new inline context slot correctly for partially-completed enrichment jobs needs verification during Phase 5 planning — not a blocker for Phases 1-4.
 
-- **Feodo Tracker feed sparseness (Phase 4):** The feed is currently nearly empty (law enforcement takedowns of Emotet 2021, Operation Endgame 2024). ThreatFeedAdapter will typically return `clean` verdicts. This is technically correct but may cause analysts to question the provider's value. Consider adding a `last_updated` timestamp from the feed JSON to `raw_stats` so analysts can see the feed was recently checked. This is a UX enhancement, not a correctness issue.
+- **Verdict micro-bar animation interaction (Phase 3):** Whether animating the bar fill (width transition as provider results accumulate) conflicts with the `sortCardsBySeverity` debounce needs a quick prototype check early in Phase 3. The fix is simple if it occurs (skip animation during active sort), but worth verifying before committing to the bar animation approach.
 
-- **System resolver on analyst workstations (Phase 3):** SentinelX uses `dns.resolver.Resolver(configure=True)` which reads the system resolver. On a cloud jump box configured with Cloudflare/Google DNS, Spamhaus returns `127.255.255.254`. The sentinel check handles this gracefully (surfaces as "resolver blocked" note, not a false positive), but analysts running from cloud hosts lose Spamhaus DNSBL signal. Document this limitation in the UI help text and release notes.
+- **Tailwind standalone scanner content glob (Phase 3-4):** If new utility classes are added in redesigned templates, confirm they are included in the Tailwind standalone scanner's content configuration. This is a known integration gotcha — utility classes added to templates not in the scanner glob silently drop from `dist/style.css`.
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- Spamhaus DNSBL zones and fair-use policy — zone names, return codes, `127.255.255.254` sentinel rollout confirmed from official Spamhaus advisories
-- Team Cymru IP-to-ASN DNS service — query format (`origin.asn.cymru.com` TXT), response format, free-forever policy verified
-- ICANN RDAP announcement January 2025 — WHOIS sunset confirmed; RDAP now the sole authoritative protocol for gTLD registrations
-- RFC 9083 (RDAP JSON responses) — response field structure, events array, entities array format
-- RFC 9224 (RDAP bootstrap registry) — caching requirement (SHOULD NOT fetch on every request) confirmed
-- RFC 9537 (RDAP Redacted Fields) — GDPR redaction formalization March 2024; explains why registrant contact fields return "REDACTED FOR PRIVACY"
-- Feodo Tracker blocklist — URL, JSON schema, CC0 license, zero-auth confirmed; feed activity MEDIUM (sparse due to takedowns)
-- `whoisit` v4.0.0 on PyPI — pure Python, synchronous, only `requests` + `python-dateutil` dependencies confirmed
-- BGPView shutdown November 2025 — confirmed; do not use in new code
-- SentinelX codebase direct inspection — `app/config.py`, `app/enrichment/http_safety.py`, `app/enrichment/adapters/dns_lookup.py`, `app/enrichment/adapters/ip_api.py`, `app/routes.py` all reviewed for integration points
+- SentinelX codebase direct inspection: `app/static/src/ts/modules/enrichment.ts` (928 LOC), `cards.ts`, `filter.ts`, `types/api.ts`, `types/ioc.ts`, `utils/dom.ts`, `main.ts`
+- SentinelX templates: `results.html`, `_ioc_card.html`, `_enrichment_slot.html`, `_verdict_dashboard.html`, `_filter_bar.html`, `ioc_detail.html`
+- SentinelX E2E test selectors: `tests/e2e/pages/results_page.py`, `test_results_page.py`, `test_extraction.py`, `test_copy_buttons.py`
+- SentinelX CSS: `app/static/src/input.css` (design tokens, keyframes, component classes)
+- [View Transition API — MDN](https://developer.mozilla.org/en-US/docs/Web/API/View_Transition_API) — API shape, browser support
+- [What's new in view transitions (2025) — Chrome Developers](https://developer.chrome.com/blog/view-transitions-in-2025) — same-document transitions, Baseline Oct 2025 confirmed
+- [VirusTotal Reports Documentation](https://docs.virustotal.com/docs/results-reports) — tab structure, domain/IP vs file/URL report information architecture
+- [IntelOwl Usage Documentation](https://intelowlproject.github.io/docs/IntelOwl/usage/) — DataModel synthesis pattern, Visualizer aggregation
+- [Hybrid Analysis Sample Report](https://hybrid-analysis.com/sample/b558f0b1444be5df69027315f7aad563c54a3f791cebbb96a56fce7e5176f8f5/) — live Malicious/Suspicious/Informative grouping inspection
+- [Shodan Host Page](https://www.shodan.io/host/203.185.191.41) — live inspection of category-first information architecture
+- [animation-timeline: view() — Can I use](https://caniuse.com/mdn-css_properties_animation-timeline_view) — 82.81% global support, Firefox flag-only as of March 2026
 
 ### Secondary (MEDIUM confidence)
-- `rdap.org` rate limiting (10 req/10 sec via Cloudflare 429) — documented at about.rdap.org; redirect vs. proxy behavior requires empirical validation
-- SURBL `multi.surbl.org` public resolver safety — no explicit restriction documented in primary sources
-- `combined.abuse.ch` DNSBL — no public resolver restriction documented
-- RDAP GDPR redaction statistics (58.2% proxy protection, 10.8% registrant visibility as of January 2024) — Interisle Consulting data via domain privacy research sources
-
-### Tertiary (LOW confidence)
-- Spamhaus fair-use policy page content — page failed to load during research; sentinel behavior is HIGH confidence from primary Spamhaus advisories; fair-use rate limit policy stated from secondary sources only
+- [Tailwind CSS v4.0 release post](https://tailwindcss.com/blog/tailwindcss-v4) — v4 CSS feature set, `@theme` config model
+- [Tailwind CSS v4 standalone CLI — GitHub Discussion #17638](https://github.com/tailwindlabs/tailwindcss/discussions/17638) — v4.1.3 standalone binary confirmed
+- [The New CSS Layout Toolbox — Medium Oct 2025](https://medium.com/@kedarbpatil07/the-new-css-layout-toolbox-subgrid-container-queries-and-more-41cf94ebf821) — subgrid 97%+ global support
+- [URLScan.io About](https://urlscan.io/about/) — "digestible chunks, analyst-first approach" design philosophy
+- [Rearrange / Animate CSS Grid Layouts with the View Transition API — Bram.us](https://www.bram.us/2023/05/09/rearrange-animate-css-grid-layouts-with-the-view-transition-api/) — grid reorder + View Transitions implementation pattern
 
 ---
-*Research completed: 2026-03-15*
+*Research completed: 2026-03-16*
 *Ready for roadmap: yes*

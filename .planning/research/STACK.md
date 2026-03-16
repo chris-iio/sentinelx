@@ -1,242 +1,212 @@
 # Stack Research
 
-**Domain:** Threat intelligence enrichment — DNSBL reputation, public threat feeds, RDAP
-registration data, ASN/BGP intelligence
-**Researched:** 2026-03-15
-**Confidence:** HIGH (all libraries verified against PyPI, official documentation, and live
-API endpoints; see Sources)
+**Domain:** Results page redesign — multi-source aggregation UI, CSS layout, animation
+**Milestone:** v1.1 Results Page Redesign
+**Researched:** 2026-03-16
+**Confidence:** HIGH (existing stack verified from codebase; CSS feature support verified against
+official MDN/caniuse; Tailwind v4 standalone verified from GitHub Discussions)
 
 ---
 
-## Context: v7.0 Additive Stack Only
+## Context: Presentation Refinement Only
 
-SentinelX v6.0 baseline is locked and shipped. This document covers ONLY new capabilities
-needed for v7.0 Free Intel. Do not re-evaluate Flask, requests, dnspython, iocextract,
-iocsearcher, esbuild, Tailwind, or any of the 13 existing providers.
+The existing stack is locked and ships. This document answers one question: **what, if anything,
+does the v1.1 results page redesign require beyond what already exists?**
 
-The existing stack after v6.0:
-- `requests==2.32.5` — all HTTP adapters
-- `dnspython==2.8.0` — DNS resolution (DnsAdapter, port 53 directly)
-- 12 hosts in `ALLOWED_API_HOSTS` SSRF allowlist
+**Existing baseline (do not re-evaluate):**
 
-The question this research answers: what new libraries and API endpoints enable DNSBL checks,
-public threat feed lookups, RDAP registration data, and ASN/BGP intelligence?
+| Tool | Version | How Used |
+|------|---------|----------|
+| TypeScript | 5.8 | 13 modules, strict mode, IIFE output via esbuild |
+| esbuild | 0.27.3 | Standalone binary, `--target=es2022`, bundles to `dist/main.js` |
+| Tailwind CSS | v3.4.17 | Standalone binary (no Node.js), utility classes in templates |
+| Custom CSS | input.css (58KB) | Design tokens, keyframes, component classes |
+| Jinja2 | Flask 3.1 | Server-side templates, partials, macros |
+
+The CSS design system already has: `--ease-out-expo`, `--ease-out-quart`, `--duration-fast/normal/slow`,
+`fadeSlideUp`, `fadeIn`, `slideInFade`, `slideOutFade` keyframes, shimmer-line loading skeleton,
+`--card-index` stagger via CSS custom property, verdict color triples, zinc hierarchy tokens.
 
 ---
 
-## Findings by Capability
+## Verdict: Current Stack Is Sufficient — No New Libraries Required
 
-### Capability 1: DNSBL Reputation Checks
+The redesign can achieve everything it needs through:
+1. CSS features already available in the current `input.css` pipeline (Tailwind + custom)
+2. ES2022 vanilla TypeScript (already compiled by esbuild)
+3. Native browser APIs that ship in all modern browsers
 
-**Verdict: implement with existing `dnspython` — no new library.**
+No npm packages, no new standalone binaries, no new Python dependencies.
 
-DNSBL lookup is a reverse-IP DNS query, not an HTTP call. The mechanism is:
-1. Reverse the IP octets: `1.2.3.4` → `4.3.2.1`
-2. Append the DNSBL zone: `4.3.2.1.zen.spamhaus.org`
-3. Resolve as an A record — `NXDOMAIN` means not listed, `127.0.0.x` means listed
-4. The return code encodes which sub-list the IP appears on
+---
 
-This is exactly what `dnspython` already does in `DnsAdapter`. The DNSBL provider is a
-new adapter that reuses the same `dns.resolver.Resolver` pattern.
+## Recommended Stack
 
-**Spamhaus public mirror restriction (HIGH confidence, critical):**
-Spamhaus is blocking queries arriving from public resolvers and cloud-hosted IPs. Error code
-`127.255.255.254` is being phased in across major cloud providers' IP space (Hetzner Feb 2025,
-Microsoft Apr 2025, Korea Telecom Sep 2025). A SOC analyst running SentinelX on their own
-workstation (with their ISP's recursive resolver) is not affected. A jump box hosted at a
-cloud provider may receive `127.255.255.254` responses from Spamhaus. The free Data Query
-Service (DQS) resolves this with a free key registration, but adds a key-management burden.
+### Core Technologies (unchanged)
 
-**DNSBL zones to query (curated for reliability):**
+| Technology | Version | Purpose | Why Sufficient |
+|------------|---------|---------|---------------|
+| TypeScript | 5.8 | DOM manipulation, enrichment polling, card reordering | Already handles all dynamic behavior; 13 modules prove the architecture scales |
+| esbuild | 0.27.3 | Compiles TS to single IIFE bundle | `--target=es2022` enables all native APIs needed (View Transitions, CSS custom properties) |
+| Tailwind CSS | v3.4.17 standalone | Utility classes for layout adjustments | Generates only used classes; CSS Grid/Flexbox utilities are comprehensive |
+| Custom CSS (input.css) | — | Design tokens, component classes, keyframes | Already has motion primitives; redesign extends existing keyframes, not replaces them |
 
-| Zone | Type | Coverage | Public Resolver Safe |
-|------|------|----------|----------------------|
-| `zen.spamhaus.org` | IP | SBL + XBL + PBL combined | Yes (own resolver); blocked from cloud/shared resolvers |
-| `dbl.spamhaus.org` | Domain | Spamhaus Domain Blocklist | Same restriction as zen |
-| `multi.surbl.org` | Domain | SURBL combined URI blocklist | Generally safe; no public resolver restriction documented |
-| `combined.abuse.ch` | IP | abuse.ch combined (botnet/malware) | Generally safe |
-| `b.barracudacentral.org` | IP | Barracuda Reputation Block List | Safe; free registration recommended to avoid throttling |
+### CSS Capabilities to Leverage (Already Available, No New Setup)
 
-**Approach:** Query all five zones per IP/domain lookup. Catch `NXDOMAIN` as "clean", catch
-`127.255.255.254` returns from Spamhaus as "query blocked" (surface this to analyst as a
-note, not an error), and map positive return codes to listed verdict.
+These are native CSS features available in the current browser target (Chrome/Edge/Firefox/Safari modern).
+They require zero new tools — just new CSS rules in `input.css`.
 
-**Do not use `pydnsbl`:** Version 1.1.7, released March 2025. Uses `asyncio` + `aiodns`.
-The entire SentinelX enrichment pipeline is synchronous (Flask request → thread pool →
-provider.lookup() calls). Introducing an async library requires event loop management that
-conflicts with the existing architecture. The DNSBL pattern is 10 lines of dnspython — no
-library needed.
+| Technique | Availability | Purpose in Redesign | Confidence |
+|-----------|-------------|---------------------|------------|
+| CSS Grid subgrid | Baseline (97%+ support) | Align card sections (header, enrichment zone, footer) across the card grid without JavaScript — headers stay level, stat rows align across cards | HIGH — Chrome 117+, Firefox 71+, Safari 16+ |
+| CSS `@container` queries | Baseline (95%+ support) | Cards adapt their internal layout based on their allocated width, not viewport — handles wide vs narrow grid slots without media query hacks | HIGH — Chrome 106+, Firefox 110+, Safari 16+ |
+| `view-transition-name` + `document.startViewTransition()` | Baseline Newly Available Oct 2025 | Animate card reordering (sort by severity) so cards glide to their new positions instead of teleporting — same-document transitions work in Chrome 111+, Firefox 133+, Safari 18+ | HIGH for same-document transitions |
+| CSS `animation-timeline: view()` (scroll-driven) | ~83% global support, Safari 26+ only | Animate cards entering the viewport — LOW PRIORITY, only suitable as progressive enhancement because Firefox does not support it as of March 2026 | MEDIUM — skip for MVP, add with `@supports` guard later |
+| `@starting-style` (entry animation) | Chrome 117+, Firefox 129+, Safari 17.5+ | Animate new detail rows appearing — triggers animation only on element insertion, not every render | HIGH — better than existing JS-managed `fadeSlideUp` for dynamically added rows |
+| CSS `color-mix()` | Baseline (95%+ support) | Derive hover/focus states from verdict color tokens without hardcoding more hex values | HIGH |
+| CSS `transition: grid-template-rows` | Modern browsers | Animate the expand/collapse of `.enrichment-details` with `grid-template-rows: 0fr` → `1fr` trick — smoother than `max-height` hacks | HIGH — known pattern, works in all modern browsers |
 
-### Capability 2: Public Threat Feed Lookups
+### View Transitions for Card Sort Animation
 
-**Verdict: use `requests` with three zero-auth HTTP API endpoints — no new library.**
+The existing `doSortCards()` in `cards.ts` re-appends DOM nodes synchronously — cards teleport to
+new positions. Wrapping this in `document.startViewTransition()` with `view-transition-name`
+CSS properties on each card produces animated FLIP-style movement:
 
-The project already queries abuse.ch services (MalwareBazaar, ThreatFox, URLhaus). Three
-additional zero-auth endpoints provide complementary feed coverage:
-
-| Service | Endpoint | What it covers | Auth |
-|---------|----------|---------------|------|
-| Feodo Tracker | `https://feodotracker.abuse.ch/downloads/ipblocklist_recommended.json` | Active botnet C2 IPs (Dridex, Emotet, TrickBot, QakBot, BazarLoader) | None |
-| abuse.ch ThreatFox API | Already in project | IOC-type lookup across all types | Free key (existing) |
-| PhishTank | `https://checkurl.phishtank.com/checkurl/` | Phishing URL verification | Free key (separate) |
-
-**Feodo Tracker approach:** Download the JSON blocklist on each request and search for the
-IP. The list is updated every 5 minutes. This is a bulk download (not a per-IP API lookup
-endpoint). Better approach: cache the parsed set server-side with the existing SQLite cache
-and refresh TTL of 15 minutes. A local `set[str]` membership check is O(1).
-
-**Important:** The project already has URLhaus, MalwareBazaar, and ThreatFox. These already
-cover the majority of "public threat feed" use cases. The Feodo Tracker C2 blocklist is the
-only significant gap — it specifically covers active C2 infrastructure rather than malware
-samples or IOC sharing. Phishing feed lookups are lower priority because URLhaus and OTX
-already return phishing signals.
-
-**Recommendation:** One new zero-auth adapter for Feodo Tracker C2 blocklist (IPs only).
-Add `feodotracker.abuse.ch` to `ALLOWED_API_HOSTS`.
-
-### Capability 3: RDAP Registration Data
-
-**Verdict: add `whoisit==4.0.0` — introduces one new transitive dependency (`python-dateutil`).**
-
-RDAP is a structured JSON API that replaced WHOIS. It provides registrar, creation date,
-expiry date, nameservers, and registrant organization for domains. For IPs, it provides
-network block owner, RIR, and allocation date. The PROJECT.md v7.0 target explicitly calls
-this out; the PROJECT.md "Out of Scope" section previously listed WHOIS as out of scope
-citing GDPR privacy redaction — RDAP is a different protocol that returns more structured
-data, but is also subject to the same GDPR redaction for domain registrant contact info.
-
-**What RDAP returns that is useful for triage:**
-- Domain: registrar name, creation date, expiry date, nameservers (all usually present
-  even with privacy redaction on contact fields)
-- IP: network block CIDR, network name, RIR, organization, country
-
-**Library options:**
-
-| Library | Version | Dependencies | Notes |
-|---------|---------|-------------|-------|
-| `whoisit` | 4.0.0 | `requests`, `python-dateutil` | Pure Python. Handles IANA bootstrap (finding the right RIR for each IP/domain TLD). Returns datetime objects. Synchronous. Covers domains + IP. HIGH confidence. |
-| `whodap` | 0.2.x | `httpx`, `dnspython` | async-first; sync support via `asyncio.run()`. Adds `httpx` dependency. |
-| `rdap` | latest | `requests` | Newer, less documented, smaller user base. MEDIUM confidence. |
-
-**Choose `whoisit`:** It is pure synchronous, depends only on `requests` (already present) and
-`python-dateutil` (not yet present), and handles IANA bootstrapping correctly — finding the
-authoritative RDAP endpoint for a given TLD or RIR is non-trivial, and whoisit solves this.
-The bootstrap data from IANA is cached per-process via `whoisit.bootstrap_info()`.
-
-**New dependency introduced:** `python-dateutil` (for datetime parsing in whoisit). This is
-a low-risk, widely used library. No version conflicts with the existing stack.
-
-**SSRF allowlist impact:** whoisit queries multiple RDAP endpoints (arin.net, ripe.net,
-lacnic.net, apnic.net, afrinic.net, rdap.verisign.com, rdap.nominet.org.uk, etc.) depending
-on the IP or domain TLD. These are not fixed hostnames. The existing `validate_endpoint()`
-SSRF check in `http_safety.py` must be bypassed for RDAP, or the RDAP adapter must manage
-its own outbound call (bypassing `http_safety`) with its own timeout. Because whoisit uses
-`requests` internally, it does not go through the project's `validate_endpoint()`. This is
-acceptable: RDAP bootstrapping resolves only IANA-blessed registrars, not arbitrary URLs.
-Document this exception clearly in the adapter file. Apply a request timeout via whoisit's
-session configuration.
-
-### Capability 4: ASN/BGP Intelligence
-
-**Verdict: use `ipapi.is` via `requests` — no new library. One new SSRF allowlist entry.**
-
-`ipapi.is` returns ASN number, organization name, network type (hosting/ISP/business/
-education/government), abuse email, route/prefix (CIDR), RIR, and active status. Free tier:
-1,000 lookups/day with no authentication required. The endpoint is:
-
-```
-GET https://api.ipapi.is?q=<ip_address>
+```typescript
+// In cards.ts — replace doSortCards() body with:
+if ('startViewTransition' in document) {
+  document.startViewTransition(() => doSortCards());
+} else {
+  doSortCards(); // graceful fallback — existing behavior
+}
 ```
 
-JSON response includes an `asn` object with fields: `asn`, `org`, `type`, `abuse`,
-`route`, `country`, `rir`, `active`.
+This requires assigning `view-transition-name` values. The `--card-index` CSS custom property
+pattern already in `ui.ts` provides a template: assign names dynamically from TypeScript using
+`card.style.setProperty('view-transition-name', 'ioc-card-' + CSS.escape(iocValue))`.
 
-**BGPView is not an option:** BGPView announced shutdown on November 26, 2025. Do not use it
-for new code.
+No new library. Zero bundle size impact. Graceful degradation is built-in — browsers without
+support just execute the DOM change without animation.
 
-**The existing `ip-api.com` provider does NOT cover ASN:** ip-api.com returns GeoIP (country,
-city, lat/lon, ISP name, proxy/VPN flags) but does not return ASN number, network CIDR, RIR,
-or abuse contact. `ipapi.is` fills this gap with different, complementary data.
+**Browser support:** Chrome 111+, Edge 111+, Firefox 133+ (Baseline Oct 2025), Safari 18+.
+HIGH confidence this is safe for production use.
 
-**Overlap with existing `ip-api.com` provider:** Both services return country and org name.
-The `ipapi.is` adapter should not duplicate fields already present from ip-api.com. Surface
-only the ASN-specific fields: ASN number, network type classification, abuse contact, CIDR
-prefix.
+### `@starting-style` for Provider Row Entry Animation
 
-**Add `api.ipapi.is` to `ALLOWED_API_HOSTS`.**
+The current `enrichment.ts` appends provider detail rows with `detailsContainer.appendChild(row)`.
+These rows appear instantly. Adding an entry animation requires either a JavaScript class-toggle
+trick or `@starting-style`, which specifies the initial painted state when an element is first
+inserted:
+
+```css
+.provider-detail-row {
+  transition: opacity 200ms var(--ease-out-quart), transform 200ms var(--ease-out-quart);
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@starting-style {
+  .provider-detail-row {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+```
+
+No TypeScript changes required. The CSS handles it automatically on element insertion.
+Browser support: Chrome 117+, Firefox 129+, Safari 17.5+ — effectively all modern browsers.
+
+### Grid Layout for Multi-Source Presentation
+
+The current `.ioc-cards-grid` uses CSS Grid (from the existing `ioc-cards-grid` class in `input.css`).
+For the redesign, the key layout technique is **subgrid** inside each card:
+
+```css
+.ioc-card {
+  display: grid;
+  grid-template-rows: auto auto 1fr; /* header / original / enrichment */
+}
+
+/* When cards are in a grid row: subgrid aligns sections across columns */
+.ioc-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+}
+```
+
+Subgrid lets the enrichment slot expand uniformly within a row — the "meta-search engine" feel
+where all cards in a row feel like a coherent table rather than independent boxes.
+
+### Supporting Browser APIs (Already Available at es2022 Target)
+
+| API | Purpose | Notes |
+|-----|---------|-------|
+| `Intersection Observer` | Lazy-reveal card stagger animations as analyst scrolls | Already in all modern browsers; use instead of scroll-driven CSS animations (better Firefox support) |
+| `CSS.escape()` | Safe dynamic CSS selector construction | Already used in `cards.ts` — continue the pattern |
+| `document.startViewTransition()` | Card sort animation | Wrap existing `doSortCards()` call |
+| `ResizeObserver` | Detect card width changes for container query fallback | Available in all modern browsers if polyfill needed |
 
 ---
 
-## New Library Summary
+## Tailwind CSS v4 Consideration
 
-| Library | Version | New? | Purpose | Install |
-|---------|---------|------|---------|---------|
-| `dnspython` | 2.8.0 | No (existing) | DNSBL lookups via DNS A record queries | Already installed |
-| `requests` | 2.32.5 | No (existing) | Feodo Tracker blocklist download + ipapi.is HTTP calls | Already installed |
-| `whoisit` | 4.0.0 | **YES** | RDAP registration data (domains + IPs) | `pip install whoisit==4.0.0` |
-| `python-dateutil` | 2.9.x | **YES** (transitive via whoisit) | Date parsing in whoisit | Installed automatically |
+**Verdict: stay on Tailwind v3.4.17 for this milestone.**
 
-**Net new packages to add to `requirements.txt`: 2** (`whoisit`, `python-dateutil`)
+Tailwind v4 is available as a standalone binary (confirmed at v4.1.3 from GitHub releases).
+The v4 config model shifts from `tailwind.config.js` to `@theme {}` in CSS — a meaningful
+migration requiring changes to `input.css` and removal of `tailwind.config.js`.
 
----
+**Why not v4 for v1.1:**
 
-## SSRF Allowlist Changes
+1. The v3 → v4 migration is a separate task with its own regression surface — utility class
+   names changed in some cases; existing `input.css` uses `@tailwind base/components/utilities`
+   directives that v4 replaces with `@import "tailwindcss"`.
+2. The CSS features needed for the redesign (`container queries`, `subgrid`, `@starting-style`,
+   View Transitions) are all native browser features — they do not require Tailwind v4.
+3. v4 does add useful utilities (native container query variants `@sm:`, `@lg:`, `@container`
+   shorthand) but the project already has full `@container` support through custom CSS.
 
-Add these entries to `ALLOWED_API_HOSTS` in `app/config.py`:
-
-| Hostname | Purpose |
-|----------|---------|
-| `api.ipapi.is` | ASN/BGP intelligence (zero-auth, 1000/day free) |
-| `feodotracker.abuse.ch` | Feodo Tracker C2 blocklist download (zero-auth) |
-
-RDAP (whoisit) queries bypass `validate_endpoint()` — document this in the adapter file.
-DNSBL (dnspython) does not use HTTP — no SSRF surface, no allowlist entry needed (same
-pattern as the existing `DnsAdapter`).
-
----
-
-## New Provider Adapter Map
-
-| Adapter file | Capability | IOC Types | Auth | Library |
-|-------------|-----------|-----------|------|---------|
-| `dnsbl.py` | DNSBL reputation checks | `IPv4`, `IPv6`, `DOMAIN` | None | `dnspython` (existing) |
-| `feodo.py` | Feodo Tracker C2 blocklist | `IPv4` | None | `requests` (existing) |
-| `rdap.py` | RDAP registration data | `DOMAIN`, `IPv4`, `IPv6` | None | `whoisit` (new) |
-| `asn_intel.py` | ASN/BGP intelligence | `IPv4`, `IPv6` | None | `requests` (existing) |
-
-Each adapter: one file in `app/enrichment/adapters/`, one `registry.register()` call in
-`app/enrichment/setup.py`. No other files change (zero-change provider protocol holds).
+**Upgrade path:** Tailwind v4 is a natural follow-on for a cleanup milestone after v1.1 ships.
+The redesigned CSS will be easier to migrate than the current accumulation of v3 workarounds.
 
 ---
 
 ## What NOT to Add
 
-| Avoid | Why | Use Instead |
-|-------|-----|-------------|
-| `pydnsbl` v1.1.7 | asyncio/aiodns dependency; async-only API incompatible with Flask sync architecture | Custom 10-line implementation using existing `dnspython` |
-| `aiodnsbl` | Same async problem as pydnsbl; fork of pydnsbl with less adoption | Same: custom `dnspython` implementation |
-| `pyasn` | Requires 100+ MB offline BGP MRT dump files with weekly refresh. Wrong model for an analyst workstation tool. | `ipapi.is` via HTTP — zero local files, zero maintenance |
-| BGPView API | Announced shutdown November 2025 — do not use in new code | `ipapi.is` API |
-| `ipwhois` library | Overlaps with `whoisit` for IP RDAP. The project recommended ipwhois in v6.0 research but ultimately shipped without it (ip-api.com was used instead). Now `whoisit` is the better choice: covers both domains AND IPs, pure requests dependency. | `whoisit` for all RDAP needs |
-| `whodap` | Async-first; adds `httpx` dependency; whoisit covers identical RDAP surface synchronously | `whoisit` |
-| `geoip2` + GeoLite2 .mmdb files | Not needed for v7.0 — ip-api.com already covers GeoIP in v6.0. Adding offline databases would require DB file management, MaxMind account setup, and refresh automation. | Existing `ip-api.com` provider (already shipped) |
-| PhishTank API | Requires free key registration — adds key management burden. URLhaus + ThreatFox already cover phishing URLs effectively. | Existing URLhaus and ThreatFox providers |
-| Spamhaus DQS key | Free but requires account registration — contradicts "zero API keys" goal for default experience | Fall back gracefully when `127.255.255.254` returned (surface as "query blocked via public resolver") |
+| Avoid | Why | What to Use Instead |
+|-------|-----|---------------------|
+| Chart.js / D3.js / any data viz library | The "data visualization" need for a results page is narrow: conviction bars, engine counts. CSS-only progress bars (width: percentage; background: verdict color) cover 100% of the use case. A 100KB chart library is disproportionate. | CSS `width` percentages + custom properties |
+| Framer Motion / GSAP / Anime.js | Animation library for vanilla TS makes no sense. These target React/component frameworks. GSAP is 60KB+. | CSS `@starting-style`, View Transitions API, `transition` property |
+| Motion One (JS animation library) | Lower overhead than GSAP but still adds bundle size for capabilities CSS now handles natively. | Native CSS transitions and `@starting-style` |
+| Alpine.js / Htmx | Reactive micro-frameworks would require restructuring the existing 13-module TypeScript pattern. High migration cost, no gain for a refinement milestone. | Existing vanilla TS modules |
+| Intersection Observer polyfill | Not needed — all modern browsers support it natively. The app is desktop-only, analyst workstations run current browsers. | Native Intersection Observer |
+| CSS scroll-driven animations (`animation-timeline: view()`) as primary mechanism | Firefox does not support this as of March 2026 (available only under a flag). Safari only in v26 (beta as of research date). 82% support is not sufficient for a production feature that analysts depend on. | Intersection Observer API in TypeScript — 98%+ support, identical visual result |
+| `view-transition-class` (new 2025 feature) | Chrome 139+ only as of March 2026. Too new for production use. | Plain `view-transition-name` per element |
+| React / Vue / Svelte | Out of scope per PROJECT.md. The vanilla TS architecture handles this complexity. | Vanilla TypeScript |
 
 ---
 
-## Installation
+## Animation Strategy Summary
 
-```bash
-# New packages only — add to requirements.txt
-pip install whoisit==4.0.0
+The redesign has three distinct animation contexts:
 
-# python-dateutil is a transitive dependency of whoisit — installed automatically
-# Pin it explicitly for reproducible builds:
-pip install python-dateutil==2.9.0
-```
+| Context | Technique | Rationale |
+|---------|-----------|-----------|
+| Card entry (page load) | Existing `--card-index` stagger + `fadeSlideUp` keyframe | Already works. Keep as-is. |
+| Provider row entry (enrichment arrives) | `@starting-style` CSS rule on `.provider-detail-row` | Zero JS change. Browser animates on element insertion automatically. |
+| Card reorder (sort by severity) | `document.startViewTransition()` wrapping `doSortCards()` | 3 lines of TypeScript. FLIP-style animation. Graceful degradation built-in. |
+| Shimmer loading skeleton | Already implemented (`shimmer-line` classes) | Keep. Appears before first provider result arrives. |
+| Expand/collapse enrichment details | `grid-template-rows: 0fr / 1fr` transition | Replace existing `max-height` approach if used; grid-rows is smoother and avoids flash. |
 
-No changes to esbuild, Tailwind, or TypeScript build pipeline.
+---
+
+## Build Tool Versions to Keep
+
+| Tool | Current | Upgrade? | Reason |
+|------|---------|---------|--------|
+| esbuild | 0.27.3 | No | Current, stable. `--target=es2022` already enables View Transitions API. |
+| Tailwind CSS standalone | v3.4.17 | No (this milestone) | v4 migration is separate work. |
+| tsc | (project version) | No | TypeScript 5.8 supports all needed syntax. |
 
 ---
 
@@ -244,38 +214,50 @@ No changes to esbuild, Tailwind, or TypeScript build pipeline.
 
 | Recommended | Alternative | When to Use Alternative |
 |-------------|-------------|-------------------------|
-| Custom `dnspython` DNSBL | `pydnsbl` library | Only if the project adopts async throughout (not planned) |
-| `whoisit` for RDAP | `whodap` | If project migrates to `httpx` and async (not planned) |
-| `ipapi.is` for ASN | `ipinfo.io` ASN API | ipinfo.io returns very similar data but requires a token for >50k lookups/month; unnecessary for a local tool |
-| Feodo Tracker bulk JSON + cache | Per-IP HTTP query to non-existent Feodo API | Feodo Tracker does not have a per-IP lookup endpoint — bulk download is the only option |
+| Native `document.startViewTransition()` | GSAP FLIP plugin | Only if GSAP is already in the project and you need IE/older browser support |
+| `@starting-style` CSS | JS class-toggle + `requestAnimationFrame` trick | Only in projects that still support Firefox 128 or Safari 17.4 |
+| CSS Grid subgrid | JavaScript layout synchronization | Only if subgrid is genuinely unavailable (pre-2023 browsers) — not applicable to analyst workstations |
+| Intersection Observer for lazy stagger | `animation-timeline: view()` | Use the CSS approach once Firefox ships it without a flag (tentative: Firefox 136+, currently flag-only) |
 
 ---
 
 ## Version Compatibility
 
-| Package | Compatible With | Notes |
-|---------|-----------------|-------|
-| `whoisit==4.0.0` | Python 3.10+, `requests>=2.0`, `python-dateutil>=2.0` | Pure Python. Tested on Python 3.10–3.12. No known conflicts with Flask 3.1 or existing deps. |
-| `python-dateutil==2.9.0` | Python 3.10+ | No conflicts with existing packages. Widely used (transitive dep of many libraries). |
-| `dnspython==2.8.0` | Python 3.10+ | Already in requirements.txt. DNSBL queries use the same `dns.resolver.Resolver` already proven in `DnsAdapter`. |
+| Feature | Chrome | Firefox | Safari | Notes |
+|---------|--------|---------|--------|-------|
+| CSS Grid subgrid | 117+ | 71+ | 16+ | Safe — all modern browsers |
+| CSS Container queries | 106+ | 110+ | 16+ | Safe — all modern browsers |
+| `@starting-style` | 117+ | 129+ | 17.5+ | Safe — all modern browsers |
+| `document.startViewTransition()` | 111+ | 133+ | 18+ | Safe — Baseline Oct 2025 |
+| `animation-timeline: view()` | 115+ | flag only | 26+ | NOT safe for MVP — use IntersectionObserver instead |
+| `color-mix()` | 111+ | 113+ | 16.2+ | Safe |
+| `CSS.escape()` | 46+ | 31+ | 8+ | Already used in codebase |
 
 ---
 
 ## Sources
 
-- [ipapi.is Developer Documentation](https://ipapi.is/developers.html) — Rate limits (1000/day free, no auth), ASN JSON fields confirmed (HIGH confidence)
-- [ipapi.is ASN Database](https://ipapi.is/asn.html) — JSON example response with all ASN fields (HIGH confidence)
-- [whoisit on PyPI](https://pypi.org/project/whoisit/) — Version 4.0.0, pure Python, requests + dateutil dependencies confirmed (HIGH confidence)
-- [whoisit GitHub](https://github.com/meeb/whoisit) — Supported lookup types, field documentation, bootstrap mechanism (HIGH confidence)
-- [pydnsbl on PyPI](https://pypi.org/project/pydnsbl/) — Version 1.1.7, asyncio/aiodns dependency confirmed (HIGH confidence)
-- [Spamhaus DNSBL Fair Use Policy](https://www.spamhaus.org/blocklists/dnsbl-fair-use-policy/) — Public resolver blocking, error code 127.255.255.254 phased rollout 2025 confirmed (HIGH confidence)
-- [Spamhaus Free DQS](https://www.spamhaus.com/data-access/free-data-query-service/) — Free key option available; requires account registration (HIGH confidence)
-- [Feodo Tracker Blocklist](https://feodotracker.abuse.ch/blocklist/) — JSON download endpoint confirmed, zero-auth, CC0 license (HIGH confidence)
-- [BGPView FAQ / shutdown notice](https://bgpview.io/) — BGPView shutting down November 26, 2025 (HIGH confidence)
-- [SURBL multi.surbl.org](https://cwiki.apache.org/confluence/display/SPAMASSASSIN/DnsBlocklists) — Public resolver safe, no key required (MEDIUM confidence — SpamAssassin docs)
-- [abuse.ch combined DNSBL](https://www.dnsbl.info/dnsbl-details.php?dnsbl=combined.abuse.ch) — Available, no public resolver restriction documented (MEDIUM confidence)
+- [Tailwind CSS v4 standalone CLI — GitHub Discussion #17638](https://github.com/tailwindlabs/tailwindcss/discussions/17638)
+  v4.1.3 standalone binary confirmed. v3→v4 migration model documented. MEDIUM confidence on migration scope.
+- [Tailwind CSS v4.0 release post](https://tailwindcss.com/blog/tailwindcss-v4)
+  v4 CSS feature set confirmed (`@theme`, `@container` native utilities, `starting:` variant). HIGH confidence.
+- [What's new in view transitions (2025 update) — Chrome Developers](https://developer.chrome.com/blog/view-transitions-in-2025)
+  Same-document view transitions browser support, `match-element` auto-naming, scoped transitions. HIGH confidence.
+- [View Transition API — MDN](https://developer.mozilla.org/en-US/docs/Web/API/View_Transition_API)
+  API shape, `document.startViewTransition()` method signature. HIGH confidence.
+- [animation-timeline: view() — Can I use](https://caniuse.com/mdn-css_properties_animation-timeline_view)
+  82.81% global support. Safari iOS 26+ only. Firefox flag-only as of research date. HIGH confidence on support numbers.
+- [CSS scroll-driven animations — MDN](https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Scroll-driven_animations)
+  `animation-timeline: view()` syntax and `@supports` feature detection pattern. HIGH confidence.
+- [The New CSS Layout Toolbox: subgrid, container queries — Medium Oct 2025](https://medium.com/@kedarbpatil07/the-new-css-layout-toolbox-subgrid-container-queries-and-more-41cf94ebf821)
+  Subgrid 97%+ global support confirmed. MEDIUM confidence (secondary source).
+- [Rearrange / Animate CSS Grid Layouts with the View Transition API — Bram.us](https://www.bram.us/2023/05/09/rearrange-animate-css-grid-layouts-with-the-view-transition-api/)
+  Grid reorder + View Transitions API pattern. HIGH confidence — direct implementation reference.
+- SentinelX codebase: `app/static/src/input.css`, `Makefile`, `app/static/src/ts/modules/cards.ts`,
+  `app/static/src/ts/modules/ui.ts`, `app/static/src/ts/modules/enrichment.ts`
+  Existing motion tokens, keyframes, stagger implementation, doSortCards() function. HIGH confidence.
 
 ---
 
-*Stack research for: SentinelX v7.0 Free Intel — DNSBL, threat feeds, RDAP, ASN/BGP*
-*Researched: 2026-03-15*
+*Stack research for: SentinelX v1.1 Results Page Redesign*
+*Researched: 2026-03-16*

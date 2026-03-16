@@ -1,198 +1,106 @@
 # Feature Research
 
-**Domain:** Threat intelligence enrichment — DNSBL, public threat feeds, RDAP, ASN/BGP
-**Milestone:** v7.0 Free Intel
-**Researched:** 2026-03-15
-**Confidence:** HIGH (DNSBL mechanism, RDAP protocol status); MEDIUM (specific provider choices, rate limits)
+**Domain:** Threat intelligence results page — multi-source aggregation, unified presentation
+**Milestone:** v1.1 Results Page Redesign
+**Researched:** 2026-03-16
+**Confidence:** HIGH (platform patterns from official docs + direct inspection); MEDIUM (specific
+implementation approaches, comparative analysis based on public documentation)
 
 ---
 
-## Context: This Is a Subsequent Milestone
+## Context: This Is a Presentation Redesign, Not a Feature Addition
 
-The app already has 13 providers, per-IOC detail pages, export, bulk input, SQLite cache, and filter bar.
-This research covers ONLY the four new capabilities and the one removal task for v7.0.
+The app already ships 14 providers, per-IOC detail pages, export, bulk input, cache, filter bar,
+and verdict dashboard. The problem is not missing data — it is how that data is presented.
 
-Existing zero-auth providers (already shipping): Shodan InternetDB, CIRCL Hashlookup, ip-api.com,
-DNS Records, crt.sh, ThreatMiner. The new providers follow the same Provider Protocol pattern:
-one adapter file + one `registry.register()` call in `setup.py`. No orchestrator changes required.
+Current state: 14 provider rows (verdict badge + attribution + stat text + context fields) displayed
+inside an expandable accordion per IOC card. Summary row shows worst verdict + consensus badge.
+Context providers (IP Context, DNS Records, Cert History, ThreatMiner, ASN Intel) are pinned to top
+of the expanded section. All other providers are sorted by severity descending.
 
----
+The problem statement: "results feel like 14 separate search results stapled together, not one
+cohesive report. Information isn't uniform across providers. Mix of verdicts, context rows, no-data
+rows feels disjointed."
 
-## How Each Feature Domain Works
-
-### DNSBL Reputation Checks
-
-**Mechanism:** Pure DNS. Reverse the IP octets, append the blacklist zone, query for an A record.
-Example: for IP `1.2.3.4`, query `4.3.2.1.zen.spamhaus.org`. If the DNS response returns any A
-record, the IP is listed. NXDOMAIN means not listed. No HTTP calls — uses dnspython, which is
-already installed and used by the existing DnsAdapter.
-
-**For domains (DBL):** Prepend the domain to the zone: `example.com.dbl.spamhaus.org`.
-
-**Return data:** Which list(s) hit, return code meaning (spam source vs botnet vs policy block),
-and an overall "listed on N of N checked" summary. There is no confidence score — it is binary
-listed/not-listed per zone.
-
-**Key lists — free, no auth, actively maintained:**
-
-| List | Zone | Covers | IOC Types |
-|------|------|--------|-----------|
-| Spamhaus ZEN | `zen.spamhaus.org` | SBL + CSS + XBL + PBL combined (spam + botnet + exploited hosts + policy) | IPv4 |
-| Spamhaus DBL | `dbl.spamhaus.org` | Spam/phishing/malware domains | Domain |
-| SURBL multi | `multi.surbl.org` | Malicious URLs/domains across multiple feeds | Domain |
-| Barracuda | `b.barracudacentral.org` | Spam source IPs | IPv4 |
-| SpamCop | `bl.spamcop.net` | Spam source IPs (user-reported) | IPv4 |
-
-**Rate limits:** Spamhaus free public mirrors enforce fair-use for low-volume non-commercial use.
-A local analyst triage tool running a few checks per session is well within limits. Commercial
-email filtering requires a paid DQS subscription — not applicable here.
-
-**Important:** Do NOT use public DNS resolvers (8.8.8.8, 1.1.1.1) for DNSBL queries. Some public
-resolvers hijack NXDOMAIN responses (return synthetic A records), which breaks DNSBL negative
-results — a listed IP could appear not listed. Use `dns.resolver.Resolver(configure=True)` to
-rely on the system resolver, matching the existing DnsAdapter pattern.
-
-**Verdict mapping:**
-- Any hit → `malicious` — DNSBL listing is an explicit flagging action by list operators
-- No hits across all checked zones → `clean` — affirmative signal: checked N lists, found on none
-- DNS error / timeout → `error`
-
-This contrasts with providers like ip-api.com that return `no_data`. DNSBL is a reputation signal
-with a binary outcome, warranting real verdicts.
+This research answers: what design patterns do the best threat intelligence platforms use to make
+multi-source results feel like one unified answer?
 
 ---
 
-### Public Threat Feed Lookups
+## How the Best Platforms Solve This
 
-**Mechanism:** HTTP to abuse.ch endpoints. Check whether a specific IP appears in known-bad C2
-infrastructure databases.
+### VirusTotal: Separation by Information Type, Not Source
 
-**Key providers (free):**
+VirusTotal's core architectural insight is that different questions deserve different views, and
+sources should be subordinate to those views. Their tab structure for file/URL reports:
 
-| Provider | Endpoint | Covers | Auth |
-|----------|----------|--------|------|
-| Feodo Tracker | `feodotracker.abuse.ch` | Botnet C2 IPs: Dridex, Emotet, TrickBot, QakBot, BazarLoader | None — public JSON blocklist |
-| ThreatFox | `threatfox-api.abuse.ch` | IP:port, domain, URL, hash IOCs with malware family | Requires free abuse.ch Auth-Key |
+- **Summary header** (always visible): Detection ratio ("X / Y" flagged), community score, hash,
+  timestamp, tags. This is the unified answer at a glance.
+- **Detection tab**: Partner verdict grid — all vendor results in one flat table, grouped by
+  verdict category (malicious / suspicious / clean / undetected). Sources appear as rows within
+  categories, not as the organizational unit.
+- **Details tab**: Metadata (file properties, HTTP headers, DNS records) — type-specific context
+  separated from reputation judgments.
+- **Relations tab**: Relationships and pivots — all IOC-to-IOC connections independent of which
+  source found them.
+- **Community tab**: Analyst notes and votes — separated from automated signals.
 
-**Feodo Tracker detail:** Publishes a bulk JSON blocklist refreshed every 5 minutes. No per-IP
-lookup API exists — the integration is to fetch the full JSON blocklist and check in-memory or
-cache in SQLite. Fields include: `ip_address`, `port`, `status`, `last_online`, `malware`,
-`country`, `as_number`, `as_name`, `abuse_contact_email`. The full list is approximately 200KB
-JSON — small enough to hold in memory or in the existing SQLite cache with TTL.
+Key lesson: **verdict assessment** and **contextual intelligence** and **relationships** are
+fundamentally different kinds of information and should never be mixed in the same section.
 
-**ThreatFox detail:** Has a per-IOC search API (`search_ioc` POST method). Requires a free
-Auth-Key from the abuse.ch Authentication Portal — same portal as existing MalwareBazaar and
-URLhaus keys. Returns: IOC type, malware family, threat type (botnet_cc, payload_delivery, etc.),
-confidence level, first/last seen timestamps, reporter, tags, associated samples (with hashes).
-Supports IP:port, domain, URL, MD5, SHA256.
+Domain/IP reports in VirusTotal intentionally omit partner verdicts (because vendors don't rate IPs
+as "malicious" the same way they rate files). Instead they show pure context — passive DNS, WHOIS,
+ASN, communicating files. This distinction between IOC types is a critical design principle.
 
-**ThreatFox vs existing ThreatFox provider:** The existing ThreatFox adapter (TFAdapter) already
-queries ThreatFox. Check whether the existing adapter already covers the needed query types before
-creating a new Feodo-specific adapter. Feodo Tracker is additive: it covers C2 IPs specifically,
-which ThreatFox also covers — but Feodo's dedicated blocklist is authoritative for the specific
-botnet families it tracks.
+### Hybrid Analysis: Severity-First, Source-Secondary
 
-**Note on PhishTank:** New user registration disabled since 2020. Cannot obtain API key. Not viable.
+Hybrid Analysis leads with a **threat score** (e.g., 66/100) and an **AV detection rate** (e.g.,
+9%) in the header — the synthesized judgment — before any source is named. Then it groups findings
+into **Malicious Indicators** / **Suspicious Indicators** / **Informative Indicators** with counts.
+Within each group, items show their source type (Static Parser, API Call, Registry Access) as an
+attribute, not the organizing principle.
 
-**Note on URLhaus:** Already a provider (v4.0, free abuse.ch key). Covers malware distribution
-URLs/domains/hashes/IPs. Feodo Tracker adds dedicated C2 IP coverage that URLhaus does not
-emphasize. Do not duplicate URLhaus functionality.
+The MITRE ATT&CK matrix section organizes tactics/techniques without naming which analyzer found
+each — the framework is the organizing lens, not the tool.
 
-**Verdict mapping:**
-- Found in feed → `malicious` with malware family name in attribution fields
-- Not found → `clean` (checked, not present — affirmative negative)
+Key lesson: **group by threat signal type** (malicious / suspicious / informative / context), not
+by provider name. Provider is an attribute within a group, not a section header.
 
----
+### Shodan: Category-First, Drill-Down Architecture
 
-### RDAP Registration Data
+Shodan's host page opens with a **General Information block** (location, org, ISP, ASN) — a single
+unified identity section that collapses all provider outputs for that category. Then **Web
+Technologies** as a second block. Then **Open Ports** as navigable tab anchors.
 
-**Mechanism:** HTTPS REST. IANA maintains bootstrap files mapping TLDs to authoritative RDAP
-servers. The `rdap.org` proxy handles bootstrap discovery automatically — query
-`https://rdap.org/domain/example.com` and it issues a 302 redirect to the authoritative registry
-RDAP endpoint, returning the registry's response transparently. For IPs,
-`https://rdap.org/ip/1.2.3.4` routes to the correct RIR (ARIN, RIPE, APNIC, LACNIC, AfriNIC).
+Each port section reveals nested detail (SSL cert, banners, service identification, vulnerability
+CVEs) via sequential drill-down. The user never sees "nginx reports X, Shodan reports Y" — they see
+a unified answer for the port with all data synthesized under one heading.
 
-**2025 RDAP status:** As of January 28, 2025, ICANN officially sunsetted WHOIS for all gTLD
-registries. RDAP is now the definitive and authoritative source for domain registration data.
-RDAP returns structured JSON per RFC 9083 — machine-readable, standardized, no text parsing needed.
+Key lesson: **group by topic/category** (identity, network, reputation, behavior), not by data
+source. Multiple sources feeding the same category should appear together under that category.
 
-**For domains — high-value fields:**
+### IntelOwl: DataModel Synthesis
 
-| Field | JSON path | Triage value |
-|-------|-----------|--------------|
-| Creation date | `events[?eventAction=="registration"].eventDate` | Domain age — "registered 3 days ago" is a major red flag |
-| Expiration date | `events[?eventAction=="expiration"].eventDate` | Short-TTL domains common in malware campaigns |
-| Registrar name | `entities[?roles contains "registrar"].vcard` | Some registrars have known abuse patterns |
-| Nameservers | `nameservers[*].ldhName` | Fast-flux NS patterns reveal bulletproof hosting |
-| Status | `status[]` | clientTransferProhibited, pendingDelete, etc. |
+IntelOwl v6.2+ introduced "DataModels" that normalize all analyzer outputs into standardized keys
+before display. Instead of showing OTX's response format next to ThreatFox's response format, both
+are mapped to `{ ip_reputation, asn, last_seen, associated_malware }` and displayed uniformly.
 
-**For IPs — high-value fields:**
+Their "Visualizers" aggregate across multiple analyzers (e.g., "DNS Visualizer aggregates all DNS
+analyzer reports") so the display unit is the topic, not the tool.
 
-| Field | JSON path | Triage value |
-|-------|-----------|--------------|
-| Network name | `name` | e.g., "HETZNER-CLOUD" — immediately identifies hosting provider |
-| CIDR block | `startAddress` + `endAddress` | Subnet ownership context |
-| Organization | `entities[?roles contains "registrant"].vcard` | Who officially owns this network |
-| Abuse contact | `entities[?roles contains "abuse"].vcard` | For incident reporting |
-| Allocation date | `events[?eventAction=="registration"].eventDate` | Network block age |
+Key lesson: **normalize provider output to domain fields** before display. "Reputation" means the
+same thing whether it comes from AbuseIPDB or GreyNoise — the label should match, not the provider
+name.
 
-**GDPR / privacy caveat:** Registrant contact info is heavily GDPR-redacted for European
-registrars and many privacy-shield registrations. Do not surface registrant contact — it will be
-"REDACTED FOR PRIVACY" for the majority of domains. The high-value fields (creation date,
-registrar, nameservers) survive GDPR redaction and remain useful.
+### URLScan.io: Context First, Security Second
 
-**Domain age calculation:** `created N days ago` is the highest-value output. Adversaries
-rapidly register and abandon domains. A domain under 30 days old warrants immediate escalation.
-Display as both the exact ISO date and a human-readable "X days ago" label.
+URLScan organizes scan results as: infrastructure (IPs/domains/technologies found) → statistics
+(counts, protocols) → enrichment (geolocation, ASN, rankings) → security verdicts (threat
+analysis, community). Context establishes what something IS before the verdict establishes whether
+it's BAD.
 
-**Verdict mapping:** `no_data` — registration data is context, not a threat verdict. This matches
-the existing pattern for ip-api.com, DNS Records, crt.sh. The analyst sees creation date and draws
-their own conclusion.
-
-**rdap.org redirect behavior:** Querying `rdap.org` results in a 302 redirect to the authoritative
-server. This adapter must use `allow_redirects=True`, which is a deliberate exception to the
-existing `allow_redirects=False` convention used by all other HTTP adapters. This exception must
-be documented explicitly in the adapter docstring.
-
-**Python library vs plain requests:** `whoisit` (PyPI) and `whodap` (PyPI) are both available.
-Recommendation: use plain `requests` to `rdap.org` — already a dependency, straightforward JSON
-parsing, avoids adding a new library for a REST call. The RFC 9083 JSON structure is documented
-and stable.
-
----
-
-### ASN/BGP Intelligence
-
-**What ip-api.com already provides:** The existing IPApiAdapter already returns ASN data. The `as`
-field contains `"AS24940 Hetzner Online GmbH"` and `asname` contains `"HETZNER-ONLINE"`. This is
-already formatted into the `geo` display string as `"CC · City · AS12345 (ISP Name)"`.
-
-**What is missing:** ASN type classification (hosting vs ISP vs residential vs datacenter), the
-CIDR prefix, RIR allocation, and allocation date. These are the differentiating fields that make
-ASN data actionable for network-level pivoting.
-
-**Team Cymru DNS-based ASN lookup (zero-auth):**
-
-Query `{reversed_ip}.origin.asn.cymru.com` as a TXT record via dnspython.
-Response format: `"15169 | 8.8.8.0/24 | US | arin | 1992-12-01"`
-Fields: ASN number, CIDR prefix, country code, RIR, allocation date.
-
-This is zero-auth, DNS-based (uses dnspython which is already installed), adds no new HTTP
-dependency, and requires no account or API key. Rate limit caveat: the Cymru whois server blocks
-abusive bulk usage patterns (large batches of individual queries instead of bulk mode). Single
-per-IOC lookups as part of analyst triage sessions are fine.
-
-**ipinfo.io Lite (alternative):** Provides ASN + org name + domain in JSON response. Requires a
-free token (no credit card, unlimited requests on Lite tier). Adds a new account dependency.
-Given Team Cymru provides equivalent data via DNS with zero auth, ipinfo.io Lite adds marginal
-value and is not recommended for MVP.
-
-**Recommended approach for v7.0:** Extend coverage with a dedicated ASN/BGP adapter using Team
-Cymru DNS. This adds CIDR prefix + RIR + allocation date on top of what ip-api.com already shows.
-Single adapter, DNS-based, zero new dependencies, zero new accounts.
-
-**Verdict mapping:** `no_data` — network ownership is context, not a verdict. Hosting provider
-classification is informational (legitimate cloud infrastructure hosts malicious payloads routinely).
+Key lesson: **establish identity before making judgment**. Show "this IP is in US-East, owned by
+Hetzner, serving port 443 with Nginx" before "3 providers flagged this as malicious."
 
 ---
 
@@ -200,149 +108,135 @@ classification is informational (legitimate cloud infrastructure hosts malicious
 
 ### Table Stakes (Analysts Expect These)
 
-Features an analyst expects from a tool claiming "DNSBL + threat feed + RDAP + ASN" capability.
-Missing these makes the feature feel incomplete or underbaked.
+Features that any analyst would expect from a unified threat intelligence results view.
+Missing these makes the redesign feel superficial.
 
 | Feature | Why Expected | Complexity | Notes |
 |---------|--------------|------------|-------|
-| DNSBL check for IPs against Spamhaus ZEN | Spamhaus ZEN is the industry-standard first check; every IP reputation tool includes it | LOW | Pure DNS via dnspython, reverse IP + A record query; already-available library |
-| DNSBL check for domains against Spamhaus DBL | Domain blocklist complement to IP checks; email security staple | LOW | Prepend domain to DBL zone, same dnspython pattern as IP |
-| DNSBL result names which list(s) hit, not just "listed" | Analysts need to know if SBL (spam source) vs XBL (botnet/exploited) vs PBL (policy block) | LOW | Return code decoding table mapped to human-readable names |
-| "Not listed on any DNSBL" shown explicitly as CLEAN | Absence of listing is a positive signal; must not silently show as NO RECORD | LOW | Verdict = `clean` when all checked zones return NXDOMAIN |
-| RDAP creation date for domains | Domain age is the primary triage signal; "registered 3 days ago" is immediately actionable | LOW | RDAP `events[registration].eventDate`, format as "X days ago" |
-| RDAP registrar name for domains | Registrar context (pattern recognition across incidents) | LOW | `entities` array, role = "registrar" |
-| RDAP nameservers for domains | Nameserver patterns reveal bulletproof hosting, fast-flux | LOW | `nameservers` array in RDAP response |
-| RDAP network block name + org for IPs | Who owns this IP block — direct answer to "whose infrastructure is this?" | LOW | `name` + registrant entity in IP RDAP response |
-| ASN number and CIDR prefix for IPs | ASN is standard; CIDR prefix enables subnet-level pivoting | LOW | ip-api.com already returns ASN; Team Cymru DNS adds prefix |
-| Feodo Tracker C2 check for IPs | Well-known C2 list; zero-auth; direct threat signal for botnet infrastructure | MEDIUM | Bulk JSON download + in-memory or SQLite-cached check |
-| Remove annotations (notes + tags) | Scope reduction per v7.0 plan — removes complexity, not a user-facing feature loss for triage | MEDIUM | Touches routes, TS modules, templates, SQLite store |
+| Verdict-first summary per IOC | Every serious TI platform leads with the judgment — analyst should know malicious/clean before reading any detail | LOW | Already exists as worst-verdict badge; needs better visual hierarchy/prominence |
+| Clear visual separation of verdict vs context providers | VirusTotal, Shodan, URLScan all separate "reputation signals" from "contextual data" — mixing them creates confusion | MEDIUM | Currently all rows in one flat list; context providers pinned to top but visually identical to verdict rows |
+| Grouped provider display by category | Hybrid Analysis, Shodan group signals by type (malicious / suspicious / informative / context) not by source name | MEDIUM | Currently: flat list sorted by severity. Needed: category sections with counts per section |
+| Provider count shown in summary ("3/9 flagged") | VT shows "X/Y engines"; HA shows AV detection rate — analysts want denominator, not just numerator | LOW | Consensus badge `[2/5]` partially does this; needs to be more prominent and readable |
+| Empty/no-data state clearly separated from clean verdict | A provider that has no record ≠ a provider that checked and found nothing | LOW | Currently both map to `no_data` label; "checked and clean" vs "no record found" are different signals |
+| Context fields readable without expanding details | Shodan shows key fields (open ports, vulns) inline on the search results card — critical context should not require expansion | MEDIUM | Currently context fields (GeoIP, ASN, ports) are hidden in expanded accordion; minimal context should always be visible |
+| IOC type badge clearly visible | Every platform distinguishes IP / domain / URL / hash — different types have different signals, the analyst must know which they're looking at | LOW | Already implemented; needs consistent prominent placement |
+| Scan date or data freshness indicator | Analysts care whether VirusTotal result is from today or 6 months ago; stale data changes the verdict meaning | LOW | `scan_date` is already in `EnrichmentResultItem`; not currently surfaced in summary row |
 
-### Differentiators (Competitive Advantage)
+### Differentiators (What Makes This Feel Like One Report)
+
+Features that go beyond "list of provider results" toward "unified intelligence report."
+These are the features that make the difference between 14 results stapled together and one answer.
 
 | Feature | Value Proposition | Complexity | Notes |
 |---------|-------------------|------------|-------|
-| Domain age displayed as "registered N days ago" with visual age indicator | "Registered 2 days ago" is instant analyst signal; ISO date requires mental arithmetic | LOW | Client-side formatting from RDAP creation timestamp; color-code: red if < 30 days |
-| DNSBL shows count summary "Listed on 2/5 checked" in summary badge | Triage at a glance without expanding detail rows | LOW | Aggregate in adapter, surface in summary row detection_count / total_engines fields |
-| RDAP covers both domains AND IPs (single unified adapter) | Other tools split domain WHOIS and IP WHOIS into separate workflows | MEDIUM | Single adapter routes by IOC type: DOMAIN → rdap.org/domain/, IPv4/IPv6 → rdap.org/ip/ |
-| DNSBL queries multiple lists in parallel | dnspython resolves each zone in ~50ms; 5 parallel queries < 500ms total | LOW | Loop of DNS resolver calls; no async required — each resolves quickly and sequentially is fine for 5-6 zones |
-| Team Cymru CIDR prefix + RIR via DNS (zero new dependency) | Subnet ownership enables "is this the same /24 as other malicious IPs?" | LOW | TXT record query to origin.asn.cymru.com; uses existing dnspython |
-| Feodo Tracker malware family attribution | Returns botnet family name alongside "malicious" verdict — high analyst value for family tracking | MEDIUM | `malware` field from Feodo JSON; map to canonical family names |
+| Category-grouped provider sections | Show verdict-producing providers in one section ("Reputation"), context providers in another ("Infrastructure"), zero-data providers collapsed or in a third section ("No Data") — matching Hybrid Analysis / VirusTotal pattern | MEDIUM | Requires template redesign of enrichment-details; existing CONTEXT_PROVIDERS set is the seed for this grouping |
+| Inline context summary always visible | Show 2-3 key context fields (GeoIP country, ASN org, open port count) directly in the IOC card header without requiring expansion — the "at a glance" context that establishes identity before judgment | MEDIUM | Requires context providers to complete before card renders context line; may need to wait for first context result |
+| Verdict breakdown micro-bar | Visual "3 malicious / 2 suspicious / 4 clean / 5 no data" bar within each IOC card — matches Hybrid Analysis's "Malicious/Suspicious/Informative" count approach; richer than current `[2/5]` text badge | MEDIUM | Client-side, requires count tracking already in iocVerdicts; pure CSS/DOM addition |
+| Provider category icons/labels | Distinct visual treatment for reputation providers (flag icon) vs infrastructure context (server icon) vs passive intel (clock icon) — reinforces that different rows answer different questions | LOW | CSS token + icon addition; high visual impact for low implementation cost |
+| "No data" section collapsed by default | Move all no-data providers into a collapsed section ("5 providers had no record") rather than showing them as flat rows equal to providers with actual findings | LOW | Currently no-data rows appear in the same sorted list; separating them reduces visual noise significantly |
+| Worst-verdict summary as report headline | Make the worst-verdict badge the dominant visual element in the IOC card — current badge is 12-16px text in a row; should be the first thing the eye goes to (size hierarchy matching VT's large X/Y detection ratio) | LOW | CSS change to verdict-label/verdict-badge sizing in ioc-card-header; high impact, low cost |
+| Staleness indicator on cached results | Show "data from 4h ago" on summary row when result was served from cache — matches VT's timestamp-in-summary approach; tells analyst whether to trust the verdict or re-query | LOW | `cached_at` field already exists in EnrichmentResultItem and is shown in expanded detail rows; surface in summary row |
 
 ### Anti-Features (Commonly Requested, Often Problematic)
 
 | Feature | Why Requested | Why Problematic | Alternative |
 |---------|---------------|-----------------|-------------|
-| Check 50+ DNSBL zones | More lists = more coverage | Beyond 5-6 high-quality zones, lists have poor maintenance, high false positives, and DNS latency multiplies; checking 50 lists takes 5-10x longer for marginal signal gain | Check 5-6 actively maintained high-quality lists; show count clearly |
-| WHOIS instead of RDAP | Familiar to analysts; widely referenced | ICANN sunsetted WHOIS for gTLDs January 2025; plain-text format is inconsistent across registrars; requires custom parsers per registrar; GDPR-redacted to near-uselessness | Use RDAP — machine-readable JSON, authoritative, standardized; already the successor |
-| Registrant contact info from RDAP | "Who owns this domain?" is a natural question | GDPR redaction returns "REDACTED FOR PRIVACY" for the vast majority of European-registered domains; surfaces noise, not signal | Show registrar + nameservers + creation date; skip registrant contact entirely |
-| BGP path visualization / AS path graph | Visual BGP routing looks impressive in demos | BGP routing paths change dynamically; a static snapshot is misleading; rendering AS path graphs requires significant frontend work for low triage value | Show ASN number, org, prefix, RIR as structured text fields |
-| PhishTank phishing URL lookup | Well-known phishing database | New user registration closed since 2020; cannot obtain API key for new integrations | URLhaus already integrated for malware distribution URLs; ThreatFox covers phishing C2 |
-| DNSBL via public resolvers (8.8.8.8, 1.1.1.1) | Easy to configure well-known public DNS | Some public resolvers use NXDOMAIN hijacking (returning synthetic A records for negative queries), which corrupts DNSBL results — listed IPs appear clean | Use `dns.resolver.Resolver(configure=True)` (system resolver); matches existing DnsAdapter pattern |
-| Keep annotations (notes + tags) | Analysts want to mark IOCs for case management | Couples triage tool to case management workflow — better done in a dedicated TIP/SIEM; adds UI and backend complexity; conflicts with v7.0 simplification goal | Remove entirely; direct analysts to their TIP for case notes |
-| ipinfo.io Lite for ASN | More ASN fields (ASN type classification) | Requires new account signup and token management; marginal value over Team Cymru + ip-api.com combined | Team Cymru DNS provides CIDR + RIR for free with zero auth |
+| Composite threat score (e.g., "74/100") | Feels like a unified answer; analysts want one number | Hides the reasoning; obscures which providers drove the score; SentinelX's core design philosophy is transparency — "never invent scores"; composite scores require calibration that doesn't exist here | Use verdict breakdown bar (malicious count / responded count) — visual but not invented |
+| Provider logo/branding in rows | Looks professional, easier to recognize at a glance | Significantly increases page weight (14 logos × number of IOCs); logos require licensing verification; textContent-only DOM rule makes inline SVG complex | Use consistent provider name abbreviations with color-coded category badges |
+| Auto-expand all IOC cards | Analyst wants everything visible immediately | 10 IOCs × 14 providers = 140 rows visible simultaneously; catastrophic for scan time and cognitive load | Expand only the highest-severity IOC by default; let analyst expand others on demand |
+| Tabs instead of accordion | VT uses tabs; tabs look modern | For a card-per-IOC layout, tabs would require tab state per card (complex JS) and break the at-a-glance comparison across IOCs; accordion lets all IOCs remain scannable simultaneously | Keep accordion; improve category sections within the accordion |
+| Inline verdict editing / analyst override | Analyst wants to mark "VT says clean but I disagree" | Annotations were removed in v7.0 for good reason — couples triage tool to case management; introduces mutable state; conflicts with cache invalidation model | Direct analysts to their TIP/SIEM for case notes; detail page already exists for deep investigation |
+| Real-time confidence scoring across providers | Weight providers by reputation (VT = high trust, unknown = low trust) | Requires maintaining a trust model that goes stale as providers change quality; creates false precision; different providers answer different questions (AbuseIPDB answers "is this reported" not "is this malicious") | Show provider category (reputation vs passive intel) as context so analyst applies their own mental weights |
+| Progressive disclosure with infinite scroll | Modern UX pattern; avoids long pages | IOC triage is a compare-all-IOCs task, not a read-one-article task; infinite scroll breaks the analyst's mental model of "I have N IOCs to triage" | Show all IOC cards, keep cards compact, use filter bar to reduce visible set |
 
 ---
 
 ## Feature Dependencies
 
 ```
-DNSBL Provider (IP)
-    requires──> dnspython (already installed — DnsAdapter uses it)
-    requires──> Provider Protocol adapter pattern (in place)
-    uses pattern──> same as existing DnsAdapter (no new library)
+Category-Grouped Provider Sections
+    requires──> CONTEXT_PROVIDERS set (already exists in enrichment.ts)
+    requires──> verdict count tracking per category (iocVerdicts already tracks this)
+    requires──> template redesign of .enrichment-details container
+    enables──> "No Data" section collapsed by default (trivially add third group)
+    enables──> Provider category icons/labels (apply per group, not per row)
 
-DNSBL Provider (Domain)
-    requires──> dnspython (already installed)
-    shares pattern──> DNSBL Provider (IP) — same adapter or sibling adapter
+Inline Context Summary (always visible)
+    requires──> context provider results arrive before card renders full summary
+    requires──> IOC card template change (new .ioc-context-inline slot)
+    depends on──> enrichment.ts routing context vs verdict results differently
+    conflicts with──> showing nothing until all providers complete (current behavior)
 
-RDAP Provider
-    requires──> requests (already installed)
-    requires──> rdap.org added to SSRF allowlist in config.py
-    requires──> allow_redirects=True (documented exception to project convention)
-    covers──> DOMAIN + IPv4 + IPv6 (single adapter, routes by ioc.type)
+Verdict Breakdown Micro-Bar
+    requires──> per-verdict count tracking (iocVerdicts already has this data)
+    requires──> CSS bar component
+    enhances──> Worst-verdict summary as report headline
+    replaces──> current [flagged/responded] consensus badge (same data, better display)
 
-ASN/BGP Provider (Team Cymru)
-    requires──> dnspython (already installed)
-    extends──> ip-api.com context (already returns ASN; this adds CIDR + RIR)
-    covers──> IPv4 + IPv6
+Worst-Verdict as Report Headline
+    requires──> CSS hierarchy change in .ioc-card-header
+    is independent of──> grouped sections (works immediately as CSS-only change)
 
-Feodo Tracker Provider
-    requires──> requests (already installed)
-    requires──> feodotracker.abuse.ch added to SSRF allowlist in config.py
-    requires──> bulk-list caching strategy (SQLite with TTL or in-memory)
-    covers──> IPv4 only
+Staleness Indicator on Summary Row
+    requires──> cached_at already in EnrichmentResultItem (already exists)
+    requires──> updateSummaryRow() to surface cached_at when all results are from cache
+    is independent of──> category grouping
 
-Annotations Removal
-    removes──> app/annotations/__init__.py and store.py
-    removes──> /api/annotations/* routes from app/routes.py
-    removes──> AnnotationStore initialization from app/__init__.py
-    removes──> annotations.ts TypeScript module
-    removes──> annotation UI from app/templates/detail.html
-    removes──> tag filter chip UI from app/templates/results.html
-    removes──> tag nodes from graph.ts (or simplify graph without tags)
-    removes──> annotation unit tests and E2E scenarios
-    is independent of──> new providers (can be phased separately)
-    should happen before──> new provider development (cleaner test surface)
+No-Data Section Collapsed by Default
+    requires──> Category-Grouped Provider Sections (no_data is a group)
+    is a low-cost win once grouping exists
 ```
 
 ### Dependency Notes
 
-- **DNSBL requires dnspython** which is already present. The DnsAdapter (dns_lookup.py) uses it
-  for A/MX/NS/TXT resolution. The DNSBL adapter uses the same library for A record queries to
-  DNSBL zones. Zero new dependencies.
+- **Grouping is the backbone change.** Most differentiators become simple once the three-section
+  structure (Reputation / Infrastructure Context / No Data) exists. Category icons, collapsed
+  no-data section, and section-level counts all follow from grouping.
 
-- **RDAP requires `rdap.org` in the SSRF allowlist.** The rdap.org proxy transparently returns
-  the authoritative RIR or registry response, so only one allowlist entry is needed rather than
-  entries for all RIRs (rdap.arin.net, rdap.db.ripe.net, rdap.apnic.net, etc.). The adapter must
-  use `allow_redirects=True` — document this as an intentional deviation from the project default.
+- **Inline context summary is independent of grouping** but higher-complexity. It requires
+  enrichment.ts to write context fields into a new DOM slot in the card header (above the accordion)
+  rather than only into the expanded details container.
 
-- **Feodo Tracker uses a bulk-list pattern** unlike all other providers. All existing adapters
-  make per-IOC HTTP calls. Feodo requires a different pattern: fetch the full blocklist, cache it,
-  then check membership. Two options: (1) in-memory set populated once at adapter construction
-  time and refreshed on TTL, or (2) SQLite cache row per IP with a timestamp. Option 1 is simpler
-  for a single-user app; option 2 aligns with existing CacheStore patterns and survives restarts.
+- **Worst-verdict as headline is purely CSS.** No JS changes required — make the existing
+  `.verdict-label` in `.ioc-card-header` significantly larger (24-28px vs current 12-14px).
+  Highest impact-to-cost ratio of any change.
 
-- **Annotations removal is independent** of the new providers. It can be its own phase,
-  completed first. This reduces test noise throughout the rest of the milestone.
-
-- **DNSBL and ASN/BGP both use DNS (dnspython) not HTTP.** They do not require SSRF allowlist
-  entries. DNS uses port 53 directly, same as the existing DnsAdapter.
+- **Verdict breakdown bar is purely additive JS.** The `iocVerdicts` data structure already
+  accumulates every verdict entry. Computing counts by verdict type and rendering a bar is a
+  `updateSummaryRow()` change + CSS addition.
 
 ---
 
-## MVP Definition (v7.0)
+## MVP Definition (v1.1)
 
-### Launch With
+### Launch With (v1.1 Core)
 
-These are the four specified feature areas plus the one removal. All are required for v7.0.
+Minimum changes that address the "14 separate results stapled together" problem.
 
-- [ ] Remove annotations entirely — notes, tags, AnnotationStore, tag filter UI, annotations.ts,
-  tag nodes in graph.ts, /api/annotations routes, annotations.db documentation for users
-- [ ] DNSBL provider for IPs — Spamhaus ZEN + Barracuda + SpamCop (3 zones minimum); dnspython
-  A record queries; verdict `malicious` on any hit with hit list names, `clean` when all NXDOMAIN
-- [ ] DNSBL provider for domains — Spamhaus DBL + SURBL multi (2 zones minimum); same DNS pattern
-- [ ] RDAP provider — domains (creation date, registrar, nameservers) and IPs (org, network block,
-  country) via rdap.org; verdict `no_data`; creation date formatted as human-readable age
-- [ ] ASN/BGP provider for IPs — Team Cymru DNS TXT query for CIDR prefix + RIR + allocation date;
-  verdict `no_data`; supplements existing ip-api.com ASN field
-- [ ] Feodo Tracker provider for IPs — fetch and cache JSON blocklist; verdict `malicious` on hit
-  with malware family; verdict `clean` when not found
-- [ ] SSRF allowlist updates — add `rdap.org` and `feodotracker.abuse.ch` to ALLOWED_API_HOSTS
+- [ ] Worst-verdict as report headline — make verdict badge the dominant element in card header
+  (CSS sizing change, zero JS changes, highest ROI)
+- [ ] Category-grouped provider sections — Reputation section (verdict-producing providers) /
+  Infrastructure Context section (CONTEXT_PROVIDERS) / No Data section (collapsed by default)
+- [ ] Verdict breakdown micro-bar — visual count of malicious/suspicious/clean/no-data providers
+  (replaces `[2/5]` consensus text badge with visual representation)
+- [ ] No-data section collapsed by default — removes visual noise from flat provider list
+- [ ] Provider category labels — distinct label/icon for "Reputation" vs "Infrastructure" sections
 
-### Add After Validation (v7.x)
+### Add After Validation (v1.1.x)
 
-- [ ] SORBS DNSBL as additional IP zone — if analysts request more coverage
-- [ ] DNSBL listed-count in summary badge "Listed 2/5" — once baseline DNSBL is working
-- [ ] ThreatFox IOC search for domains/URLs/hashes — if analysts want malware family attribution
-  beyond Feodo Tracker IPs (requires same free abuse.ch Auth-Key as existing MalwareBazaar key)
+Features to add once core restructure is working and tested.
 
-### Future Consideration (v8+)
+- [ ] Inline context summary — once grouping is stable, surface 2-3 key context fields directly
+  in card header (GeoIP country + ASN org for IPs; creation age for domains)
+- [ ] Staleness indicator in summary row — surface `cached_at` when data is not fresh
+- [ ] Scan date on summary row — show most recent scan date from verdict providers
 
-- [ ] RDAP abuse contact email extraction for IPs — useful for incident reporting but requires
-  complex entity traversal in RDAP response
-- [ ] DNSBL for IPv6 — technically supported by most zones but IPv6 IOCs are rare in triage;
-  IPv6 reversal uses nibble notation (32 hex chars reversed), more complex than IPv4
-- [ ] Additional threat feeds (Abuse.ch SSL blacklist) — diminishing returns beyond core set
+### Future Consideration (v1.2+)
+
+- [ ] Per-category expand/collapse toggle — collapse "Infrastructure" section by default for
+  clean IOCs where context adds noise
+- [ ] IOC card sort by IOC type (group all IPs together, then domains, etc.) as an alternative
+  to current severity sort — useful for bulk input with mixed IOC types
 
 ---
 
@@ -350,120 +244,56 @@ These are the four specified feature areas plus the one removal. All are require
 
 | Feature | User Value | Implementation Cost | Priority |
 |---------|------------|---------------------|----------|
-| Remove annotations | HIGH (simplifies app, aligns v7.0 goal) | MEDIUM (routes, TS, templates, SQLite) | P1 |
-| DNSBL for IPs (Spamhaus ZEN et al.) | HIGH (direct reputation signal, zero-auth) | LOW (dnspython DNS queries, no new libs) | P1 |
-| RDAP domain (creation date + registrar + NS) | HIGH (domain age is top triage signal, WHOIS sunset means RDAP is now the standard) | LOW (requests to rdap.org, JSON parsing) | P1 |
-| Feodo Tracker C2 feed for IPs | HIGH (zero-auth, active C2 botnet list, direct malicious verdict) | MEDIUM (bulk list caching, not per-IP API) | P1 |
-| RDAP IP (network block + org) | MEDIUM (supplements ip-api.com context) | LOW (same RDAP adapter, different path) | P2 |
-| DNSBL for domains (DBL + SURBL) | MEDIUM (useful for email-origin domains; IP DNSBL is higher priority) | LOW (same DNS pattern as IP) | P2 |
-| ASN/BGP via Team Cymru (CIDR + RIR) | MEDIUM (CIDR prefix adds analyst value for subnet pivoting) | LOW (dnspython TXT record, zero new deps) | P2 |
-| DNSBL listed-count summary badge | LOW (nice-to-have UX polish) | LOW | P3 |
+| Worst-verdict as report headline (CSS only) | HIGH — first thing analyst reads | LOW — CSS sizing | P1 |
+| Category-grouped provider sections | HIGH — eliminates "14 results" feel | MEDIUM — JS + template | P1 |
+| No-data section collapsed by default | HIGH — reduces noise immediately | LOW — CSS default state | P1 |
+| Verdict breakdown micro-bar | MEDIUM — richer than text badge | MEDIUM — JS count + CSS bar | P1 |
+| Provider category labels/icons | MEDIUM — reinforces information structure | LOW — CSS tokens | P2 |
+| Inline context summary (always visible) | MEDIUM — eliminates mandatory expand for context | HIGH — new DOM slot, enrichment.ts change | P2 |
+| Staleness indicator on summary row | LOW-MEDIUM — data freshness matters for verdict trust | LOW — cached_at already available | P2 |
+| Scan date on summary row | LOW — detail-level info | LOW — scan_date already available | P3 |
 
 **Priority key:**
-- P1: Must have for v7.0 launch
-- P2: Should have, include in v7.0 if schedule permits
-- P3: Nice to have, v7.x
+- P1: Must have for v1.1 — directly addresses the "stapled together" problem
+- P2: Should have — improves information coherence and context visibility
+- P3: Nice to have — polish
 
 ---
 
-## IOC Type Coverage by New Provider
+## Competitor Feature Analysis
 
-| Provider | IPv4 | IPv6 | Domain | URL | Hash | CVE |
-|----------|------|------|--------|-----|------|-----|
-| DNSBL | YES | note | YES | — | — | — |
-| RDAP | YES | YES | YES | — | — | — |
-| Feodo Tracker | YES | — | — | — | — | — |
-| ASN/BGP (Team Cymru) | YES | YES | — | — | — | — |
+How the best platforms handle the specific problems SentinelX currently exhibits.
 
-IPv6 DNSBL note: technically supported but requires nibble-format reversal (32 hex chars reversed
-one at a time, dot-separated) rather than simple octet reversal. Omit from MVP — rare in triage.
-
----
-
-## Implementation Notes (for Roadmap Phases)
-
-### DNSBL Adapter Implementation Pattern
-
-```python
-# IP check: reverse octets, append zone, query A record
-# 1.2.3.4 -> query 4.3.2.1.zen.spamhaus.org
-# Hit = any A record returned; NXDOMAIN = not listed
-reversed_ip = ".".join(reversed(ip.split(".")))
-query = f"{reversed_ip}.{zone}"
-
-# Domain check: prepend domain to zone
-# example.com -> query example.com.dbl.spamhaus.org
-query = f"{domain}.{zone}"
-```
-
-Both patterns use `dns.resolver.Resolver(configure=True)` from dnspython — identical to
-DnsAdapter. The DNSBL adapter loops over a configured list of zones; each zone produces a
-hit/miss result. Aggregate results feed detection_count (hits) and total_engines (zones checked).
-
-### RDAP Adapter Implementation Pattern
-
-```python
-# Use rdap.org as bootstrap proxy
-# Domains: GET https://rdap.org/domain/example.com
-# IPs:     GET https://rdap.org/ip/1.2.3.4
-# rdap.org issues 302 -> follow to authoritative registry/RIR
-# allow_redirects=True is REQUIRED here (intentional exception to project default)
-```
-
-Parse RFC 9083 JSON. Extract events for creation date, nameservers array, entities for registrar.
-For IPs: extract name, startAddress, endAddress, country from top-level fields.
-
-### Feodo Tracker Integration Pattern
-
-```python
-# Bulk fetch: GET https://feodotracker.abuse.ch/downloads/ipblocklist.json
-# Returns list of objects with ip_address, port, malware, status fields
-# Cache strategy options:
-#   A) In-memory set at adapter construction, TTL-refresh on lookup miss
-#   B) SQLite rows in existing cache DB with timestamp, refresh on TTL expiry
-# Option B recommended: survives restarts, consistent with CacheStore
-```
-
-### Annotations Removal Scope
-
-Files to remove or modify:
-
-| File | Action |
-|------|--------|
-| `app/annotations/__init__.py` | Delete |
-| `app/annotations/store.py` | Delete |
-| `app/routes.py` | Remove `/api/annotations/*` routes |
-| `app/__init__.py` | Remove AnnotationStore import + initialization |
-| `app/static/src/ts/annotations.ts` | Delete |
-| `app/static/src/ts/detail.ts` | Remove annotation UI calls |
-| `app/templates/detail.html` | Remove annotation form and display sections |
-| `app/templates/results.html` | Remove tag filter chip UI |
-| `app/static/src/ts/graph.ts` | Remove tag nodes (or simplify; graph stays for IOC-provider edges) |
-| `tests/unit/test_annotations*.py` | Delete |
-| `tests/e2e/` | Remove annotation E2E scenarios |
-
-`~/.sentinelx/annotations.db` is a user file — the app should not delete it; release notes should
-document that users can remove it manually after upgrading to v7.0.
+| Problem | VirusTotal Approach | Hybrid Analysis Approach | Our Approach (v1.1) |
+|---------|---------------------|--------------------------|---------------------|
+| 14 sources feel separate | Tabs separate verdict / metadata / relations / community — verdict is the primary tab | Group by signal type (malicious / suspicious / informative), not by source | Three-section accordion: Reputation / Infrastructure Context / No Data |
+| Context vs verdict mixed | Domain/IP reports have zero vendor verdicts — pure context only; file reports have zero context in detection tab | Indicators section separates malicious / suspicious / informative rows | CONTEXT_PROVIDERS rendered in their own section, visually distinct from verdict section |
+| Verdict clarity | Large X/Y ratio in header is the dominant visual element | Threat score + AV detection rate in header before any source details | Worst-verdict badge promoted to dominant headline element in card |
+| No-data providers as noise | Not shown — VirusTotal only lists engines that returned a result | Informative indicators section separates low-signal results | No-data section collapsed by default with count shown ("5 had no record") |
+| Context fields buried | Details tab separate from detection; always shown by default | Informative indicators always visible in summary | Inline context summary (2-3 fields) always visible in card header |
 
 ---
 
 ## Sources
 
-- [Spamhaus ZEN Blocklist](https://www.spamhaus.org/blocklists/zen-blocklist/) — DNSBL zone, return codes, usage
-- [Spamhaus DBL](https://www.spamhaus.org/blocklists/domain-blocklist/) — Domain DNSBL zone and query format
-- [Spamhaus Fair Use Policy](https://www.spamhaus.org/blocklists/dnsbl-fair-use-policy/) — Rate limits for non-commercial use
-- [ICANN RDAP announcement January 2025](https://www.icann.org/en/announcements/details/icann-update-launching-rdap-sunsetting-whois-27-01-2025-en) — WHOIS sunset, RDAP now definitive
-- [rdap.org developer guide](https://about.rdap.org/) — Bootstrap proxy usage, redirect behavior
-- [RFC 9083 RDAP JSON](https://datatracker.ietf.org/doc/rfc9083/) — Response fields specification
-- [IANA RDAP Bootstrap Registry](https://data.iana.org/rdap) — Authoritative RIR bootstrap files
-- [Feodo Tracker](https://feodotracker.abuse.ch/) — C2 blocklist format, content, update frequency
-- [ThreatFox API](https://threatfox.abuse.ch/api/) — IOC search methods, auth requirements, IOC types
-- [Team Cymru IP to ASN](https://www.team-cymru.com/ip-asn-mapping) — DNS-based ASN lookup, TXT record format
-- [ipinfo.io Lite API](https://ipinfo.io/developers/lite-api) — Free ASN fields (token required)
-- [pydnsbl PyPI](https://pypi.org/project/pydnsbl/) — Python DNSBL reference implementation (not used directly)
-- [ARIN RDAP](https://www.arin.net/resources/registry/whois/rdap/) — IP RDAP RIR reference
+- [VirusTotal Reports Documentation](https://docs.virustotal.com/docs/results-reports) — Official
+  tab structure, field names, domain/IP vs file/URL report differences (HIGH confidence)
+- [Shodan Host Page](https://www.shodan.io/host/203.185.191.41) — Live inspection of Shodan host
+  report information architecture (HIGH confidence — direct observation)
+- [IntelOwl Usage Documentation](https://intelowlproject.github.io/docs/IntelOwl/usage/) — DataModel
+  synthesis approach, Visualizer aggregation pattern (HIGH confidence — official docs)
+- [Hybrid Analysis Sample Report](https://hybrid-analysis.com/sample/b558f0b1444be5df69027315f7aad563c54a3f791cebbb96a56fce7e5176f8f5/) —
+  Live inspection of Malicious/Suspicious/Informative indicator grouping (HIGH confidence)
+- [ANY.RUN Malware Analysis Report blog](https://any.run/cybersecurity-blog/malware-analysis-report/) —
+  ANY.RUN report section structure and hierarchy (MEDIUM confidence — marketing blog)
+- [URLScan.io About](https://urlscan.io/about/) — "digestible chunks, analyst-first approach"
+  design philosophy (MEDIUM confidence — official but brief)
+- [SentinelX enrichment.ts](../app/static/src/ts/modules/enrichment.ts) — Current implementation
+  of summary row, consensus badge, context row, detail row, sort logic (HIGH confidence — source)
+- [SentinelX _ioc_card.html / _enrichment_slot.html templates](../app/templates/partials/) —
+  Current DOM structure (HIGH confidence — source)
 
 ---
 
-*Feature research for: SentinelX v7.0 Free Intel milestone*
-*Researched: 2026-03-15*
+*Feature research for: SentinelX v1.1 Results Page Redesign*
+*Researched: 2026-03-16*
