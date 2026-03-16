@@ -48,16 +48,12 @@ Safe, correct, and transparent IOC extraction and enrichment — never invent sc
 - ✓ Custom tags on IOCs with tag-based filtering — v6.0
 - ✓ SVG relationship graph showing IOC-provider connections and verdicts — v6.0
 - ✓ 13 threat intel providers (5 zero-auth + 1 public + 7 key-auth) — v6.0
+- ✓ Annotations feature removed (notes, tags, tag filtering, AnnotationStore) — v7.0 partial
+- ✓ ASN/BGP intelligence for IP IOCs via Team Cymru DNS (CIDR, RIR, allocation date) — v7.0 partial
 
 ### Active
 
-**v7.0 Free Intel** — Actionable threat intelligence with zero API keys
-
-- [ ] Remove annotations feature entirely (notes, tags, tag filtering, AnnotationStore)
-- [ ] DNSBL reputation checks for IPs and domains via DNS lookups (Spamhaus, SURBL, etc.)
-- [ ] Public threat feed lookups via free APIs (blocklists, C2 lists, phishing URLs)
-- [ ] RDAP registration data for domains and IPs (registrar, creation date, nameservers)
-- [ ] ASN/BGP intelligence for IPs (hosting network, provider type, abuse contacts)
+(None — between milestones)
 
 ### Out of Scope
 
@@ -81,11 +77,11 @@ Safe, correct, and transparent IOC extraction and enrichment — never invent sc
 - **Frontend stack:** TypeScript 5.8 + esbuild (IIFE output), Tailwind CSS standalone CLI, Inter Variable + JetBrains Mono Variable, dark-first zinc/emerald/teal design tokens
 - **Codebase:** ~4,923 LOC Python, ~2,459 LOC TypeScript, ~635 LOC templates, ~12,350 LOC tests
 - **Test suite:** 757+ unit/integration + 91 E2E (up from 483 at v5.0)
-- **Threat intel providers (13):** VirusTotal (API key), MalwareBazaar (public), ThreatFox (public), Shodan InternetDB (zero-auth), URLhaus (free key), OTX AlienVault (free key), GreyNoise Community (free key), AbuseIPDB (free key), ip-api.com (zero-auth), CIRCL hashlookup (zero-auth), DNS Records (zero-auth), crt.sh (zero-auth), ThreatMiner (zero-auth)
-- **Architecture:** Provider Protocol + ProviderRegistry — adding a provider = one adapter file + one `register()` call. AnnotationStore for per-IOC notes/tags (separate SQLite DB). CacheStore for enrichment result caching.
+- **Threat intel providers (14):** VirusTotal (API key), MalwareBazaar (public), ThreatFox (public), Shodan InternetDB (zero-auth), URLhaus (free key), OTX AlienVault (free key), GreyNoise Community (free key), AbuseIPDB (free key), ip-api.com (zero-auth), CIRCL hashlookup (zero-auth), DNS Records (zero-auth), crt.sh (zero-auth), ThreatMiner (zero-auth), ASN Intel/Team Cymru (zero-auth)
+- **Architecture:** Provider Protocol + ProviderRegistry — adding a provider = one adapter file + one `register()` call. CacheStore for enrichment result caching.
 - **Security posture:** All defenses from v1.0 maintained — CSP, CSRF, SSRF allowlist (12 HTTP hosts), host validation, automated regression guards. CSRF meta tag for client-side fetch.
 - **Build:** Makefile targets — `css`, `js`, `js-dev`, `js-watch`, `typecheck`, `build`
-- **Frontend modules:** 14 TypeScript modules (was 12 at v5.0 — added annotations.ts, graph.ts)
+- **Frontend modules:** 13 TypeScript modules (annotations.ts removed in v7.0 partial, graph.ts added in v6.0)
 
 ## Constraints
 
@@ -120,16 +116,9 @@ Safe, correct, and transparent IOC extraction and enrichment — never invent sc
 | CONTEXT_PROVIDERS set pattern | Route zero-verdict context rows through shared renderer | ✓ Good — generalized createContextRow() for all context providers |
 | path converter for IOC URLs | URL IOCs contain slashes that break standard routing | ✓ Good — `<path:ioc_value>` handles all IOC formats |
 
-## Current Milestone: v7.0 Free Intel
+## Current Milestone
 
-**Goal:** Provide actionable threat intelligence out of the box — useful triage with zero API keys configured, via DNSBL checks, public threat feeds, RDAP registration data, and ASN/BGP intelligence.
-
-**Target features:**
-- DNSBL reputation checks (Spamhaus, SURBL, etc.) — "is this IP/domain on a blocklist?"
-- Public threat feed queries — C2 lists, phishing databases, known-bad indicators
-- RDAP registration data — registrar, creation date, nameservers (age = triage signal)
-- ASN/BGP intelligence — hosting provider, network type, abuse contacts
-- Remove annotations — strip notes, tags, tag filtering, AnnotationStore
+(None — v7.0 abandoned after phases 01-02, starting fresh)
 
 ## Shipped Milestones
 
@@ -148,4 +137,4 @@ Safe, correct, and transparent IOC extraction and enrichment — never invent sc
 See `.planning/MILESTONES.md` for full details.
 
 ---
-*Last updated: 2026-03-15 after v7.0 Free Intel milestone started*
+*Last updated: 2026-03-16 after v7.0 abandoned (phases 01-02 kept), preparing new milestone*

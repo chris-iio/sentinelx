@@ -1,13 +1,13 @@
 ---
 gsd_state_version: 1.0
-milestone: v7.0
-milestone_name: Free Intel
-status: planning
-stopped_at: Completed 02-asn-intelligence-01-PLAN.md
-last_updated: "2026-03-14T22:09:55.190Z"
-last_activity: 2026-03-15 — Roadmap created, 7/7 requirements mapped
+milestone: none
+milestone_name: idle
+status: idle
+stopped_at: v7.0 abandoned, ready for new milestone
+last_updated: "2026-03-16"
+last_activity: 2026-03-16 — v7.0 abandoned after phases 01-02, starting fresh
 progress:
-  total_phases: 5
+  total_phases: 0
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -18,17 +18,17 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-15)
+See: .planning/PROJECT.md (updated 2026-03-16)
 
 **Core value:** Safe, correct, and transparent IOC extraction and enrichment
-**Current focus:** v7.0 Free Intel — Phase 01 ready to plan
+**Current focus:** Between milestones — defining next milestone
 
 ## Current Position
 
-**Milestone:** v7.0 Free Intel
-**Phase:** 0 of 5 (not started)
-**Status:** Ready to plan
-**Last activity:** 2026-03-15 — Roadmap created, 7/7 requirements mapped
+**Milestone:** None (idle)
+**Phase:** —
+**Status:** Ready for new milestone
+**Last activity:** 2026-03-16 — v7.0 abandoned after phases 01-02, starting fresh
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -39,40 +39,24 @@ Progress: [░░░░░░░░░░] 0%
 - Average duration: —
 - Total execution time: —
 
-**By Phase:**
-
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| - | - | - | - |
-
-*Updated after each plan completion*
-| Phase 01-annotations-removal P01 | 284 | 3 tasks | 11 files |
-| Phase 02-asn-intelligence P01 | 4 | 2 tasks | 6 files |
-
 ## Accumulated Context
 
 ### Decisions
 
-Recent decisions affecting current work:
-
-- [Roadmap]: Phase 01 (Annotations Removal) must complete before any provider work — atomic removal prevents orphaned imports crashing app at startup
-- [Roadmap]: Phases 02 and 03 are independent of each other (both depend only on Phase 01); DNS-native before HTTP
-- [Roadmap]: Phase 04 (RDAP Design Decision) is a gate phase — empirical test of rdap.org redirect vs proxy behavior determines Phase 05 implementation approach
-- [Phase 01-annotations-removal]: routes.py edited before annotations/ deleted — prevents ImportError during removal sequence
-- [Phase 01-annotations-removal]: Two pre-existing test failures deferred (E2E title case, deduplication count) — confirmed out-of-scope, logged to deferred-items.md
-- [Phase 02-asn-intelligence]: NXDOMAIN for private/RFC-1918 IPs returns EnrichmentResult(no_data) not EnrichmentError — consistent with IPApiAdapter private IP handling
-- [Phase 02-asn-intelligence]: Country code excluded from CymruASNAdapter raw_stats — RIR region != geolocation, ip-api.com already provides geolocation via IP Context
+- [v7.0-partial]: Annotations removal completed — codebase no longer has notes/tags/AnnotationStore
+- [v7.0-partial]: ASN Intelligence (Team Cymru DNS) is live as 14th provider — zero-auth, always configured
+- [v7.0-abandoned]: Feodo Tracker, RDAP design decision, and RDAP registration data abandoned — user chose to start fresh
 
 ### Blockers/Concerns
 
-- [Phase 04] RDAP SEC-06 conflict unresolved — rdap.org redirect vs proxy behavior requires empirical validation; blocks Phase 05 implementation
+None.
 
 ### Pending Todos
 
-None yet.
+1 pending todo from previous work.
 
 ## Session Continuity
 
-Last session: 2026-03-14T22:06:31.214Z
-Stopped at: Completed 02-asn-intelligence-01-PLAN.md
+Last session: 2026-03-16
+Stopped at: v7.0 abandoned, proceeding to new milestone definition
 Resume file: None

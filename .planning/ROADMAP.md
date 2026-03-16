@@ -11,7 +11,7 @@
 - ✅ **v4.0 Universal Threat Intel Hub** — Phases 1-4 (shipped 2026-03-03)
 - ✅ **v5.0 Quality-of-Life** — Phase 1 retroactive (shipped 2026-03-09)
 - ✅ **v6.0 Analyst Experience** — Phases 01-04 (shipped 2026-03-14)
-- 🚧 **v7.0 Free Intel** — Phases 01-05 (in progress)
+- ⚠️ **v7.0 Free Intel** — Phases 01-02 completed, 03-05 abandoned (2026-03-16)
 
 ## Phases
 
@@ -113,81 +113,14 @@ Full details: `milestones/v6.0-ROADMAP.md`
 
 </details>
 
-### v7.0 Free Intel (In Progress)
+### v7.0 Free Intel (Abandoned — Partial)
 
-**Milestone Goal:** Provide actionable threat intelligence out of the box — useful triage with zero API keys configured, via annotations removal (codebase cleanup), ASN/BGP context, Feodo Tracker C2 feed, and RDAP registration data.
+**Milestone Goal:** Provide actionable threat intelligence out of the box.
 
-- [x] **Phase 01: Annotations Removal** — Strip notes, tags, AnnotationStore, and annotation API routes for a clean v7.0 baseline (completed 2026-03-14)
-- [x] **Phase 02: ASN Intelligence** — Team Cymru DNS-based ASN/BGP context (CIDR prefix, RIR, allocation date) for IP IOCs (completed 2026-03-14)
-- [ ] **Phase 03: Threat Feed Intelligence** — Feodo Tracker C2 blocklist for IP IOCs (malicious with malware family on hit)
-- [ ] **Phase 04: RDAP Design Decision** — Resolve SEC-06 redirect conflict empirically before writing any RDAP adapter code
-- [ ] **Phase 05: RDAP Registration Data** — Domain and IP registration data (registrar, creation date, network block) via RDAP
+- [x] **Phase 01: Annotations Removal** — completed 2026-03-14
+- [x] **Phase 02: ASN Intelligence** — completed 2026-03-14
+- ~~Phase 03: Threat Feed Intelligence~~ — abandoned
+- ~~Phase 04: RDAP Design Decision~~ — abandoned
+- ~~Phase 05: RDAP Registration Data~~ — abandoned
 
-## Phase Details
-
-### Phase 01: Annotations Removal
-**Goal**: Remove the annotations feature entirely, establishing a clean codebase baseline before any new provider work begins
-**Depends on**: Nothing (first phase)
-**Requirements**: CLEAN-01, CLEAN-02
-**Success Criteria** (what must be TRUE):
-  1. No notes input, tag input, or tag filter UI appears on the results page or IOC detail page
-  2. The `/api/annotations/*` routes return 404 (routes no longer exist)
-  3. `flask --debug run` starts without import errors after annotations module is removed
-  4. Full test suite passes with no annotation-related test failures
-**Plans:** 1/1 plans complete
-Plans:
-- [x] 01-01-PLAN.md — Complete annotations removal (tests, Python, TypeScript)
-
-### Phase 02: ASN Intelligence
-**Goal**: Users see ASN/BGP context (CIDR prefix, RIR, allocation date, ASN number and org) for IP IOCs via Team Cymru DNS — zero new dependencies, zero SSRF surface changes
-**Depends on**: Phase 01
-**Requirements**: ASN-01
-**Success Criteria** (what must be TRUE):
-  1. Submitting an IP IOC in online mode shows an ASN context row with CIDR prefix, ASN number, org name, and RIR
-  2. The ASN provider appears in the provider coverage dashboard as a zero-auth provider
-  3. The ASN adapter has no `requires_api_key` and `is_configured()` always returns True
-**Plans:** 1/1 plans complete
-Plans:
-- [ ] 02-01-PLAN.md — CymruASNAdapter + registration + frontend wiring
-
-### Phase 03: Threat Feed Intelligence
-**Goal**: Users see Feodo Tracker C2 blocklist verdict for IP IOCs — malicious with malware family name on hit, clean when confirmed absent from the feed
-**Depends on**: Phase 01
-**Requirements**: FEED-01
-**Success Criteria** (what must be TRUE):
-  1. Submitting an IP IOC known to be in Feodo Tracker shows a malicious verdict with the malware family name
-  2. Submitting an IP IOC absent from the feed shows a clean verdict
-  3. `feodotracker.abuse.ch` is in the SSRF allowlist and a unit test confirms `validate_endpoint()` passes for it
-  4. The Feodo feed is cached (subsequent lookups within TTL do not re-download the full feed)
-**Plans**: TBD
-
-### Phase 04: RDAP Design Decision
-**Goal**: Resolve the SEC-06 redirect conflict for RDAP before any adapter code is written — empirically confirm whether rdap.org proxies responses or issues redirects, and document the binding design decision
-**Depends on**: Phase 01
-**Requirements**: RDAP-03
-**Success Criteria** (what must be TRUE):
-  1. A documented test result exists showing the HTTP response status of `GET https://rdap.org/domain/google.com` with `allow_redirects=False`
-  2. The RDAP implementation approach is chosen (requests + allowlist if 200, or whoisit library if 302) and recorded in PROJECT.md Key Decisions
-  3. Any SEC-06 exception (if whoisit is chosen) is explicitly documented with rationale
-**Plans**: TBD
-
-### Phase 05: RDAP Registration Data
-**Goal**: Users see domain registration data (registrar, creation date as "registered N days ago", nameservers) and IP registration data (network block name, org, CIDR, country) for applicable IOC types
-**Depends on**: Phase 04
-**Requirements**: RDAP-01, RDAP-02
-**Success Criteria** (what must be TRUE):
-  1. Submitting a domain IOC shows an RDAP context row with registrar name, creation date formatted as "registered N days ago", and nameservers
-  2. Submitting an IP IOC shows an RDAP context row with network block name, org, CIDR, and country
-  3. The RDAP provider appears in the provider coverage dashboard as a zero-auth provider
-  4. No registrant contact fields (name, email, address) appear in RDAP output — GDPR-scoped data model only
-**Plans**: TBD
-
-## Progress
-
-| Phase | Milestone | Plans Complete | Status | Completed |
-|-------|-----------|----------------|--------|-----------|
-| 01. Annotations Removal | 1/1 | Complete    | 2026-03-14 | - |
-| 02. ASN Intelligence | 1/1 | Complete    | 2026-03-14 | - |
-| 03. Threat Feed Intelligence | v7.0 | 0/TBD | Not started | - |
-| 04. RDAP Design Decision | v7.0 | 0/TBD | Not started | - |
-| 05. RDAP Registration Data | v7.0 | 0/TBD | Not started | - |
+Full details: `milestones/v7.0-abandoned/`

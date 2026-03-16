@@ -1,5 +1,26 @@
 # Milestones
 
+## v7.0 Free Intel (Abandoned: 2026-03-16 — Partial)
+
+**Phases:** 2 of 5 completed (01-02) | **Plans:** 2 | **Requirements:** 3/7 (4 abandoned)
+**Timeline:** 1 day (2026-03-14 → 2026-03-14)
+
+**Completed before abandonment:**
+1. Annotations removal — stripped notes, tags, tag filtering, AnnotationStore, annotation API routes
+2. ASN Intelligence — Team Cymru DNS-based IP-to-ASN adapter (14th provider, zero-auth)
+
+**Abandoned phases:**
+- Phase 03: Threat Feed Intelligence (Feodo Tracker)
+- Phase 04: RDAP Design Decision
+- Phase 05: RDAP Registration Data
+
+**Reason:** User chose to start fresh with a new milestone direction.
+
+**Archives:**
+- `milestones/v7.0-abandoned/`
+
+---
+
 ## v6.0 Analyst Experience (Shipped: 2026-03-14)
 
 **Phases:** 4 (01-04) | **Plans:** 11 | **Tasks:** 13 | **Requirements:** 13/13
