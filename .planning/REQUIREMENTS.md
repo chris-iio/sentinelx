@@ -1,54 +1,58 @@
 # Requirements: SentinelX
 
-**Defined:** 2026-03-15
+**Defined:** 2026-03-16
 **Core Value:** Safe, correct, and transparent IOC extraction and enrichment
 
-## v7.0 Requirements
+## v1.1 Requirements
 
-Requirements for v7.0 Free Intel. Each maps to roadmap phases.
+Requirements for the Results Page Redesign. Each maps to roadmap phases.
 
-### Cleanup
+### Visual Hierarchy
 
-- [x] **CLEAN-01**: Annotations feature (notes, tags, tag filtering, AnnotationStore) is fully removed — no notes/tags UI on any page
-- [x] **CLEAN-02**: Annotation API routes (/api/annotations/*) no longer exist
+- [ ] **VIS-01**: Worst verdict is the dominant visual element in each IOC card header
+- [ ] **VIS-02**: Verdict breakdown shows visual count bar of malicious/suspicious/clean/no-data providers (replaces text consensus badge)
+- [ ] **VIS-03**: Provider rows display distinct category labels distinguishing Reputation from Infrastructure
 
-### RDAP Registration
+### Information Grouping
 
-- [ ] **RDAP-01**: User sees domain registration data (registrar, creation date as "registered N days ago", nameservers) for domain IOCs
-- [ ] **RDAP-02**: User sees IP registration data (network block name, org, CIDR, country) for IP IOCs
-- [ ] **RDAP-03**: RDAP provider resolves SEC-06 redirect conflict with documented design decision before implementation
+- [ ] **GRP-01**: Provider results are grouped into three sections: Reputation, Infrastructure Context, and No Data
+- [ ] **GRP-02**: No-data providers are collapsed by default with a count summary ("5 had no record")
 
-### Threat Feeds
+### Context Visibility
 
-- [ ] **FEED-01**: User sees Feodo Tracker C2 verdict for IP IOCs — malicious with malware family on hit, clean when absent
-
-### ASN/BGP Intelligence
-
-- [x] **ASN-01**: User sees ASN/BGP context (CIDR prefix, RIR, allocation date) for IP IOCs via Team Cymru DNS
+- [ ] **CTX-01**: Key context fields (GeoIP country, ASN org for IPs; registrar for domains) are visible in IOC card header without expanding
+- [ ] **CTX-02**: Cached results show a staleness indicator ("data from 4h ago") in the summary row
 
 ## Future Requirements
 
 Deferred to future release. Tracked but not in current roadmap.
 
-### DNSBL Reputation
+### Context Visibility
+
+- **CTX-03**: Scan date from verdict providers shown on summary row
+- **CTX-04**: Per-category expand/collapse toggle (collapse Infrastructure for clean IOCs)
+
+### Results Organization
+
+- **ORG-01**: IOC card sort by IOC type as alternative to severity sort (for mixed bulk input)
+
+### DNSBL Reputation (from v7.0)
 
 - **DNSBL-01**: IP reputation via Spamhaus ZEN + Barracuda + SpamCop
 - **DNSBL-02**: Domain reputation via Spamhaus DBL + SURBL
 - **DNSBL-03**: IPv6 DNSBL with nibble reversal
 
-### RDAP Extensions
-
-- **RDAP-04**: RDAP abuse contact email extraction
-
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| WHOIS in any form | Sunsetted by ICANN January 2025; RDAP is the sole standard |
-| RDAP registrant contact fields | 58%+ return "REDACTED FOR PRIVACY" due to GDPR; noise not signal |
-| BGP path visualization | Dynamic data misleading as static snapshot; high frontend cost for low triage value |
-| PhishTank | New user registration closed since 2020; cannot obtain API key |
-| BGPView | Service shut down November 2025 |
+| Composite threat score | Core design philosophy: never invent scores — transparency over convenience |
+| Provider logos in rows | Page weight (14 logos x N IOCs), licensing, textContent-only DOM constraint |
+| Auto-expand all IOC cards | 10 IOCs x 14 providers = 140 rows — catastrophic for scan time |
+| Tabs replacing accordion | Complex per-card tab state; breaks at-a-glance comparison across IOCs |
+| Analyst verdict overrides | Annotations removed in v7.0; couples triage to case management |
+| New providers | v1.1 is presentation-only — no new data sources |
+| Detail page redesign | Architecturally independent (CSS-only tabs); defer to v1.2 if needed |
 
 ## Traceability
 
@@ -56,19 +60,19 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CLEAN-01 | Phase 01 | Complete |
-| CLEAN-02 | Phase 01 | Complete |
-| ASN-01 | Phase 02 | Complete |
-| FEED-01 | Phase 03 | Pending |
-| RDAP-03 | Phase 04 | Pending |
-| RDAP-01 | Phase 05 | Pending |
-| RDAP-02 | Phase 05 | Pending |
+| VIS-01 | — | Pending |
+| VIS-02 | — | Pending |
+| VIS-03 | — | Pending |
+| GRP-01 | — | Pending |
+| GRP-02 | — | Pending |
+| CTX-01 | — | Pending |
+| CTX-02 | — | Pending |
 
 **Coverage:**
-- v7.0 requirements: 7 total
-- Mapped to phases: 7
-- Unmapped: 0
+- v1.1 requirements: 7 total
+- Mapped to phases: 0
+- Unmapped: 7
 
 ---
-*Requirements defined: 2026-03-15*
-*Last updated: 2026-03-15 after roadmap creation — 7/7 requirements mapped*
+*Requirements defined: 2026-03-16*
+*Last updated: 2026-03-16 after initial definition*
