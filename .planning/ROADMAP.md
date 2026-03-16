@@ -47,7 +47,7 @@ Plans:
   4. All 91 E2E tests pass unchanged after extraction — zero behavioral change
 **Plans**: 1 plan
 Plans:
-- [ ] 02-01-PLAN.md — Extract verdict-compute.ts, row-factory.ts, and trim enrichment.ts
+- [x] 02-01-PLAN.md — Extract verdict-compute.ts, row-factory.ts, and trim enrichment.ts
 
 ### Phase 3: Visual Redesign
 **Goal**: Provider rows display a clear visual hierarchy with verdict prominence, a breakdown micro-bar, category labels, and no-data rows collapsed by default
@@ -88,7 +88,7 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 1. Contracts and Foundation | 1/1 | Complete   | 2026-03-16 | - |
-| 2. TypeScript Module Extractions | v1.1 | 0/1 | Planning complete | - |
+| 2. TypeScript Module Extractions | v1.1 | 1/1 | Complete | 2026-03-17 |
 | 3. Visual Redesign | v1.1 | 0/TBD | Not started | - |
 | 4. Template Restructuring | v1.1 | 0/TBD | Not started | - |
 | 5. Context and Staleness | v1.1 | 0/TBD | Not started | - |
