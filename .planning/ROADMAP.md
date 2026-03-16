@@ -34,7 +34,7 @@ See `.planning/MILESTONES.md` for full internal milestone history.
   4. A CSS layer ownership rule exists: component classes own all visual properties for existing elements; Tailwind utilities for new layout structures only
 **Plans**: 1 plan
 Plans:
-- [ ] 01-01-PLAN.md — CSS contract catalog, inline source annotations, and E2E baseline confirmation
+- [x] 01-01-PLAN.md — CSS contract catalog, inline source annotations, and E2E baseline confirmation
 
 ### Phase 2: TypeScript Module Extractions
 **Goal**: `enrichment.ts` is split into three focused modules with zero behavioral change — visual redesign work is now isolated to `row-factory.ts`
@@ -45,7 +45,9 @@ Plans:
   2. `row-factory.ts` exists (~150 LOC) with unified `createProviderRow(result, kind, statText)` owning the `CONTEXT_PROVIDERS` set and all row-building DOM code
   3. `enrichment.ts` is trimmed to ~300 LOC as the polling orchestrator and state owner only
   4. All 91 E2E tests pass unchanged after extraction — zero behavioral change
-**Plans**: TBD
+**Plans**: 1 plan
+Plans:
+- [ ] 02-01-PLAN.md — Extract verdict-compute.ts, row-factory.ts, and trim enrichment.ts
 
 ### Phase 3: Visual Redesign
 **Goal**: Provider rows display a clear visual hierarchy with verdict prominence, a breakdown micro-bar, category labels, and no-data rows collapsed by default
@@ -86,7 +88,7 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 1. Contracts and Foundation | 1/1 | Complete   | 2026-03-16 | - |
-| 2. TypeScript Module Extractions | v1.1 | 0/TBD | Not started | - |
+| 2. TypeScript Module Extractions | v1.1 | 0/1 | Planning complete | - |
 | 3. Visual Redesign | v1.1 | 0/TBD | Not started | - |
 | 4. Template Restructuring | v1.1 | 0/TBD | Not started | - |
 | 5. Context and Staleness | v1.1 | 0/TBD | Not started | - |
