@@ -23,7 +23,8 @@ import type { VerdictEntry } from "./verdict-compute";
 import { computeWorstVerdict, findWorstEntry } from "./verdict-compute";
 import { CONTEXT_PROVIDERS, createContextRow, createDetailRow,
          updateSummaryRow, formatDate,
-         injectSectionHeadersAndNoDataSummary } from "./row-factory";
+         injectSectionHeadersAndNoDataSummary,
+         updateContextLine } from "./row-factory";
 
 // ---- Module-private state ----
 
@@ -226,6 +227,9 @@ function renderEnrichmentResult(
     if (contextSection && result.type === "result") {
       const contextRow = createContextRow(result);
       contextSection.appendChild(contextRow);
+
+      // Populate inline context line in card header (CTX-01)
+      updateContextLine(card, result);
     }
 
     // Update pending indicator

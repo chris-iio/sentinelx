@@ -1060,6 +1060,21 @@
         margin-bottom: 0.35rem;
     }
 
+    /* ---- CTX-01: Inline context line (GeoIP, ASN, DNS A records) ---- */
+
+    .ioc-context-line:empty {
+        display: none;
+    }
+    .ioc-context-line {
+        font-size: 0.75rem;
+        color: var(--text-muted, #6b7280);
+        padding: 0.125rem 1rem 0.25rem;
+        line-height: 1.4;
+    }
+    .ioc-context-line .context-field {
+        margin-right: 0.75rem;
+    }
+
     /* ---- Enrichment UI (inside cards) ---- */
 
     .enrich-warning {

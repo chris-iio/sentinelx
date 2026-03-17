@@ -52,6 +52,8 @@
     <div class="ioc-original">Original: {{ ioc.raw_match }}</div>
     {% endif %}
 
+    <div class="ioc-context-line"></div>
+
     {% if mode == "online" and job_id %}
     {% include "partials/_enrichment_slot.html" %}
     {% endif %}

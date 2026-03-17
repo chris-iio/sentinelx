@@ -405,6 +405,95 @@ export function createProviderRow(
 }
 
 /**
+ * Populate the inline context line in the IOC card header (CTX-01).
+ *
+ * Extracts key fields from context provider raw_stats and appends them
+ * to the .ioc-context-line element. Providers handled:
+ *   - "IP Context" → raw_stats.geo (pre-formatted location string)
+ *   - "ASN Intel"  → raw_stats.asn + raw_stats.prefix (skips if IP Context already present)
+ *   - "DNS Records" → raw_stats.a (first 3 A-record IPs)
+ *
+ * All DOM construction uses createElement + textContent (SEC-08).
+ */
+export function updateContextLine(card: HTMLElement, result: EnrichmentResultItem): void {
+  const contextLine = card.querySelector<HTMLElement>(".ioc-context-line");
+  if (!contextLine) return;
+
+  const provider = result.provider;
+  const stats = result.raw_stats;
+  if (!stats) return;
+
+  if (provider === "IP Context") {
+    const geo = stats.geo;
+    if (!geo || typeof geo !== "string") return;
+
+    // Check if IP Context span already exists — replace its text
+    const existing = contextLine.querySelector<HTMLElement>('span[data-context-provider="IP Context"]');
+    if (existing) {
+      existing.textContent = geo;
+      return;
+    }
+
+    // Remove ASN Intel span if present — IP Context is more comprehensive
+    const asnSpan = contextLine.querySelector<HTMLElement>('span[data-context-provider="ASN Intel"]');
+    if (asnSpan) {
+      contextLine.removeChild(asnSpan);
+    }
+
+    const span = document.createElement("span");
+    span.className = "context-field";
+    span.setAttribute("data-context-provider", "IP Context");
+    span.textContent = geo;
+    contextLine.appendChild(span);
+  } else if (provider === "ASN Intel") {
+    // Only populate if IP Context hasn't already provided richer data
+    if (contextLine.querySelector('span[data-context-provider="IP Context"]')) return;
+
+    const asn = stats.asn;
+    const prefix = stats.prefix;
+    if (!asn && !prefix) return;
+
+    const parts: string[] = [];
+    if (asn && (typeof asn === "string" || typeof asn === "number")) parts.push(String(asn));
+    if (prefix && typeof prefix === "string") parts.push(prefix);
+    if (parts.length === 0) return;
+
+    const text = parts.join(" · ");
+    const existing = contextLine.querySelector<HTMLElement>('span[data-context-provider="ASN Intel"]');
+    if (existing) {
+      existing.textContent = text;
+      return;
+    }
+
+    const span = document.createElement("span");
+    span.className = "context-field";
+    span.setAttribute("data-context-provider", "ASN Intel");
+    span.textContent = text;
+    contextLine.appendChild(span);
+  } else if (provider === "DNS Records") {
+    const aRecords = stats.a;
+    if (!Array.isArray(aRecords) || aRecords.length === 0) return;
+
+    const ips = aRecords.slice(0, 3).filter((ip): ip is string => typeof ip === "string");
+    if (ips.length === 0) return;
+
+    const text = "A: " + ips.join(", ");
+    const existing = contextLine.querySelector<HTMLElement>('span[data-context-provider="DNS Records"]');
+    if (existing) {
+      existing.textContent = text;
+      return;
+    }
+
+    const span = document.createElement("span");
+    span.className = "context-field";
+    span.setAttribute("data-context-provider", "DNS Records");
+    span.textContent = text;
+    contextLine.appendChild(span);
+  }
+  // All other providers — do nothing
+}
+
+/**
  * Inject no-data collapse summary (GRP-02) into the no-data section of an
  * enrichment slot. Must be called AFTER enrichment completes and sortDetailRows()
  * has finalized the DOM order.

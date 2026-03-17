@@ -97,3 +97,13 @@ This task adds a template placeholder, a new `updateContextLine()` function in `
 - `app/static/src/input.css` — `.ioc-context-line` and `.context-field` CSS rules
 - `app/static/dist/main.js` — Rebuilt JS bundle
 - `app/static/dist/style.css` — Rebuilt CSS
+
+## Observability Impact
+
+- **New DOM surface:** `.ioc-context-line` div present on every `.ioc-card`. When empty (no context providers for IOC type), `:empty` CSS rule hides it. When populated, child `<span>` elements carry `data-context-provider` attributes identifying which provider sourced the data.
+- **Inspection commands:**
+  - `document.querySelectorAll('.ioc-context-line:not(:empty)').length` — count of IOCs with inline context rendered
+  - `document.querySelectorAll('.ioc-context-line').length` — should equal `.ioc-card` count (placeholder always present)
+  - `document.querySelector('.ioc-context-line span')?.getAttribute('data-context-provider')` — identifies which provider populated a context line
+- **Failure signal:** If an IP IOC's `.ioc-context-line` stays empty while `.enrichment-section--context .provider-detail-row` has children, then `updateContextLine()` was not called or `raw_stats.geo` was absent.
+- **No backend changes.** All data already flows from Flask to browser via the enrichment status endpoint.

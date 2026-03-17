@@ -51,7 +51,7 @@
 
 ## Tasks
 
-- [ ] **T01: Add inline context line to IOC card header for IP and domain IOCs** `est:45m`
+- [x] **T01: Add inline context line to IOC card header for IP and domain IOCs** `est:45m`
   - Why: Delivers CTX-01 — the higher-complexity feature with template + JS routing + CSS. Context fields visible without expanding give users immediate intelligence value.
   - Files: `app/templates/partials/_ioc_card.html`, `app/static/src/ts/modules/row-factory.ts`, `app/static/src/ts/modules/enrichment.ts`, `app/static/src/input.css`
   - Do: (1) Add empty `.ioc-context-line` div in `_ioc_card.html` after `{% endif %}` for `.ioc-original` and before the `{% if mode == "online" %}` enrichment slot include. (2) Add `updateContextLine(card, result)` function to `row-factory.ts` that extracts context from `raw_stats` based on provider name — IP Context uses `raw_stats.geo`, ASN Intel uses `asn`+`prefix` (skips if IP Context already populated), DNS Records uses `raw_stats.a` array (first 2-3 IPs). Each span gets `data-context-provider` attribute for dedup. (3) Call `updateContextLine` from the context provider branch in `enrichment.ts` (after the context row append, before the return). (4) Add `.ioc-context-line` CSS in `input.css` — `:empty { display: none }`, muted text styling, positioned between header and enrichment slot. (5) All DOM uses `createElement + textContent` only (SEC-08). Only CONTEXT_PROVIDERS results populate the line — never verdict providers.
