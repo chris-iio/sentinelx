@@ -8,3 +8,6 @@
 - "Post-enrichment DOM injection via markEnrichmentComplete() — section headers and no-data collapse inserted after sortDetailRows() finalizes order, immune to re-sorting (S03/T02)"
 - "CSS-driven toggle for no-data collapse: .no-data-expanded class on container controls child visibility; aria-expanded + keyboard Enter/Space for a11y compliance (S03/T02)"
 - "Kept computeConsensus/consensusBadgeClass exports in verdict-compute.ts for API stability despite removal of DOM consumption (S03/T01)"
+- "IP Context provider replaces ASN Intel span if it arrives later — IP Context has more comprehensive geo data; dedup via data-context-provider attribute (S05/T01)"
+- "Staleness badge shows oldest cached_at across all providers (worst-case data age) — analysts need to know the stalest data, not the freshest (S05/T02)"
+- "Error-type results never carry cachedAt — only successful 'result' type responses can be cached (S05/T02)"

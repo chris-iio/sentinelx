@@ -58,6 +58,7 @@ No-data providers are collapsed by default with a count summary ("5 had no recor
 - Class: core-capability
 - Source: inferred
 - Primary Slice: S05
+- Implementation: `.ioc-context-line` placeholder in `_ioc_card.html`, `updateContextLine()` in row-factory.ts handles IP Context (geo), ASN Intel (asn+prefix, deduped by IP Context), DNS Records (A records). `:empty { display: none }` hides for non-context IOC types. Awaiting live UAT visual confirmation.
 
 Key context fields (GeoIP country, ASN org for IPs; registrar for domains) are visible in IOC card header without expanding
 
@@ -67,6 +68,7 @@ Key context fields (GeoIP country, ASN org for IPs; registrar for domains) are v
 - Class: core-capability
 - Source: inferred
 - Primary Slice: S05
+- Implementation: `VerdictEntry.cachedAt` optional field populated from `result.cached_at` in enrichment.ts. `updateSummaryRow()` renders `.staleness-badge` with oldest cache age via `formatRelativeTime()`. Awaiting live UAT visual confirmation.
 
 Cached results show a staleness indicator ("data from 4h ago") in the summary row
 

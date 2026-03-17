@@ -93,7 +93,7 @@ Everything built through 9 milestones (2026-02-21 to 2026-03-14). See `.planning
 
 **Goal:** Make 14 providers feel like one cohesive intelligence report instead of 14 separate search results stapled together.
 
-**Progress:** 3/5 slices complete (S01 contracts, S02 module extraction, S03 visual redesign). Next: S04 template restructuring, S05 context fields + staleness.
+**Progress:** 5/5 slices complete (S01 contracts, S02 module extraction, S03 visual redesign, S04 template restructuring, S05 context & staleness). All implementation done — awaiting UAT.
 
 **Target features:**
 - Uniform information architecture across all provider types (verdict, context, no-data)
@@ -101,6 +101,10 @@ Everything built through 9 milestones (2026-02-21 to 2026-03-14). See `.planning
 - Results page that embodies the "meta-search engine" identity
 
 **Completed in S03:** Enlarged verdict badges (VIS-01), proportional verdict micro-bar replacing consensus text (VIS-02), "Reputation"/"Infrastructure Context" section headers (VIS-03), no-data row collapse with count summary (GRP-02).
+
+**Completed in S04:** Server-rendered three-section grouping — Reputation, Infrastructure Context, No Data (GRP-01).
+
+**Completed in S05:** Inline context line showing GeoIP/ASN/DNS fields in IOC card headers (CTX-01), staleness badge showing oldest cache age in summary rows (CTX-02).
 
 ## Shipped Milestones
 
