@@ -1,7 +1,7 @@
 # GSD State
 
 **Active Milestone:** M001: v1.1 Results Page Redesign
-**Active Slice:** S04: Template Restructuring
+**Active Slice:** S05: Context And Staleness
 **Phase:** executing
 **Requirements Status:** 7 active · 0 validated · 0 deferred · 0 out of scope
 
@@ -9,10 +9,10 @@
 - 🔄 **M001:** v1.1 Results Page Redesign
 
 ## Recent Decisions
-- D004: Template-rendered section structure for enrichment details (M001/S04)
+- None recorded
 
 ## Blockers
 - None
 
 ## Next Action
-Execute S04/T01: Add template sections and wire JS routing to section containers
+Execute S05/T01: Add inline context line to IOC card header for IP and domain IOCs
