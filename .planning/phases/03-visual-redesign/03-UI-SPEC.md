@@ -47,8 +47,8 @@ Declared values (multiples of 4 only):
 
 Exceptions:
 - `.verdict-label` padding target: `0.25rem 0.75rem` (4px 12px — on 4-point scale). Source: RESEARCH.md VIS-01 recommendation.
-- `.verdict-micro-bar` height: 6px — intentional sub-grid value for a compact visual indicator. Source: RESEARCH.md VIS-02 recommendation.
-- `.no-data-summary-row` padding: `0.35rem 0.5rem` (≈6px 8px) — source: RESEARCH.md GRP-02 recommendation.
+- `.verdict-micro-bar` height: `4px` — compact visual indicator on the 4-point scale (revised from 6px to align with grid).
+- `.no-data-summary-row` padding: `0.5rem 0.5rem` (8px 8px — on 4-point scale). Vertical 0.5rem (8px) maintains adequate click target for a desktop-only SOC tool (revised from 0.35rem to align with grid).
 - Touch target for `.no-data-summary-row` (interactive row): minimum effective click area is `width: 100%; min-height: 28px` via padding — acceptable for desktop-only SOC tool.
 
 ---
@@ -60,9 +60,11 @@ Phase 3 introduces three new text roles and modifies one existing role. All othe
 | Role | Size | Weight | Line Height | Font | Applies To |
 |------|------|--------|-------------|------|-----------|
 | Verdict badge (card header) | 0.875rem (≈13.1px at 15px base) | 700 | n/a (single line) | `--font-mono` | `.verdict-label` — modified from 0.7rem to create hierarchy |
-| Verdict badge (provider row) | 0.72rem (≈10.8px) | 600 | n/a (single line) | `--font-mono` | `.verdict-badge` — unchanged, defines lower bound |
 | Section label | 0.65rem (≈9.75px) | 700 | n/a (single line, uppercase) | `--font-ui` | `.provider-section-header` — new element |
 | No-data summary | 0.75rem (≈11.25px) | 400 | n/a (single line) | `--font-ui` | `.no-data-summary-row` — new element |
+
+**Inherited / unchanged (not counted in Phase 3 type scale):**
+- `.verdict-badge` (provider rows): 0.72rem, weight 600, `--font-mono`. This class is not modified in Phase 3. Its weight 600 is inherited from the existing design system and is not changed in Phase 3. It is excluded from the counted scale below.
 
 **Active type scale for Phase 3 changes (4 sizes):**
 1. 0.65rem — section labels (uppercase, tracked)
@@ -134,7 +136,7 @@ No new class. Modify existing `.verdict-label` in `input.css`:
 Replaces `.consensus-badge` production in `updateSummaryRow()`. The `.consensus-badge` CSS class and its DOM production are removed. Confirmed no E2E Playwright test queries `.consensus-badge` directly (Source: RESEARCH.md open question #2).
 
 ```
-.verdict-micro-bar         — flex container, 6px height, rounded, overflow hidden, min-width 4rem
+.verdict-micro-bar         — flex container, 4px height, rounded, overflow hidden, min-width 4rem
 .micro-bar-segment         — height 100%, no min-width
 .micro-bar-segment--malicious
 .micro-bar-segment--suspicious
@@ -167,6 +169,7 @@ Category is derived from `CONTEXT_PROVIDERS.has(result.provider)` — no new dat
 .provider-row--no-data              — display: none (hidden by default)
 .no-data-expanded .provider-row--no-data — display: flex (revealed on toggle)
 .no-data-summary-row               — flex row, 0.75rem, --text-muted, cursor pointer
+                                     padding: 0.5rem 0.5rem (8px vertical — on 4-point grid)
                                      border-top: 1px solid --border
 .no-data-summary-row:hover         — color: --text-secondary
 ```
