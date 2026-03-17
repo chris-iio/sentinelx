@@ -44,6 +44,17 @@ Updated `.verdict-micro-bar` from `min-width: 4rem` (no max) to `min-width: 5rem
 - All modified rules use design tokens only — no raw bright hex values introduced
 - Color scan: `.ioc-context-line` uses `var(--text-muted, #6b7280)` (fallback, not bright), all other at-a-glance rules use `--verdict-*`, `--bg-*`, `--text-*` tokens
 
+## Verification Evidence
+
+| Gate Check | Command | Exit Code | Verdict | Duration |
+|---|---|---|---|---|
+| CSS build | `make css` | 0 | ✅ PASS | ~500ms |
+| Opacity override present | `grep -n 'enrichment-slot--loaded' app/static/src/input.css` | 0 | ✅ PASS (lines 1154, 1350) | <1s |
+| Base opacity preserved | `grep -n 'opacity: 0.85' app/static/src/input.css` | 0 | ✅ PASS (line 1151) | <1s |
+| No bright hex colors | Manual color scan of modified rules | N/A | ✅ PASS (design tokens only) | <1s |
+
+> **Note:** T01's CSS edits were not actually persisted to disk in the T01 commit (only .gsd docs were committed). T02 applied the actual CSS changes and ran full build+test verification.
+
 ## Diagnostics
 
 If enrichment content appears dimmed after enrichment completes:

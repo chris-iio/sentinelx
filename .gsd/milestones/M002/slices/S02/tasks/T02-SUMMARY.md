@@ -57,6 +57,18 @@ All must-haves confirmed:
 - `grep -n 'opacity: 0.85' app/static/src/input.css` → line 1128 (base .enrichment-slot rule) ✓
 - Bright hex color scan: no raw hex values adjacent to context-line/summary-row/micro-bar/staleness selectors ✓
 
+## Verification Evidence
+
+| Gate Check | Command | Exit Code | Verdict | Duration |
+|---|---|---|---|---|
+| CSS build | `make css` | 0 | ✅ PASS | 515ms |
+| TypeScript check | `make typecheck` | 0 | ✅ PASS | ~15s |
+| JS bundle | `make js-dev` | 0 | ✅ PASS (194.9kb) | 12ms |
+| E2E tests | `pytest tests/e2e/test_results_page.py tests/e2e/test_extraction.py -q` | 0 | ✅ PASS (36/36) | 6.79s |
+| Opacity override present | `grep -n 'enrichment-slot--loaded' input.css` | 0 | ✅ PASS (lines 1132, 1327) | <1s |
+| Base opacity preserved | `grep -n 'opacity: 0.85' input.css` | 0 | ✅ PASS (line 1128) | <1s |
+| No bright hex colors | Manual scan of enrichment surface CSS rules | N/A | ✅ PASS (design tokens only) | <1s |
+
 ## Diagnostics
 
 If enrichment content appears dimmed after enrichment completes:

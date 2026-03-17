@@ -52,7 +52,7 @@ This milestone is complete only when all are true:
 - [x] **S01: Layout skeleton + quiet precision design system** `risk:high` `depends:[]`
   > After this: Offline results render in single-column full-width rows with verdict-only color, compressed dashboard placeholder, and simplified filter bar. Visually a complete departure from the current grid layout.
 
-- [ ] **S02: At-a-glance enrichment surface** `risk:high` `depends:[S01]`
+- [x] **S02: At-a-glance enrichment surface** `risk:high` `depends:[S01]`
   > After this: Online enrichment streams into the new layout — each row shows verdict badge, real-world context (geo/ASN/DNS), key provider stat line, micro-bar, and staleness badge. No expand needed to see the important data.
 
 - [ ] **S03: Inline expand + progressive disclosure** `risk:medium` `depends:[S02]`
