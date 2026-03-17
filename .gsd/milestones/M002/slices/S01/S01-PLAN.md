@@ -23,6 +23,25 @@
 - Real runtime required: yes (visual layout verification, filter/copy functional check)
 - Human/UAT required: yes (visual design quality — "does this read as professional tooling?")
 
+## Observability / Diagnostics
+
+**Runtime inspection surfaces:**
+- `make css` stdout — Tailwind reports unused/unknown classes; any "warn" lines indicate selector drift
+- `make typecheck` stderr — TypeScript errors expose broken DOM contract (e.g. `Property X does not exist on type HTMLElement`)
+- Flask dev server logs (`flask run`) — template render errors (Jinja2 `UndefinedError`) indicate missing/renamed variables
+- Browser devtools → Elements panel: inspect `.ioc-card`, `#ioc-cards-grid`, `#verdict-dashboard` to verify rendered DOM structure
+
+**Failure visibility:**
+- CSS compile failure: `make css` exits non-zero; stdout includes the offending Tailwind class or PostCSS error
+- TS contract break: `make typecheck` exits non-zero; error message names the missing selector or attribute
+- Template error: Flask 500 page in browser with Jinja2 traceback; `flask run` stderr shows the specific partial and line
+- Layout regression: Browser renders 2-column grid instead of single column — visible immediately on `/analyze` results page
+
+**Redaction constraints:** No secrets or PII appear in CSS/template files. Build tool output is safe to log.
+
+**Diagnostic check (failure path):**
+- After any template edit, verify with: `python -c "from app import create_app; app = create_app(); app.test_client()" 2>&1 | grep -i error` — catches import-time template errors before browser load
+
 ## Verification
 
 - `make css` — Tailwind CSS compiles cleanly with reworked design tokens
@@ -31,6 +50,7 @@
 - `pytest tests/e2e/test_extraction.py -q` — Catches `#ioc-cards-grid`, `.ioc-card`, base results page regressions
 - `pytest tests/e2e/test_results_page.py -q` — Catches filter bar, verdict dashboard, enrichment slot structural regressions
 - Manual spot check on `/analyze`: submit sample IOCs offline, verify single-column layout, verdict-only color, filter functionality
+- `make typecheck` exits non-zero if any DOM contract selector is renamed — inspectable failure state
 
 ## Integration Closure
 
@@ -40,7 +60,7 @@
 
 ## Tasks
 
-- [ ] **T01: Convert grid layout to single-column rows — restructure templates + structural CSS** `est:1.5h`
+- [x] **T01: Convert grid layout to single-column rows — restructure templates + structural CSS** `est:1.5h`
   - Why: Delivers R001 (single-column full-width layout). Restructures all template internals for row-based composition and updates layout CSS. This is the structural migration that carries contract-break risk.
   - Files: `app/templates/results.html`, `app/templates/partials/_ioc_card.html`, `app/templates/partials/_verdict_dashboard.html`, `app/templates/partials/_filter_bar.html`, `app/static/src/input.css`
   - Do: (1) Restructure `_ioc_card.html` internals from card header/body/footer to horizontal row layout (identity → meta → actions) while keeping `.ioc-card` root with all data-* attributes, all child hooks (`.ioc-value`, `.ioc-type-badge`, `.verdict-label`, `.copy-btn`, `.ioc-context-line`, `.enrichment-slot`). (2) Compress `_verdict_dashboard.html` internals to inline summary bar — keep `#verdict-dashboard` root, `[data-verdict-count]`, `.verdict-kpi-card[data-verdict]` click targets. (3) Compact `_filter_bar.html` into single-row layout — keep `.filter-bar-wrapper`, `[data-filter-verdict]`, `[data-filter-type]`, `#filter-search-input`. (4) Simplify `results.html` composition around dashboard → filter → list. (5) Update `input.css` structural rules: remove `min-width:768px` 2-column breakpoint on `#ioc-cards-grid`, restyle `.ioc-card` spacing/borders for full-width row feel, compress dashboard CSS, compact filter bar CSS. **Critical constraint:** Do NOT rename/remove any contract selectors. Do NOT restructure `.enrichment-slot` subtree.

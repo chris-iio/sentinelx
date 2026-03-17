@@ -74,6 +74,23 @@ The critical constraint is **contract preservation**: every selector and data at
 - [ ] `.enrichment-slot` subtree is NOT modified — only repositioned/restyled around
 - [ ] `make css`, `make typecheck`, and `make js-dev` all pass
 
+## Observability Impact
+
+**Signals that change after T01:**
+- `make css` — Tailwind will now process new utility classes added to templates (flexbox layout classes on `.ioc-card`, `.verdict-dashboard`, `.filter-bar-wrapper`). Unused old grid classes may appear as warnings if they remain in input.css without DOM references.
+- `make typecheck` — Zero new TS signals expected. Any breakage here means a contract selector was accidentally renamed.
+- Flask 500 in browser — Template syntax errors (broken Jinja2 blocks from restructuring) show as 500 with traceback in `flask run` output.
+
+**How a future agent inspects this task:**
+- Run `grep -n 'data-ioc-value\|data-ioc-type\|data-verdict' app/templates/partials/_ioc_card.html` — must return the root `.ioc-card` element line
+- Run `grep -n 'ioc-cards-grid\|grid-cols-2\|repeat(2' app/static/src/input.css` — must return 0 lines matching `grid-cols-2` or `repeat(2`
+- Run `grep -n 'flex' app/static/src/input.css | grep ioc-card` — should show flexbox on `.ioc-card`
+
+**Failure state visibility:**
+- 2-column layout still present: `grep 'grid-cols-2\|repeat(2' app/static/src/input.css` returns a hit
+- TS build fails with selector reference: error message names the exact class/attribute that is missing
+- Template partial error: Flask log shows `jinja2.exceptions.UndefinedError` with partial file name and line number
+
 ## Verification
 
 - `make css` exits 0
