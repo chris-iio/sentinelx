@@ -15,10 +15,25 @@ import type { EnrichmentItem, EnrichmentResultItem } from "../types/api";
 import type { VerdictKey } from "../types/ioc";
 import { VERDICT_LABELS } from "../types/ioc";
 import type { VerdictEntry } from "./verdict-compute";
-import { computeWorstVerdict, computeConsensus, computeAttribution,
-         consensusBadgeClass } from "./verdict-compute";
+import { computeWorstVerdict, computeAttribution } from "./verdict-compute";
 
 // ---- Private helpers ----
+
+/**
+ * Compute verdict category counts from entries for micro-bar rendering.
+ */
+function computeVerdictCounts(entries: VerdictEntry[]): {
+  malicious: number; suspicious: number; clean: number; noData: number; total: number;
+} {
+  let malicious = 0, suspicious = 0, clean = 0, noData = 0;
+  for (const e of entries) {
+    if (e.verdict === "malicious") malicious++;
+    else if (e.verdict === "suspicious") suspicious++;
+    else if (e.verdict === "clean") clean++;
+    else noData++;
+  }
+  return { malicious, suspicious, clean, noData, total: entries.length };
+}
 
 /**
  * Format an ISO 8601 date string for display.
@@ -246,7 +261,6 @@ export function updateSummaryRow(
 
   const worstVerdict = computeWorstVerdict(entries);
   const attribution = computeAttribution(entries);
-  const { flagged, responded } = computeConsensus(entries);
 
   const summaryRow = getOrCreateSummaryRow(slot);
 
@@ -265,11 +279,28 @@ export function updateSummaryRow(
   attributionSpan.textContent = attribution.text;
   summaryRow.appendChild(attributionSpan);
 
-  // c. Consensus badge
-  const consensusBadge = document.createElement("span");
-  consensusBadge.className = "consensus-badge " + consensusBadgeClass(flagged);
-  consensusBadge.textContent = "[" + flagged + "/" + responded + "]";
-  summaryRow.appendChild(consensusBadge);
+  // c. Verdict micro-bar (replaces consensus badge)
+  const counts = computeVerdictCounts(entries);
+  const total = Math.max(1, counts.total);
+  const microBar = document.createElement("div");
+  microBar.className = "verdict-micro-bar";
+  microBar.setAttribute("title",
+    `${counts.malicious} malicious, ${counts.suspicious} suspicious, ${counts.clean} clean, ${counts.noData} no data`
+  );
+  const segments: Array<[number, string]> = [
+    [counts.malicious, "malicious"],
+    [counts.suspicious, "suspicious"],
+    [counts.clean, "clean"],
+    [counts.noData, "no_data"],
+  ];
+  for (const [count, verdict] of segments) {
+    if (count === 0) continue;
+    const seg = document.createElement("div");
+    seg.className = "micro-bar-segment micro-bar-segment--" + verdict;
+    seg.style.width = Math.round((count / total) * 100) + "%";
+    microBar.appendChild(seg);
+  }
+  summaryRow.appendChild(microBar);
 }
 
 /**

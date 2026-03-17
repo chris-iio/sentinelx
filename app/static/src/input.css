@@ -1029,11 +1029,11 @@
 
     .verdict-label {
         font-family: var(--font-mono);
-        font-size: 0.7rem;
-        font-weight: 600;
+        font-size: 0.875rem;
+        font-weight: 700;
         letter-spacing: 0.03em;
         text-transform: uppercase;
-        padding: 0.1rem 0.4rem;
+        padding: 0.25rem 0.75rem;
         border-radius: 2rem;
         flex-shrink: 0;
     }
@@ -1208,6 +1208,27 @@
         background-color: var(--verdict-malicious-bg);
         border: 1px solid var(--verdict-malicious-border);
     }
+
+    /* ---- Phase 4 Results UX — Verdict micro-bar ---- */
+
+    .verdict-micro-bar {
+        display: flex;
+        height: 6px;
+        border-radius: 3px;
+        overflow: hidden;
+        min-width: 4rem;
+        flex-shrink: 0;
+        background-color: var(--bg-tertiary);
+    }
+    .micro-bar-segment {
+        height: 100%;
+        transition: width var(--duration-fast) ease;
+        min-width: 0;
+    }
+    .micro-bar-segment--malicious  { background-color: var(--verdict-malicious-border); }
+    .micro-bar-segment--suspicious { background-color: var(--verdict-suspicious-border); }
+    .micro-bar-segment--clean      { background-color: var(--verdict-clean-border); }
+    .micro-bar-segment--no_data    { background-color: var(--bg-hover); }
 
     /* ---- Phase 4 Results UX — Chevron toggle ---- */
 

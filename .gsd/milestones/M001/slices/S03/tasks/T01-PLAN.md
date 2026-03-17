@@ -135,3 +135,11 @@ VIS-01 is CSS-only — increase `.verdict-label` size. VIS-02 touches both CSS (
 
 - `app/static/src/input.css` — `.verdict-label` enlarged; new `.verdict-micro-bar` and `.micro-bar-segment` classes added
 - `app/static/src/ts/modules/row-factory.ts` — `computeVerdictCounts()` helper added; `updateSummaryRow()` creates micro-bar instead of consensus badge; `consensusBadgeClass` import removed if unused
+
+## Observability Impact
+
+- **New DOM elements:** `.verdict-micro-bar` divs appear in each IOC card summary row, containing `.micro-bar-segment` children with percentage widths. Inspect via `document.querySelectorAll('.verdict-micro-bar')`.
+- **Accessible title attribute:** Each `.verdict-micro-bar` has a `title` attribute encoding exact counts (e.g. "2 malicious, 0 suspicious, 3 clean, 1 no data"). Visible on hover and in accessibility tree.
+- **Removed DOM elements:** `.consensus-badge` spans are no longer created by `updateSummaryRow()`. The CSS class remains as dead CSS.
+- **Visual hierarchy signal:** `.verdict-label` (summary row) renders at 0.875rem/700, `.verdict-badge` (provider rows) at 0.72rem/600 — size gap is the hierarchy indicator.
+- **Failure visibility:** Micro-bar with `NaN%` widths indicates a division-by-zero bug (guarded by `Math.max(1, total)`). Empty micro-bar (no segments) indicates all entries had zero counts. Both inspectable via element inspector.

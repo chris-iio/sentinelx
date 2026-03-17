@@ -46,7 +46,7 @@
 
 ## Tasks
 
-- [ ] **T01: Enlarge verdict badge and replace consensus badge with micro-bar** `est:45m`
+- [x] **T01: Enlarge verdict badge and replace consensus badge with micro-bar** `est:45m`
   - Why: Delivers VIS-01 (badge prominence) and VIS-02 (micro-bar) — the header/summary row visual hierarchy that makes each IOC card scannable at a glance
   - Files: `app/static/src/input.css`, `app/static/src/ts/modules/row-factory.ts`
   - Do: (1) In `input.css`, increase `.verdict-label` to `font-size: 0.875rem`, `font-weight: 700`, `padding: 0.25rem 0.75rem`. (2) Add new CSS classes: `.verdict-micro-bar` (flex container, 6px height, rounded), `.micro-bar-segment` (height 100%, transition), `.micro-bar-segment--malicious/suspicious/clean/no_data` (verdict color tokens). (3) In `row-factory.ts`, add `computeVerdictCounts(entries)` helper returning `{malicious, suspicious, clean, noData, total}`. (4) In `updateSummaryRow()`, replace consensus badge block with micro-bar: create `.verdict-micro-bar` div, compute percentage widths per segment, skip zero-count segments, set `title` attribute with counts. (5) Remove `consensusBadgeClass` import if no longer used. (6) Guard against `total === 0` to prevent NaN widths.
