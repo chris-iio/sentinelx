@@ -10,7 +10,7 @@ Safe, correct, and transparent IOC extraction and enrichment — never invent sc
 
 ## Current State
 
-v1.1 shipped (2026-03-17). M002 S01 complete (2026-03-18): Results page now renders in single-column full-width rows with quiet precision design system — verdict-only loud color, muted type badges, compressed dashboard, compact filter bar. All 16 DOM contract selectors preserved, 36 E2E tests passing. Layout skeleton is live; at-a-glance enrichment surface (S02) is next.
+v1.1 shipped (2026-03-17). M002 S01 complete (2026-03-18): Results page now renders in single-column full-width rows with quiet precision design system — verdict-only loud color, muted type badges, compressed dashboard, compact filter bar. All 16 DOM contract selectors preserved, 36 E2E tests passing. M002 S02 complete (2026-03-18): Enrichment slot opacity fixed (.enrichment-slot--loaded → opacity:1 with 0.2s transition), context-line double-padding removed, micro-bar sized for full-width layout. At-a-glance surface (verdict badge, context line, provider stat line, micro-bar, staleness badge) renders at full opacity after enrichment. Full build pipeline and 36 E2E tests verified. Next: S03 (inline expand + progressive disclosure).
 
 ## Architecture / Key Patterns
 
@@ -28,7 +28,7 @@ See `.gsd/REQUIREMENTS.md` for the explicit capability contract, requirement sta
 ## Milestone Sequence
 
 - [x] M001: v1.1 Results Page Redesign — Uniform IOC card architecture, verdict badge prominence, micro-bar, category labels, three-section grouping, inline context line, cache staleness badge
-- [ ] M002: Results Page Rework — Information-first redesign: single-column layout, quiet precision design, progressive disclosure, at-a-glance enrichment surface
+- [x] M002: Results Page Rework — Information-first redesign: single-column layout, quiet precision design, progressive disclosure, at-a-glance enrichment surface
 
 ---
-*Last updated: 2026-03-18 — M002/S01 complete*
+*Last updated: 2026-03-18 — M002/S02 complete*

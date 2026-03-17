@@ -1091,7 +1091,7 @@
     .ioc-context-line {
         font-size: 0.75rem;
         color: var(--text-muted, #6b7280);
-        padding: 0.125rem 1rem 0.25rem;
+        padding: 0.125rem 0 0.25rem;
         line-height: 1.4;
     }
     .ioc-context-line .context-field {
@@ -1149,6 +1149,11 @@
         padding-top: 0.35rem;
         border-top: 1px solid var(--border);
         opacity: 0.85;
+    }
+
+    .enrichment-slot.enrichment-slot--loaded {
+        opacity: 1;
+        transition: opacity 0.2s ease;
     }
 
     /* ---- Shimmer Skeleton ---- */
@@ -1255,7 +1260,8 @@
         height: 6px;
         border-radius: 3px;
         overflow: hidden;
-        min-width: 4rem;
+        min-width: 5rem;
+        max-width: 8rem;
         flex-shrink: 0;
         background-color: var(--bg-tertiary);
     }
