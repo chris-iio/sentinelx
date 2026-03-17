@@ -17,7 +17,7 @@
   > Split 928-LOC enrichment.ts into verdict-compute.ts (pure functions), row-factory.ts (DOM builders), and trimmed enrichment.ts (polling orchestrator) with zero behavioral change.
 - [x] **S03: Visual Redesign** `risk:medium` `depends:[S02]`
   > Verdict badge prominence (VIS-01), micro-bar replacing consensus badge (VIS-02), category labels (VIS-03), and no-data collapse (GRP-02) — all changes confined to row-factory.ts and input.css.
-- [ ] **S04: Template Restructuring** `risk:medium` `depends:[S03]`
+- [x] **S04: Template Restructuring** `risk:medium` `depends:[S03]`
   > HTML template delivers three explicit sections — Reputation, Infrastructure Context, No Data — as the structural backbone of each IOC card (GRP-01).
 - [ ] **S05: Context And Staleness** `risk:medium` `depends:[S04]`
   > Key context fields (GeoIP, ASN org, registrar) visible in IOC card header without expanding (CTX-01), plus cache staleness indicator (CTX-02).

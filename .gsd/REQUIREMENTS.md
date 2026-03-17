@@ -28,7 +28,7 @@ Verdict breakdown shows visual count bar of malicious/suspicious/clean/no-data p
 - Class: core-capability
 - Source: inferred
 - Primary Slice: S03
-- Implementation: `.provider-section-header` elements injected post-enrichment in S03/T02. Awaiting live UAT visual confirmation.
+- Implementation: `.provider-section-header` elements originally injected post-enrichment in S03/T02, migrated to server-rendered Jinja template in S04/T01. Awaiting live UAT visual confirmation.
 
 Provider rows display distinct category labels distinguishing Reputation from Infrastructure
 
@@ -38,6 +38,7 @@ Provider rows display distinct category labels distinguishing Reputation from In
 - Class: core-capability
 - Source: inferred
 - Primary Slice: S04
+- Implementation: Three server-rendered `.enrichment-section` containers in `_enrichment_slot.html` (context, reputation, no-data) with JS routing in `enrichment.ts` and CSS `:has()` empty-section hiding in S04. Awaiting live UAT visual confirmation.
 
 Provider results are grouped into three sections: Reputation, Infrastructure Context, and No Data
 
