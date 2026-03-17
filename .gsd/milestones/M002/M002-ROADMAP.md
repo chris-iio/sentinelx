@@ -49,7 +49,7 @@ This milestone is complete only when all are true:
 
 ## Slices
 
-- [ ] **S01: Layout skeleton + quiet precision design system** `risk:high` `depends:[]`
+- [x] **S01: Layout skeleton + quiet precision design system** `risk:high` `depends:[]`
   > After this: Offline results render in single-column full-width rows with verdict-only color, compressed dashboard placeholder, and simplified filter bar. Visually a complete departure from the current grid layout.
 
 - [ ] **S02: At-a-glance enrichment surface** `risk:high` `depends:[S01]`

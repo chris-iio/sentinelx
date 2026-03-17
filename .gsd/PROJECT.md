@@ -10,7 +10,7 @@ Safe, correct, and transparent IOC extraction and enrichment — never invent sc
 
 ## Current State
 
-v1.1 shipped (2026-03-17). All core functionality is complete and working: 14 providers, detail pages, cache, export, bulk input, relationship graphs, verdict badges, micro-bars, three-section enrichment grouping, inline context lines, cache staleness badges. The results page works but has a junior-project feel — too many competing visual elements, 2-column grid cramps IOC data, information hierarchy is flat.
+v1.1 shipped (2026-03-17). M002 S01 complete (2026-03-18): Results page now renders in single-column full-width rows with quiet precision design system — verdict-only loud color, muted type badges, compressed dashboard, compact filter bar. All 16 DOM contract selectors preserved, 36 E2E tests passing. Layout skeleton is live; at-a-glance enrichment surface (S02) is next.
 
 ## Architecture / Key Patterns
 
@@ -31,4 +31,4 @@ See `.gsd/REQUIREMENTS.md` for the explicit capability contract, requirement sta
 - [ ] M002: Results Page Rework — Information-first redesign: single-column layout, quiet precision design, progressive disclosure, at-a-glance enrichment surface
 
 ---
-*Last updated: 2026-03-18 — M002 planning complete*
+*Last updated: 2026-03-18 — M002/S01 complete*
