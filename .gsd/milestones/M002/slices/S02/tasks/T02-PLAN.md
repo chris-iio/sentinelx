@@ -79,3 +79,11 @@ The build pipeline (`make css`, `make typecheck`, `make js-dev`) confirms CSS co
 - All build targets exit 0 (CSS compiled, TS clean, JS bundled)
 - 36 E2E tests pass with no regressions
 - Confirmation that the at-a-glance enrichment surface CSS is correctly integrated
+
+## Observability Impact
+
+- **Signal: `make css` exit code** — exit 0 confirms the new opacity/padding rules are syntactically valid Tailwind CSS that compiles without error. Non-zero indicates a malformed rule in `input.css`.
+- **Signal: `make typecheck` exit code** — exit 0 confirms TypeScript DOM selectors (`.enrichment-slot--loaded`, `.ioc-context-line`, etc.) match what the TS pipeline constructs. A type error here would indicate a selector rename mismatch between CSS and TS.
+- **Signal: 36 E2E tests** — running count in `pytest -q` output; any number below 36 indicates a DOM contract break (e.g., a selector or element the test expects is missing from rendered HTML).
+- **Failure inspection:** `pytest tests/e2e/test_results_page.py tests/e2e/test_extraction.py -v 2>&1 | grep FAILED` — shows which specific tests broke and in which file.
+- **CSS rule presence check:** `grep -n 'enrichment-slot--loaded' app/static/src/input.css` — must return the `opacity: 1` override rule; absence means T01's CSS fix is missing from the worktree.

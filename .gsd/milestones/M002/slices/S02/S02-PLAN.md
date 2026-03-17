@@ -51,7 +51,7 @@
   - Verify: `make css` exits 0, `grep 'enrichment-slot--loaded' app/static/src/input.css` shows opacity rule
   - Done when: `.enrichment-slot.enrichment-slot--loaded` has `opacity: 1` with transition; all at-a-glance component styles tuned for full-width layout; `make css` exits 0
 
-- [ ] **T02: Build verification and integration test suite** `est:20m`
+- [x] **T02: Build verification and integration test suite** `est:20m`
   - Why: Proves the CSS changes integrate correctly with the existing TS rendering pipeline and don't break any DOM contracts or E2E tests.
   - Files: `app/static/src/input.css` (read-only verification), `app/static/src/ts/modules/row-factory.ts` (read-only verification), `app/static/src/ts/modules/enrichment.ts` (read-only verification)
   - Do: (1) Run full build pipeline: `make css`, `make typecheck`, `make js-dev`. (2) Run E2E suite: `pytest tests/e2e/test_results_page.py tests/e2e/test_extraction.py -q`. (3) Verify opacity fix with grep. (4) Verify no bright colors in enrichment surface CSS. (5) If any test fails, diagnose and fix.
