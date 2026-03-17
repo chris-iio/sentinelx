@@ -84,3 +84,16 @@ After completing the CSS changes, this task runs the full verification suite inc
 ## Expected Output
 
 - `app/static/src/input.css` — complete quiet precision design system: verdict-only loud color, muted type badges, muted filter pills, typography hierarchy, polished row presentation
+
+## Observability Impact
+
+**Signals that change after T02:**
+- `make css` stdout — if any class name was mistyped or a Tailwind utility conflicts with a component class, the build emits a warning line; non-zero exit exposes the offending rule
+- Browser devtools → Elements panel: `.ioc-type-badge--*` should show `color: var(--text-muted)` and `border-color: var(--border-default)` (no bright accent colors); `.filter-pill--*:active` should show `background-color: var(--bg-tertiary)` not accent; `.verdict-label--*` still shows vivid verdict color
+- Browser devtools → Computed styles: `.ioc-value` should show `font-weight: 600` and `font-size: 0.9rem`
+- Visual inspection signal: results page has exactly one class of loud color — verdict labels/borders; everything else is zinc-range neutrals
+
+**Failure visibility:**
+- If type badge still shows bright color: selector didn't match — inspect element to confirm class name matches template's `ioc-type-badge--{type}` pattern
+- If verdict labels lose color: look for conflicting `!important` or specificity override from Tailwind utility class
+- If enrichment slot invisible: `opacity: 0.85` + `min-height: 0` is intentional subordinate state; if completely hidden check for `display: none` or zero-height collapse on parent

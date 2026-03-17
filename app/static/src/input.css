@@ -575,8 +575,8 @@
     }
 
     .btn-copy.copied {
-        color: var(--accent-domain);
-        border-color: var(--accent-domain);
+        color: var(--text-primary);
+        border-color: var(--border-default);
     }
 
     .btn-export {
@@ -620,15 +620,15 @@
     }
 
     .mode-indicator.mode-offline {
-        background-color: rgba(74, 158, 255, 0.1);
-        border-color: rgba(74, 158, 255, 0.3);
-        color: var(--accent-ipv4);
+        background-color: var(--bg-tertiary);
+        border-color: var(--border-default);
+        color: var(--text-secondary);
     }
 
     .mode-indicator.mode-online {
-        background-color: rgba(125, 211, 252, 0.1);
-        border-color: rgba(125, 211, 252, 0.3);
-        color: var(--accent-domain);
+        background-color: var(--bg-tertiary);
+        border-color: var(--border-default);
+        color: var(--text-secondary);
     }
 
     .results-summary {
@@ -722,6 +722,13 @@
     .verdict-kpi-card--clean      { border-top-color: var(--verdict-clean-border); }
     .verdict-kpi-card--known_good { border-top-color: var(--verdict-known-good-border); }
     .verdict-kpi-card--no_data    { border-top-color: var(--verdict-no-data-border); }
+
+    /* Verdict-colored counts in dashboard KPIs — verdict IS the loud signal */
+    .verdict-kpi-card--malicious  .verdict-kpi-count { color: var(--verdict-malicious-text); }
+    .verdict-kpi-card--suspicious .verdict-kpi-count { color: var(--verdict-suspicious-text); }
+    .verdict-kpi-card--clean      .verdict-kpi-count { color: var(--verdict-clean-text); }
+    .verdict-kpi-card--known_good .verdict-kpi-count { color: var(--verdict-known-good-text); }
+    .verdict-kpi-card--no_data    .verdict-kpi-count { color: var(--verdict-no-data-text); }
 
     .verdict-kpi-count {
         font-family: var(--font-mono);
@@ -880,15 +887,19 @@
         color: var(--text-primary);
     }
 
-    /* Type-colored active states for filter pills */
-    .filter-pill--ipv4.filter-pill--active   { border-color: var(--accent-ipv4);   color: var(--accent-ipv4); }
-    .filter-pill--ipv6.filter-pill--active   { border-color: var(--accent-ipv6);   color: var(--accent-ipv6); }
-    .filter-pill--domain.filter-pill--active { border-color: var(--accent-domain); color: var(--accent-domain); }
-    .filter-pill--url.filter-pill--active    { border-color: var(--accent-url);    color: var(--accent-url); }
-    .filter-pill--md5.filter-pill--active    { border-color: var(--accent-md5);    color: var(--accent-md5); }
-    .filter-pill--sha1.filter-pill--active   { border-color: var(--accent-sha1);   color: var(--accent-sha1); }
-    .filter-pill--sha256.filter-pill--active { border-color: var(--accent-sha256); color: var(--accent-sha256); }
-    .filter-pill--cve.filter-pill--active    { border-color: var(--accent-cve);    color: var(--accent-cve); }
+    /* Quiet precision: type-active pills use neutral treatment — only verdict pills get color */
+    .filter-pill--ipv4.filter-pill--active,
+    .filter-pill--ipv6.filter-pill--active,
+    .filter-pill--domain.filter-pill--active,
+    .filter-pill--url.filter-pill--active,
+    .filter-pill--md5.filter-pill--active,
+    .filter-pill--sha1.filter-pill--active,
+    .filter-pill--sha256.filter-pill--active,
+    .filter-pill--cve.filter-pill--active {
+        border-color: var(--text-secondary);
+        color: var(--text-primary);
+        background-color: var(--bg-tertiary);
+    }
 
     /* ---- Filter Search Input ---- */
 
@@ -997,7 +1008,8 @@
 
     .ioc-value {
         font-family: var(--font-mono);
-        font-size: 0.83rem;
+        font-size: 0.9rem;
+        font-weight: 600;
         color: var(--text-primary);
         word-break: break-all;
         min-width: 0;
@@ -1028,14 +1040,15 @@
         flex-shrink: 0;
     }
 
-    .ioc-type-badge--ipv4   { color: var(--accent-ipv4);   border-color: rgba(74, 158, 255, 0.3); }
-    .ioc-type-badge--ipv6   { color: var(--accent-ipv6);   border-color: rgba(74, 158, 255, 0.3); }
-    .ioc-type-badge--domain { color: var(--accent-domain); border-color: rgba(125, 211, 252, 0.3); }
-    .ioc-type-badge--url    { color: var(--accent-url);    border-color: rgba(74, 238, 238, 0.3); }
-    .ioc-type-badge--md5    { color: var(--accent-md5);    border-color: rgba(255, 158, 74, 0.3); }
-    .ioc-type-badge--sha1   { color: var(--accent-sha1);   border-color: rgba(255, 158, 74, 0.3); }
-    .ioc-type-badge--sha256 { color: var(--accent-sha256); border-color: rgba(255, 158, 74, 0.3); }
-    .ioc-type-badge--cve    { color: var(--accent-cve);    border-color: rgba(255, 74, 74, 0.3); }
+    /* Quiet precision: type badges are neutral — verdict is the only loud color signal */
+    .ioc-type-badge--ipv4,
+    .ioc-type-badge--ipv6,
+    .ioc-type-badge--domain,
+    .ioc-type-badge--url,
+    .ioc-type-badge--md5,
+    .ioc-type-badge--sha1,
+    .ioc-type-badge--sha256,
+    .ioc-type-badge--cve    { color: var(--text-muted); border-color: var(--border-default); }
 
     .verdict-label {
         font-family: var(--font-mono);
@@ -1131,10 +1144,11 @@
         display: flex;
         flex-direction: column;
         gap: 0.35rem;
-        min-height: 1.5rem;
-        margin-top: 0.5rem;
-        padding-top: 0.5rem;
+        min-height: 0;
+        margin-top: 0.35rem;
+        padding-top: 0.35rem;
         border-top: 1px solid var(--border);
+        opacity: 0.85;
     }
 
     /* ---- Shimmer Skeleton ---- */
