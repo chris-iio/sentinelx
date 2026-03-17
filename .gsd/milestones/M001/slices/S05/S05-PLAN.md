@@ -48,14 +48,14 @@
 
 ## Tasks
 
-- [ ] **T01: Add inline context line to IOC card header for IP and domain IOCs** `est:30m`
+- [x] **T01: Add inline context line to IOC card header for IP and domain IOCs** `est:30m`
   - Why: Delivers CTX-01 — key context fields visible without expanding. Adds template placeholder, `updateContextLine()` function, enrichment.ts wiring, and CSS.
   - Files: `app/templates/partials/_ioc_card.html`, `app/static/src/ts/modules/row-factory.ts`, `app/static/src/ts/modules/enrichment.ts`, `app/static/src/input.css`
   - Do: Add `.ioc-context-line` div in template between card header/original and enrichment slot. Create `updateContextLine(card, result)` in row-factory.ts with provider-specific extraction (IP Context → `raw_stats.geo`, ASN Intel → `asn+prefix` only if IP Context absent, DNS Records → first 3 A record IPs). Wire call in enrichment.ts context branch. Add `:empty { display: none }` and styling CSS. All DOM via `createElement + textContent` (SEC-08).
   - Verify: `make typecheck && make js-dev && make css` all pass; `grep -n "updateContextLine" app/static/src/ts/modules/enrichment.ts` shows call; SEC-08 grep clean
   - Done when: `.ioc-context-line` placeholder in template, `updateContextLine` exported and called, CSS rules present, builds pass
 
-- [ ] **T02: Add staleness badge to summary row and run full E2E verification** `est:25m`
+- [x] **T02: Add staleness badge to summary row and run full E2E verification** `est:25m`
   - Why: Delivers CTX-02 — cache staleness indicator in summary row. Also runs full E2E verification for both CTX-01 and CTX-02.
   - Files: `app/static/src/ts/modules/verdict-compute.ts`, `app/static/src/ts/modules/enrichment.ts`, `app/static/src/ts/modules/row-factory.ts`, `app/static/src/input.css`
   - Do: Add `cachedAt?: string` to `VerdictEntry` interface. Populate from `result.cached_at` in enrichment.ts verdict branch. In `updateSummaryRow()`, filter entries with `cachedAt`, find oldest, render `.staleness-badge` with `formatRelativeTime()`. Add `.staleness-badge` CSS. Rebuild bundles. Run full E2E suite.
