@@ -22,19 +22,9 @@ Everything built through 9 milestones (2026-02-21 to 2026-03-14). See `.planning
 - ✓ SQLite cache, client-side export (JSON/CSV/clipboard), bulk input mode
 - ✓ Security-first: CSP, CSRF, SSRF allowlist, textContent-only DOM, no innerHTML
 
-v1.1 Results Page Redesign (M001, shipped 2026-03-17):
-
-- ✓ VIS-01: Verdict badge prominence — enlarged verdict label in IOC card headers
-- ✓ VIS-02: Proportional verdict micro-bar replacing text consensus badge
-- ✓ VIS-03: Category section headers distinguishing Reputation from Infrastructure Context
-- ✓ GRP-01: Three-section grouping (Reputation, Infrastructure Context, No Data) via server-rendered template
-- ✓ GRP-02: No-data row collapse with count summary and keyboard accessibility
-- ✓ CTX-01: Inline context line (GeoIP, ASN, DNS) in IOC card header without expanding
-- ✓ CTX-02: Staleness badge showing oldest cache age in summary rows
-
 ### Active
 
-<!-- No active requirements -->
+<!-- v1.1 Results Page Redesign — scope defined in REQUIREMENTS.md -->
 
 ### Out of Scope
 
@@ -99,18 +89,22 @@ v1.1 Results Page Redesign (M001, shipped 2026-03-17):
 | CONTEXT_PROVIDERS set pattern | Route zero-verdict context rows through shared renderer | ✓ Good — generalized createContextRow() for all context providers |
 | path converter for IOC URLs | URL IOCs contain slashes that break standard routing | ✓ Good — `<path:ioc_value>` handles all IOC formats |
 
-## Current Milestone: None
+## Current Milestone: v1.1 Results Page Redesign
 
-**v1.1 Results Page Redesign (M001) shipped 2026-03-17.** All 7 requirements validated. 89/91 E2E tests passing (2 pre-existing title-case failures out of scope).
+**Goal:** Make 14 providers feel like one cohesive intelligence report instead of 14 separate search results stapled together.
+
+**Target features:**
+- Uniform information architecture across all provider types (verdict, context, no-data)
+- Cohesive visual presentation that matches the value of the data
+- Results page that embodies the "meta-search engine" identity
 
 ## Shipped Milestones
 
 | Version | Name | Shipped | Key Feature |
 |---------|------|---------|-------------|
-| v1.1 | Results Page Redesign | 2026-03-17 | Three-section IA, verdict micro-bar, inline context, staleness badges |
 | v1.0 | Foundation | 2026-03-14 | 14 providers, detail pages, cache, export, bulk input, relationship graphs |
 
 See `.planning/MILESTONES.md` for full history.
 
 ---
-*Last updated: 2026-03-17 after M001 (v1.1 Results Page Redesign) shipped*
+*Last updated: 2026-03-16 after version reset, starting v1.1 Results Page Redesign*
