@@ -1247,12 +1247,18 @@
         border-top: none;
     }
 
+    /* ---- GRP-01: Section-based enrichment structure ---- */
+
+    .enrichment-section:not(:has(.provider-detail-row)) {
+        display: none;
+    }
+
     /* ---- GRP-02: No-data collapse ---- */
 
     .provider-row--no-data {
         display: none;
     }
-    .no-data-expanded .provider-row--no-data {
+    .enrichment-section--no-data.no-data-expanded .provider-row--no-data {
         display: flex;
     }
     .no-data-summary-row {
@@ -1309,7 +1315,7 @@
     }
 
     .enrichment-details.is-open {
-        max-height: 600px;
+        max-height: 750px;
     }
 
     /* ---- Phase 4 Results UX — Provider detail rows ---- */

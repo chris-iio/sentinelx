@@ -54,7 +54,7 @@
 
 ## Tasks
 
-- [ ] **T01: Add template sections and wire JS routing to section containers** `est:45m`
+- [x] **T01: Add template sections and wire JS routing to section containers** `est:45m`
   - Why: Delivers the core GRP-01 structural change — three explicit section containers in the HTML template, with JS routing each provider row to the correct section. This is atomic: template, JS routing, sort simplification, post-enrichment cleanup, and CSS must all change together.
   - Files: `app/templates/partials/_enrichment_slot.html`, `app/static/src/ts/modules/enrichment.ts`, `app/static/src/ts/modules/row-factory.ts`, `app/static/src/input.css`
   - Do: (1) Add three `.enrichment-section` divs with `.provider-section-header` children inside `.enrichment-details` in the template. (2) Update `renderEnrichmentResult()` in enrichment.ts to route context rows to `.enrichment-section--context`, no-data/error rows to `.enrichment-section--no-data`, and reputation rows to `.enrichment-section--reputation`. (3) Update `sortDetailRows()` to target `.enrichment-section--reputation` and remove context-pinning block. (4) Simplify `injectSectionHeadersAndNoDataSummary()` in row-factory.ts to remove header injection, keep only no-data summary row creation, retarget queries to `.enrichment-section--no-data`. (5) Add CSS: hide empty sections via `:has()`, override `.provider-row--no-data` display:none inside `.enrichment-section--no-data`, increase `.enrichment-details.is-open` max-height to 750px. Constraint: SEC-08 (no innerHTML), preserve chevron adjacency, no new Flask template variables.

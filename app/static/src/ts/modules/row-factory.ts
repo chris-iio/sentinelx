@@ -435,44 +435,11 @@ export function createSectionHeader(label: string): HTMLElement {
  * All DOM construction uses createElement + textContent (SEC-08).
  */
 export function injectSectionHeadersAndNoDataSummary(slot: HTMLElement): void {
-  const detailsContainer = slot.querySelector<HTMLElement>(".enrichment-details");
-  if (!detailsContainer) return;
+  // Headers are now in the template (GRP-01). Only no-data collapse logic remains.
+  const noDataSection = slot.querySelector<HTMLElement>(".enrichment-section--no-data");
+  if (!noDataSection) return;
 
-  const rows = Array.from(
-    detailsContainer.querySelectorAll<HTMLElement>(".provider-detail-row")
-  );
-  if (rows.length === 0) return;
-
-  // --- VIS-03: Section headers ---
-  let firstContextRow: HTMLElement | null = null;
-  let firstVerdictRow: HTMLElement | null = null;
-
-  for (const row of rows) {
-    if (row.classList.contains("provider-context-row")) {
-      if (!firstContextRow) firstContextRow = row;
-    } else {
-      if (!firstVerdictRow) firstVerdictRow = row;
-    }
-    // Early exit once both found
-    if (firstContextRow && firstVerdictRow) break;
-  }
-
-  // Insert headers BEFORE the first row of each category
-  if (firstContextRow) {
-    detailsContainer.insertBefore(
-      createSectionHeader("Infrastructure Context"),
-      firstContextRow
-    );
-  }
-  if (firstVerdictRow) {
-    detailsContainer.insertBefore(
-      createSectionHeader("Reputation"),
-      firstVerdictRow
-    );
-  }
-
-  // --- GRP-02: No-data collapse ---
-  const noDataRows = detailsContainer.querySelectorAll<HTMLElement>(
+  const noDataRows = noDataSection.querySelectorAll<HTMLElement>(
     ".provider-row--no-data"
   );
   if (noDataRows.length === 0) return;
@@ -485,15 +452,15 @@ export function injectSectionHeadersAndNoDataSummary(slot: HTMLElement): void {
   summaryRow.setAttribute("aria-expanded", "false");
   summaryRow.textContent = count + " provider" + (count !== 1 ? "s" : "") + " had no record";
 
-  // Insert summary row before the first no-data row
+  // Insert summary row before the first no-data row within the no-data section
   const firstNoData = noDataRows[0];
   if (firstNoData) {
-    detailsContainer.insertBefore(summaryRow, firstNoData);
+    noDataSection.insertBefore(summaryRow, firstNoData);
   }
 
-  // Wire click → toggle .no-data-expanded on detailsContainer
+  // Wire click → toggle .no-data-expanded on noDataSection
   summaryRow.addEventListener("click", () => {
-    const isExpanded = detailsContainer.classList.toggle("no-data-expanded");
+    const isExpanded = noDataSection.classList.toggle("no-data-expanded");
     summaryRow.setAttribute("aria-expanded", String(isExpanded));
   });
 

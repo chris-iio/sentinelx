@@ -60,14 +60,6 @@ function sortDetailRows(detailsContainer: HTMLElement, iocValue: string): void {
     for (const row of rows) {
       detailsContainer.appendChild(row);
     }
-
-    // Pin context rows (IP Context) to top after severity sort
-    const contextRows = Array.from(
-      detailsContainer.querySelectorAll<HTMLElement>('.provider-detail-row[data-verdict="context"]')
-    );
-    for (const cr of contextRows) {
-      detailsContainer.insertBefore(cr, detailsContainer.firstChild);
-    }
   }, 100);
   sortTimers.set(iocValue, timer);
 }
@@ -229,11 +221,11 @@ function renderEnrichmentResult(
     // Track result count for pending indicator
     iocResultCounts[result.ioc_value] = (iocResultCounts[result.ioc_value] ?? 0) + 1;
 
-    // Render context row and PREPEND to details container (first position)
-    const detailsContainer = slot.querySelector<HTMLElement>(".enrichment-details");
-    if (detailsContainer && result.type === "result") {
+    // Render context row and append to context section container
+    const contextSection = slot.querySelector<HTMLElement>(".enrichment-section--context");
+    if (contextSection && result.type === "result") {
       const contextRow = createContextRow(result);
-      detailsContainer.insertBefore(contextRow, detailsContainer.firstChild);
+      contextSection.appendChild(contextRow);
     }
 
     // Update pending indicator
@@ -303,12 +295,19 @@ function renderEnrichmentResult(
   iocVerdicts[result.ioc_value] = entries;
   entries.push({ provider: result.provider, verdict, summaryText, detectionCount, totalEngines, statText });
 
-  // Build detail row and append to .enrichment-details container
-  const detailsContainer = slot.querySelector<HTMLElement>(".enrichment-details");
-  if (detailsContainer) {
+  // Build detail row and route to correct section container
+  const isNoData = verdict === "no_data" || verdict === "error";
+  const sectionSelector = isNoData
+    ? ".enrichment-section--no-data"
+    : ".enrichment-section--reputation";
+  const sectionContainer = slot.querySelector<HTMLElement>(sectionSelector);
+  if (sectionContainer) {
     const detailRow = createDetailRow(result.provider, verdict, statText, result);
-    detailsContainer.appendChild(detailRow);
-    sortDetailRows(detailsContainer, result.ioc_value);
+    sectionContainer.appendChild(detailRow);
+    // Sort only reputation rows (no-data rows don't need severity sorting)
+    if (!isNoData) {
+      sortDetailRows(sectionContainer, result.ioc_value);
+    }
   }
 
   // Update summary row (worst verdict + attribution + consensus)

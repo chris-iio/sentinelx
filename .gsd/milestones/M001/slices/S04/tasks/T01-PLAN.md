@@ -87,6 +87,13 @@ S03 currently injects section headers via JavaScript post-enrichment (`injectSec
 - `grep "insertBefore(cr, detailsContainer.firstChild)" app/static/src/ts/modules/enrichment.ts` — zero results (context pinning removed)
 - `grep -rn "innerHTML\|insertAdjacentHTML" app/static/src/ts/` — zero results
 
+## Observability Impact
+
+- **New runtime signal:** `document.querySelectorAll('.enrichment-section').length` per `.enrichment-slot` = 3 (always present, server-rendered). Distribution across sections: `.enrichment-section--reputation .provider-detail-row`, `.enrichment-section--context .provider-detail-row`, `.enrichment-section--no-data .provider-detail-row`.
+- **Empty-section hiding:** `getComputedStyle(el).display` on each `.enrichment-section` — returns `none` when no `.provider-detail-row` children exist (CSS `:has()` rule). Visible = at least one row routed there.
+- **Failure states visible:** (1) Empty section with visible header = CSS `:has()` rule not applied or not supported. (2) Rows appearing outside any `.enrichment-section` = JS routing targeting wrong container. (3) Duplicate section headers = `injectSectionHeadersAndNoDataSummary()` still calling `createSectionHeader()`.
+- **No-data collapse scoping:** `.no-data-expanded` class now applied to `.enrichment-section--no-data` element, not `.enrichment-details`. Inspect via `document.querySelector('.enrichment-section--no-data').classList`.
+
 ## Inputs
 
 - `app/templates/partials/_enrichment_slot.html` — current 21 LOC template with single `.enrichment-details` div

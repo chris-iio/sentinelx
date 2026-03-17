@@ -16,6 +16,15 @@
 
     {# Expandable details container — starts collapsed #}
     <div class="enrichment-details">
-        {# Per-provider detail rows rendered by enrichment.ts #}
+        {# GRP-01: Three explicit section containers — rows routed here by enrichment.ts #}
+        <div class="enrichment-section enrichment-section--context">
+            <div class="provider-section-header">Infrastructure Context</div>
+        </div>
+        <div class="enrichment-section enrichment-section--reputation">
+            <div class="provider-section-header">Reputation</div>
+        </div>
+        <div class="enrichment-section enrichment-section--no-data">
+            <div class="provider-section-header">No Data</div>
+        </div>
     </div>
 </div>
