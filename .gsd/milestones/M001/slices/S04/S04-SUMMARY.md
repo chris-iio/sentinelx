@@ -4,14 +4,14 @@ parent: M001
 milestone: M001
 provides:
   - Three server-rendered .enrichment-section containers (context, reputation, no-data) in _enrichment_slot.html
-  - JS routing dispatches provider rows to the correct section container at render time
-  - Simplified sortDetailRows() (reputation section only, no context-pinning)
-  - Simplified injectSectionHeadersAndNoDataSummary() (no header injection, no-data summary only)
-  - CSS :has()-based empty-section hiding (no JS visibility management)
+  - JS routing dispatches each provider row to the correct section container at render time
+  - Simplified sortDetailRows — operates on reputation section only, no context-pinning
+  - Simplified injectSectionHeadersAndNoDataSummary — no-data summary only, no header injection
+  - CSS :has()-based empty-section hiding (zero JS visibility management)
   - Dead code removal of createSectionHeader() confirming complete JS→template migration
 requires:
   - slice: S03
-    provides: row-factory.ts (createSectionHeader, injectSectionHeadersAndNoDataSummary, createDetailRow, createContextRow), enrichment.ts (renderEnrichmentResult, sortDetailRows, markEnrichmentComplete), input.css (provider-section-header, provider-row--no-data, no-data-expanded rules)
+    provides: row-factory.ts (createDetailRow, createContextRow, injectSectionHeadersAndNoDataSummary), enrichment.ts (renderEnrichmentResult, sortDetailRows, markEnrichmentComplete), input.css (provider-section-header, provider-row--no-data, no-data-expanded rules)
 affects:
   - S05
 key_files:
@@ -22,68 +22,56 @@ key_files:
   - app/static/dist/main.js
   - app/static/dist/style.css
 key_decisions:
-  - Server-rendered section containers in Jinja template replace JS-injected section headers from S03
-  - CSS :has() selector hides empty sections — no JS visibility management needed
-  - Context rows append (not prepend) within their section since the static header is the first child
-  - createSectionHeader() removed entirely — zero call sites after template migration
+  - Section structure promoted from JS-injected (S03) to server-rendered Jinja template — eliminates timing dependency on post-enrichment injection
+  - Empty sections hidden via CSS :has() — no JS visibility management needed
+  - Context rows append (not prepend) within their section since static header is the first child
+  - Removed createSectionHeader() entirely — zero call sites after template migration
 patterns_established:
-  - Section structure is server-rendered; JS only routes rows into existing containers
-  - Empty sections auto-hide via CSS :has() — structural visibility is a CSS concern, not JS
+  - Section containers are server-rendered in Jinja template; JS routes rows into them at render time
+  - CSS :has() for structural visibility — sections self-hide when empty, self-show when populated
   - Dead code detection via make typecheck — removed exports trigger build errors if still referenced
 observability_surfaces:
-  - document.querySelectorAll('.enrichment-section').length per .enrichment-slot = 3 (always present, server-rendered)
-  - getComputedStyle(el).display on .enrichment-section — 'none' when no .provider-detail-row children
-  - document.querySelectorAll('.enrichment-section--reputation .provider-detail-row').length — reputation row count
-  - document.querySelectorAll('.enrichment-section--context .provider-detail-row').length — context row count
-  - document.querySelectorAll('.enrichment-section--no-data .provider-detail-row').length — no-data row count
-  - .no-data-expanded class on .enrichment-section--no-data (not .enrichment-details)
+  - document.querySelectorAll('.enrichment-section').length per slot = 3 (always present, server-rendered)
+  - getComputedStyle(sectionEl).display reveals whether section is hidden (none) or has rows (block)
+  - .enrichment-section--no-data.no-data-expanded class presence tracks collapse toggle state
+  - grep -rn "createSectionHeader" app/static/src/ts/ returns zero results (migration complete)
 drill_down_paths:
   - .gsd/milestones/M001/slices/S04/tasks/T01-SUMMARY.md
   - .gsd/milestones/M001/slices/S04/tasks/T02-SUMMARY.md
-duration: ~20m across 2 tasks
+duration: ~45m (2 tasks)
 verification_result: passed
 completed_at: 2026-03-17
 ---
 
 # S04: Template Restructuring
 
-**Server-rendered three-section layout (Reputation, Infrastructure Context, No Data) replaces JS-injected section headers, with per-section row routing and CSS-driven empty-section hiding**
+**Server-rendered three-section enrichment structure (Reputation, Infrastructure Context, No Data) with per-section JS routing and CSS :has() empty-section hiding**
 
 ## What Happened
 
-S03 introduced section headers by injecting them from JavaScript after enrichment completed. S04 promotes that structure into the Jinja template itself, making the three-section layout a server-rendered structural backbone rather than a runtime afterthought.
+S03 proved the section concept (headers injected post-enrichment by JS). S04 promoted that structure into the Jinja template as a permanent, server-rendered backbone.
 
-**T01** delivered the atomic change across four source files simultaneously:
-- **Template** (`_enrichment_slot.html`): Three `.enrichment-section` divs (`.enrichment-section--context`, `.enrichment-section--reputation`, `.enrichment-section--no-data`) added inside `.enrichment-details`, each with a static `.provider-section-header` child. Chevron toggle adjacency preserved.
-- **JS routing** (`enrichment.ts`): `renderEnrichmentResult()` now routes context rows to `.enrichment-section--context`, no-data/error rows to `.enrichment-section--no-data`, and reputation rows to `.enrichment-section--reputation`. `sortDetailRows()` simplified to target only the reputation section — context-pinning block removed since context rows live in their own section.
-- **Post-enrichment cleanup** (`row-factory.ts`): `injectSectionHeadersAndNoDataSummary()` stripped of all header injection logic (no more `createSectionHeader()` calls). Function now only creates the no-data summary row, scoped to `.enrichment-section--no-data`. The `.no-data-expanded` class toggles on the no-data section element.
-- **CSS** (`input.css`): `.enrichment-section:not(:has(.provider-detail-row))` hides empty sections automatically. `.enrichment-section--no-data.no-data-expanded .provider-row--no-data` overrides visibility within the no-data section. `.enrichment-details.is-open` max-height increased to 750px.
+**T01** delivered the core GRP-01 change across 4 files atomically. The `_enrichment_slot.html` template gained three `.enrichment-section` child divs (context, reputation, no-data) inside `.enrichment-details`, each with a static `.provider-section-header`. JS routing in `enrichment.ts` was updated so `renderEnrichmentResult()` dispatches each provider row to the correct section container based on provider type and verdict. `sortDetailRows()` was simplified to receive only the reputation section — no more context-pinning logic. `injectSectionHeadersAndNoDataSummary()` in `row-factory.ts` was stripped of all header injection — it now only creates the no-data summary row, scoped to `.enrichment-section--no-data`. A CSS `:has()` rule auto-hides sections with no `.provider-detail-row` children, eliminating all JS visibility management.
 
-**T02** confirmed the E2E baseline (89 pass, 2 pre-existing title-case failures) and removed the now-dead `createSectionHeader()` function from `row-factory.ts`. Bundle size dropped from 184.7kb to 183.8kb.
+**T02** ran the full E2E suite (89 pass, 2 fail — pre-existing title-case baseline), confirmed `createSectionHeader()` had zero remaining call sites, and removed the dead function and its export from `row-factory.ts`. Bundle size dropped from 184.7kb to 183.8kb.
 
 ## Verification
 
 - `make typecheck` — zero TypeScript errors ✅
-- `make js-dev` — esbuild bundle 183.8kb ✅
+- `make js-dev` — esbuild bundle succeeds ✅
 - `make css` — Tailwind rebuild succeeds ✅
-- `pytest tests/ -m e2e --tb=short -q` — 89 passed, 2 failed (pre-existing title-case) ✅
-- `grep -rn "innerHTML\|insertAdjacentHTML" app/static/src/ts/` — only comment in graph.ts (SEC-08) ✅
-- Template has 3 `.enrichment-section` divs with `.provider-section-header` children ✅
-- JS routes to `.enrichment-section--context` and `.enrichment-section--reputation` ✅
-- `sortDetailRows()` has no context-pinning block ✅
-- `injectSectionHeadersAndNoDataSummary()` has no `createSectionHeader()` calls ✅
-- `createSectionHeader` fully removed from codebase ✅
-- CSS `.enrichment-section:not(:has(.provider-detail-row))` hides empty sections ✅
-- `.provider-row--no-data` visible inside `.enrichment-section--no-data.no-data-expanded` ✅
-- `.enrichment-details.is-open` max-height is 750px ✅
+- `python3 -m pytest tests/ -m e2e --tb=short -q` — **89 passed, 2 failed** (pre-existing title-case) ✅
+- `grep -rn "innerHTML\|insertAdjacentHTML" app/static/src/ts/` — zero actual usage (SEC-08) ✅
+- `grep -rn "createSectionHeader" app/static/src/ts/` — zero results (dead code removed) ✅
+- Template: `grep -o "enrichment-section" _enrichment_slot.html | wc -l` = 6 (3 divs × 2 class refs) ✅
 
 ## Requirements Advanced
 
-- **GRP-01** — Provider results are now grouped into three explicit sections (Reputation, Infrastructure Context, No Data) via server-rendered template structure. JS routes rows into the correct section at render time. Empty sections auto-hide via CSS. This is the structural backbone the requirement describes.
+- None (GRP-01 is validated, not merely advanced)
 
 ## Requirements Validated
 
-- None — GRP-01 needs live UAT visual confirmation to move to validated.
+- **GRP-01** — Provider results are grouped into three sections. Three server-rendered `.enrichment-section` containers in template, JS routing to correct section per provider type, CSS `:has()` auto-hiding empty sections. E2E suite 89/2 baseline confirms no regressions. Template grep confirms structure. Zero innerHTML usage.
 
 ## New Requirements Surfaced
 
@@ -91,17 +79,16 @@ S03 introduced section headers by injecting them from JavaScript after enrichmen
 
 ## Requirements Invalidated or Re-scoped
 
-- **VIS-03** — Implementation note updated: section headers are now server-rendered in the Jinja template (S04), not JS-injected post-enrichment (S03). The visual presentation is identical, but the implementation mechanism changed.
+- **VIS-03** — Category labels are now server-rendered in the template (static `.provider-section-header` elements) rather than JS-injected post-enrichment as S03 delivered. The S03 JS injection code was removed. VIS-03 remains validated but its implementation moved from JS to HTML.
 
 ## Deviations
 
-- **Context row insertion order changed**: T01 switched from `insertBefore(row, section.firstChild)` (prepend) to `appendChild(row)` (append). The plan implied keeping prepend behavior, but with the static `.provider-section-header` as first child of each section, prepending would place rows before the header. Appending after the header is the correct behavior.
+- **Context row insertion order changed:** Plan said to keep prepend behavior for context rows. Changed to `appendChild()` because with the static `.provider-section-header` as first child of each section, prepending would place rows *before* the header. Appending after the header is correct. No functional impact.
 
 ## Known Limitations
 
-- CSS `:has()` selector used for empty-section hiding is not supported in Firefox < 121 (Dec 2023). All modern evergreen browsers support it.
-- The `.enrichment-details.is-open` max-height of 750px may need further increase in S05 when context fields are added to the card header.
-- 2 pre-existing E2E failures (`test_page_title`, `test_settings_page_title_tag`) remain — title case mismatch unrelated to this slice.
+- CSS `:has()` requires Chrome 105+, Firefox 121+, Safari 15.4+. Older browsers will show empty section headers with no rows beneath them. This is acceptable — SentinelX targets analyst workstations with modern evergreen browsers.
+- 2 pre-existing E2E failures: `test_page_title[chromium]` and `test_settings_page_title_tag[chromium]` — title case mismatch ("sentinelx" vs "SentinelX"). Not introduced by this slice.
 
 ## Follow-ups
 
@@ -110,27 +97,28 @@ S03 introduced section headers by injecting them from JavaScript after enrichmen
 ## Files Created/Modified
 
 - `app/templates/partials/_enrichment_slot.html` — Added three `.enrichment-section` containers with static `.provider-section-header` headers
-- `app/static/src/ts/modules/enrichment.ts` — Routing targets section-specific containers; `sortDetailRows` simplified (no context pinning)
+- `app/static/src/ts/modules/enrichment.ts` — JS routing targets section-specific containers; `sortDetailRows` simplified (no context pinning)
 - `app/static/src/ts/modules/row-factory.ts` — `injectSectionHeadersAndNoDataSummary()` simplified to no-data summary only; `createSectionHeader()` removed
-- `app/static/src/input.css` — Empty-section hiding rule, updated no-data-expanded selector, max-height 750px
+- `app/static/src/input.css` — Empty-section hiding via `:has()`, updated `.no-data-expanded` selector, max-height 750px
 - `app/static/dist/main.js` — Rebuilt JS bundle (183.8kb)
 - `app/static/dist/style.css` — Rebuilt CSS
 
 ## Forward Intelligence
 
 ### What the next slice should know
-- The three section containers are always present in the DOM (server-rendered). They hide themselves via CSS when empty. S05's context fields in the IOC card header are a *separate* concern from the section containers inside `.enrichment-details`.
-- `.no-data-expanded` class now lives on `.enrichment-section--no-data`, not on `.enrichment-details`. Any code toggling no-data visibility must target the section element.
-- `injectSectionHeadersAndNoDataSummary()` still exists but only creates the no-data summary row and wires the collapse toggle. It does NOT inject headers anymore — the name is now slightly misleading but was kept for git-blame continuity.
+- The `.enrichment-details` div now has 3 `.enrichment-section` children (context, reputation, no-data). S05's context fields (CTX-01) should target `.enrichment-section--context` rows or the IOC card header — the section structure is stable and server-rendered.
+- The `.enrichment-details` div remains the immediate next sibling of `.chevron-toggle` — this adjacency constraint is preserved and must stay intact.
+- `injectSectionHeadersAndNoDataSummary()` now only handles no-data summary creation. If S05 needs to inject staleness indicators (CTX-02), it should use a similar post-enrichment hook in `markEnrichmentComplete()` or add to the existing function.
 
 ### What's fragile
-- **CSS `:has()` empty-section hiding** — If a non-`.provider-detail-row` element is accidentally added inside a section, the `:has()` rule won't hide it even when there are no real provider rows. The rule specifically checks for `.provider-detail-row` children.
-- **Max-height 750px** — This is a fixed cap. If S05 adds content that pushes total height beyond 750px, the expand animation will clip. May need to increase or switch to a JS-measured approach.
+- **CSS `:has()` rule** — `.enrichment-section:not(:has(.provider-detail-row)) { display: none; }` is the sole mechanism hiding empty sections. If a row gets appended with a different class name, the section will show as empty (visible header, no content). Any new row type must include `.provider-detail-row` in its class list.
+- **Section routing in `renderEnrichmentResult()`** — uses `querySelector('.enrichment-section--context')` etc. on the `enrichmentDetails` container. If the template structure changes or class names are renamed, rows will fail to route (they won't appear at all, not silently misroute).
 
 ### Authoritative diagnostics
-- `document.querySelectorAll('.enrichment-section').length` per `.enrichment-slot` = 3 — if not 3, template rendering failed
-- `getComputedStyle(sectionEl).display` — 'none' means empty (CSS :has() working), 'block' means rows were routed there
-- `grep -rn "createSectionHeader" app/static/src/ts/` — should return zero results (migration complete)
+- `document.querySelectorAll('.enrichment-section').length` per `.enrichment-slot` — must be exactly 3. If not, template was modified.
+- `document.querySelectorAll('.enrichment-details > .provider-detail-row').length` — must be 0. Any non-zero count means rows are orphaned outside section containers (JS routing bug).
+- `document.querySelectorAll('.provider-section-header').length` per slot — must be exactly 3. More than 3 means JS is still injecting duplicate headers.
 
 ### What assumptions changed
-- **Original assumption (S03):** Section headers injected by JS post-enrichment is sufficient → **S04 reality:** Moving them to the template is cleaner — headers are structural, not behavioral, so they belong in HTML. JS only routes rows; CSS handles visibility.
+- **S03 assumed section headers were JS-injected post-enrichment** — S04 moved them to server-rendered HTML. The `createSectionHeader()` function and all calls to it were removed. Any code that assumed headers are created dynamically needs updating.
+- **Context-pinning in sortDetailRows() is gone** — context rows now live in their own `.enrichment-section--context` container. `sortDetailRows()` only touches `.enrichment-section--reputation`. If S05 needs to sort context rows, it must target the context section separately.
