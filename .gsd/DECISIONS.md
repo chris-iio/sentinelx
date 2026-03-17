@@ -4,3 +4,7 @@
 - "formatDate exported from row-factory.ts (not private) because renderEnrichmentResult in enrichment.ts needs it for scan_date formatting"
 - "createProviderRow thin dispatcher added to row-factory.ts as stable API surface for Phase 3 visual work"
 - "VERDICT_LABELS and EnrichmentResultItem imports removed from enrichment.ts — only needed by row-factory.ts now"
+- "Kept .consensus-badge CSS as dead CSS for safe rollback; only removed DOM creation in row-factory.ts (S03/T01)"
+- "Post-enrichment DOM injection via markEnrichmentComplete() — section headers and no-data collapse inserted after sortDetailRows() finalizes order, immune to re-sorting (S03/T02)"
+- "CSS-driven toggle for no-data collapse: .no-data-expanded class on container controls child visibility; aria-expanded + keyboard Enter/Space for a11y compliance (S03/T02)"
+- "Kept computeConsensus/consensusBadgeClass exports in verdict-compute.ts for API stability despite removal of DOM consumption (S03/T01)"

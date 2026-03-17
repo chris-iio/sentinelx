@@ -15,7 +15,7 @@
   > CSS contract catalog, inline source-file annotations, CSS layer ownership rule, and E2E baseline confirmation protecting all subsequent phases from accidentally breaking tests.
 - [x] **S02: TypeScript Module Extractions** `risk:low` `depends:[S01]`
   > Split 928-LOC enrichment.ts into verdict-compute.ts (pure functions), row-factory.ts (DOM builders), and trimmed enrichment.ts (polling orchestrator) with zero behavioral change.
-- [ ] **S03: Visual Redesign** `risk:medium` `depends:[S02]`
+- [x] **S03: Visual Redesign** `risk:medium` `depends:[S02]`
   > Verdict badge prominence (VIS-01), micro-bar replacing consensus badge (VIS-02), category labels (VIS-03), and no-data collapse (GRP-02) — all changes confined to row-factory.ts and input.css.
 - [ ] **S04: Template Restructuring** `risk:medium` `depends:[S03]`
   > HTML template delivers three explicit sections — Reputation, Infrastructure Context, No Data — as the structural backbone of each IOC card (GRP-01).

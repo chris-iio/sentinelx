@@ -8,6 +8,7 @@
 - Class: core-capability
 - Source: inferred
 - Primary Slice: S03
+- Implementation: `.verdict-label` enlarged to 0.875rem/700 in S03/T01; `.verdict-badge` remains at 0.72rem/600. Awaiting live UAT visual confirmation.
 
 Worst verdict is the dominant visual element in each IOC card header
 
@@ -17,6 +18,7 @@ Worst verdict is the dominant visual element in each IOC card header
 - Class: core-capability
 - Source: inferred
 - Primary Slice: S03
+- Implementation: `.verdict-micro-bar` with proportional segments replaces consensus badge text in S03/T01. Title tooltip shows counts. Awaiting live UAT visual confirmation.
 
 Verdict breakdown shows visual count bar of malicious/suspicious/clean/no-data providers (replaces text consensus badge)
 
@@ -26,6 +28,7 @@ Verdict breakdown shows visual count bar of malicious/suspicious/clean/no-data p
 - Class: core-capability
 - Source: inferred
 - Primary Slice: S03
+- Implementation: `.provider-section-header` elements injected post-enrichment in S03/T02. Awaiting live UAT visual confirmation.
 
 Provider rows display distinct category labels distinguishing Reputation from Infrastructure
 
@@ -44,6 +47,7 @@ Provider results are grouped into three sections: Reputation, Infrastructure Con
 - Class: core-capability
 - Source: inferred
 - Primary Slice: S03
+- Implementation: `.provider-row--no-data` hidden by default; `.no-data-summary-row` with click toggle and keyboard a11y in S03/T02. Awaiting live UAT interaction confirmation.
 
 No-data providers are collapsed by default with a count summary ("5 had no record")
 
