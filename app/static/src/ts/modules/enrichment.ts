@@ -22,7 +22,8 @@ import { exportJSON, exportCSV, copyAllIOCs } from "./export";
 import type { VerdictEntry } from "./verdict-compute";
 import { computeWorstVerdict, findWorstEntry } from "./verdict-compute";
 import { CONTEXT_PROVIDERS, createContextRow, createDetailRow,
-         updateSummaryRow, formatDate } from "./row-factory";
+         updateSummaryRow, formatDate,
+         injectSectionHeadersAndNoDataSummary } from "./row-factory";
 
 // ---- Module-private state ----
 
@@ -185,6 +186,11 @@ function markEnrichmentComplete(): void {
   if (exportBtn) {
     exportBtn.removeAttribute("disabled");
   }
+
+  // VIS-03 + GRP-02: Inject section headers and no-data collapse for all slots
+  document.querySelectorAll<HTMLElement>(".enrichment-slot").forEach(slot => {
+    injectSectionHeadersAndNoDataSummary(slot);
+  });
 }
 
 /**

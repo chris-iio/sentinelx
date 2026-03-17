@@ -349,7 +349,8 @@ export function createDetailRow(
   result?: EnrichmentItem
 ): HTMLElement {
   const row = document.createElement("div");
-  row.className = "provider-detail-row";
+  const isNoData = verdict === "no_data" || verdict === "error";
+  row.className = "provider-detail-row" + (isNoData ? " provider-row--no-data" : "");
   row.setAttribute("data-verdict", verdict);
 
   const nameSpan = document.createElement("span");
@@ -401,4 +402,106 @@ export function createProviderRow(
     return createContextRow(result);
   }
   return createDetailRow(result.provider, result.verdict, statText, result);
+}
+
+/**
+ * Create a category section header element (VIS-03).
+ * All DOM construction uses createElement + textContent (SEC-08).
+ */
+export function createSectionHeader(label: string): HTMLElement {
+  const header = document.createElement("div");
+  header.className = "provider-section-header";
+  header.setAttribute("data-section-label", label);
+  header.textContent = label;
+  return header;
+}
+
+/**
+ * Inject category section headers (VIS-03) and no-data collapse summary (GRP-02)
+ * into an enrichment slot's details container. Must be called AFTER enrichment
+ * completes and sortDetailRows() has finalized the DOM order.
+ *
+ * Section headers: Scans .provider-detail-row elements in DOM order. Context rows
+ * (.provider-context-row) are pinned to the top, verdict rows below. Inserts
+ * "Infrastructure Context" header before the first context row and "Reputation"
+ * header before the first non-context row (when each group exists).
+ *
+ * No-data collapse: Counts .provider-row--no-data elements. If any exist, creates
+ * a clickable summary row that toggles .no-data-expanded on the details container.
+ *
+ * Edge cases: zero rows, zero context rows, zero verdict rows, zero no-data rows
+ * all handled gracefully (no crash, no empty headers).
+ *
+ * All DOM construction uses createElement + textContent (SEC-08).
+ */
+export function injectSectionHeadersAndNoDataSummary(slot: HTMLElement): void {
+  const detailsContainer = slot.querySelector<HTMLElement>(".enrichment-details");
+  if (!detailsContainer) return;
+
+  const rows = Array.from(
+    detailsContainer.querySelectorAll<HTMLElement>(".provider-detail-row")
+  );
+  if (rows.length === 0) return;
+
+  // --- VIS-03: Section headers ---
+  let firstContextRow: HTMLElement | null = null;
+  let firstVerdictRow: HTMLElement | null = null;
+
+  for (const row of rows) {
+    if (row.classList.contains("provider-context-row")) {
+      if (!firstContextRow) firstContextRow = row;
+    } else {
+      if (!firstVerdictRow) firstVerdictRow = row;
+    }
+    // Early exit once both found
+    if (firstContextRow && firstVerdictRow) break;
+  }
+
+  // Insert headers BEFORE the first row of each category
+  if (firstContextRow) {
+    detailsContainer.insertBefore(
+      createSectionHeader("Infrastructure Context"),
+      firstContextRow
+    );
+  }
+  if (firstVerdictRow) {
+    detailsContainer.insertBefore(
+      createSectionHeader("Reputation"),
+      firstVerdictRow
+    );
+  }
+
+  // --- GRP-02: No-data collapse ---
+  const noDataRows = detailsContainer.querySelectorAll<HTMLElement>(
+    ".provider-row--no-data"
+  );
+  if (noDataRows.length === 0) return;
+
+  const count = noDataRows.length;
+  const summaryRow = document.createElement("div");
+  summaryRow.className = "no-data-summary-row";
+  summaryRow.setAttribute("role", "button");
+  summaryRow.setAttribute("tabindex", "0");
+  summaryRow.setAttribute("aria-expanded", "false");
+  summaryRow.textContent = count + " provider" + (count !== 1 ? "s" : "") + " had no record";
+
+  // Insert summary row before the first no-data row
+  const firstNoData = noDataRows[0];
+  if (firstNoData) {
+    detailsContainer.insertBefore(summaryRow, firstNoData);
+  }
+
+  // Wire click → toggle .no-data-expanded on detailsContainer
+  summaryRow.addEventListener("click", () => {
+    const isExpanded = detailsContainer.classList.toggle("no-data-expanded");
+    summaryRow.setAttribute("aria-expanded", String(isExpanded));
+  });
+
+  // Wire keyboard Enter/Space for accessibility
+  summaryRow.addEventListener("keydown", (e: KeyboardEvent) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      summaryRow.click();
+    }
+  });
 }

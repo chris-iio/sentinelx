@@ -135,6 +135,14 @@ Both features share a critical timing constraint: they must be injected AFTER en
 - `grep -n "provider-row--no-data\|provider-section-header\|no-data-summary-row\|injectSectionHeaders" app/static/src/ts/modules/row-factory.ts` — confirms all new functions exist
 - `grep -n "injectSectionHeaders" app/static/src/ts/modules/enrichment.ts` — confirms call wired in `markEnrichmentComplete()`
 
+## Observability Impact
+
+- **New DOM elements:** `.provider-section-header` (inspect via `document.querySelectorAll('.provider-section-header')`) and `.no-data-summary-row` (inspect via `document.querySelectorAll('.no-data-summary-row')`) appear inside `.enrichment-details` after enrichment completes.
+- **Collapse state:** `.no-data-summary-row[aria-expanded]` tracks whether hidden no-data rows are shown; the parent `.enrichment-details` gains/loses `.no-data-expanded` class on toggle.
+- **Hidden rows:** `.provider-row--no-data` elements have `display:none` by default — count them via `document.querySelectorAll('.provider-row--no-data').length` to verify no-data detection is working.
+- **Failure visibility:** If `injectSectionHeadersAndNoDataSummary()` throws, section headers and the collapse summary will be absent after enrichment completes — detectable by zero `.provider-section-header` elements when provider rows exist. TypeScript compilation errors surface via `make typecheck`; CSS build errors via `make css`.
+- **Edge-case inspection:** Zero no-data rows → no `.no-data-summary-row` in DOM. Zero context rows → no "Infrastructure Context" header. Zero verdict rows → no "Reputation" header. All inspectable via DevTools element count queries.
+
 ## Inputs
 
 - `app/static/src/input.css` — with T01 changes already applied (micro-bar classes present)

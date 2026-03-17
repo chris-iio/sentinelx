@@ -1230,6 +1230,46 @@
     .micro-bar-segment--clean      { background-color: var(--verdict-clean-border); }
     .micro-bar-segment--no_data    { background-color: var(--bg-hover); }
 
+    /* ---- VIS-03: Category section headers ---- */
+
+    .provider-section-header {
+        font-size: 0.65rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--text-muted);
+        padding: 0.4rem 0.5rem 0.15rem;
+        margin-top: 0.25rem;
+        border-top: 1px solid var(--border);
+    }
+    .provider-section-header:first-child {
+        margin-top: 0;
+        border-top: none;
+    }
+
+    /* ---- GRP-02: No-data collapse ---- */
+
+    .provider-row--no-data {
+        display: none;
+    }
+    .no-data-expanded .provider-row--no-data {
+        display: flex;
+    }
+    .no-data-summary-row {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.35rem 0.5rem;
+        font-size: 0.75rem;
+        color: var(--text-muted);
+        cursor: pointer;
+        border-top: 1px solid var(--border);
+        transition: color var(--duration-fast) ease;
+    }
+    .no-data-summary-row:hover {
+        color: var(--text-secondary);
+    }
+
     /* ---- Phase 4 Results UX — Chevron toggle ---- */
 
     .chevron-toggle {
