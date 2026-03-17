@@ -405,32 +405,18 @@ export function createProviderRow(
 }
 
 /**
- * Create a category section header element (VIS-03).
- * All DOM construction uses createElement + textContent (SEC-08).
- */
-export function createSectionHeader(label: string): HTMLElement {
-  const header = document.createElement("div");
-  header.className = "provider-section-header";
-  header.setAttribute("data-section-label", label);
-  header.textContent = label;
-  return header;
-}
-
-/**
- * Inject category section headers (VIS-03) and no-data collapse summary (GRP-02)
- * into an enrichment slot's details container. Must be called AFTER enrichment
- * completes and sortDetailRows() has finalized the DOM order.
+ * Inject no-data collapse summary (GRP-02) into the no-data section of an
+ * enrichment slot. Must be called AFTER enrichment completes and sortDetailRows()
+ * has finalized the DOM order.
  *
- * Section headers: Scans .provider-detail-row elements in DOM order. Context rows
- * (.provider-context-row) are pinned to the top, verdict rows below. Inserts
- * "Infrastructure Context" header before the first context row and "Reputation"
- * header before the first non-context row (when each group exists).
+ * Section headers are now server-rendered in the template (GRP-01/S04).
+ * This function only handles the no-data summary row and collapse toggle.
  *
- * No-data collapse: Counts .provider-row--no-data elements. If any exist, creates
- * a clickable summary row that toggles .no-data-expanded on the details container.
+ * Counts .provider-row--no-data elements in .enrichment-section--no-data. If any
+ * exist, creates a clickable summary row that toggles .no-data-expanded on the
+ * section element.
  *
- * Edge cases: zero rows, zero context rows, zero verdict rows, zero no-data rows
- * all handled gracefully (no crash, no empty headers).
+ * Edge cases: zero no-data rows handled gracefully (early return, no crash).
  *
  * All DOM construction uses createElement + textContent (SEC-08).
  */

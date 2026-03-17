@@ -57,6 +57,13 @@ Verify the atomic template+JS change from T01 doesn't break E2E tests, then clea
 - `grep -rn "innerHTML\|insertAdjacentHTML" app/static/src/ts/` — zero results
 - `make typecheck && make js-dev && make css` — all pass
 
+## Observability Impact
+
+- **Signals removed:** `createSectionHeader()` export removed from row-factory.ts — any module that imported it will get a build error (intentional dead-code detection).
+- **Inspection surface:** After this task, `grep -rn "createSectionHeader" app/static/src/ts/` should return zero results, confirming the migration from JS-injected headers to template-rendered headers is complete.
+- **Failure state visibility:** If `createSectionHeader` is removed but still referenced somewhere, `make typecheck` will fail with an import error — this is the primary detection mechanism.
+- **E2E baseline:** 89 pass / 2 fail (pre-existing title-case). Any deviation from this baseline after T01's changes indicates a regression in section routing, sort ordering, or no-data collapse.
+
 ## Inputs
 
 - T01 completed: template has three `.enrichment-section` containers, JS routes rows to correct sections, `injectSectionHeadersAndNoDataSummary()` simplified

@@ -61,7 +61,7 @@
   - Verify: `make typecheck && make js-dev && make css` all pass. Template has 3 `.enrichment-section` divs. `sortDetailRows()` has no context-pinning. `injectSectionHeadersAndNoDataSummary()` has no `createSectionHeader` calls.
   - Done when: Build succeeds with zero type errors, template has three section containers with static headers, JS routes rows to correct sections.
 
-- [ ] **T02: Run E2E suite and clean up dead code** `est:20m`
+- [x] **T02: Run E2E suite and clean up dead code** `est:20m`
   - Why: Confirms the atomic change from T01 didn't break any E2E tests, removes dead code paths (createSectionHeader export if unused, context-pinning comments), and verifies edge cases (empty sections hidden, no-data collapse still works).
   - Files: `app/static/src/ts/modules/row-factory.ts`, `app/static/src/ts/modules/enrichment.ts`
   - Do: (1) Run full E2E suite. (2) Verify `createSectionHeader` — if only called internally by `injectSectionHeadersAndNoDataSummary()` and no longer needed, remove the export or the function entirely. (3) Grep for innerHTML (SEC-08 gate). (4) Verify no duplicate section headers in rendered output by checking that `injectSectionHeadersAndNoDataSummary` doesn't create headers. (5) Confirm `.enrichment-details.is-open` max-height is sufficient (750px). (6) Run `make js-dev && make css` for final build.
