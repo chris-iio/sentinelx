@@ -1,0 +1,6 @@
+- "E2E baseline is 89/91 — 2 pre-existing failures in test_homepage.py and test_settings.py (page title capitalization mismatch: expects 'SentinelX', actual 'sentinelx'); these predate Phase 1 and are out of scope"
+- "CSS-CONTRACTS.md placed in .planning/phases/01-contracts-and-foundation/ (not milestone-level) — it is produced by Phase 1 and consumed by subsequent phases via path reference"
+- "18 JS-created runtime classes catalogued separately from 24 template-sourced classes — both are equally contractual because E2E tests can query runtime DOM"
+- "formatDate exported from row-factory.ts (not private) because renderEnrichmentResult in enrichment.ts needs it for scan_date formatting"
+- "createProviderRow thin dispatcher added to row-factory.ts as stable API surface for Phase 3 visual work"
+- "VERDICT_LABELS and EnrichmentResultItem imports removed from enrichment.ts — only needed by row-factory.ts now"
