@@ -9,7 +9,7 @@
 - 🔄 **M001:** v1.1 Results Page Redesign
 
 ## Recent Decisions
-- None recorded
+- D008: Domain IOCs show DNS A records (not registrar) in context line — no WHOIS adapter exists
 
 ## Blockers
 - None
