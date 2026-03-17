@@ -156,7 +156,7 @@ Injected post-enrichment by `injectSectionHeadersAndNoDataSummary()`. Never inje
 ```
 .provider-section-header   — 0.65rem, weight 700, uppercase, letter-spacing 0.08em
                              text: --text-muted, border-top: 1px solid --border
-                             padding: 0.4rem 0.5rem 0.15rem, margin-top: 0.25rem
+                             padding: 0.5rem 0.5rem 0.25rem, margin-top: 0.25rem
 .provider-section-header:first-child — margin-top: 0, border-top: none
 ```
 
