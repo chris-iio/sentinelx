@@ -1,7 +1,7 @@
 # GSD State
 
 **Active Milestone:** M001: v1.1 Results Page Redesign
-**Active Slice:** S03: Visual Redesign
+**Active Slice:** S04: Template Restructuring
 **Phase:** executing
 **Requirements Status:** 7 active · 0 validated · 0 deferred · 0 out of scope
 
@@ -9,10 +9,10 @@
 - 🔄 **M001:** v1.1 Results Page Redesign
 
 ## Recent Decisions
-- D001: Post-enrichment injection for section headers and no-data summary (not per-result) — avoids sortDetailRows() timing issue
+- D004: Template-rendered section structure for enrichment details (M001/S04)
 
 ## Blockers
 - None
 
 ## Next Action
-Execute S03/T01: Enlarge verdict badge and replace consensus badge with micro-bar.
+Execute S04/T01: Add template sections and wire JS routing to section containers
