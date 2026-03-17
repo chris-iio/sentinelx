@@ -19,5 +19,5 @@
   > Verdict badge prominence (VIS-01), micro-bar replacing consensus badge (VIS-02), category labels (VIS-03), and no-data collapse (GRP-02) — all changes confined to row-factory.ts and input.css.
 - [x] **S04: Template Restructuring** `risk:medium` `depends:[S03]`
   > HTML template delivers three explicit sections — Reputation, Infrastructure Context, No Data — as the structural backbone of each IOC card (GRP-01).
-- [ ] **S05: Context And Staleness** `risk:medium` `depends:[S04]`
+- [x] **S05: Context And Staleness** `risk:medium` `depends:[S04]`
   > Key context fields (GeoIP, ASN org, registrar) visible in IOC card header without expanding (CTX-01), plus cache staleness indicator (CTX-02).

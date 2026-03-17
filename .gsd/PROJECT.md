@@ -89,22 +89,23 @@ Everything built through 9 milestones (2026-02-21 to 2026-03-14). See `.planning
 | CONTEXT_PROVIDERS set pattern | Route zero-verdict context rows through shared renderer | ✓ Good — generalized createContextRow() for all context providers |
 | path converter for IOC URLs | URL IOCs contain slashes that break standard routing | ✓ Good — `<path:ioc_value>` handles all IOC formats |
 
-## Current Milestone: v1.1 Results Page Redesign
+## Current Milestone: None (M001 complete)
 
-**Goal:** Make 14 providers feel like one cohesive intelligence report instead of 14 separate search results stapled together.
-
-**Target features:**
-- Uniform information architecture across all provider types (verdict, context, no-data)
-- Cohesive visual presentation that matches the value of the data
-- Results page that embodies the "meta-search engine" identity
+**M001 (v1.1 Results Page Redesign) shipped 2026-03-17.** All 5 slices delivered:
+- S01: CSS contract catalog and E2E baseline
+- S02: TypeScript module extractions (verdict-compute.ts, row-factory.ts)
+- S03: Visual redesign (verdict badge, micro-bar, category labels, no-data collapse)
+- S04: Template restructuring (three-section Reputation/Infrastructure/No Data grouping)
+- S05: Context and staleness (inline GeoIP/ASN/DNS context line, cache staleness badge)
 
 ## Shipped Milestones
 
 | Version | Name | Shipped | Key Feature |
 |---------|------|---------|-------------|
+| v1.1 | Results Page Redesign | 2026-03-17 | Uniform IOC card architecture: verdict badge prominence, micro-bar, category labels, three-section grouping, inline context line (GeoIP/ASN/DNS), cache staleness badge |
 | v1.0 | Foundation | 2026-03-14 | 14 providers, detail pages, cache, export, bulk input, relationship graphs |
 
 See `.planning/MILESTONES.md` for full history.
 
 ---
-*Last updated: 2026-03-16 after version reset, starting v1.1 Results Page Redesign*
+*Last updated: 2026-03-17 after M001 (v1.1 Results Page Redesign) complete — all 5 slices shipped*

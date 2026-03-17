@@ -5,115 +5,145 @@
 
 ## UAT Type
 
-- UAT mode: mixed
-- Why this mode is sufficient: Context line placement and staleness badge appearance are visual features that need human confirmation of layout and readability. Build + E2E tests confirm no regressions but cannot judge visual coherence.
+- UAT mode: live-runtime
+- Why this mode is sufficient: CTX-01 and CTX-02 both depend on asynchronous enrichment data arriving from real providers. Static artifact inspection can verify template structure and CSS rules but cannot confirm that `updateContextLine()` fires with real geo/ASN/DNS data or that staleness badges render from real `cached_at` timestamps. Live runtime with a real (or fixture-backed) enrichment cycle is required.
 
 ## Preconditions
 
-- App running locally: `flask run` or `make run` on default port
-- At least one IP IOC and one domain IOC submitted for enrichment (online mode with provider API keys configured)
-- At least one previous enrichment cached (to verify staleness badge — run the same IOC twice with >1 minute gap, or seed cache)
+1. Application server is running (`make run` or `flask run`)
+2. At least one IP IOC result is available (search a known public IP such as `8.8.8.8` or load a fixture that includes an IP with IP Context / ASN Intel provider results)
+3. At least one domain IOC result is available (e.g., `example.com` or a fixture with DNS Records provider results)
+4. At least one cached result is available — either a previously searched IOC served from cache, or a fixture that includes `cached_at` timestamps on one or more provider results
+5. Browser developer tools available (console access for diagnostic queries)
 
 ## Smoke Test
 
-Submit an IP address (e.g., `93.184.216.34`) in online mode. Before expanding the IOC card, confirm a line of muted text appears between the IOC value and the enrichment rows showing country/city/org info (e.g., "US · San Francisco · AS24940 (Hetzner Online GmbH)").
+Navigate to a results page for an IP IOC. Within 5 seconds of enrichment completing, the IOC card header should show a one-line context string (e.g., "United States, Mountain View (AS15169 GOOGLE)") without clicking any accordion or expand control.
+
+---
 
 ## Test Cases
 
-### 1. IP IOC context line displays GeoIP and ASN data
+### 1. IP IOC — GeoIP context visible in card header
 
-1. Navigate to the search page
-2. Enter a known public IP address (e.g., `8.8.8.8`) and submit
-3. Wait for enrichment to complete (all provider rows populated)
-4. Look at the IOC card **before expanding** — between the IOC value and the enrichment section
-5. **Expected:** A muted text line shows geographic context, e.g., "US · Mountain View · AS15169 (Google LLC)". The line should contain country, city, and ASN org separated by middle dots.
+1. Search for a known public IP (e.g., `8.8.8.8`).
+2. Wait for enrichment to complete (provider rows populate).
+3. Inspect the IOC card header — do **not** expand any section.
+4. **Expected:** A context line below the IOC value shows GeoIP data: country, city, and ASN in the format "Country, City (ASXXXXX ORG)". The data comes from the "IP Context" provider.
+5. Open browser console and run: `document.querySelectorAll('.ioc-context-line:not(:empty)').length`
+6. **Expected:** Returns `1` (or more if multiple IP IOCs are present).
+7. Run: `document.querySelector('.ioc-context-line span')?.getAttribute('data-context-provider')`
+8. **Expected:** Returns `"IP Context"`.
 
-### 2. Domain IOC context line displays A-record IPs
+### 2. IP IOC — ASN Intel fallback when IP Context absent
 
-1. Navigate to the search page
-2. Enter a known domain (e.g., `example.com`) and submit
-3. Wait for enrichment to complete
-4. Look at the IOC card before expanding
-5. **Expected:** A muted text line shows resolved A-record IPs (up to 3), e.g., "A: 93.184.216.34". If the domain has multiple A records, up to 3 are shown.
+1. Search for an IP IOC where only "ASN Intel" is configured (or mock IP Context to return no-data).
+2. Wait for enrichment to complete.
+3. Inspect the IOC card header context line.
+4. **Expected:** Context line shows ASN + prefix (e.g., "AS15169 / 8.8.8.0/24") from ASN Intel provider.
+5. Run: `document.querySelector('.ioc-context-line span')?.getAttribute('data-context-provider')`
+6. **Expected:** Returns `"ASN Intel"`.
 
-### 3. Hash IOC has no context line visible
+### 3. IP IOC — IP Context replaces ASN Intel when both fire
 
-1. Enter a known hash (e.g., a SHA256 from MalwareBazaar) and submit
-2. Wait for enrichment to complete
-3. Look at the IOC card before expanding
-4. **Expected:** No context line is visible — there should be no extra space or blank line between the IOC value and the enrichment section. (The `.ioc-context-line` div exists in DOM but is hidden via `:empty` CSS.)
+1. Search for an IP IOC where both "IP Context" and "ASN Intel" are enabled.
+2. Wait for full enrichment.
+3. **Expected:** Context line shows only **one** span — the IP Context data (more comprehensive). ASN Intel data is not shown alongside it.
+4. Run: `document.querySelectorAll('.ioc-context-line span').length`
+5. **Expected:** Returns `1`.
+6. Run: `document.querySelector('.ioc-context-line span')?.getAttribute('data-context-provider')`
+7. **Expected:** Returns `"IP Context"` (not `"ASN Intel"`).
 
-### 4. Staleness badge appears for cached results
+### 4. Domain IOC — DNS A records visible in card header
 
-1. Submit an IP address and let enrichment complete
-2. Wait at least 1 minute
-3. Submit the same IP address again
-4. Wait for enrichment to complete (should be fast — served from cache)
-5. **Expected:** The summary row shows a staleness badge on the right side, e.g., "cached 2m ago" or "cached 1h ago" depending on cache age. The text should be muted/small and right-aligned relative to the micro-bar.
+1. Search for a domain IOC (e.g., `example.com`).
+2. Wait for enrichment to complete.
+3. Inspect the domain IOC card header — do **not** expand any section.
+4. **Expected:** Context line shows up to 3 resolved A-record IPs (e.g., "93.184.216.34").
+5. Run: `document.querySelector('.ioc-context-line span')?.getAttribute('data-context-provider')`
+6. **Expected:** Returns `"DNS Records"`.
 
-### 5. Staleness badge absent for fresh results
+### 5. Hash/URL/CVE IOC — context line hidden
 
-1. Submit an IP address that has never been queried before (or clear cache first)
-2. Wait for enrichment to complete
-3. **Expected:** No staleness badge appears in the summary row — only the verdict label and micro-bar are present.
+1. Search for a hash, URL, or CVE IOC.
+2. Wait for enrichment to complete.
+3. Inspect the IOC card header area where the context line would appear.
+4. **Expected:** No context line is visible — the `.ioc-context-line` div is present in the DOM but hidden by CSS (`:empty { display: none }`).
+5. Run: `document.querySelector('.ioc-context-line')` — verifies the element exists.
+6. **Expected:** Element found (not null).
+7. Run: `window.getComputedStyle(document.querySelector('.ioc-context-line')).display`
+8. **Expected:** Returns `"none"`.
 
-### 6. Multiple IOC types in one submission
+### 6. Cached IOC — staleness badge in summary row
 
-1. Enter mixed text containing an IP, a domain, and a hash (e.g., "Check 8.8.8.8 and example.com and 44d88612fea8a8f36de82e1278abb02f")
-2. Submit and wait for all enrichment to complete
-3. **Expected:**
-   - IP card: context line shows GeoIP/ASN data
-   - Domain card: context line shows A-record IPs
-   - Hash card: no context line visible
-   - All three cards render correctly without layout shifts or overlapping elements
+1. Search for an IOC that returns cached results (previously searched, or use a fixture with `cached_at` timestamps).
+2. Wait for enrichment to complete.
+3. Inspect the IOC summary row (the collapsed card header with verdict badge and micro-bar).
+4. **Expected:** A muted badge to the right of the summary row reads "cached Xh ago" (or "cached Xm ago" for recent cache), where X is the time since the oldest `cached_at` timestamp across all providers.
+5. Run: `document.querySelectorAll('.staleness-badge').length`
+6. **Expected:** Returns `1` (or more if multiple IOCs have cached results).
+7. Run: `document.querySelector('.staleness-badge')?.textContent`
+8. **Expected:** String contains "cached" and a relative time unit (e.g., "cached 4h ago", "cached 2d ago").
+
+### 7. Fresh IOC — no staleness badge
+
+1. Search for a new IOC that has never been searched before (guaranteed fresh results).
+2. Wait for enrichment to complete.
+3. Inspect the IOC summary row.
+4. **Expected:** No staleness badge is present.
+5. Run: `document.querySelectorAll('.staleness-badge').length`
+6. **Expected:** Returns `0`.
+
+---
 
 ## Edge Cases
 
-### ASN Intel arrives before IP Context
+### Multiple providers cached at different ages — oldest wins
 
-1. This is provider timing-dependent and may not be reproducible on demand
-2. If observable: ASN Intel initially populates the context line with ASN number + prefix
-3. When IP Context subsequently arrives, the ASN span is replaced with the richer geo data
-4. **Expected:** Final context line shows full geo info (country · city · org), not duplicate ASN data
+1. Search for an IOC where some providers return cached results and others return fresh results.
+2. Wait for enrichment.
+3. Locate the `.staleness-badge` if present.
+4. **Expected:** The badge shows the age of the **oldest** cached_at timestamp among all providers (worst-case data age, not best-case).
 
-### Very old cached data
+### Domain IOC with more than 3 A records
 
-1. If cache contains data from >24h ago (manually seed or time-shift)
-2. Submit the IOC
-3. **Expected:** Staleness badge shows appropriate relative time (e.g., "cached 2d ago"), not a raw ISO timestamp
+1. Search for a domain that resolves to more than 3 IP addresses.
+2. **Expected:** Context line shows exactly 3 IPs (first three), not all of them. No overflow or truncation error.
 
-### Context providers return no data
+### Context line DOM structure — :empty rule
 
-1. Submit an IP that geo-lookup cannot resolve (e.g., a private/reserved IP like `10.0.0.1` if it passes extraction)
-2. **Expected:** Context line stays hidden (`:empty` rule) — no blank space appears
+1. On any results page, open DevTools and inspect a hash IOC's `.ioc-context-line` element.
+2. **Expected:** The div has **no child nodes** (not even whitespace text nodes), confirming the template renders `<div class="ioc-context-line"></div>` without inner whitespace. This is required for the `:empty` CSS rule to fire.
+
+---
 
 ## Failure Signals
 
-- Context line shows raw JSON or `[object Object]` instead of formatted text — `updateContextLine()` is accessing wrong property path
-- Context line visible for hash/URL/CVE IOC types — `:empty` CSS rule is broken or context providers are incorrectly routing data
-- Staleness badge shows raw ISO timestamp instead of relative time — `formatRelativeTime()` is failing silently
-- Staleness badge appears on every result including fresh ones — `cachedAt` is being populated from a wrong field
-- Layout shift when context line appears — CSS height transition or missing space allocation
-- `innerHTML` or `insertAdjacentHTML` found in source — SEC-08 violation (run `grep -rn "innerHTML\|insertAdjacentHTML" app/static/src/ts/`)
+- **Context line visible but blank for IP IOC:** `updateContextLine()` was called but `result.raw_stats.geo` was absent. Check the network tab for the IP Context provider response — geo field may be missing or null.
+- **Context line not visible for IP IOC when IP Context provider has data:** `updateContextLine()` was not called. Check that the `enrichment.ts` context provider branch routes "IP Context" calls to `updateContextLine()`.
+- **ASN Intel data still showing alongside IP Context:** The dedup replacement logic failed. Check that `data-context-provider` attribute is being set on ASN Intel spans and that the replacement lookup by attribute works correctly.
+- **Staleness badge missing when a cached result is present:** `result.cached_at` was not propagated to `VerdictEntry.cachedAt`. Check that `result.type === "result"` on the cached response (error results do not carry `cachedAt`).
+- **Staleness badge shows raw ISO timestamp instead of relative time:** `formatRelativeTime()` failed to parse the timestamp. The timestamp format may not be ISO 8601 UTC.
+- **CSS `:empty` not hiding context line for hash IOC:** Inner whitespace is present in the template's `.ioc-context-line` div. Verify `<div class="ioc-context-line"></div>` has no whitespace between tags.
+- **E2E regression:** Any test count other than exactly 89 passed / 2 failed indicates a regression. The 2 pre-existing failures are `test_page_title[chromium]` and `test_settings_page_title_tag[chromium]` (title-case mismatch).
+
+---
 
 ## Requirements Proved By This UAT
 
-- CTX-01 — Test cases 1, 2, 3, and 6 prove that key context fields are visible in IOC card header without expanding, and correctly absent for non-context IOC types
-- CTX-02 — Test cases 4 and 5 prove that staleness indicator appears only when cached results are served and shows meaningful relative time
+- **CTX-01** — Test cases 1–5 prove that GeoIP/ASN data appears inline in IP IOC headers, DNS A records appear in domain headers, dedup works between IP Context and ASN Intel, and the context line is hidden for unsupported IOC types.
+- **CTX-02** — Test cases 6–7 prove that staleness badges appear for cached results with correct relative time and are absent for fresh results.
 
 ## Not Proven By This UAT
 
-- VIS-01 through GRP-02 — these were implemented in S03/S04 and should have separate UAT
-- Staleness badge behavior when cache is cleared mid-session
-- Context line rendering with providers that return partial data (e.g., geo with country but no city)
-- Performance impact of context line rendering on pages with many IOCs (50+)
+- Provider configuration edge cases (e.g., what happens if "IP Context" adapter is disabled in settings but "ASN Intel" is enabled — ASN Intel should fill in, but this requires provider config control).
+- Very large staleness values (e.g., cache from months ago) — `formatRelativeTime()` may return unexpected strings for extreme durations.
+- Concurrent searches — multiple IOCs completing enrichment simultaneously and racing to update context lines.
+- Mobile/small viewport rendering — the context line and staleness badge are styled for desktop; truncation on narrow viewports is not tested.
 
 ## Notes for Tester
 
-- The context line content depends entirely on which providers are configured and responding. If IP Context provider (ip-api.com) is down, the line may show only ASN Intel data or nothing.
-- The "registrar" field mentioned in the original requirement description (CTX-01) is intentionally not implemented — WHOIS/RDAP was previously scoped out due to GDPR redaction. DNS A-records are shown for domains instead.
-- The 2 pre-existing E2E test failures (title-case mismatch) are unrelated to S05 and predate the v1.1 redesign.
-- To verify diagnostic surfaces in browser console:
-  - `document.querySelectorAll('.ioc-context-line:not(:empty)').length` — should match number of IP/domain IOC cards
-  - `document.querySelectorAll('.staleness-badge').length` — should be >0 when cached results shown
-  - `getComputedStyle(document.querySelector('.ioc-card[data-ioc-type="hash"] .ioc-context-line')).display` — should be `'none'`
+- The two pre-existing E2E failures (`test_page_title` and `test_settings_page_title_tag`) are **expected** and unrelated to S05 work — both test for "SentinelX" but the page title is "sentinelx". Do not investigate these.
+- If live provider credentials are not configured, use fixture data with pre-seeded `raw_stats.geo` and `cached_at` fields to trigger context lines and staleness badges without real API calls.
+- The staleness badge appears in the **summary row** (the collapsed card header), not inside the accordion sections. Look at the row-level flex container, not the expanded provider detail section.
+- `data-context-provider` attributes on context spans are the primary diagnostic tool — they identify which provider won the dedup race and are visible in DevTools element inspector.

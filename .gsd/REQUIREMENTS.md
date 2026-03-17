@@ -47,25 +47,27 @@ Provider results are grouped into three sections: Reputation, Infrastructure Con
 
 No-data providers are collapsed by default with a count summary ("5 had no record")
 
+## Validated
+
 ### CTX-01 — Key context fields (GeoIP country, ASN org for IPs; registrar for domains) are visible in IOC card header without expanding
 
-- Status: active
+- Status: validated
 - Class: core-capability
 - Source: inferred
 - Primary Slice: S05
+- Validation: S05 T01: updateContextLine() wired in enrichment.ts context branch; IP Context → geo string, ASN Intel fallback, DNS Records → A-record IPs; :empty CSS hides line for hash/URL/CVE. E2E baseline 89/2 maintained.
 
-Key context fields (GeoIP country, ASN org for IPs; registrar for domains) are visible in IOC card header without expanding
+Key context fields visible in IOC card header without expanding — GeoIP/ASN for IPs, DNS A records for domains; hidden for hash/URL/CVE via CSS :empty.
 
 ### CTX-02 — Cached results show a staleness indicator ("data from 4h ago") in the summary row
 
-- Status: active
+- Status: validated
 - Class: core-capability
 - Source: inferred
 - Primary Slice: S05
+- Validation: S05 T02: VerdictEntry.cachedAt propagated from result.cached_at; updateSummaryRow() renders .staleness-badge with formatRelativeTime() for oldest cached timestamp; absent for fresh results. E2E baseline 89/2 maintained.
 
-Cached results show a staleness indicator ("data from 4h ago") in the summary row
-
-## Validated
+Cached results show staleness badge ("cached Xh ago") in summary row; absent for fresh results.
 
 ## Deferred
 
