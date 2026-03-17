@@ -58,7 +58,7 @@
   - Verify: `make typecheck && make js-dev && make css` all pass; `.ioc-context-line` in template between header and slot; `grep updateContextLine app/static/src/ts/modules/enrichment.ts` shows call in context branch
   - Done when: typecheck clean, bundle builds, CSS rebuilds, context line placeholder in template, `updateContextLine` wired in enrichment.ts context branch
 
-- [ ] **T02: Add staleness badge to summary row and run full E2E verification** `est:30m`
+- [x] **T02: Add staleness badge to summary row and run full E2E verification** `est:30m`
   - Why: Delivers CTX-02 — staleness indicator surfaces cache age to users. Also performs final E2E verification for both CTX-01 and CTX-02.
   - Files: `app/static/src/ts/modules/verdict-compute.ts`, `app/static/src/ts/modules/enrichment.ts`, `app/static/src/ts/modules/row-factory.ts`, `app/static/src/input.css`
   - Do: (1) Add `cachedAt?: string` to `VerdictEntry` interface in `verdict-compute.ts`. (2) In `enrichment.ts` verdict branch, when building VerdictEntry objects, populate `cachedAt: result.cached_at` when `result.cached_at` exists. (3) In `row-factory.ts` `updateSummaryRow()`, after appending the micro-bar, find the oldest `cachedAt` across all entries for the IOC. If any exist, create a `.staleness-badge` span with text like "cached 4h ago" using the existing `formatRelativeTime()`. Append to `summaryRow`. (4) Add `.staleness-badge` CSS in `input.css` — small muted text, consistent with existing `.cache-badge` styling on detail rows. (5) Rebuild bundles with `make js-dev && make css`. (6) Run full E2E suite: `pytest tests/ -m e2e --tb=short -q` — expect 89 pass, 2 pre-existing failures.

@@ -21,6 +21,7 @@ export interface VerdictEntry {
   detectionCount: number;   // from result.detection_count (0 for errors)
   totalEngines: number;     // from result.total_engines (0 for errors)
   statText: string;         // key stat string for display (e.g., "45/72 engines")
+  cachedAt?: string;        // ISO timestamp from result.cached_at when served from cache
 }
 
 /**

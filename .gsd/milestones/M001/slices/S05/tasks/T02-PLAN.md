@@ -107,3 +107,10 @@ After implementing CTX-02, this task also performs the final full E2E verificati
 - `app/static/dist/main.js` — Rebuilt JS bundle
 - `app/static/dist/style.css` — Rebuilt CSS
 - Full E2E suite passing at baseline (89 pass, 2 pre-existing fail)
+
+## Observability Impact
+
+- **New DOM signal:** `document.querySelectorAll('.staleness-badge').length` — count of IOCs whose summary row shows a cache-staleness indicator. Non-zero means at least one verdict result was served from cache.
+- **Inspection:** Each `.staleness-badge` element's `textContent` shows the relative age of the oldest cached result for that IOC (e.g., "cached 4h ago").
+- **Failure visibility:** If `.staleness-badge` is absent when expected, inspect `VerdictEntry` objects in `iocVerdicts` for `cachedAt` field presence — if missing, `result.cached_at` was not populated by the API response or the enrichment.ts propagation line was not reached. If the badge text shows raw ISO instead of relative time, `formatRelativeTime()` threw during parsing.
+- **No staleness when fresh:** When all results are fresh (no `cached_at` on any API response), zero `.staleness-badge` elements should exist — verify via `document.querySelectorAll('.staleness-badge').length === 0`.

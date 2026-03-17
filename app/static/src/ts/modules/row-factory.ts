@@ -301,6 +301,21 @@ export function updateSummaryRow(
     microBar.appendChild(seg);
   }
   summaryRow.appendChild(microBar);
+
+  // d. Staleness badge — show oldest cached_at if any entries were cached (CTX-02)
+  const cachedEntries = entries.filter(e => e.cachedAt);
+  if (cachedEntries.length > 0) {
+    // Find the oldest (minimum) cached_at timestamp
+    const oldestCachedAt = cachedEntries
+      .map(e => e.cachedAt!)
+      .sort()[0];
+    if (oldestCachedAt) {
+      const staleBadge = document.createElement("span");
+      staleBadge.className = "staleness-badge";
+      staleBadge.textContent = "cached " + formatRelativeTime(oldestCachedAt);
+      summaryRow.appendChild(staleBadge);
+    }
+  }
 }
 
 /**

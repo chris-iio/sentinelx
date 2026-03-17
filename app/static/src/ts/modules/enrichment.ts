@@ -297,7 +297,7 @@ function renderEnrichmentResult(
   // Push to iocVerdicts with extended fields
   const entries = iocVerdicts[result.ioc_value] ?? [];
   iocVerdicts[result.ioc_value] = entries;
-  entries.push({ provider: result.provider, verdict, summaryText, detectionCount, totalEngines, statText });
+  entries.push({ provider: result.provider, verdict, summaryText, detectionCount, totalEngines, statText, cachedAt: result.type === "result" ? result.cached_at ?? undefined : undefined });
 
   // Build detail row and route to correct section container
   const isNoData = verdict === "no_data" || verdict === "error";

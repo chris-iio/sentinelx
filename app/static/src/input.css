@@ -1468,6 +1468,15 @@
         white-space: nowrap;
     }
 
+    /* ---- CTX-02: Staleness badge in summary row ---- */
+
+    .staleness-badge {
+        font-size: 0.675rem;
+        color: var(--text-muted, #6b7280);
+        margin-left: auto;
+        white-space: nowrap;
+    }
+
     /* ---- Phase 4 Results UX — Provider coverage row ---- */
 
     .provider-coverage-row {
