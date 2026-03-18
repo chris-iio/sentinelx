@@ -37,6 +37,31 @@
 - Security audit evidence documented in T02 summary (grep results for innerHTML, CSP, CSRF, eval, document.write)
 - `--bg-hover` token confirmed defined in `input.css`
 
+## Observability / Diagnostics
+
+**Runtime signals:**
+- `make typecheck` exit code + stderr surface all TS type errors before any runtime failure
+- `pytest tests/e2e/ -v` prints per-test pass/fail; `--tb=short` expands stack traces on failure
+- Browser devtools console: JS module init errors surface immediately on page load (look for `[export]`, `[filter]`, `[clipboard]` prefixed log lines)
+- `#enrich-warning` banner visibility signals enrichment error state — inspect DOM when polling stalls
+- `#enrich-progress-fill` width % and `#enrich-progress-text` content are direct progress readout
+
+**Inspection surfaces:**
+- `window.__sentinelxAllResults` (if exposed) or breakpoint on `allResults.push()` in `enrichment.ts` verifies accumulation
+- DevTools → Network tab: enrichment poll requests appear as `/api/status/<session_id>` calls
+- DevTools → Console: clipboard write errors surface as unhandled promise rejections
+- `app/static/dist/main.js` — minified bundle; source maps (if generated) enable readable stack traces
+
+**Failure visibility:**
+- Build failures: `make typecheck` / `make css` / `make js-dev` exit non-zero; stderr contains file:line
+- E2E failures: pytest prints failed test name + selector/assertion error; check `tests/e2e/conftest.py` for fixture setup
+- Wiring breaks (e.g., missing selector): JS TypeError in console + feature silently does nothing (no banner thrown to user)
+- Production size regression: `wc -c app/static/dist/main.js` > 30720 bytes fails the gate
+
+**Redaction constraints:**
+- IOC values (IP addresses, domains, hashes) may appear in E2E test logs — do not copy raw fixture payloads into external systems
+- No secrets in TS source; API keys are server-side only
+
 ## Integration Closure
 
 - Upstream surfaces consumed: All S01–S03 DOM structure, data-* attributes, enrichment pipeline, expand/collapse wiring
@@ -45,7 +70,7 @@
 
 ## Tasks
 
-- [ ] **T01: Verify integration pipeline — export, filter, sort, progress, warnings, copy, detail links** `est:30m`
+- [x] **T01: Verify integration pipeline — export, filter, sort, progress, warnings, copy, detail links** `est:30m`
   - Why: R008 requires all existing functionality works after the S01–S03 rework. This task produces evidence that the pipeline is intact, or surfaces specific breakages to fix.
   - Files: `app/static/src/ts/modules/export.ts`, `app/static/src/ts/modules/filter.ts`, `app/static/src/ts/modules/cards.ts`, `app/static/src/ts/modules/enrichment.ts`, `app/static/src/ts/modules/clipboard.ts`, `app/templates/results.html`, `app/templates/partials/_verdict_dashboard.html`, `app/templates/partials/_filter_bar.html`, `app/templates/partials/_ioc_card.html`
   - Do: Run `make typecheck`, `make css`, `make js-dev`, and full E2E suite. Then code-review each wiring point: (1) export.ts reads `allResults[]` from enrichment.ts — verify accumulation path, (2) filter.ts binds `.verdict-kpi-card[data-verdict]` click and reads `data-verdict`/`data-ioc-type`/`data-ioc-value` from `.ioc-card` — verify selectors present in templates, (3) cards.ts `sortCardsBySeverity()` reads `data-verdict` from `.ioc-card` children of `#ioc-cards-grid` — verify selector chain, (4) `#enrich-progress-fill`/`#enrich-progress-text`/`#enrich-warning` present in results.html, (5) `.copy-btn` with `data-value` in `_ioc_card.html`, (6) `injectDetailLink()` called from `markEnrichmentComplete()`. Document each check result. If any wiring is broken, fix it.

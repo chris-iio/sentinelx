@@ -12,6 +12,23 @@ estimated_files: 9
 
 R008 requires that all existing functionality — enrichment polling, export (JSON/CSV/clipboard), verdict filtering, type filtering, text search, detail page links, copy buttons, progress bar — continues working after the S01–S03 layout rework. S01–S03 preserved all selector names and data attributes (D015: no selector renames), so the pipeline should be intact. This task is primarily diagnostic: run the build + E2E suite, then systematically code-review each wiring point to produce a verification matrix. If any wiring is broken, fix it.
 
+## Observability Impact
+
+**Signals this task touches:**
+- Build outputs (`app/static/dist/main.js`, `app/static/dist/style.css`) are rebuilt and verified; size/exit-code observable
+- `make typecheck` stderr is the primary signal for TS wiring breaks — 0 errors = wiring intact
+- E2E test output is the primary runtime signal — 36/36 pass = all pipelines exercised
+
+**How a future agent inspects this task's state:**
+- Read `T01-SUMMARY.md` for the verification matrix with file:line evidence for each wiring point
+- Re-run `pytest tests/e2e/test_results_page.py tests/e2e/test_extraction.py -q` to reproduce the pass/fail state
+- Re-run `make typecheck` to check if TS types still compile clean
+
+**Failure state visibility:**
+- If a wiring break is introduced after this task, the E2E suite will surface it (test names map directly to features)
+- TS type errors surface from `make typecheck` before any runtime impact
+- Missing DOM element IDs (progress, warning) surface as null-dereference errors in JS console
+
 ## Steps
 
 1. Run `make typecheck` — expect 0 errors. If errors exist, investigate and fix before proceeding.
