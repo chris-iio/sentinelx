@@ -55,7 +55,7 @@ This milestone is complete only when all are true:
 - [x] **S02: At-a-glance enrichment surface** `risk:high` `depends:[S01]`
   > After this: Online enrichment streams into the new layout — each row shows verdict badge, real-world context (geo/ASN/DNS), key provider stat line, micro-bar, and staleness badge. No expand needed to see the important data.
 
-- [ ] **S03: Inline expand + progressive disclosure** `risk:medium` `depends:[S02]`
+- [x] **S03: Inline expand + progressive disclosure** `risk:medium` `depends:[S02]`
   > After this: Clicking an IOC row expands full provider details inline — reputation section, infrastructure context, no-data collapse. Detail page link available from expanded view.
 
 - [ ] **S04: Functionality integration + polish** `risk:medium` `depends:[S03]`
