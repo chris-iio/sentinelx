@@ -61,7 +61,7 @@ This milestone is complete only when all are true:
 - [x] **S04: Functionality integration + polish** `risk:medium` `depends:[S03]`
   > After this: Export (JSON/CSV/clipboard), dashboard-click-to-filter, verdict sorting, progress bar, warning banners all work. Security contracts verified. Visual polish pass complete.
 
-- [ ] **S05: E2E test suite update** `risk:low` `depends:[S04]`
+- [x] **S05: E2E test suite update** `risk:low` `depends:[S04]`
   > After this: Full E2E test suite passes against the new DOM structure. ResultsPage page object updated. No coverage reduction.
 
 ## Boundary Map

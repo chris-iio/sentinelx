@@ -114,16 +114,18 @@ This file is the explicit capability and coverage contract for the project.
 - Validation: S04 validated: production bundle 27,226 bytes (≤ 30KB gate; baseline was ~13KB IIFE pre-rework; new figure reflects ESM+inline sourcemap dev vs minified prod — minified prod is 26.6KB). Polling interval, dedup, and debounced sort patterns confirmed unchanged in enrichment.ts and cards.ts. CSS polish pass confirmed no performance-affecting style injections. Build gate reproducible: `wc -c app/static/dist/main.js`.
 - Notes: Monitor build size — current main.js is ~13KB IIFE
 
+## Validated
+
 ### R011 — All E2E tests updated for new DOM structure (selectors, page objects) and passing. No reduction in coverage.
 - Class: quality-attribute
-- Status: active
+- Status: validated
 - Description: All E2E tests updated for new DOM structure (selectors, page objects) and passing. No reduction in coverage.
 - Why it matters: Test suite is the safety net that proves the redesign doesn't break functionality.
 - Source: inferred
 - Primary owning slice: M002/S05
 - Supporting slices: none
-- Validation: unmapped
-- Notes: ResultsPage page object needs selector updates; test logic should mostly survive
+- Validation: python3 -m pytest tests/e2e/ -q → 99 passed, 0 failed (up from 91 baseline). ResultsPage page object expanded from 118 to 266 lines with 18+ new locators and 5 helpers covering all S01–S04 enrichment surface elements. 8 new tests added covering inline expand/collapse, enrichment summary rows, micro-bar, detail links, enrichment-slot loaded state, and offline-mode guard. No tests removed.
+- Notes: Delivered in M002/S05. Route-mocking infrastructure in conftest.py enables future enrichment surface tests without external API dependency.
 
 ## Deferred
 
@@ -160,16 +162,16 @@ This file is the explicit capability and coverage contract for the project.
 | R005 | core-capability | active | M002/S02 | M002/S01 | unmapped |
 | R006 | core-capability | active | M002/S02 | M002/S01 | unmapped |
 | R007 | quality-attribute | active | M002/S03 | M002/S02 | S03 delivered: expand/collapse gate means provider details (the less-important data) are hidden by default and revealed on deliberate click or keyboard action. Summary row always shows verdict + context + key stats (established in S02). Full provider breakdown only on demand. No-data providers hidden in collapsed section (established in M001). "View full detail" link visible only after expand. |
-| R008 | continuity | active | M002/S04 | M002/S01, M002/S02, M002/S03 | S04 validated: 18-point wiring matrix + 91/91 E2E pass |
-| R009 | compliance/security | active | M002/S04 | all | S04 validated: six grep-based audit checks; zero violations |
-| R010 | quality-attribute | active | M002/S04 | all | S04 validated: production bundle 27,226 bytes ≤ 30KB; patterns unchanged |
-| R011 | quality-attribute | active | M002/S05 | none | unmapped |
+| R008 | continuity | active | M002/S04 | M002/S01, M002/S02, M002/S03 | S04 validated: 18-point wiring verification matrix confirms every sub-feature intact (file:line evidence in T01-SUMMARY.md). 91/91 E2E tests pass exercising the full pipeline. allResults[] accumulation → export.ts confirmed via closure; filter.ts binds .verdict-kpi-card[data-verdict]; doSortCards() reads #ioc-cards-grid → .ioc-card[data-verdict]; #enrich-progress-fill/#enrich-progress-text/#enrich-warning present in results.html; .copy-btn[data-value] in _ioc_card.html; injectDetailLink() called from markEnrichmentComplete() with idempotency guard. |
+| R009 | compliance/security | active | M002/S04 | all | S04 validated: six grep-based audit checks confirm zero violations. CSP header at app/__init__.py:71 (script-src 'self'). CSRFProtect initialized and csrf.init_app(app) called; <meta name="csrf-token"> in base.html. innerHTML occurrences are JSDoc comment lines only (graph.ts:10, row-factory.ts:230). document.write/eval() return zero matches (grep exit 1). All .style.xxx assignments are DOM property access (width, display) not <style> injection. row-factory.ts and enrichment.ts use createElement/createElementNS + textContent + setAttribute throughout. |
+| R010 | quality-attribute | active | M002/S04 | all | S04 validated: production bundle 27,226 bytes (≤ 30KB gate; baseline was ~13KB IIFE pre-rework; new figure reflects ESM+inline sourcemap dev vs minified prod — minified prod is 26.6KB). Polling interval, dedup, and debounced sort patterns confirmed unchanged in enrichment.ts and cards.ts. CSS polish pass confirmed no performance-affecting style injections. Build gate reproducible: `wc -c app/static/dist/main.js`. |
+| R011 | quality-attribute | validated | M002/S05 | none | python3 -m pytest tests/e2e/ -q → 99 passed, 0 failed (up from 91 baseline). ResultsPage page object expanded from 118 to 266 lines with 18+ new locators and 5 helpers covering all S01–S04 enrichment surface elements. 8 new tests added covering inline expand/collapse, enrichment summary rows, micro-bar, detail links, enrichment-slot loaded state, and offline-mode guard. No tests removed. |
 | R012 | quality-attribute | deferred | none | none | unmapped |
 | R013 | quality-attribute | deferred | none | none | unmapped |
 
 ## Coverage Summary
 
-- Active requirements: 11
-- Mapped to slices: 11
-- Validated: 3 (R008, R009, R010 — S04 evidence)
+- Active requirements: 10
+- Mapped to slices: 10
+- Validated: 1 (R011)
 - Unmapped active requirements: 0

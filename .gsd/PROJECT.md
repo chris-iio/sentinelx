@@ -12,7 +12,7 @@ Safe, correct, and transparent IOC extraction and enrichment — never invent sc
 
 ## Current State
 
-v1.1 shipped (2026-03-17). M002 S01 complete (2026-03-18): Results page now renders in single-column full-width rows with quiet precision design system — verdict-only loud color, muted type badges, compressed dashboard, compact filter bar. All 16 DOM contract selectors preserved, 36 E2E tests passing. M002 S02 complete (2026-03-18): At-a-glance enrichment surface (verdict badge, context line, provider stat line, micro-bar, staleness badge) renders at full opacity after enrichment. M002 S03 complete (2026-03-18): Summary row is now the expand/collapse click target — event-delegated, keyboard-accessible, animated chevron, "View full detail →" link injected on enrichment completion, expanded panel polished with design tokens only. M002 S04 complete (2026-03-18): Full integration and security audit passed — all R008 wiring intact (18-point matrix), all R009 contracts clean (6 grep checks), production bundle 27,226 bytes (≤30KB), 91/91 E2E passing (full suite). Brand name confirmed: "sentinelx" lowercase in <title>. Next: S05 (E2E test suite update with new selectors).
+**M002 complete (2026-03-18).** v1.2 shipped: Results page fully reworked — single-column layout, quiet precision design system, at-a-glance enrichment surface (verdict badge, context line, provider stat line, micro-bar, staleness badge), inline expand/collapse with event delegation, full integration (export/filter/sort/progress), security audit clean. E2E suite expanded from 91 to 99 tests with Playwright route-mocking infrastructure covering all enrichment surface elements. All R001–R011 validated. R012 (detail page refresh) and R013 (input page refresh) deferred.
 
 ## Architecture / Key Patterns
 
@@ -33,4 +33,4 @@ See `.gsd/REQUIREMENTS.md` for the explicit capability contract, requirement sta
 - [x] M002: Results Page Rework — Information-first redesign: single-column layout, quiet precision design, progressive disclosure, at-a-glance enrichment surface
 
 ---
-*Last updated: 2026-03-18 — M002/S04 complete*
+*Last updated: 2026-03-18 — M002 complete (all 5 slices done)*
