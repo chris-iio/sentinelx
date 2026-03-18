@@ -29,7 +29,7 @@ def test_settings_page_loads(page: Page, live_server: str) -> None:
 def test_settings_page_title_tag(page: Page, live_server: str) -> None:
     """Browser tab title is set for the settings page."""
     page.goto(live_server + "/settings")
-    expect(page).to_have_title("SentinelX")
+    expect(page).to_have_title("sentinelx")
 
 
 def test_settings_security_headers(page: Page, live_server: str) -> None:

@@ -226,7 +226,9 @@ function createContextFields(result: EnrichmentResultItem): HTMLElement | null {
 
 /**
  * Get or create the .ioc-summary-row element inside the slot.
- * Inserts before .chevron-toggle if present, otherwise as first child.
+ * Inserts before .enrichment-details if present, otherwise appends.
+ * Injects chevron SVG icon into the summary row on creation (SEC-08: no innerHTML).
+ * Sets role="button", tabindex="0", aria-expanded="false" for accessibility.
  */
 export function getOrCreateSummaryRow(slot: HTMLElement): HTMLElement {
   const existing = slot.querySelector<HTMLElement>(".ioc-summary-row");
@@ -234,14 +236,39 @@ export function getOrCreateSummaryRow(slot: HTMLElement): HTMLElement {
 
   const row = document.createElement("div");
   row.className = "ioc-summary-row";
+  row.setAttribute("role", "button");
+  row.setAttribute("tabindex", "0");
+  row.setAttribute("aria-expanded", "false");
 
-  // Insert before chevron-toggle if present
-  const chevron = slot.querySelector(".chevron-toggle");
-  if (chevron) {
-    slot.insertBefore(row, chevron);
+  // Insert before .enrichment-details if present; fallback to append
+  const details = slot.querySelector(".enrichment-details");
+  if (details) {
+    slot.insertBefore(row, details);
   } else {
     slot.appendChild(row);
   }
+
+  // Inject chevron icon into summary row (SEC-08: createElement/createElementNS only)
+  const wrapper = document.createElement("span");
+  wrapper.className = "chevron-icon-wrapper";
+
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("class", "chevron-icon");
+  svg.setAttribute("width", "12");
+  svg.setAttribute("height", "12");
+  svg.setAttribute("viewBox", "0 0 12 12");
+  svg.setAttribute("fill", "none");
+
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  path.setAttribute("d", "M4.5 2.5L8.5 6L4.5 9.5");
+  path.setAttribute("stroke", "currentColor");
+  path.setAttribute("stroke-width", "1.5");
+  path.setAttribute("stroke-linecap", "round");
+  path.setAttribute("stroke-linejoin", "round");
+
+  svg.appendChild(path);
+  wrapper.appendChild(svg);
+  row.appendChild(wrapper);
 
   return row;
 }
@@ -263,6 +290,9 @@ export function updateSummaryRow(
   const attribution = computeAttribution(entries);
 
   const summaryRow = getOrCreateSummaryRow(slot);
+
+  // Preserve the chevron wrapper (injected once by getOrCreateSummaryRow, but cleared below)
+  const chevronWrapper = summaryRow.querySelector<HTMLElement>(".chevron-icon-wrapper");
 
   // Clear existing children (immutable rebuild pattern)
   summaryRow.textContent = "";
@@ -305,16 +335,19 @@ export function updateSummaryRow(
   // d. Staleness badge — show oldest cached_at if any entries were cached (CTX-02)
   const cachedEntries = entries.filter(e => e.cachedAt);
   if (cachedEntries.length > 0) {
-    // Find the oldest (minimum) cached_at timestamp
-    const oldestCachedAt = cachedEntries
-      .map(e => e.cachedAt!)
-      .sort()[0];
+    // ISO 8601 strings sort lexicographically, so the first element is the oldest
+    const oldestCachedAt = cachedEntries.map(e => e.cachedAt!).sort()[0];
     if (oldestCachedAt) {
       const staleBadge = document.createElement("span");
       staleBadge.className = "staleness-badge";
       staleBadge.textContent = "cached " + formatRelativeTime(oldestCachedAt);
       summaryRow.appendChild(staleBadge);
     }
+  }
+
+  // e. Re-append chevron wrapper (always last — floated right via margin-left:auto)
+  if (chevronWrapper) {
+    summaryRow.appendChild(chevronWrapper);
   }
 }
 
@@ -405,21 +438,6 @@ export function createDetailRow(
 }
 
 /**
- * Unified row creation dispatcher — routes to createContextRow or createDetailRow
- * based on the kind parameter. Provides a stable API for Phase 3 visual work.
- */
-export function createProviderRow(
-  result: EnrichmentResultItem,
-  kind: "context" | "detail",
-  statText: string
-): HTMLElement {
-  if (kind === "context") {
-    return createContextRow(result);
-  }
-  return createDetailRow(result.provider, result.verdict, statText, result);
-}
-
-/**
  * Populate the inline context line in the IOC card header (CTX-01).
  *
  * Extracts key fields from context provider raw_stats and appends them
@@ -434,32 +452,33 @@ export function updateContextLine(card: HTMLElement, result: EnrichmentResultIte
   const contextLine = card.querySelector<HTMLElement>(".ioc-context-line");
   if (!contextLine) return;
 
-  const provider = result.provider;
+  const { provider } = result;
   const stats = result.raw_stats;
   if (!stats) return;
+
+  /** Upsert a data-context-provider span — update text if existing, else append. */
+  function upsertContextSpan(providerName: string, text: string): void {
+    const existing = contextLine!.querySelector<HTMLElement>(`span[data-context-provider="${providerName}"]`);
+    if (existing) {
+      existing.textContent = text;
+      return;
+    }
+    const span = document.createElement("span");
+    span.className = "context-field";
+    span.setAttribute("data-context-provider", providerName);
+    span.textContent = text;
+    contextLine!.appendChild(span);
+  }
 
   if (provider === "IP Context") {
     const geo = stats.geo;
     if (!geo || typeof geo !== "string") return;
 
-    // Check if IP Context span already exists — replace its text
-    const existing = contextLine.querySelector<HTMLElement>('span[data-context-provider="IP Context"]');
-    if (existing) {
-      existing.textContent = geo;
-      return;
-    }
-
     // Remove ASN Intel span if present — IP Context is more comprehensive
     const asnSpan = contextLine.querySelector<HTMLElement>('span[data-context-provider="ASN Intel"]');
-    if (asnSpan) {
-      contextLine.removeChild(asnSpan);
-    }
+    if (asnSpan) contextLine.removeChild(asnSpan);
 
-    const span = document.createElement("span");
-    span.className = "context-field";
-    span.setAttribute("data-context-provider", "IP Context");
-    span.textContent = geo;
-    contextLine.appendChild(span);
+    upsertContextSpan("IP Context", geo);
   } else if (provider === "ASN Intel") {
     // Only populate if IP Context hasn't already provided richer data
     if (contextLine.querySelector('span[data-context-provider="IP Context"]')) return;
@@ -473,18 +492,7 @@ export function updateContextLine(card: HTMLElement, result: EnrichmentResultIte
     if (prefix && typeof prefix === "string") parts.push(prefix);
     if (parts.length === 0) return;
 
-    const text = parts.join(" · ");
-    const existing = contextLine.querySelector<HTMLElement>('span[data-context-provider="ASN Intel"]');
-    if (existing) {
-      existing.textContent = text;
-      return;
-    }
-
-    const span = document.createElement("span");
-    span.className = "context-field";
-    span.setAttribute("data-context-provider", "ASN Intel");
-    span.textContent = text;
-    contextLine.appendChild(span);
+    upsertContextSpan("ASN Intel", parts.join(" · "));
   } else if (provider === "DNS Records") {
     const aRecords = stats.a;
     if (!Array.isArray(aRecords) || aRecords.length === 0) return;
@@ -492,18 +500,7 @@ export function updateContextLine(card: HTMLElement, result: EnrichmentResultIte
     const ips = aRecords.slice(0, 3).filter((ip): ip is string => typeof ip === "string");
     if (ips.length === 0) return;
 
-    const text = "A: " + ips.join(", ");
-    const existing = contextLine.querySelector<HTMLElement>('span[data-context-provider="DNS Records"]');
-    if (existing) {
-      existing.textContent = text;
-      return;
-    }
-
-    const span = document.createElement("span");
-    span.className = "context-field";
-    span.setAttribute("data-context-provider", "DNS Records");
-    span.textContent = text;
-    contextLine.appendChild(span);
+    upsertContextSpan("DNS Records", "A: " + ips.join(", "));
   }
   // All other providers — do nothing
 }

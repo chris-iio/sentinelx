@@ -11,7 +11,7 @@
 
   1. CSS attribute selectors (input.css):
      .ioc-card[data-verdict="malicious"] { border-left-color: ... }
-     Used for verdict-colored left border on the card.
+     Used for verdict-colored left border on the row.
 
   2. enrichment.ts — updateCardVerdict():
      Reads card via data-ioc-value, writes data-verdict as enrichment arrives.
@@ -29,9 +29,11 @@
 #}
 <div class="ioc-card" data-ioc-value="{{ ioc.value }}" data-ioc-type="{{ ioc.type.value }}" data-verdict="no_data">
     <div class="ioc-card-header">
-        <code class="ioc-value">{{ ioc.value }}</code>
-        <span class="ioc-type-badge ioc-type-badge--{{ ioc.type.value }}">{{ ioc.type.value | upper }}</span>
-        <span class="verdict-label verdict-label--no_data">NO DATA</span>
+        <div class="ioc-row-left">
+            <span class="verdict-label verdict-label--no_data">NO DATA</span>
+            <span class="ioc-type-badge ioc-type-badge--{{ ioc.type.value }}">{{ ioc.type.value | upper }}</span>
+            <code class="ioc-value">{{ ioc.value }}</code>
+        </div>
         <div class="ioc-card-actions">
             <button
                 class="btn btn-copy copy-btn"

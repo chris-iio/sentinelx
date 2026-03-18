@@ -11,7 +11,7 @@ from tests.e2e.pages import IndexPage
 def test_page_title(page: Page, index_url: str) -> None:
     """Page title includes 'SentinelX'."""
     page.goto(index_url)
-    expect(page).to_have_title("SentinelX")
+    expect(page).to_have_title("sentinelx")
 
 
 def test_header_branding(page: Page, index_url: str) -> None:

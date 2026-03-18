@@ -105,3 +105,79 @@ def index_url(live_server: str) -> str:
 def settings_url(live_server: str) -> str:
     """URL for the settings page."""
     return live_server + "/settings"
+
+
+# ---------------------------------------------------------------------------
+# Enrichment route-mocking helpers
+# ---------------------------------------------------------------------------
+
+#: Canned enrichment response for a single IP IOC (8.8.8.8 / ipv4).
+#: Two provider results + complete: true so enrichment.ts fires the full pipeline
+#: including handleProviderResult(), getOrCreateSummaryRow(), and markEnrichmentComplete().
+MOCK_ENRICHMENT_RESPONSE_8888 = {
+    "total": 2,
+    "done": 2,
+    "complete": True,
+    "results": [
+        {
+            "type": "result",
+            "ioc_value": "8.8.8.8",
+            "ioc_type": "ipv4",
+            "provider": "VirusTotal",
+            "verdict": "clean",
+            "detection_count": 0,
+            "total_engines": 70,
+            "scan_date": "2026-03-15T12:00:00Z",
+            "raw_stats": {},
+        },
+        {
+            "type": "result",
+            "ioc_value": "8.8.8.8",
+            "ioc_type": "ipv4",
+            "provider": "AbuseIPDB",
+            "verdict": "clean",
+            "detection_count": 0,
+            "total_engines": 1,
+            "scan_date": "2026-03-15T12:00:00Z",
+            "raw_stats": {"abuse_confidence_score": 0},
+        },
+    ],
+}
+
+
+def setup_enrichment_route_mock(page, response_body: dict | None = None) -> None:
+    """Intercept ``**/enrichment/status/*`` and return canned enrichment JSON.
+
+    Call this **before** navigating to the results page (or before submit) so that
+    the Playwright route handler is registered before enrichment.ts fires its first
+    ``fetch()`` poll.
+
+    Args:
+        page: The Playwright ``Page`` instance.
+        response_body: Optional dict to return as JSON. Defaults to
+            :data:`MOCK_ENRICHMENT_RESPONSE_8888` (one IP, two providers, complete).
+    """
+    import json
+
+    body = response_body if response_body is not None else MOCK_ENRICHMENT_RESPONSE_8888
+
+    page.route(
+        "**/enrichment/status/**",
+        lambda route: route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=json.dumps(body),
+        ),
+    )
+
+
+@pytest.fixture()
+def mocked_enrichment(page):
+    """Fixture that pre-registers the enrichment route mock on *page*.
+
+    Tests can use this fixture directly; the mock is active for the entire test.
+    The route intercepts ``**/enrichment/status/**`` and returns a canned single-IP
+    response with ``complete: true``.
+    """
+    setup_enrichment_route_mock(page)
+    return page
