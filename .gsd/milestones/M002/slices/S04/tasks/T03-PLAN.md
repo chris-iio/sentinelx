@@ -71,6 +71,25 @@ This is the only S04 task that may produce code changes (CSS only). All changes 
 - `wc -c app/static/dist/main.js` — ≤ 30,000 bytes
 - `pytest tests/e2e/ -q` — 36/36 pass
 
+## Observability Impact
+
+**Signals produced by this task:**
+- `app/static/dist/style.css` — rebuilt; `grep 'bg-hover' dist/style.css` confirms the token compiled through
+- `app/static/dist/main.js` — rebuilt production bundle; `wc -c` reads bundle size directly as a byte count
+- E2E test suite — `pytest tests/e2e/ -q` produces a pass/fail count; failures after CSS-only changes indicate element visibility regressions
+
+**How a future agent inspects this task:**
+- Token presence: `grep 'bg-hover' app/static/src/input.css` (source) + `grep 'bg-hover' app/static/dist/style.css` (compiled)
+- S03 CSS artifacts: `grep 'ioc-summary-row\|chevron-icon\|detail-link' app/static/dist/style.css`
+- Bundle size gate: `wc -c app/static/dist/main.js` — value must be ≤ 30000
+- Build health: `make css && make js` — exit code 0 means all assets compiled cleanly
+
+**Failure state visibility:**
+- `--bg-hover` undefined in dist → hover state on `.ioc-summary-row` silently does nothing (no JS error, purely visual)
+- Bundle size > 30KB → tree-shaking regression; check for new large imports in TS modules
+- CSS build failure → `make css` exits non-zero with postcss/tailwind error on stderr
+- E2E failure after CSS change → a visual assertion or `display:none` style gate broke; check `pytest -v` output for specific test name
+
 ## Inputs
 
 - T01 completed: integration pipeline verified, builds green

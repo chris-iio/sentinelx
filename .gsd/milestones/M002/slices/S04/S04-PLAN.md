@@ -84,7 +84,7 @@
   - Verify: All grep checks produce expected results, no innerHTML in executable code, no eval/document.write, all DOM construction SEC-08 compliant
   - Done when: Security audit evidence documented with pass/fail for each R009 sub-contract
 
-- [ ] **T03: Visual polish pass, --bg-hover verification, production build gate** `est:30m`
+- [x] **T03: Visual polish pass, --bg-hover verification, production build gate** `est:30m`
   - Why: R010 requires performance doesn't regress and visual quality is production-grade. This task verifies the `--bg-hover` design token (flagged as fragile by S03), applies any CSS polish needed, and runs the final production build gate.
   - Files: `app/static/src/input.css`, `app/static/dist/style.css`, `app/static/dist/main.js`
   - Do: (1) Verify `--bg-hover` token is defined in `input.css` `:root` or `@theme` block — if undefined, add it with an appropriate muted value consistent with the quiet precision design system, (2) review S03 forward intelligence items: hover state visible on `.ioc-summary-row`, chevron rotation smooth in CSS, detail link present in dist CSS, (3) check spacing consistency — expanded panel padding, filter bar alignment, dashboard-to-results gap, (4) if any CSS adjustments needed, edit `input.css` only — no TS changes, (5) rebuild: `make css && make js-dev` then `make js` for production, (6) verify production build size: `wc -c app/static/dist/main.js` ≤ 30KB, (7) final E2E gate: `pytest tests/e2e/ -q` — 36/36 pass. Skill note: load the `lint` skill if any formatting issues arise.
