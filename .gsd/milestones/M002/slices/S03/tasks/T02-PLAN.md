@@ -94,3 +94,28 @@ R004 notes: "Detail page still exists for deep dives — linked from expanded vi
 - `app/static/src/input.css` — `.detail-link-footer`, `.detail-link`, `.detail-link:hover` styles added; `.enrichment-details.is-open` background/border polish added; `.ioc-summary-row:hover` style added
 - `app/static/dist/style.css` — rebuilt
 - `app/static/dist/main.js` — rebuilt
+
+## Observability Impact
+
+**Signals introduced by this task:**
+
+- `document.querySelectorAll('.detail-link').length` — count of injected "View full detail →" links; should equal number of fully-enriched IOC slots after `markEnrichmentComplete()` fires
+- `document.querySelectorAll('.detail-link-footer').length` — same count via wrapper; both should match number of `.enrichment-slot--loaded` elements
+- `document.querySelectorAll('.ioc-summary-row:hover')` — validates CSS hover state is active (DevTools element inspect → :hov state)
+
+**Inspection surface:**
+```js
+// After enrichment completes — how many detail links injected?
+document.querySelectorAll('.detail-link').length
+// Inspect href of first link to verify URL pattern
+document.querySelector('.detail-link')?.href
+// Are the link footers present inside the details panels?
+document.querySelectorAll('.enrichment-details .detail-link-footer').length
+```
+
+**Failure states and signals:**
+- Links absent after enrichment → `markEnrichmentComplete()` call of `injectDetailLink()` not reached, or `.enrichment-slot--loaded` class not added before completion
+- Link href is `/detail//` (empty segments) → `.ioc-card` ancestor missing `data-ioc-type` / `data-ioc-value` attributes
+- Hover background not visible → `--bg-hover` CSS variable not defined in design token set or CSS not rebuilt (`make css`)
+- Expanded panel shows no left border → `--border` token missing, or `.enrichment-details.is-open` CSS not in `dist/style.css`
+- Multiple links per panel → idempotency guard (`.detail-link-footer` check) not firing — verify `details.querySelector(".detail-link-footer")` returns non-null on second call

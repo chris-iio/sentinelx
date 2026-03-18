@@ -1213,6 +1213,13 @@
         gap: 0.5rem;
         padding: 0.5rem 0;
         font-size: 0.85rem;
+        cursor: pointer;
+        user-select: none;
+    }
+
+    .ioc-summary-row:hover {
+        background-color: var(--bg-hover);
+        border-radius: var(--radius-sm);
     }
 
     .ioc-summary-attribution {
@@ -1321,33 +1328,28 @@
         color: var(--text-secondary);
     }
 
-    /* ---- Phase 4 Results UX — Chevron toggle ---- */
+    /* ---- Phase 4 Results UX — Chevron icon (injected into .ioc-summary-row by row-factory.ts) ---- */
 
-    .chevron-toggle {
-        background: none;
-        border: none;
+    /* .chevron-toggle rules removed — standalone button replaced by .chevron-icon-wrapper inside summary row */
+
+    .chevron-icon-wrapper {
         color: var(--text-secondary);
-        cursor: pointer;
-        padding: 0.25rem 0.5rem;
-        transition: color var(--duration-fast) ease;
         display: flex;
         align-items: center;
-    }
-
-    .chevron-toggle:hover {
-        color: var(--text-primary);
+        flex-shrink: 0;
+        margin-left: auto;
     }
 
     .chevron-icon {
         transition: transform var(--duration-fast) var(--ease-out-expo);
     }
 
-    .chevron-toggle.is-open .chevron-icon {
+    .ioc-summary-row.is-open .chevron-icon {
         transform: rotate(90deg);
     }
 
-    /* Hide chevron until results arrive */
-    .enrichment-slot:not(.enrichment-slot--loaded) .chevron-toggle {
+    /* Hide summary row until results arrive (safety fallback for race conditions) */
+    .enrichment-slot:not(.enrichment-slot--loaded) .ioc-summary-row {
         display: none;
     }
 
@@ -1360,7 +1362,30 @@
     }
 
     .enrichment-details.is-open {
-        max-height: 750px;
+        max-height: 2000px;
+        background-color: var(--bg-secondary);
+        border-left: 2px solid var(--border);
+        padding-left: 0.5rem;
+    }
+
+    /* ---- Phase 4 Results UX — Detail link footer (R004) ---- */
+
+    .detail-link-footer {
+        padding: 0.5rem;
+        border-top: 1px solid var(--border);
+        text-align: right;
+    }
+
+    .detail-link {
+        color: var(--text-secondary);
+        font-size: 0.8rem;
+        text-decoration: none;
+        transition: color var(--duration-fast) ease;
+    }
+
+    .detail-link:hover {
+        color: var(--text-primary);
+        text-decoration: underline;
     }
 
     /* ---- Phase 4 Results UX — Provider detail rows ---- */

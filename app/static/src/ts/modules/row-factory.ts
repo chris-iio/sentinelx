@@ -226,7 +226,9 @@ function createContextFields(result: EnrichmentResultItem): HTMLElement | null {
 
 /**
  * Get or create the .ioc-summary-row element inside the slot.
- * Inserts before .chevron-toggle if present, otherwise as first child.
+ * Inserts before .enrichment-details if present, otherwise appends.
+ * Injects chevron SVG icon into the summary row on creation (SEC-08: no innerHTML).
+ * Sets role="button", tabindex="0", aria-expanded="false" for accessibility.
  */
 export function getOrCreateSummaryRow(slot: HTMLElement): HTMLElement {
   const existing = slot.querySelector<HTMLElement>(".ioc-summary-row");
@@ -234,14 +236,39 @@ export function getOrCreateSummaryRow(slot: HTMLElement): HTMLElement {
 
   const row = document.createElement("div");
   row.className = "ioc-summary-row";
+  row.setAttribute("role", "button");
+  row.setAttribute("tabindex", "0");
+  row.setAttribute("aria-expanded", "false");
 
-  // Insert before chevron-toggle if present
-  const chevron = slot.querySelector(".chevron-toggle");
-  if (chevron) {
-    slot.insertBefore(row, chevron);
+  // Insert before .enrichment-details if present; fallback to append
+  const details = slot.querySelector(".enrichment-details");
+  if (details) {
+    slot.insertBefore(row, details);
   } else {
     slot.appendChild(row);
   }
+
+  // Inject chevron icon into summary row (SEC-08: createElement/createElementNS only)
+  const wrapper = document.createElement("span");
+  wrapper.className = "chevron-icon-wrapper";
+
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("class", "chevron-icon");
+  svg.setAttribute("width", "12");
+  svg.setAttribute("height", "12");
+  svg.setAttribute("viewBox", "0 0 12 12");
+  svg.setAttribute("fill", "none");
+
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  path.setAttribute("d", "M4.5 2.5L8.5 6L4.5 9.5");
+  path.setAttribute("stroke", "currentColor");
+  path.setAttribute("stroke-width", "1.5");
+  path.setAttribute("stroke-linecap", "round");
+  path.setAttribute("stroke-linejoin", "round");
+
+  svg.appendChild(path);
+  wrapper.appendChild(svg);
+  row.appendChild(wrapper);
 
   return row;
 }
@@ -263,6 +290,9 @@ export function updateSummaryRow(
   const attribution = computeAttribution(entries);
 
   const summaryRow = getOrCreateSummaryRow(slot);
+
+  // Preserve the chevron wrapper (injected once by getOrCreateSummaryRow, but cleared below)
+  const chevronWrapper = summaryRow.querySelector<HTMLElement>(".chevron-icon-wrapper");
 
   // Clear existing children (immutable rebuild pattern)
   summaryRow.textContent = "";
@@ -315,6 +345,11 @@ export function updateSummaryRow(
       staleBadge.textContent = "cached " + formatRelativeTime(oldestCachedAt);
       summaryRow.appendChild(staleBadge);
     }
+  }
+
+  // e. Re-append chevron wrapper (always last — floated right via margin-left:auto)
+  if (chevronWrapper) {
+    summaryRow.appendChild(chevronWrapper);
   }
 }
 

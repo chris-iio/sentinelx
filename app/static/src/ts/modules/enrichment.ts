@@ -162,6 +162,46 @@ function showEnrichWarning(message: string): void {
 }
 
 /**
+ * Inject a "View full detail →" link footer into the .enrichment-details panel
+ * for a given enrichment slot. Reads data-ioc-type and data-ioc-value from the
+ * ancestor .ioc-card and constructs href as /detail/<type>/<encoded-value>.
+ *
+ * Idempotent: no-op if .detail-link-footer already exists in the panel.
+ * All DOM construction uses createElement + textContent + setAttribute (SEC-08).
+ *
+ * Observability:
+ *   document.querySelectorAll('.detail-link').length — count of injected links
+ *   document.querySelectorAll('.detail-link-footer').length — same count
+ *   Failure: link absent after enrichment → injectDetailLink() not called, or
+ *     .ioc-card ancestor missing data-ioc-type / data-ioc-value attributes.
+ */
+function injectDetailLink(slot: HTMLElement): void {
+  const details = slot.querySelector<HTMLElement>(".enrichment-details");
+  if (!details) return;
+
+  // Idempotency guard — only inject once per panel
+  if (details.querySelector(".detail-link-footer")) return;
+
+  const card = slot.closest<HTMLElement>(".ioc-card");
+  if (!card) return;
+
+  const iocType = card.getAttribute("data-ioc-type") ?? "";
+  const iocValue = card.getAttribute("data-ioc-value") ?? "";
+  if (!iocType || !iocValue) return;
+
+  const footer = document.createElement("div");
+  footer.className = "detail-link-footer";
+
+  const anchor = document.createElement("a");
+  anchor.className = "detail-link";
+  anchor.textContent = "View full detail \u2192";
+  anchor.setAttribute("href", "/detail/" + iocType + "/" + encodeURIComponent(iocValue));
+
+  footer.appendChild(anchor);
+  details.appendChild(footer);
+}
+
+/**
  * Mark enrichment complete: add .complete class to progress container,
  * update text, and enable the export button.
  * Source: main.js markEnrichmentComplete() (lines 590-603).
@@ -183,6 +223,11 @@ function markEnrichmentComplete(): void {
   // VIS-03 + GRP-02: Inject section headers and no-data collapse for all slots
   document.querySelectorAll<HTMLElement>(".enrichment-slot").forEach(slot => {
     injectSectionHeadersAndNoDataSummary(slot);
+  });
+
+  // R004: Inject "View full detail →" link into each loaded slot's details panel
+  document.querySelectorAll<HTMLElement>(".enrichment-slot--loaded").forEach(slot => {
+    injectDetailLink(slot);
   });
 }
 
@@ -333,21 +378,47 @@ function renderEnrichmentResult(
 }
 
 /**
- * Wire expand/collapse toggle for all .chevron-toggle buttons on the page.
- * Called once from init(). Click listener toggles .is-open on the sibling
- * .enrichment-details container and sets aria-expanded accordingly.
- * Multiple cards can be independently opened — no collapse-others logic.
+ * Wire expand/collapse toggle using event delegation on .page-results.
+ * Called once from init(). Handles clicks and keyboard Enter/Space on any
+ * .ioc-summary-row that appears in the page — including ones created after
+ * init() (summary rows are built by row-factory.ts during polling).
+ * Toggles .is-open on both the summary row and its .enrichment-details container.
+ * Updates aria-expanded on the summary row accordingly.
+ * Multiple rows remain independently expandable — no accordion logic.
  */
 function wireExpandToggles(): void {
-  const toggles = document.querySelectorAll<HTMLElement>(".chevron-toggle");
-  toggles.forEach((toggle) => {
-    toggle.addEventListener("click", () => {
-      const details = toggle.nextElementSibling as HTMLElement | null;
-      if (!details || !details.classList.contains("enrichment-details")) return;
-      const isOpen = details.classList.toggle("is-open");
-      toggle.classList.toggle("is-open", isOpen);
-      toggle.setAttribute("aria-expanded", String(isOpen));
-    });
+  const pageResults = document.querySelector<HTMLElement>(".page-results");
+  if (!pageResults) return;
+
+  function handleToggle(target: HTMLElement): void {
+    const summaryRow = target.closest<HTMLElement>(".ioc-summary-row");
+    if (!summaryRow) return;
+
+    // Find .enrichment-details: try next sibling first, then slot-scoped fallback
+    let details: HTMLElement | null = summaryRow.nextElementSibling as HTMLElement | null;
+    if (!details || !details.classList.contains("enrichment-details")) {
+      const slot = summaryRow.closest<HTMLElement>(".enrichment-slot");
+      details = slot ? slot.querySelector<HTMLElement>(".enrichment-details") : null;
+    }
+    if (!details) return;
+
+    const isOpen = details.classList.toggle("is-open");
+    summaryRow.classList.toggle("is-open", isOpen);
+    summaryRow.setAttribute("aria-expanded", String(isOpen));
+  }
+
+  pageResults.addEventListener("click", (event: MouseEvent) => {
+    handleToggle(event.target as HTMLElement);
+  });
+
+  pageResults.addEventListener("keydown", (event: KeyboardEvent) => {
+    if (event.key === "Enter" || event.key === " ") {
+      const target = event.target as HTMLElement;
+      if (target.closest(".ioc-summary-row")) {
+        event.preventDefault();
+        handleToggle(target);
+      }
+    }
   });
 }
 

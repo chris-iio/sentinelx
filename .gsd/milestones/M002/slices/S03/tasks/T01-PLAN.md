@@ -71,6 +71,30 @@ The standalone `<button class="chevron-toggle">` is removed from the Jinja templ
 - `grep -n 'max-height: 750px' app/static/src/input.css` → no output
 - `grep -c 'innerHTML' app/static/src/ts/modules/enrichment.ts app/static/src/ts/modules/row-factory.ts` → both 0
 
+## Observability Impact
+
+**Runtime signals introduced by this task:**
+- `.ioc-summary-row.is-open` class: present on the summary row when the panel is expanded. `document.querySelectorAll('.ioc-summary-row.is-open').length` shows count of currently expanded panels.
+- `aria-expanded` attribute on `.ioc-summary-row`: reflects toggle state (`"true"` / `"false"`). Queryable via `el.getAttribute('aria-expanded')`.
+- `.chevron-icon-wrapper` inside `.ioc-summary-row`: confirms chevron was injected by `row-factory.ts` (row creation path ran). Absent = enrichment pipeline stalled before `getOrCreateSummaryRow()`.
+- `.enrichment-details.is-open` class: mirrors the summary row state — both toggle together. Mismatch between the two indicates a wiring bug in `wireExpandToggles()`.
+
+**Failure visibility:**
+1. No expand on click → check `.ioc-summary-row` has no click handler (DevTools Event Listeners pane) → `wireExpandToggles()` ran before summary rows existed (timing issue) or rows never created.
+2. Chevron doesn't rotate → `.chevron-icon` not present inside `.ioc-summary-row` → `getOrCreateSummaryRow()` chevron injection path was skipped.
+3. Details content clipped after `max-height` fix → `grep 'max-height' app/static/dist/style.css` must show `2000px` not `750px` (CSS not rebuilt).
+4. Pre-enrichment toggle fires → `.enrichment-slot--loaded` guard missing; `display:none` on `.ioc-summary-row` in unloaded slots should prevent this.
+
+**Inspection incantations (browser DevTools console):**
+```js
+// Count open panels
+document.querySelectorAll('.ioc-summary-row.is-open').length
+// Verify chevron injection
+document.querySelectorAll('.ioc-summary-row .chevron-icon').length
+// Verify aria state matches is-open count
+document.querySelectorAll('[aria-expanded="true"]').length
+```
+
 ## Inputs
 
 - `app/templates/partials/_enrichment_slot.html` — current template with standalone `<button class="chevron-toggle">` that must be removed
