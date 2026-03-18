@@ -78,3 +78,20 @@ Document all results in the task summary.
 
 - Security audit evidence document with pass/fail for each R009 sub-contract, including grep output with line numbers
 - If any violations found: fix applied with before/after evidence
+
+## Observability Impact
+
+**What changes after this task:**
+- T02-SUMMARY.md contains the permanent grep-evidence record for all R009 security contracts. Future agents can re-run the same commands to check for regressions.
+
+**How a future agent inspects this task's output:**
+- Re-run the six grep commands from Steps 1–6 against current source. If exit codes and line numbers match the documented baseline, the security posture is unchanged.
+- `grep -n 'innerHTML' app/static/src/ts/modules/*.ts` — should return only comment lines.
+- `grep -rn 'document\.write\|eval(' app/static/src/ts/` — must return 0 matches (exit 1).
+- `grep -n 'Content-Security-Policy' app/__init__.py` — must find line 71 (or the CSP definition line).
+
+**Failure state visibility:**
+- A new `innerHTML =` assignment in any `.ts` module will make Step 1 return a non-comment line — immediately visible as a grep hit that fails the comment-only check.
+- A removed CSP header causes Step 2 to return no output — detectable by exit 1 on a `grep -c` wrapper.
+- A new `eval(` call in TS source will produce a match in Step 4 — zero-tolerance gate.
+- These checks are intentionally rerunnable as a standalone regression test without spinning up the server.

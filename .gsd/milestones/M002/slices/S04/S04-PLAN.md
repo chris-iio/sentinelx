@@ -77,7 +77,7 @@
   - Verify: `make typecheck` 0 errors, `make css && make js-dev` exit 0, `pytest tests/e2e/ -q` 36/36 pass, all wiring checks documented
   - Done when: Verification matrix documented with pass/fail for each R008 sub-feature, E2E 36/36, no regressions
 
-- [ ] **T02: Audit security contracts — CSP, CSRF, SEC-08 textContent-only** `est:20m`
+- [x] **T02: Audit security contracts — CSP, CSRF, SEC-08 textContent-only** `est:20m`
   - Why: R009 requires security posture doesn't regress during the UI redesign. This task produces grep-based evidence for compliance.
   - Files: `app/__init__.py`, `app/templates/base.html`, `app/static/src/ts/modules/*.ts`
   - Do: (1) `grep -c 'innerHTML' app/static/src/ts/modules/*.ts` — must be 0 in executable code (comments are OK, verify any non-zero count), (2) `grep -n 'Content-Security-Policy' app/__init__.py` — CSP header present, (3) `grep -n 'csrf' app/__init__.py app/templates/base.html` — CSRF protection active with CSRFProtect and meta tag, (4) `grep -rn 'document\.write\|eval(' app/static/src/ts/` — 0 matches, (5) review all `.style.xxx` assignments in enrichment.ts and filter.ts — confirm DOM property access not inline style element injection, (6) verify all DOM construction in row-factory.ts and enrichment.ts uses createElement+textContent+setAttribute pattern. Document each audit result.
