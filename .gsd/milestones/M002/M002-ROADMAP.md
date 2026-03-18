@@ -58,7 +58,7 @@ This milestone is complete only when all are true:
 - [x] **S03: Inline expand + progressive disclosure** `risk:medium` `depends:[S02]`
   > After this: Clicking an IOC row expands full provider details inline — reputation section, infrastructure context, no-data collapse. Detail page link available from expanded view.
 
-- [ ] **S04: Functionality integration + polish** `risk:medium` `depends:[S03]`
+- [x] **S04: Functionality integration + polish** `risk:medium` `depends:[S03]`
   > After this: Export (JSON/CSV/clipboard), dashboard-click-to-filter, verdict sorting, progress bar, warning banners all work. Security contracts verified. Visual polish pass complete.
 
 - [ ] **S05: E2E test suite update** `risk:low` `depends:[S04]`

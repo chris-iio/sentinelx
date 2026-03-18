@@ -89,7 +89,7 @@ This file is the explicit capability and coverage contract for the project.
 - Source: user
 - Primary owning slice: M002/S04
 - Supporting slices: M002/S01, M002/S02, M002/S03
-- Validation: unmapped
+- Validation: S04 validated: 18-point wiring verification matrix confirms every sub-feature intact (file:line evidence in T01-SUMMARY.md). 91/91 E2E tests pass exercising the full pipeline. allResults[] accumulation → export.ts confirmed via closure; filter.ts binds .verdict-kpi-card[data-verdict]; doSortCards() reads #ioc-cards-grid → .ioc-card[data-verdict]; #enrich-progress-fill/#enrich-progress-text/#enrich-warning present in results.html; .copy-btn[data-value] in _ioc_card.html; injectDetailLink() called from markEnrichmentComplete() with idempotency guard.
 - Notes: Export and copy depend on data-* attributes on DOM elements — must preserve or migrate
 
 ### R009 — CSP headers, CSRF protection, textContent-only DOM construction (SEC-08), SSRF allowlist, host validation — all maintained.
@@ -100,7 +100,7 @@ This file is the explicit capability and coverage contract for the project.
 - Source: inferred
 - Primary owning slice: M002/S04
 - Supporting slices: all
-- Validation: unmapped
+- Validation: S04 validated: six grep-based audit checks confirm zero violations. CSP header at app/__init__.py:71 (script-src 'self'). CSRFProtect initialized and csrf.init_app(app) called; <meta name="csrf-token"> in base.html. innerHTML occurrences are JSDoc comment lines only (graph.ts:10, row-factory.ts:230). document.write/eval() return zero matches (grep exit 1). All .style.xxx assignments are DOM property access (width, display) not <style> injection. row-factory.ts and enrichment.ts use createElement/createElementNS + textContent + setAttribute throughout.
 - Notes: Every DOM construction in new TypeScript code must use createElement + textContent
 
 ### R010 — Debounced card sorting, polling efficiency (750ms interval, dedup), lazy rendering of enrichment results — all unchanged or improved.
@@ -111,7 +111,7 @@ This file is the explicit capability and coverage contract for the project.
 - Source: inferred
 - Primary owning slice: M002/S04
 - Supporting slices: all
-- Validation: unmapped
+- Validation: S04 validated: production bundle 27,226 bytes (≤ 30KB gate; baseline was ~13KB IIFE pre-rework; new figure reflects ESM+inline sourcemap dev vs minified prod — minified prod is 26.6KB). Polling interval, dedup, and debounced sort patterns confirmed unchanged in enrichment.ts and cards.ts. CSS polish pass confirmed no performance-affecting style injections. Build gate reproducible: `wc -c app/static/dist/main.js`.
 - Notes: Monitor build size — current main.js is ~13KB IIFE
 
 ### R011 — All E2E tests updated for new DOM structure (selectors, page objects) and passing. No reduction in coverage.
@@ -160,9 +160,9 @@ This file is the explicit capability and coverage contract for the project.
 | R005 | core-capability | active | M002/S02 | M002/S01 | unmapped |
 | R006 | core-capability | active | M002/S02 | M002/S01 | unmapped |
 | R007 | quality-attribute | active | M002/S03 | M002/S02 | S03 delivered: expand/collapse gate means provider details (the less-important data) are hidden by default and revealed on deliberate click or keyboard action. Summary row always shows verdict + context + key stats (established in S02). Full provider breakdown only on demand. No-data providers hidden in collapsed section (established in M001). "View full detail" link visible only after expand. |
-| R008 | continuity | active | M002/S04 | M002/S01, M002/S02, M002/S03 | unmapped |
-| R009 | compliance/security | active | M002/S04 | all | unmapped |
-| R010 | quality-attribute | active | M002/S04 | all | unmapped |
+| R008 | continuity | active | M002/S04 | M002/S01, M002/S02, M002/S03 | S04 validated: 18-point wiring matrix + 91/91 E2E pass |
+| R009 | compliance/security | active | M002/S04 | all | S04 validated: six grep-based audit checks; zero violations |
+| R010 | quality-attribute | active | M002/S04 | all | S04 validated: production bundle 27,226 bytes ≤ 30KB; patterns unchanged |
 | R011 | quality-attribute | active | M002/S05 | none | unmapped |
 | R012 | quality-attribute | deferred | none | none | unmapped |
 | R013 | quality-attribute | deferred | none | none | unmapped |
@@ -171,5 +171,5 @@ This file is the explicit capability and coverage contract for the project.
 
 - Active requirements: 11
 - Mapped to slices: 11
-- Validated: 0
+- Validated: 3 (R008, R009, R010 — S04 evidence)
 - Unmapped active requirements: 0
