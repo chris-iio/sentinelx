@@ -1,7 +1,7 @@
 # GSD State
 
 **Active Milestone:** M002: Results Page Rework
-**Active Slice:** S03: Inline expand + progressive disclosure
+**Active Slice:** S04: Functionality integration + polish
 **Phase:** executing
 **Requirements Status:** 11 active · 0 validated · 2 deferred · 0 out of scope
 
@@ -16,4 +16,4 @@
 - None
 
 ## Next Action
-Execute T01 of slice S03 (wire summary-row expand toggle and fix max-height clipping).
+Execute T01 of S04 (verify integration pipeline).
