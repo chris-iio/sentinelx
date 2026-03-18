@@ -335,10 +335,8 @@ export function updateSummaryRow(
   // d. Staleness badge — show oldest cached_at if any entries were cached (CTX-02)
   const cachedEntries = entries.filter(e => e.cachedAt);
   if (cachedEntries.length > 0) {
-    // Find the oldest (minimum) cached_at timestamp
-    const oldestCachedAt = cachedEntries
-      .map(e => e.cachedAt!)
-      .sort()[0];
+    // ISO 8601 strings sort lexicographically, so the first element is the oldest
+    const oldestCachedAt = cachedEntries.map(e => e.cachedAt!).sort()[0];
     if (oldestCachedAt) {
       const staleBadge = document.createElement("span");
       staleBadge.className = "staleness-badge";
@@ -440,21 +438,6 @@ export function createDetailRow(
 }
 
 /**
- * Unified row creation dispatcher — routes to createContextRow or createDetailRow
- * based on the kind parameter. Provides a stable API for Phase 3 visual work.
- */
-export function createProviderRow(
-  result: EnrichmentResultItem,
-  kind: "context" | "detail",
-  statText: string
-): HTMLElement {
-  if (kind === "context") {
-    return createContextRow(result);
-  }
-  return createDetailRow(result.provider, result.verdict, statText, result);
-}
-
-/**
  * Populate the inline context line in the IOC card header (CTX-01).
  *
  * Extracts key fields from context provider raw_stats and appends them
@@ -469,32 +452,33 @@ export function updateContextLine(card: HTMLElement, result: EnrichmentResultIte
   const contextLine = card.querySelector<HTMLElement>(".ioc-context-line");
   if (!contextLine) return;
 
-  const provider = result.provider;
+  const { provider } = result;
   const stats = result.raw_stats;
   if (!stats) return;
+
+  /** Upsert a data-context-provider span — update text if existing, else append. */
+  function upsertContextSpan(providerName: string, text: string): void {
+    const existing = contextLine!.querySelector<HTMLElement>(`span[data-context-provider="${providerName}"]`);
+    if (existing) {
+      existing.textContent = text;
+      return;
+    }
+    const span = document.createElement("span");
+    span.className = "context-field";
+    span.setAttribute("data-context-provider", providerName);
+    span.textContent = text;
+    contextLine!.appendChild(span);
+  }
 
   if (provider === "IP Context") {
     const geo = stats.geo;
     if (!geo || typeof geo !== "string") return;
 
-    // Check if IP Context span already exists — replace its text
-    const existing = contextLine.querySelector<HTMLElement>('span[data-context-provider="IP Context"]');
-    if (existing) {
-      existing.textContent = geo;
-      return;
-    }
-
     // Remove ASN Intel span if present — IP Context is more comprehensive
     const asnSpan = contextLine.querySelector<HTMLElement>('span[data-context-provider="ASN Intel"]');
-    if (asnSpan) {
-      contextLine.removeChild(asnSpan);
-    }
+    if (asnSpan) contextLine.removeChild(asnSpan);
 
-    const span = document.createElement("span");
-    span.className = "context-field";
-    span.setAttribute("data-context-provider", "IP Context");
-    span.textContent = geo;
-    contextLine.appendChild(span);
+    upsertContextSpan("IP Context", geo);
   } else if (provider === "ASN Intel") {
     // Only populate if IP Context hasn't already provided richer data
     if (contextLine.querySelector('span[data-context-provider="IP Context"]')) return;
@@ -508,18 +492,7 @@ export function updateContextLine(card: HTMLElement, result: EnrichmentResultIte
     if (prefix && typeof prefix === "string") parts.push(prefix);
     if (parts.length === 0) return;
 
-    const text = parts.join(" · ");
-    const existing = contextLine.querySelector<HTMLElement>('span[data-context-provider="ASN Intel"]');
-    if (existing) {
-      existing.textContent = text;
-      return;
-    }
-
-    const span = document.createElement("span");
-    span.className = "context-field";
-    span.setAttribute("data-context-provider", "ASN Intel");
-    span.textContent = text;
-    contextLine.appendChild(span);
+    upsertContextSpan("ASN Intel", parts.join(" · "));
   } else if (provider === "DNS Records") {
     const aRecords = stats.a;
     if (!Array.isArray(aRecords) || aRecords.length === 0) return;
@@ -527,18 +500,7 @@ export function updateContextLine(card: HTMLElement, result: EnrichmentResultIte
     const ips = aRecords.slice(0, 3).filter((ip): ip is string => typeof ip === "string");
     if (ips.length === 0) return;
 
-    const text = "A: " + ips.join(", ");
-    const existing = contextLine.querySelector<HTMLElement>('span[data-context-provider="DNS Records"]');
-    if (existing) {
-      existing.textContent = text;
-      return;
-    }
-
-    const span = document.createElement("span");
-    span.className = "context-field";
-    span.setAttribute("data-context-provider", "DNS Records");
-    span.textContent = text;
-    contextLine.appendChild(span);
+    upsertContextSpan("DNS Records", "A: " + ips.join(", "));
   }
   // All other providers — do nothing
 }

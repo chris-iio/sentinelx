@@ -70,12 +70,8 @@ function sortDetailRows(detailsContainer: HTMLElement, iocValue: string): void {
  * Source: main.js findCopyButtonForIoc() (lines 571-579).
  */
 function findCopyButtonForIoc(iocValue: string): HTMLElement | null {
-  const btns = document.querySelectorAll<HTMLElement>(".copy-btn");
-  for (let i = 0; i < btns.length; i++) {
-    const btn = btns[i];
-    if (btn && attr(btn, "data-value") === iocValue) {
-      return btn;
-    }
+  for (const btn of document.querySelectorAll<HTMLElement>(".copy-btn")) {
+    if (attr(btn, "data-value") === iocValue) return btn;
   }
   return null;
 }
@@ -394,12 +390,9 @@ function wireExpandToggles(): void {
     const summaryRow = target.closest<HTMLElement>(".ioc-summary-row");
     if (!summaryRow) return;
 
-    // Find .enrichment-details: try next sibling first, then slot-scoped fallback
-    let details: HTMLElement | null = summaryRow.nextElementSibling as HTMLElement | null;
-    if (!details || !details.classList.contains("enrichment-details")) {
-      const slot = summaryRow.closest<HTMLElement>(".enrichment-slot");
-      details = slot ? slot.querySelector<HTMLElement>(".enrichment-details") : null;
-    }
+    // .ioc-summary-row and .enrichment-details are siblings inside .enrichment-slot
+    const slot = summaryRow.closest<HTMLElement>(".enrichment-slot");
+    const details = slot ? slot.querySelector<HTMLElement>(".enrichment-details") : null;
     if (!details) return;
 
     const isOpen = details.classList.toggle("is-open");
