@@ -82,6 +82,24 @@ This task adds all missing locators and helper methods to the page object so T02
   - `.detail-link-footer`, `.detail-link` → injected by `enrichment.ts` `injectDetailLink()`
   - `.ioc-context-line` → server-rendered in `_ioc_card.html`
 
+## Observability Impact
+
+This task makes zero runtime changes — it is a pure page-object expansion with no application code touched. Observable effects are limited to the test layer:
+
+**What changes are visible:**
+- `results_page.py` gains 18+ new `@property` methods. Running `python3 -c "from tests.e2e.pages.results_page import ResultsPage; print([m for m in dir(ResultsPage) if not m.startswith('_')])"` shows the new locator names.
+- Any test that previously accessed these selectors manually now has a canonical method to call.
+
+**How a future agent inspects this task:**
+- `wc -l tests/e2e/pages/results_page.py` — should be ~200 lines after this task (was ~118 before).
+- `grep -c "def \|property" tests/e2e/pages/results_page.py` — count includes all property/method definitions.
+- `python3 -m pytest tests/e2e/ -q` — 91 tests pass confirms no regression.
+
+**Failure state visibility:**
+- If a new property has a typo in the CSS selector, no test will fail yet (T02 exercises these). The failure surfaces in T02 as a Playwright timeout with element-not-found context.
+- If an existing property was accidentally deleted, one or more of the 91 existing tests will fail immediately and name the missing locator.
+
 ## Expected Output
 
 - `tests/e2e/pages/results_page.py` — expanded from ~118 lines to ~200 lines with all new locators and helpers
+

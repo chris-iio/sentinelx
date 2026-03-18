@@ -18,6 +18,27 @@
 - `python3 -m pytest tests/e2e/ -q --co | grep -c '::test_'` → count ≥ 91
 - No existing test removed or renamed — only additions and docstring updates
 
+## Observability / Diagnostics
+
+**Runtime signals:**
+- Playwright test runner output (`python3 -m pytest tests/e2e/ -v`) shows per-test pass/fail including browser console errors captured by the `console_errors` fixture.
+- Playwright traces (`--tracing on`) record DOM snapshots around every `expect()` call, enabling post-mortem inspection of selector failures.
+- `--headed` flag runs Chromium visibly so enrichment-slot expand/collapse animations can be observed in real time.
+
+**Inspection surfaces:**
+- `results_page.py` properties return raw `Locator` objects — call `.count()`, `.all_text_contents()`, or `.evaluate("el => el.className")` in the test REPL to inspect live DOM state.
+- `is_row_expanded(ioc_value)` returns a `bool` directly evaluable in a pytest debugging session.
+- The `mocked_enrichment` fixture (T02) logs which route patterns were intercepted to the test's capfd output.
+
+**Failure visibility:**
+- Mismatched CSS selector → `expect(...).to_have_count(N)` timeout with Playwright's element snapshot in the error message.
+- Missing `.is-open` class after expand → `expand_row()` assertion failure clearly names which card and which selector was absent.
+- Route mock not triggered → enrichment slots remain in un-loaded state; `loaded_enrichment_slots.count()` returns 0, distinguishable from a selector bug.
+
+**Redaction constraints:**
+- No PII or credentials flow through E2E tests — all IOC values in fixtures are synthetic (e.g., `1.2.3.4`, `evil.example.com`).
+- Route mock bodies contain no real threat intelligence data.
+
 ## Integration Closure
 
 - Upstream surfaces consumed: Final DOM structure from S04 — `_ioc_card.html`, `_enrichment_slot.html`, `row-factory.ts`, `enrichment.ts`
@@ -26,7 +47,7 @@
 
 ## Tasks
 
-- [ ] **T01: Add enrichment surface locators and helpers to ResultsPage page object** `est:20m`
+- [x] **T01: Add enrichment surface locators and helpers to ResultsPage page object** `est:20m`
   - Why: The page object has no locators for new S01–S04 DOM elements. T02's new tests need these locators to exist before they can be written. This is a pure page-object edit — no test logic changes.
   - Files: `tests/e2e/pages/results_page.py`
   - Do: Add locators for `.ioc-summary-row`, `.enrichment-details`, `.chevron-icon-wrapper`, `.verdict-micro-bar`, `.staleness-badge`, `.detail-link-footer`, `.detail-link`, `.ioc-summary-attribution`, `.enrichment-slot`, `.enrichment-slot--loaded`, `.is-open` state, `.enrichment-section`, `.ioc-context-line`. Add helper methods for expand/collapse. Update module docstring. Ensure existing locators and methods are unchanged.

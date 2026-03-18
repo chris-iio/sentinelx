@@ -1,4 +1,4 @@
-"""Page Object Model for the SentinelX results page (card layout)."""
+"""Page Object Model for the SentinelX results page (single-column layout with enrichment surface)."""
 
 from __future__ import annotations
 
@@ -134,3 +134,133 @@ class ResultsPage:
     def provider_coverage(self) -> Locator:
         """The provider coverage row below the verdict dashboard."""
         return self.page.locator(".provider-coverage-row")
+
+    # ---- Enrichment Slots ----
+
+    @property
+    def enrichment_slots(self) -> Locator:
+        """All enrichment slot containers (server-rendered, one per card)."""
+        return self.page.locator(".enrichment-slot")
+
+    @property
+    def loaded_enrichment_slots(self) -> Locator:
+        """Enrichment slots that have received data and been marked as loaded."""
+        return self.page.locator(".enrichment-slot--loaded")
+
+    @property
+    def enrichment_details(self) -> Locator:
+        """All enrichment detail panels (collapsed by default, toggled by summary row)."""
+        return self.page.locator(".enrichment-details")
+
+    # ---- Summary Rows ----
+
+    @property
+    def summary_rows(self) -> Locator:
+        """All JS-created IOC summary rows (injected by row-factory.ts after enrichment)."""
+        return self.page.locator(".ioc-summary-row")
+
+    @property
+    def expanded_summary_rows(self) -> Locator:
+        """Summary rows currently in the expanded (is-open) state."""
+        return self.page.locator(".ioc-summary-row.is-open")
+
+    # ---- Enrichment Element Locators ----
+
+    @property
+    def chevron_wrappers(self) -> Locator:
+        """All chevron icon wrappers inside summary rows."""
+        return self.page.locator(".chevron-icon-wrapper")
+
+    @property
+    def micro_bars(self) -> Locator:
+        """All verdict micro-bar elements (inline verdict visualisation)."""
+        return self.page.locator(".verdict-micro-bar")
+
+    @property
+    def staleness_badges(self) -> Locator:
+        """All staleness badge elements indicating data age."""
+        return self.page.locator(".staleness-badge")
+
+    @property
+    def attribution_spans(self) -> Locator:
+        """All provider attribution spans inside summary rows."""
+        return self.page.locator(".ioc-summary-attribution")
+
+    @property
+    def detail_link_footers(self) -> Locator:
+        """All detail link footer wrappers injected after enrichment completes."""
+        return self.page.locator(".detail-link-footer")
+
+    @property
+    def detail_links(self) -> Locator:
+        """All 'View full detail →' anchor links injected by enrichment.ts."""
+        return self.page.locator(".detail-link")
+
+    @property
+    def context_lines(self) -> Locator:
+        """All IOC context line elements (server-rendered in _ioc_card.html)."""
+        return self.page.locator(".ioc-context-line")
+
+    # ---- Section Containers ----
+
+    @property
+    def enrichment_sections(self) -> Locator:
+        """All enrichment section containers inside detail panels."""
+        return self.page.locator(".enrichment-section")
+
+    @property
+    def section_context(self) -> Locator:
+        """Infrastructure context enrichment sections."""
+        return self.page.locator(".enrichment-section--context")
+
+    @property
+    def section_reputation(self) -> Locator:
+        """Reputation enrichment sections."""
+        return self.page.locator(".enrichment-section--reputation")
+
+    @property
+    def section_no_data(self) -> Locator:
+        """No-data placeholder sections (shown when a provider returned nothing)."""
+        return self.page.locator(".enrichment-section--no-data")
+
+    # ---- Card-Scoped Helpers ----
+
+    def summary_row_for_card(self, ioc_value: str) -> Locator:
+        """Return the summary row locator scoped to the card matching *ioc_value*."""
+        return self.page.locator(f'.ioc-card[data-ioc-value="{ioc_value}"] .ioc-summary-row')
+
+    def enrichment_details_for_card(self, ioc_value: str) -> Locator:
+        """Return the enrichment details panel locator scoped to the card matching *ioc_value*."""
+        return self.page.locator(f'.ioc-card[data-ioc-value="{ioc_value}"] .enrichment-details')
+
+    # ---- Expand / Collapse Helpers ----
+
+    def expand_row(self, ioc_value: str) -> None:
+        """Click the summary row for *ioc_value* and assert it enters the expanded state.
+
+        Both the ``.ioc-summary-row`` and its sibling ``.enrichment-details`` must
+        acquire the ``is-open`` class before the assertion is satisfied.
+        """
+        summary_row = self.summary_row_for_card(ioc_value)
+        details = self.enrichment_details_for_card(ioc_value)
+        summary_row.click()
+        expect(summary_row).to_have_class(r".*is-open.*")
+        expect(details).to_have_class(r".*is-open.*")
+
+    def collapse_row(self, ioc_value: str) -> None:
+        """Click the summary row for *ioc_value* again and assert it returns to collapsed state.
+
+        Both the ``.ioc-summary-row`` and its sibling ``.enrichment-details`` must
+        lose the ``is-open`` class before the assertion is satisfied.
+        """
+        summary_row = self.summary_row_for_card(ioc_value)
+        details = self.enrichment_details_for_card(ioc_value)
+        summary_row.click()
+        expect(summary_row).not_to_have_class(r".*is-open.*")
+        expect(details).not_to_have_class(r".*is-open.*")
+
+    def is_row_expanded(self, ioc_value: str) -> bool:
+        """Return ``True`` if the summary row for *ioc_value* currently has the ``is-open`` class."""
+        summary_row = self.summary_row_for_card(ioc_value)
+        classes: str = summary_row.evaluate("el => el.className")
+        return "is-open" in classes
