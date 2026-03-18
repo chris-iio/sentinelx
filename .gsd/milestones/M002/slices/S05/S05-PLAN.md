@@ -54,7 +54,7 @@
   - Verify: `python3 -m pytest tests/e2e/ -q` → 91/91 still pass (no regressions from page object additions)
   - Done when: Page object has all new locators, all 91 existing tests pass unchanged
 
-- [ ] **T02: Add enrichment surface tests and update test_responsive_grid_layout docstring** `est:40m`
+- [x] **T02: Add enrichment surface tests and update test_responsive_grid_layout docstring** `est:40m`
   - Why: The current 91 tests have zero coverage of inline expand, enrichment summary row, detail link, micro-bar, or staleness badge. These features were added in S01–S04 but never tested. New tests use Playwright route mocking to simulate enrichment API responses in online mode, avoiding any dependency on external API keys.
   - Files: `tests/e2e/test_results_page.py`, `tests/e2e/test_extraction.py`, `tests/e2e/conftest.py`
   - Do: (1) Update `test_responsive_grid_layout` docstring from "responsive grid layout" to "single-column layout". (2) Add a Playwright route-mocking fixture in conftest.py that intercepts the enrichment polling endpoint and returns canned provider results, triggering JS-side summary row creation. (3) Write new tests in `test_results_page.py` covering: enrichment slot present in online mode, `.ioc-summary-row` created after mocked enrichment, expand/collapse toggles `.is-open` on both summary row and details panel, `.enrichment-details` contains section containers, `.detail-link-footer` injected after enrichment complete, `.verdict-micro-bar` present, offline mode absence guards for these elements. (4) Run full suite.

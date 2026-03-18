@@ -33,3 +33,17 @@ if (chevronWrapper) summaryRow.appendChild(chevronWrapper); // always last
 **Fix:** Use event delegation — bind a single `click` + `keydown` handler on the stable `.page-results` ancestor. Events from `.ioc-summary-row` elements (created at any time during polling) bubble up to the ancestor. Use `event.target.closest(".ioc-summary-row")` to identify the relevant row inside the handler.
 
 This is the standard pattern for dynamically created elements in this codebase. The old `.chevron-toggle` approach worked because the button existed in the server-rendered template before `init()` ran — the new `.ioc-summary-row` does not.
+
+---
+
+## Playwright route mocking: register BEFORE navigation, not after
+
+`page.route("**/enrichment/status/**", handler)` must be called **before** the page action that triggers the fetch (e.g., form submit, navigation). Registering after submit races against the first polling tick (750ms) and may miss it, leaving enrichment.ts with no response and the UI in an unloaded state.
+
+Pattern: in `_navigate_online_with_mock()`, call `setup_enrichment_route_mock(page)` → then `idx.goto()` → then `idx.extract_iocs()` → then `wait_for_selector(".ioc-summary-row")`.
+
+---
+
+## SentinelX detail link route is /detail/<ioc_type>/<ioc_value>, not /ioc/
+
+The `injectDetailLink()` function in enrichment.ts builds links using the Flask route `/detail/<ioc_type>/<ioc_value>`. Test assertions checking the href of `.detail-link` should match `/detail/` not `/ioc/`. The plan incorrectly assumed `/ioc/` — inspecting actual DOM output (or the Flask route table) is the definitive source.

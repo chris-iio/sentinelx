@@ -282,3 +282,154 @@ def test_offline_mode_cards_have_no_enrichment_slot(page: Page, index_url: str) 
     results = _navigate_to_results(page, index_url)
     slots = results.page.locator(".enrichment-slot")
     expect(slots).to_have_count(0)
+
+
+# ---------------------------------------------------------------------------
+# Enrichment surface tests — online mode with mocked API responses
+# ---------------------------------------------------------------------------
+# These tests intercept /enrichment/status/* via page.route() so no real API
+# key is required.  The canned response triggers the full enrichment.ts pipeline:
+#   - handleProviderResult() → getOrCreateSummaryRow() (row-factory.ts)
+#   - markEnrichmentComplete() → injectDetailLink()
+#
+# All enrichment tests submit a single IOC ("8.8.8.8") so the mock response
+# (which references "8.8.8.8") aligns with what the server processes.
+# ---------------------------------------------------------------------------
+
+# Single IOC used in all enrichment surface tests
+SINGLE_IP_IOC = "8.8.8.8"
+
+
+def _navigate_online_with_mock(page: Page, index_url: str, text: str = SINGLE_IP_IOC) -> ResultsPage:
+    """Navigate in online mode with enrichment polling intercepted by a route mock.
+
+    Sets up the route mock BEFORE navigation so the handler is active when
+    enrichment.ts fires its first fetch().  Waits for ``.ioc-summary-row`` to
+    appear (confirms enrichment.ts processed the mocked response) before
+    returning the ResultsPage.
+
+    Args:
+        page: Playwright Page instance.
+        index_url: URL of the SentinelX index page.
+        text: IOC text to submit (default: single IP matching the mock response).
+
+    Returns:
+        :class:`ResultsPage` after enrichment rows are visible.
+    """
+    from tests.e2e.conftest import setup_enrichment_route_mock
+
+    # Register route mock BEFORE navigation
+    setup_enrichment_route_mock(page)
+
+    idx = IndexPage(page, index_url.rstrip("/"))
+    idx.goto()
+    idx.extract_iocs(text, mode="online")
+
+    # Wait for enrichment.ts to fire and row-factory.ts to inject the summary row
+    page.wait_for_selector(".ioc-summary-row", timeout=10_000)
+
+    return ResultsPage(page)
+
+
+def test_online_mode_has_enrichment_slots(page: Page, index_url: str) -> None:
+    """In online mode, each IOC card has an enrichment slot (server-rendered)."""
+    results = _navigate_online_with_mock(page, index_url)
+
+    card_count = results.ioc_cards.count()
+    slot_count = results.enrichment_slots.count()
+    assert slot_count == card_count, (
+        f"Expected {card_count} enrichment slots (one per card), got {slot_count}"
+    )
+
+
+def test_enrichment_summary_row_created_after_polling(page: Page, index_url: str) -> None:
+    """Mocked enrichment polling causes .ioc-summary-row to appear inside an .ioc-card."""
+    results = _navigate_online_with_mock(page, index_url)
+
+    # At least one summary row must exist
+    expect(results.summary_rows).not_to_have_count(0)
+
+    # The first summary row must be a descendant of an .ioc-card
+    first_row = results.summary_rows.first
+    card_ancestor = page.locator(".ioc-card").filter(has=first_row)
+    assert card_ancestor.count() >= 1, ".ioc-summary-row is not inside an .ioc-card"
+
+
+def test_enrichment_summary_row_has_verdict_micro_bar(page: Page, index_url: str) -> None:
+    """Each summary row contains a .verdict-micro-bar element after mocked enrichment."""
+    results = _navigate_online_with_mock(page, index_url)
+
+    # Wait for micro-bar (it may render slightly after the summary row)
+    page.wait_for_selector(".verdict-micro-bar", timeout=5_000)
+
+    expect(results.micro_bars).not_to_have_count(0)
+
+
+def test_expand_collapse_toggle(page: Page, index_url: str) -> None:
+    """Clicking .ioc-summary-row toggles .is-open on both the row and .enrichment-details."""
+    results = _navigate_online_with_mock(page, index_url)
+
+    # --- Expand ---
+    results.summary_rows.first.click()
+
+    expect(page.locator(".ioc-summary-row.is-open")).to_have_count(1)
+    expect(page.locator(".enrichment-details.is-open")).to_have_count(1)
+
+    # --- Collapse ---
+    results.summary_rows.first.click()
+
+    expect(page.locator(".ioc-summary-row.is-open")).to_have_count(0)
+    expect(page.locator(".enrichment-details.is-open")).to_have_count(0)
+
+
+def test_enrichment_details_has_section_containers(page: Page, index_url: str) -> None:
+    """Expanded .enrichment-details contains the expected section modifier classes."""
+    results = _navigate_online_with_mock(page, index_url)
+
+    # Expand the first summary row
+    results.summary_rows.first.click()
+
+    # Wait for details panel to open
+    page.wait_for_selector(".enrichment-details.is-open", timeout=5_000)
+
+    # At least one of the three section types must exist inside the open panel
+    open_panel = page.locator(".enrichment-details.is-open")
+    section_count = open_panel.locator(".enrichment-section").count()
+    assert section_count >= 1, (
+        f"Expected at least 1 .enrichment-section inside open panel, got {section_count}"
+    )
+
+
+def test_detail_link_injected_after_enrichment_complete(page: Page, index_url: str) -> None:
+    """With complete:true in mock, .detail-link-footer and .detail-link are injected."""
+    results = _navigate_online_with_mock(page, index_url)
+
+    # markEnrichmentComplete() fires when complete:true — waits for footer injection
+    page.wait_for_selector(".detail-link-footer", timeout=10_000)
+
+    expect(results.detail_link_footers).not_to_have_count(0)
+    expect(results.detail_links).not_to_have_count(0)
+
+    # Detail link href must contain /detail/ path
+    first_link_href = results.detail_links.first.get_attribute("href") or ""
+    assert "/detail/" in first_link_href, (
+        f"Expected detail link href to contain '/detail/', got: '{first_link_href}'"
+    )
+
+
+def test_enrichment_slot_loaded_class_added(page: Page, index_url: str) -> None:
+    """After mocked enrichment, at least one .enrichment-slot--loaded class is added."""
+    results = _navigate_online_with_mock(page, index_url)
+
+    # Wait until at least one slot gets the --loaded modifier
+    page.wait_for_selector(".enrichment-slot--loaded", timeout=10_000)
+
+    expect(results.loaded_enrichment_slots).not_to_have_count(0)
+
+
+def test_offline_mode_no_summary_rows(page: Page, index_url: str) -> None:
+    """In offline mode, no .ioc-summary-row elements are created (no enrichment polling)."""
+    results = _navigate_to_results(page, index_url)
+
+    expect(results.summary_rows).to_have_count(0)
+

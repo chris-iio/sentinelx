@@ -122,6 +122,26 @@ The key challenge is that `.ioc-summary-row` and related elements are JS-created
 - Key timing: enrichment.ts polls every 750ms. `.ioc-summary-row` appears after first `handleProviderResult()` call. `.detail-link-footer` appears after `markEnrichmentComplete()` (when `complete: true`).
 - The results page template (`app/templates/results.html`) puts `data-job-id` on `.page-results` in online mode — this drives enrichment.ts `init()`. The mock must intercept the fetch that enrichment.ts makes to `/enrichment/status/<job_id>`.
 
+## Observability Impact
+
+**New signals after T02:**
+
+- **Test count delta**: `python3 -m pytest tests/e2e/ -q --co | grep -c '::test_'` reports 99 (up from 91). A drop back to 91 means the enrichment test section was removed or not loaded.
+- **Route mock intercept**: `setup_enrichment_route_mock()` in conftest.py registers a Playwright route on `**/enrichment/status/**`. If the mock is NOT triggered, enrichment slots remain in the unloaded state — `page.locator(".enrichment-slot--loaded").count()` returns 0, clearly distinguishable from a selector bug.
+- **Summary row timing**: `_navigate_online_with_mock()` calls `page.wait_for_selector(".ioc-summary-row", timeout=10_000)`. A timeout here means enrichment.ts did not process the mocked response — check that the route pattern matches the actual fetch URL (visible in Playwright network trace).
+- **Detail link timing**: `page.wait_for_selector(".detail-link-footer", timeout=10_000)` validates that `markEnrichmentComplete()` fired. Failure indicates `complete: true` in the mock did not propagate — check the `injectDetailLink` path in enrichment.ts.
+- **Expand/collapse failure**: `expect(page.locator(".ioc-summary-row.is-open")).to_have_count(1)` reports the exact selector that was absent, pointing to a regression in the event-delegation handler on `.page-results`.
+
+**How a future agent inspects this task:**
+- Run `python3 -m pytest tests/e2e/test_results_page.py -v -k "enrichment or expand or summary_row or detail_link"` to see per-test pass/fail for enrichment surface.
+- Add `--tracing on` for a Playwright trace zip that captures DOM snapshots around every `expect()` call.
+- Add `--headed` to observe the enrichment animation in real time.
+
+**Failure state visibility:**
+- Route mock not registered → `.enrichment-slot--loaded` count 0, all enrichment tests timeout.
+- Wrong mock pattern → network request succeeds against real server (which may 404 or return empty), enrichment.ts sees no results.
+- JS regression in enrichment.ts → `.ioc-summary-row` never appears; `wait_for_selector` times out with clear message.
+
 ## Expected Output
 
 - `tests/e2e/test_results_page.py` — 6–8 new tests added at the bottom of the file

@@ -273,7 +273,7 @@ def test_offline_mode_hides_verdict_dashboard(page: Page, index_url: str) -> Non
 
 
 def test_responsive_grid_layout(page: Page, index_url: str) -> None:
-    """Cards grid uses responsive layout."""
+    """Cards grid container is visible (single-column layout)."""
     idx = IndexPage(page, index_url.rstrip("/"))
     idx.goto()
     idx.extract_iocs(IPV4_ONLY)
