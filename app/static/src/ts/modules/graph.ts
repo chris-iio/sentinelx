@@ -82,14 +82,14 @@ function renderRelationshipGraph(container: HTMLElement): void {
 
   // ---- SVG canvas ----
   const svg = svgEl("svg");
-  svg.setAttribute("viewBox", "0 0 600 400");
+  svg.setAttribute("viewBox", "0 0 700 450");
   svg.setAttribute("width", "100%");
   svg.setAttribute("role", "img");
   svg.setAttribute("aria-label", "Provider relationship graph");
 
-  const cx = 300;  // center x
-  const cy = 200;  // center y
-  const orbitRadius = 150;
+  const cx = 350;  // center x
+  const cy = 225;  // center y
+  const orbitRadius = 170;
   const iocrr = 30;  // IOC node radius
   const prrr = 20;   // provider node radius
 
@@ -149,9 +149,9 @@ function renderRelationshipGraph(container: HTMLElement): void {
     text.setAttribute("x", String(Math.round(px)));
     text.setAttribute("y", String(Math.round(py + prrr + 14)));
     text.setAttribute("text-anchor", "middle");
-    text.setAttribute("font-size", "11");
+    text.setAttribute("font-size", "10");
     text.setAttribute("fill", "#e5e7eb");
-    text.appendChild(document.createTextNode(node.label.slice(0, 12)));
+    text.appendChild(document.createTextNode(node.label));
     group.appendChild(text);
 
     nodeGroup.appendChild(group);
@@ -181,7 +181,7 @@ function renderRelationshipGraph(container: HTMLElement): void {
   iocText.setAttribute("font-size", "10");
   iocText.setAttribute("fill", "#fff");
   iocText.setAttribute("font-weight", "bold");
-  iocText.appendChild(document.createTextNode(iocNode.label.slice(0, 20)));
+  iocText.appendChild(document.createTextNode(iocNode.label));
   iocGroup.appendChild(iocText);
 
   svg.appendChild(iocGroup);

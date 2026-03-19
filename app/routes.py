@@ -307,7 +307,7 @@ def ioc_detail(ioc_type: str, ioc_value: str) -> str:
 
     # Build graph data: central IOC node + one node per provider
     graph_nodes = [
-        {"id": "ioc", "label": ioc_value[:20], "verdict": "ioc", "role": "ioc"}
+        {"id": "ioc", "label": ioc_value, "verdict": "ioc", "role": "ioc"}
     ]
     graph_edges = []
     for result in provider_results:
@@ -315,7 +315,7 @@ def ioc_detail(ioc_type: str, ioc_value: str) -> str:
         verdict = result.get("verdict", "no_data")
         graph_nodes.append({
             "id": provider,
-            "label": provider[:12],
+            "label": provider,
             "verdict": verdict,
             "role": "provider",
         })
