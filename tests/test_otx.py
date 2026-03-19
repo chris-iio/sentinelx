@@ -193,9 +193,9 @@ class TestOTXProtocol:
         )
 
     def test_all_eight_ioc_types_supported(self) -> None:
-        """OTX supports all 8 IOC types — len(supported_types) == 8."""
-        assert len(OTXAdapter.supported_types) == 8, (
-            f"Expected 8 supported types, got {len(OTXAdapter.supported_types)}: {OTXAdapter.supported_types}"
+        """OTX supports all 9 IOC types — len(supported_types) == 9."""
+        assert len(OTXAdapter.supported_types) == 9, (
+            f"Expected 9 supported types, got {len(OTXAdapter.supported_types)}: {OTXAdapter.supported_types}"
         )
 
     def test_is_configured_with_key(self) -> None:
