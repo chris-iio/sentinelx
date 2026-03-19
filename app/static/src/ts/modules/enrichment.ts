@@ -31,6 +31,9 @@ import { CONTEXT_PROVIDERS, createContextRow, createDetailRow,
 /** Debounce timers for sortDetailRows — keyed by ioc_value */
 const sortTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
 
+/** Debounce timers for updateSummaryRow — keyed by ioc_value */
+const summaryTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
+
 /** Accumulated enrichment results for export */
 const allResults: EnrichmentItem[] = [];
 
@@ -63,6 +66,24 @@ function sortDetailRows(detailsContainer: HTMLElement, iocValue: string): void {
     }
   }, 100);
   sortTimers.set(iocValue, timer);
+}
+
+/**
+ * Debounce updateSummaryRow at 100ms per IOC to limit DOM rebuilds to 1–2
+ * during streaming enrichment instead of once per provider result (R017).
+ */
+function debouncedUpdateSummaryRow(
+  slot: HTMLElement,
+  iocValue: string,
+  iocVerdicts: Record<string, VerdictEntry[]>
+): void {
+  const existing = summaryTimers.get(iocValue);
+  if (existing !== undefined) clearTimeout(existing);
+  const timer = setTimeout(() => {
+    summaryTimers.delete(iocValue);
+    updateSummaryRow(slot, iocValue, iocVerdicts);
+  }, 100);
+  summaryTimers.set(iocValue, timer);
 }
 
 /**
@@ -355,8 +376,8 @@ function renderEnrichmentResult(
     }
   }
 
-  // Update summary row (worst verdict + attribution + consensus)
-  updateSummaryRow(slot, result.ioc_value, iocVerdicts);
+  // Update summary row (worst verdict + attribution + consensus) — debounced
+  debouncedUpdateSummaryRow(slot, result.ioc_value, iocVerdicts);
 
   // Update pending indicator for remaining providers
   updatePendingIndicator(slot, card, receivedCount);
