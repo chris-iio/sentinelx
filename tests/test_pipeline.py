@@ -123,3 +123,14 @@ class TestRunPipelineEdgeCases:
         assert IOCType.URL in types_found
         assert IOCType.MD5 in types_found
         assert IOCType.CVE in types_found
+
+
+class TestRunPipelineEmail:
+    """Integration tests for email IOC extraction through the full pipeline."""
+
+    def test_defanged_email_through_pipeline(self):
+        """Defanged email is refanged, classified as EMAIL, and value is canonical."""
+        results = run_pipeline("Contact user[@]evil[.]com for details")
+        email_results = [r for r in results if r.type == IOCType.EMAIL]
+        assert len(email_results) >= 1
+        assert email_results[0].value == "user@evil.com"

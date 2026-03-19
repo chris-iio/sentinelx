@@ -31,6 +31,10 @@ _RE_MD5 = re.compile(r"^[0-9a-fA-F]{32}$")
 # URL: starts with http:// or https://
 _RE_URL = re.compile(r"^https?://\S+", re.IGNORECASE)
 
+# Email: standard local@domain.tld — runs on already-normalized (refanged) values.
+# Must come before domain check: the domain portion of an email could match _RE_DOMAIN.
+_RE_EMAIL = re.compile(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
+
 # Domain: hostname chars with at least one dot and a valid-looking TLD
 # Rejects bare labels (no dot) and localhost
 _RE_DOMAIN = re.compile(
@@ -70,6 +74,7 @@ def classify(normalized_value: str, raw_match: str) -> IOC | None:
     5. URL   (http:// or https://)
     6. IPv6  (via ipaddress validation)
     7. IPv4  (via ipaddress validation)
+    7.5. Email (local@domain.tld — must precede Domain to prevent misclassification)
     8. Domain (hostname with valid TLD)
 
     Args:
@@ -111,6 +116,10 @@ def classify(normalized_value: str, raw_match: str) -> IOC | None:
     # 7. IPv4
     if _is_valid_ipv4(v):
         return IOC(type=IOCType.IPV4, value=v, raw_match=raw_match)
+
+    # 7.5. Email — must precede Domain: domain portion (evil.com) could match _RE_DOMAIN
+    if _RE_EMAIL.match(v):
+        return IOC(type=IOCType.EMAIL, value=v.lower(), raw_match=raw_match)
 
     # 8. Domain
     if v.lower() not in _DOMAIN_BLACKLIST and _RE_DOMAIN.match(v):

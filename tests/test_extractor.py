@@ -160,3 +160,28 @@ class TestDeduplicationInExtract:
         results = extract_iocs(text)
         raws = [r["raw"] for r in results if "192.168.1.1" in r["raw"]]
         assert len(raws) == 1
+
+
+class TestExtractEmail:
+    """Tests for email extraction — clean and defanged forms."""
+
+    def test_clean_email(self):
+        """Plain email address is extracted as a candidate."""
+        text = "Contact user@evil.com for phishing details"
+        results = extract_iocs(text)
+        raws = [r["raw"] for r in results]
+        assert any("user@evil.com" in v for v in raws)
+
+    def test_defanged_bracket_at(self):
+        """user[@]evil[.]com is extracted — covers the most common defang form."""
+        text = "Attacker email: user[@]evil[.]com was observed"
+        results = extract_iocs(text)
+        raws = [r["raw"] for r in results]
+        assert any("user" in v and "evil" in v for v in raws)
+
+    def test_defanged_word_at(self):
+        """user[at]evil[.]com is extracted — word-substitution defang form."""
+        text = "Report to user[at]evil[.]com immediately"
+        results = extract_iocs(text)
+        raws = [r["raw"] for r in results]
+        assert any("user" in v and "evil" in v for v in raws)

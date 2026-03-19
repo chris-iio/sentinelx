@@ -290,3 +290,41 @@ class TestClassifyNone:
         """Successful classification returns an IOC instance"""
         result = classify("8.8.8.8", "8.8.8.8")
         assert isinstance(result, IOC)
+
+
+class TestClassifyEmail:
+    """Tests for email classification (step 7.5 — between IPv4 and Domain)."""
+
+    def test_clean_email(self):
+        """Standard email classifies as EMAIL with value preserved."""
+        result = classify("user@evil.com", "user@evil.com")
+        assert result is not None
+        assert result.type == IOCType.EMAIL
+        assert result.value == "user@evil.com"
+
+    def test_uppercase_domain_lowercased(self):
+        """Mixed-case email is normalised to lowercase in value."""
+        result = classify("User@Evil.COM", "User@Evil.COM")
+        assert result is not None
+        assert result.type == IOCType.EMAIL
+        assert result.value == "user@evil.com"
+
+    def test_no_tld_rejected(self):
+        """user@localhost has no multi-char TLD — must not classify as EMAIL."""
+        result = classify("user@localhost", "user@localhost")
+        assert result is None or result.type != IOCType.EMAIL
+
+    def test_no_local_part_rejected(self):
+        """@evil.com has no local-part — must not classify as EMAIL."""
+        result = classify("@evil.com", "@evil.com")
+        assert result is None or result.type != IOCType.EMAIL
+
+    def test_email_before_domain(self):
+        """evil.com classifies as DOMAIN; user@evil.com classifies as EMAIL (precedence)."""
+        domain_result = classify("evil.com", "evil.com")
+        assert domain_result is not None
+        assert domain_result.type == IOCType.DOMAIN
+
+        email_result = classify("user@evil.com", "user@evil.com")
+        assert email_result is not None
+        assert email_result.type == IOCType.EMAIL

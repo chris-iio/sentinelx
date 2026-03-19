@@ -27,6 +27,7 @@ class IOCType(Enum):
     SHA1 = "sha1"
     SHA256 = "sha256"
     CVE = "cve"
+    EMAIL = "email"
 
 
 @dataclass(frozen=True)

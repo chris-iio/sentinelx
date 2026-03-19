@@ -163,7 +163,7 @@ def analyze():
         provider_counts = json.dumps({
             ioc_type.value: registry.provider_count_for_type(ioc_type)
             for ioc_type in IOCType
-            if ioc_type != IOCType.CVE
+            if ioc_type not in (IOCType.CVE, IOCType.EMAIL)
         })
         provider_coverage = {
             "registered": len(registry.all()),
