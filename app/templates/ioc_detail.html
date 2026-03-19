@@ -28,7 +28,7 @@
         ></div>
     </div>
 
-    {# ---- Provider results (tabbed) ---- #}
+    {# ---- Provider results (stacked cards) ---- #}
     <div class="detail-results-section">
         <h2 class="detail-section-title">Enrichment Results</h2>
 
@@ -39,92 +39,55 @@
         </div>
         {% else %}
 
-        {# CSS-only tabs: radio inputs control visibility #}
-        <div class="detail-tabs">
-            <style>
-                .tab-radio { display: none; }
-                {% for result in provider_results %}
-                #tab-radio-{{ loop.index }}:checked ~ .tab-panels .tab-panel:nth-child({{ loop.index }}) { display: block; }
-                {% endfor %}
-                .tab-panel { display: none; }
-                {% for result in provider_results %}
-                #tab-radio-{{ loop.index }}:checked ~ .tab-labels label[for="tab-radio-{{ loop.index }}"] { border-bottom-color: var(--color-accent, #8b5cf6); color: var(--color-text, #fff); }
-                {% endfor %}
-            </style>
-
-            {% for result in provider_results %}
-            <input
-                type="radio"
-                name="provider-tab"
-                id="tab-radio-{{ loop.index }}"
-                class="tab-radio"
-                {% if loop.first %}checked{% endif %}
-            >
-            {% endfor %}
-
-            <div class="tab-labels">
-                {% for result in provider_results %}
-                <label
-                    for="tab-radio-{{ loop.index }}"
-                    class="tab-label verdict-tab-label--{{ result.verdict | default('no_data') }}"
-                    aria-label="View {{ result.provider }} results"
-                >{{ result.provider }}</label>
-                {% endfor %}
+        {% for result in provider_results %}
+        <div class="detail-provider-card">
+            <div class="detail-provider-header">
+                <span class="detail-provider-name">{{ result.provider }}</span>
+                <span class="verdict-badge verdict-badge--{{ result.verdict | default('no_data') }}">
+                    {{ result.verdict | default('no_data') | upper }}
+                </span>
             </div>
-
-            <div class="tab-panels">
-                {% for result in provider_results %}
-                <div class="tab-panel">
-                    <dl class="detail-result-fields">
-                        <div class="result-field">
-                            <dt>Verdict</dt>
-                            <dd>
-                                <span class="verdict-badge verdict-badge--{{ result.verdict | default('no_data') }}">
-                                    {{ result.verdict | default('no_data') | upper }}
-                                </span>
-                            </dd>
-                        </div>
-                        {% if result.detection_count is not none %}
-                        <div class="result-field">
-                            <dt>Detections</dt>
-                            <dd>
-                                {{ result.detection_count }}
-                                {% if result.total_engines %}/ {{ result.total_engines }}{% endif %}
-                            </dd>
-                        </div>
-                        {% endif %}
-                        {% if result.scan_date %}
-                        <div class="result-field">
-                            <dt>Scan Date</dt>
-                            <dd>{{ result.scan_date }}</dd>
-                        </div>
-                        {% endif %}
-                        {% if result.cached_at %}
-                        <div class="result-field">
-                            <dt>Cached At</dt>
-                            <dd>{{ result.cached_at }}</dd>
-                        </div>
-                        {% endif %}
-                        {% if result.raw_stats %}
-                        <div class="result-field result-field--raw">
-                            <dt>Raw Stats</dt>
-                            <dd>
-                                <dl class="raw-stats">
-                                    {% for key, val in result.raw_stats.items() %}
-                                    <div class="raw-stat-entry">
-                                        <dt>{{ key }}</dt>
-                                        <dd>{{ val }}</dd>
-                                    </div>
-                                    {% endfor %}
-                                </dl>
-                            </dd>
-                        </div>
-                        {% endif %}
-                    </dl>
+            <dl class="detail-result-fields">
+                {% if result.detection_count is not none %}
+                <div class="result-field">
+                    <dt>Detections</dt>
+                    <dd>
+                        {{ result.detection_count }}
+                        {% if result.total_engines %}/ {{ result.total_engines }}{% endif %}
+                    </dd>
                 </div>
-                {% endfor %}
-            </div>
+                {% endif %}
+                {% if result.scan_date %}
+                <div class="result-field">
+                    <dt>Scan Date</dt>
+                    <dd>{{ result.scan_date }}</dd>
+                </div>
+                {% endif %}
+                {% if result.cached_at %}
+                <div class="result-field">
+                    <dt>Cached At</dt>
+                    <dd>{{ result.cached_at }}</dd>
+                </div>
+                {% endif %}
+                {% if result.raw_stats %}
+                <div class="result-field result-field--raw">
+                    <dt>Raw Stats</dt>
+                    <dd>
+                        <dl class="raw-stats">
+                            {% for key, val in result.raw_stats.items() %}
+                            <div class="raw-stat-entry">
+                                <dt>{{ key }}</dt>
+                                <dd>{{ val }}</dd>
+                            </div>
+                            {% endfor %}
+                        </dl>
+                    </dd>
+                </div>
+                {% endif %}
+            </dl>
         </div>
+        {% endfor %}
+
         {% endif %}
     </div>
 

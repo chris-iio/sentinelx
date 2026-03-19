@@ -70,7 +70,7 @@ class TestIocDetailRoute:
         assert "No enrichment data" in html
 
     def test_detail_page_with_results(self, client, tmp_path, monkeypatch) -> None:
-        """Detail page with cached results shows provider tab labels."""
+        """Detail page with cached results shows provider cards with M002 design tokens."""
         import app.cache.store as cache_store_module
 
         monkeypatch.setattr(cache_store_module, "DEFAULT_DB_PATH", tmp_path / "cache.db")
@@ -80,9 +80,15 @@ class TestIocDetailRoute:
         response = client.get("/ioc/ipv4/1.2.3.4")
         assert response.status_code == 200
         html = response.data.decode()
-        # Both provider names should appear as tab labels
+        # Both provider names should appear in stacked cards
         assert "virustotal" in html
         assert "abuseipdb" in html
+        # M002 design token: stacked provider cards (not tabs)
+        assert "detail-provider-card" in html
+        # M002 design token: verdict-only color via badge class
+        assert "verdict-badge--malicious" in html
+        # No inline <style> block — all styles live in input.css
+        assert "<style>" not in html
 
     def test_detail_url_ioc(self, client, tmp_path, monkeypatch) -> None:
         """GET /ioc/url/https://evil.com/beacon routes correctly via path converter."""
@@ -122,6 +128,29 @@ class TestIocDetailRoute:
         assert "ioc-notes" not in html
         assert "tag-input" not in html
         assert "Add tag" not in html
+
+    def test_detail_graph_labels_untruncated(self, client, tmp_path, monkeypatch) -> None:
+        """Graph data-graph-nodes contains full provider name without truncation (T01 regression guard)."""
+        import app.cache.store as cache_store_module
+
+        monkeypatch.setattr(cache_store_module, "DEFAULT_DB_PATH", tmp_path / "cache.db")
+
+        cache = CacheStore(db_path=tmp_path / "cache.db")
+        cache.put("1.2.3.4", "ipv4", "Shodan InternetDB", {
+            "verdict": "clean",
+            "detection_count": 0,
+            "total_engines": None,
+            "scan_date": None,
+        })
+
+        response = client.get("/ioc/ipv4/1.2.3.4")
+        assert response.status_code == 200
+        html = response.data.decode()
+        # Full 17-char provider name must appear verbatim in the graph JSON attribute.
+        # Prior to T01, this was truncated to "Shodan Inter" (12 chars).
+        assert "Shodan InternetDB" in html
+        # Confirm it's inside the data-graph-nodes attribute (not coincidentally in page text)
+        assert "data-graph-nodes" in html
 
 
 class TestAnnotationRoutes404:
