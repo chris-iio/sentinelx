@@ -17,11 +17,16 @@ Design decisions:
 """
 from __future__ import annotations
 
+import logging
+import random
 import threading
+import time
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from app.cache.store import CacheStore
 from app.enrichment.models import EnrichmentError, EnrichmentResult
@@ -160,6 +165,12 @@ class EnrichmentOrchestrator:
         """Return copy of cached result markers (ioc_value|provider -> cached_at)."""
         return dict(self._cached_markers)
 
+    @staticmethod
+    def _is_rate_limit_error(result: EnrichmentError) -> bool:
+        """Check if an EnrichmentError indicates a rate limit (429) response."""
+        error_lower = result.error.lower()
+        return "429" in error_lower or "rate limit" in error_lower
+
     def _do_lookup(self, adapter: Any, ioc: IOC) -> EnrichmentResult | EnrichmentError:
         """Look up a single IOC via a specific adapter, retrying once on EnrichmentError.
 
@@ -224,7 +235,23 @@ class EnrichmentOrchestrator:
 
         result = adapter.lookup(ioc)
         if isinstance(result, EnrichmentError):
-            result = adapter.lookup(ioc)
+            if self._is_rate_limit_error(result):
+                # Rate-limit (429): exponential backoff, up to 2 retries (3 total attempts).
+                # The semaphore is intentionally held during backoff sleeps — a backing-off
+                # request still occupies its concurrency slot.
+                for attempt in range(1, 3):  # attempt 1 and 2
+                    delay = (15 * (2 ** (attempt - 1))) + random.uniform(0, 2)
+                    logger.warning(
+                        "Rate limit from %s for %s, attempt %d/3, backoff %.1fs",
+                        provider_name, ioc.value, attempt + 1, delay,
+                    )
+                    time.sleep(delay)
+                    result = adapter.lookup(ioc)
+                    if not isinstance(result, EnrichmentError) or not self._is_rate_limit_error(result):
+                        break
+            else:
+                # Non-rate-limit error: immediate single retry (existing behavior).
+                result = adapter.lookup(ioc)
 
         # Store successful results in cache
         if self._cache is not None and provider_name and isinstance(result, EnrichmentResult):
