@@ -895,7 +895,8 @@
     .filter-pill--md5.filter-pill--active,
     .filter-pill--sha1.filter-pill--active,
     .filter-pill--sha256.filter-pill--active,
-    .filter-pill--cve.filter-pill--active {
+    .filter-pill--cve.filter-pill--active,
+    .filter-pill--email.filter-pill--active {
         border-color: var(--text-secondary);
         color: var(--text-primary);
         background-color: var(--bg-tertiary);
@@ -1048,7 +1049,8 @@
     .ioc-type-badge--md5,
     .ioc-type-badge--sha1,
     .ioc-type-badge--sha256,
-    .ioc-type-badge--cve    { color: var(--text-muted); border-color: var(--border-default); }
+    .ioc-type-badge--cve,
+    .ioc-type-badge--email    { color: var(--text-muted); border-color: var(--border-default); }
 
     .verdict-label {
         font-family: var(--font-mono);
