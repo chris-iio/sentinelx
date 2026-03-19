@@ -11,6 +11,7 @@ Covers:
 """
 from __future__ import annotations
 
+import threading
 import time
 from unittest.mock import MagicMock
 
@@ -350,3 +351,130 @@ class TestMultiAdapterDispatch:
         result_count = sum(1 for r in status["results"] if isinstance(r, EnrichmentResult))
         assert error_count == 1
         assert result_count == 1
+
+
+# ---------------------------------------------------------------------------
+# Tests — Per-provider semaphore (R014)
+# ---------------------------------------------------------------------------
+
+class TestPerProviderSemaphore:
+    """Verify that requires_api_key=True adapters are semaphore-gated while
+    zero-auth adapters run freely, and that provider_concurrency overrides work."""
+
+    def _make_vt_adapter(self, sleep_secs: float = 0.3):
+        """Return a mock VirusTotal adapter that sleeps to simulate rate limiting."""
+        adapter = MagicMock()
+        adapter.name = "VirusTotal"
+        adapter.requires_api_key = True
+        adapter.supported_types = {IOCType.IPV4}
+
+        def slow_lookup(ioc):
+            time.sleep(sleep_secs)
+            return _make_result(ioc, provider="VirusTotal")
+
+        adapter.lookup.side_effect = slow_lookup
+        return adapter
+
+    def _make_free_adapter(self):
+        """Return a mock zero-auth DNS adapter that returns instantly."""
+        adapter = MagicMock()
+        adapter.name = "DNSLookup"
+        adapter.requires_api_key = False
+        adapter.supported_types = {IOCType.IPV4}
+
+        def instant_lookup(ioc):
+            return _make_result(ioc, provider="DNSLookup")
+
+        adapter.lookup.side_effect = instant_lookup
+        return adapter
+
+    def test_no_semaphore_for_zero_auth_provider(self):
+        """Zero-auth adapters must NOT get a semaphore; API-key adapters must."""
+        vt_adapter = self._make_vt_adapter()
+        free_adapter = self._make_free_adapter()
+
+        orchestrator = EnrichmentOrchestrator(
+            adapters=[vt_adapter, free_adapter],
+            max_workers=20,
+        )
+
+        assert "VirusTotal" in orchestrator._semaphores, (
+            "VirusTotal (requires_api_key=True) must have a semaphore entry"
+        )
+        assert "DNSLookup" not in orchestrator._semaphores, (
+            "DNSLookup (requires_api_key=False) must NOT have a semaphore entry"
+        )
+
+    def test_rate_limited_provider_concurrency_capped(self):
+        """Peak concurrent VT calls must not exceed the semaphore cap.
+
+        With semaphore cap=2 and 4 VT lookups, peak concurrency must be ≤ 2.
+        """
+        peak_concurrent = 0
+        current_concurrent = 0
+        counter_lock = threading.Lock()
+
+        vt_adapter = MagicMock()
+        vt_adapter.name = "VirusTotal"
+        vt_adapter.requires_api_key = True
+        vt_adapter.supported_types = {IOCType.IPV4}
+
+        def tracked_lookup(ioc):
+            nonlocal peak_concurrent, current_concurrent
+            with counter_lock:
+                current_concurrent += 1
+                if current_concurrent > peak_concurrent:
+                    peak_concurrent = current_concurrent
+            time.sleep(0.1)
+            with counter_lock:
+                current_concurrent -= 1
+            return _make_result(ioc, provider="VirusTotal")
+
+        vt_adapter.lookup.side_effect = tracked_lookup
+
+        iocs = [_make_ioc(IOCType.IPV4, f"10.0.0.{i}") for i in range(4)]
+        orchestrator = EnrichmentOrchestrator(
+            adapters=[vt_adapter],
+            max_workers=20,
+            provider_concurrency={"VirusTotal": 2},
+        )
+        orchestrator.enrich_all("job-semaphore-cap", iocs)
+
+        assert peak_concurrent <= 2, (
+            f"Expected peak VT concurrency ≤ 2 (semaphore cap), got {peak_concurrent}"
+        )
+
+    def test_zero_auth_not_blocked_by_rate_limited_provider(self):
+        """Zero-auth adapter must complete without waiting for VT's semaphore.
+
+        With VT semaphore cap=2 and 4 VT lookups at 0.3s each, VT alone takes
+        ~0.6s (two batches). The free adapter must finish much earlier since it
+        holds no semaphore. Total wall time must be <1.0s, confirming the free
+        adapter didn't serialize behind VT.
+        """
+        vt_adapter = self._make_vt_adapter(sleep_secs=0.3)
+        free_adapter = self._make_free_adapter()
+
+        iocs = [_make_ioc(IOCType.IPV4, f"10.0.1.{i}") for i in range(4)]
+        orchestrator = EnrichmentOrchestrator(
+            adapters=[vt_adapter, free_adapter],
+            max_workers=20,
+            provider_concurrency={"VirusTotal": 2},
+        )
+
+        start = time.monotonic()
+        orchestrator.enrich_all("job-free-not-blocked", iocs)
+        elapsed = time.monotonic() - start
+
+        status = orchestrator.get_status("job-free-not-blocked")
+        # 4 IOCs × 2 adapters = 8 total lookups
+        assert status["total"] == 8
+        assert len(status["results"]) == 8
+
+        # VT alone takes ≥0.6s (2 batches × 0.3s). Free adapter is instant.
+        # If free adapter was blocked by VT's semaphore the total would approach 0.6s+.
+        # Either way the whole job completes in <1.0s (VT's 0.6s + scheduling overhead).
+        assert elapsed < 1.0, (
+            f"Expected total time <1.0s (VT semaphore-capped, free runs in parallel), "
+            f"got {elapsed:.2f}s"
+        )

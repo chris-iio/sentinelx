@@ -4,7 +4,11 @@ Runs IOC lookups in parallel via ThreadPoolExecutor, tracks job progress in a
 thread-safe dict, retries failed lookups once, and evicts old jobs via LRU.
 
 Design decisions:
-- max_workers=4 default: respects VT free tier 4 req/min (Pitfall 7 from research)
+- max_workers=20 default: thread pool is intentionally generous so zero-auth
+  providers can always run in parallel; per-provider semaphores are the real
+  concurrency gate (R014).
+- _semaphores dict: adapters with requires_api_key=True get a Semaphore (default
+  cap 4, overridable via provider_concurrency). Zero-auth adapters run ungated.
 - OrderedDict for LRU eviction: simple FIFO eviction without external libraries
 - Lock protects all reads/writes to _jobs dict (thread safety)
 - enrich_all is designed to be called from a threading.Thread (Plan 03)
@@ -13,6 +17,7 @@ Design decisions:
 """
 from __future__ import annotations
 
+import threading
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock
@@ -34,22 +39,35 @@ class EnrichmentOrchestrator:
       - supported_types: set[IOCType] — types handled by this adapter
       - lookup(ioc): IOC -> EnrichmentResult | EnrichmentError
 
+    The thread pool (max_workers=20 default) is intentionally large so that
+    zero-auth providers are never blocked by rate-limited providers.
+    Per-provider semaphores (built from requires_api_key=True adapters) are
+    the real concurrency gate — they cap API-key providers at 4 by default.
+
     Args:
-        adapters:    List of adapter objects. Each IOC is dispatched to every
-                     adapter whose supported_types includes the IOC's type.
-        max_workers: Maximum number of concurrent worker threads. Default 4 respects
-                     VirusTotal free tier rate limit of 4 requests/minute.
-        max_jobs:    Maximum number of job status entries to retain. Oldest entries
-                     are evicted via FIFO (OrderedDict) when limit is exceeded.
+        adapters:             List of adapter objects. Each IOC is dispatched to
+                              every adapter whose supported_types includes the IOC's
+                              type.
+        max_workers:          Thread pool size. Intentionally generous (default 20)
+                              so zero-auth providers always have threads available.
+                              The semaphore, not the pool, caps rate-limited providers.
+        max_jobs:             Maximum number of job status entries to retain. Oldest
+                              entries are evicted via FIFO (OrderedDict) when exceeded.
+        provider_concurrency: Optional per-provider-name override for the semaphore
+                              cap. E.g. {"VirusTotal": 2} limits VT to 2 concurrent
+                              calls. Only adapters with requires_api_key=True receive
+                              a semaphore; this dict adjusts the cap value for them.
+                              Defaults to {} (all API-key providers capped at 4).
     """
 
     def __init__(
         self,
         adapters: list[Any],
-        max_workers: int = 4,
+        max_workers: int = 20,
         max_jobs: int = 100,
         cache: CacheStore | None = None,
         cache_ttl_seconds: int = 86400,
+        provider_concurrency: dict[str, int] | None = None,
     ) -> None:
         self._adapters = adapters
         self._max_workers = max_workers
@@ -59,6 +77,17 @@ class EnrichmentOrchestrator:
         self._cache = cache
         self._cache_ttl_seconds = cache_ttl_seconds
         self._cached_markers: dict[str, str] = {}
+
+        # Build per-provider semaphores for API-key-required adapters.
+        # Zero-auth adapters are intentionally excluded — they run ungated.
+        _concurrency_overrides = provider_concurrency or {}
+        self._semaphores: dict[str, threading.Semaphore] = {}
+        for adapter in self._adapters:
+            if getattr(adapter, "requires_api_key", False):
+                name = adapter.name
+                if name not in self._semaphores:
+                    cap = _concurrency_overrides.get(name, 4)
+                    self._semaphores[name] = threading.Semaphore(cap)
 
     def enrich_all(self, job_id: str, iocs: list[IOC]) -> None:
         """Enrich all enrichable IOCs in parallel across all matching adapters.
@@ -135,6 +164,10 @@ class EnrichmentOrchestrator:
         """Look up a single IOC via a specific adapter, retrying once on EnrichmentError.
 
         Checks cache before calling adapter. Stores successful results in cache.
+        If the adapter has a semaphore (requires_api_key=True), the entire
+        lookup+retry body is executed while holding that semaphore so that
+        concurrent calls to the same rate-limited provider are capped.
+
         Calls adapter.lookup(ioc). If the result is an EnrichmentError,
         retries the lookup exactly once and returns the second result regardless
         of success or failure.
@@ -148,7 +181,28 @@ class EnrichmentOrchestrator:
             EnrichmentError if both attempts fail.
         """
         provider_name = getattr(adapter, "name", "")
+        sem = self._semaphores.get(provider_name)
 
+        if sem is not None:
+            with sem:
+                return self._do_lookup_body(adapter, ioc, provider_name)
+        else:
+            return self._do_lookup_body(adapter, ioc, provider_name)
+
+    def _do_lookup_body(self, adapter: Any, ioc: IOC, provider_name: str) -> EnrichmentResult | EnrichmentError:
+        """Inner lookup+retry body, extracted so semaphore wrapping is clean.
+
+        Called by _do_lookup either inside a semaphore context (for API-key
+        providers) or directly (for zero-auth providers).
+
+        Args:
+            adapter:       The adapter to use.
+            ioc:           The IOC to enrich.
+            provider_name: Pre-resolved adapter name string.
+
+        Returns:
+            EnrichmentResult on success, EnrichmentError after two failures.
+        """
         # Check cache
         if self._cache is not None and provider_name:
             cached = self._cache.get(
