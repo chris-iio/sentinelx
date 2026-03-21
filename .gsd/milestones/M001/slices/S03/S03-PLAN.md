@@ -38,7 +38,7 @@
   - Verify: `npx vitest run` passes with all row-factory tests green
   - Done when: `npx vitest run` reports 0 failures and ≥20 test assertions for row-factory.ts; every requirement has at least one covering test
 
-- [ ] **T03: Remove dead consensus-badge code and run full verification** `est:30m`
+- [x] **T03: Remove dead consensus-badge code and run full verification** `est:30m`
   - Why: `consensusBadgeClass()` and `.consensus-badge` CSS are dead code since VIS-02 replaced the consensus badge with the micro-bar. Removing them keeps the codebase honest and confirms nothing depends on them.
   - Files: `app/static/src/ts/modules/verdict-compute.ts`, `app/static/src/input.css`, `app/static/src/ts/modules/verdict-compute.test.ts`
   - Do: Remove `consensusBadgeClass()` export from verdict-compute.ts. Remove all `.consensus-badge` CSS rules from input.css. Remove the test for `consensusBadgeClass` from verdict-compute.test.ts. Grep entire codebase to confirm no remaining references. Run typecheck + test suite.

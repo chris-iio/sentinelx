@@ -45,6 +45,13 @@ VIS-02 replaced the `.consensus-badge` text element with the `.verdict-micro-bar
 - `grep -rc "consensus-badge" app/static/src/` — all counts are 0
 - `grep -rc "consensusBadgeClass" app/static/src/ts/` — all counts are 0
 
+## Observability Impact
+
+- **Dead code verification:** `grep -rc "consensus-badge" app/static/src/` and `grep -rc "consensusBadgeClass" app/static/src/ts/` both return all zeros, confirming complete removal.
+- **Test count change:** Removing 4 `consensusBadgeClass` tests reduces verdict-compute.test.ts from 26 to 22 tests. The total suite should remain above the ≥30 threshold due to row-factory.test.ts's 54 tests.
+- **No runtime signal change:** The removed function was already dead code (not called by production code). No runtime logs, error shapes, or user-visible behavior changes.
+- **Failure state:** If something still referenced `consensusBadgeClass` or `.consensus-badge`, the grep checks above would return non-zero counts and `make typecheck` would fail with "not exported" errors.
+
 ## Inputs
 
 - `app/static/src/ts/modules/verdict-compute.ts` — contains dead `consensusBadgeClass()` function

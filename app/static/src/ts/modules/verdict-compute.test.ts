@@ -1,14 +1,13 @@
 /**
  * Unit tests for verdict-compute.ts pure functions.
  *
- * Covers: computeWorstVerdict, computeConsensus, consensusBadgeClass,
+ * Covers: computeWorstVerdict, computeConsensus,
  *         computeAttribution, findWorstEntry.
  */
 
 import {
   computeWorstVerdict,
   computeConsensus,
-  consensusBadgeClass,
   computeAttribution,
   findWorstEntry,
   type VerdictEntry,
@@ -115,29 +114,6 @@ describe("computeConsensus", () => {
       entry({ provider: "MB", verdict: "error" }),
     ];
     expect(computeConsensus(entries)).toEqual({ flagged: 0, responded: 0 });
-  });
-});
-
-/* ------------------------------------------------------------------ */
-/*  consensusBadgeClass                                                */
-/* ------------------------------------------------------------------ */
-
-describe("consensusBadgeClass", () => {
-  it("returns green class for 0 flagged", () => {
-    expect(consensusBadgeClass(0)).toBe("consensus-badge--green");
-  });
-
-  it("returns yellow class for 1 flagged", () => {
-    expect(consensusBadgeClass(1)).toBe("consensus-badge--yellow");
-  });
-
-  it("returns yellow class for 2 flagged", () => {
-    expect(consensusBadgeClass(2)).toBe("consensus-badge--yellow");
-  });
-
-  it("returns red class for 3+ flagged", () => {
-    expect(consensusBadgeClass(3)).toBe("consensus-badge--red");
-    expect(consensusBadgeClass(10)).toBe("consensus-badge--red");
   });
 });
 
