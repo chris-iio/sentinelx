@@ -31,7 +31,7 @@
   - Verify: `npx vitest run` passes with all verdict-compute tests green
   - Done when: `npx vitest run` reports 0 failures and ≥12 test assertions for verdict-compute.ts
 
-- [ ] **T02: Test row-factory.ts DOM builders covering all visual redesign requirements** `est:1h`
+- [x] **T02: Test row-factory.ts DOM builders covering all visual redesign requirements** `est:1h`
   - Why: Every visual requirement (VIS-01, VIS-02, VIS-03, GRP-01, GRP-02, CTX-01, CTX-02) is implemented in row-factory.ts exports. Unit tests with jsdom prove the DOM output matches requirements.
   - Files: `app/static/src/ts/modules/row-factory.test.ts`
   - Do: Write jsdom-based tests for all exported functions: `getOrCreateSummaryRow` (creates row with chevron, a11y attributes), `updateSummaryRow` (micro-bar segments verify VIS-02, staleness badge verifies CTX-02), `createDetailRow` (verdict class + `provider-row--no-data` class verifies GRP-02), `createContextRow` (context rendering path verifies GRP-01), `injectSectionHeadersAndNoDataSummary` (no-data count row + click toggle verifies GRP-02), `updateContextLine` (IP Context, ASN Intel, DNS Records verifies CTX-01). Test edge cases: zero-count micro-bar, no cached entries, empty raw_stats.

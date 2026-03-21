@@ -68,6 +68,13 @@ Key requirement-to-function mapping:
 - `vitest.config.ts` — T01 output, test framework configuration
 - `package.json` — T01 output, dependencies
 
+## Observability Impact
+
+- **New signal:** `npx vitest run` now includes row-factory.test.ts — 54 additional test cases validating all 7 visual redesign requirements (VIS-01, VIS-02, VIS-03, GRP-01, GRP-02, CTX-01, CTX-02).
+- **Inspection:** `npx vitest run --reporter=verbose` shows per-test pass/fail with describe paths prefixed by requirement IDs (e.g., "VIS-02: creates micro-bar …").
+- **Failure visibility:** Any DOM structure regression in row-factory.ts will surface as a vitest assertion failure with expected/actual diffs showing the mismatched class, attribute, or text content.
+- **Coverage:** `npx vitest run --reporter=json` can be parsed to confirm every exported function has at least one covering test.
+
 ## Expected Output
 
 - `app/static/src/ts/modules/row-factory.test.ts` — new test file with ≥20 assertions covering all visual requirements
