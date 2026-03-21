@@ -11,5 +11,6 @@
     "types": [],
     "skipLibCheck": false
   },
-  "include": ["app/static/src/ts/**/*.ts"]
+  "include": ["app/static/src/ts/**/*.ts"],
+  "exclude": ["app/static/src/ts/**/*.test.ts"]
 }

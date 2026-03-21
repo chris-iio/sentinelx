@@ -53,6 +53,13 @@ No TypeScript test framework exists in this project. The project uses esbuild fo
 - `make typecheck` — zero errors (existing tsconfig untouched, test tsconfig separate)
 - Test count: `npx vitest run --reporter=verbose 2>&1 | grep -c "✓"` ≥ 12
 
+## Observability Impact
+
+- **New signal:** `npx vitest run` becomes a persistent verification surface — future agents can run it to check whether verdict computation logic is correct.
+- **Inspection:** `npx vitest run --reporter=verbose` lists each test with its full describe path, mapping directly to function names and edge cases.
+- **Failure state:** If any verdict-compute function is modified incorrectly, vitest will exit non-zero with assertion diff showing expected vs actual values.
+- **No runtime observability change:** This task only adds dev-time test infrastructure; no production code paths are modified.
+
 ## Inputs
 
 - `app/static/src/ts/modules/verdict-compute.ts` — the module under test

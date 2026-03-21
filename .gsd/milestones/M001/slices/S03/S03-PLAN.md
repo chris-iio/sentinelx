@@ -24,7 +24,7 @@
 
 ## Tasks
 
-- [ ] **T01: Bootstrap vitest and test verdict-compute.ts pure functions** `est:45m`
+- [x] **T01: Bootstrap vitest and test verdict-compute.ts pure functions** `est:45m`
   - Why: No TypeScript test framework exists. This task creates the foundation and proves it works by testing the simplest module (pure functions, no DOM).
   - Files: `package.json`, `vitest.config.ts`, `tsconfig.test.json`, `app/static/src/ts/modules/verdict-compute.test.ts`
   - Do: Create package.json with vitest + jsdom devDependencies. Create vitest.config.ts targeting the TS source. Create test-specific tsconfig extending base. Write tests for `computeWorstVerdict`, `computeConsensus`, `consensusBadgeClass`, `computeAttribution`, `findWorstEntry` covering happy paths, edge cases (empty arrays, all no-data, known_good override), and boundary conditions.
@@ -44,6 +44,15 @@
   - Do: Remove `consensusBadgeClass()` export from verdict-compute.ts. Remove all `.consensus-badge` CSS rules from input.css. Remove the test for `consensusBadgeClass` from verdict-compute.test.ts. Grep entire codebase to confirm no remaining references. Run typecheck + test suite.
   - Verify: `make typecheck && npx vitest run` both pass; `grep -r "consensus-badge" app/static/src/` returns only the comment in CSS-CONTRACTS.md (if any)
   - Done when: Zero references to consensus-badge in source files (CSS + TS), typecheck clean, all tests pass
+
+## Observability / Diagnostics
+
+- **Test runner output:** `npx vitest run --reporter=verbose` shows per-test pass/fail status with test names mapping to requirement IDs.
+- **Type-check surface:** `make typecheck` exits non-zero with file:line errors if test files or source files have type issues.
+- **Failure visibility:** Vitest provides stack traces and inline diffs on assertion failures. Exit code 1 on any failure.
+- **Inspection commands:** `npx vitest run --reporter=json` produces machine-readable test results for downstream tooling.
+- **Dead code detection:** `grep -c` commands in Verification section detect whether consensus-badge removal is complete.
+- **Redaction:** No sensitive data in this slice — all tests use synthetic VerdictEntry fixtures.
 
 ## Files Likely Touched
 
