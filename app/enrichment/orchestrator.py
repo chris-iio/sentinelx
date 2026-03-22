@@ -4,11 +4,13 @@ Runs IOC lookups in parallel via ThreadPoolExecutor, tracks job progress in a
 thread-safe dict, retries failed lookups once, and evicts old jobs via LRU.
 
 Design decisions:
-- max_workers=20 default: thread pool is intentionally generous so zero-auth
-  providers can always run in parallel; per-provider semaphores are the real
-  concurrency gate (R014).
-- _semaphores dict: adapters with requires_api_key=True get a Semaphore (default
-  cap 4, overridable via provider_concurrency). Zero-auth adapters run ungated.
+- max_workers=20 default: thread pool is no longer the concurrency gate; per-provider
+  semaphores cap rate-limited providers (e.g. VT at 4) while zero-auth providers run freely.
+- _semaphores dict: keyed by adapter name; built for adapters with requires_api_key=True;
+  each semaphore limits peak concurrent lookups for that provider (default cap: 4).
+- Zero-auth adapters (requires_api_key=False) have no semaphore — unlimited concurrency.
+- Semaphore wraps entire lookup+retry cycle in _do_lookup (not per-attempt) to avoid
+  re-entrant deadlock.
 - OrderedDict for LRU eviction: simple FIFO eviction without external libraries
 - Lock protects all reads/writes to _jobs dict (thread safety)
 - enrich_all is designed to be called from a threading.Thread (Plan 03)
@@ -19,14 +21,19 @@ from __future__ import annotations
 
 import logging
 import random
-import threading
 import time
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from threading import Lock
+from threading import Lock, Semaphore
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+# 429 / rate-limit backoff parameters
+_BACKOFF_BASE = 15            # seconds for first retry delay
+_BACKOFF_MULTIPLIER = 2       # exponential factor per subsequent retry
+_BACKOFF_JITTER = 2.0         # max random jitter added to each delay (seconds)
+_MAX_RATE_LIMIT_RETRIES = 2   # extra retries on 429 (3 total attempts)
 
 from app.cache.store import CacheStore
 from app.enrichment.models import EnrichmentError, EnrichmentResult
@@ -43,6 +50,10 @@ class EnrichmentOrchestrator:
     Each adapter must expose:
       - supported_types: set[IOCType] — types handled by this adapter
       - lookup(ioc): IOC -> EnrichmentResult | EnrichmentError
+      - requires_api_key: bool — True if the provider needs an API key
+
+    Per-provider semaphores cap rate-limited providers independently of zero-auth
+    providers, ensuring VT rate limits do not starve Shodan, DNS, ip-api, etc.
 
     The thread pool (max_workers=20 default) is intentionally large so that
     zero-auth providers are never blocked by rate-limited providers.
@@ -50,19 +61,17 @@ class EnrichmentOrchestrator:
     the real concurrency gate — they cap API-key providers at 4 by default.
 
     Args:
-        adapters:             List of adapter objects. Each IOC is dispatched to
-                              every adapter whose supported_types includes the IOC's
-                              type.
-        max_workers:          Thread pool size. Intentionally generous (default 20)
-                              so zero-auth providers always have threads available.
-                              The semaphore, not the pool, caps rate-limited providers.
-        max_jobs:             Maximum number of job status entries to retain. Oldest
-                              entries are evicted via FIFO (OrderedDict) when exceeded.
-        provider_concurrency: Optional per-provider-name override for the semaphore
-                              cap. E.g. {"VirusTotal": 2} limits VT to 2 concurrent
-                              calls. Only adapters with requires_api_key=True receive
-                              a semaphore; this dict adjusts the cap value for them.
-                              Defaults to {} (all API-key providers capped at 4).
+        adapters:             List of adapter objects. Each IOC is dispatched to every
+                              adapter whose supported_types includes the IOC's type.
+        max_workers:          Maximum number of concurrent worker threads. Default 20 so
+                              the thread pool is not the bottleneck; semaphores are the
+                              real concurrency gate for rate-limited providers.
+        max_jobs:             Maximum number of job status entries to retain. Oldest entries
+                              are evicted via FIFO (OrderedDict) when limit is exceeded.
+        provider_concurrency: Optional per-provider concurrency override dict, keyed by
+                              adapter name. For any requires_api_key=True adapter not in
+                              this dict, the default cap of 4 is used. Zero-auth adapters
+                              are always uncapped regardless of this dict.
     """
 
     def __init__(
@@ -83,16 +92,15 @@ class EnrichmentOrchestrator:
         self._cache_ttl_seconds = cache_ttl_seconds
         self._cached_markers: dict[str, str] = {}
 
-        # Build per-provider semaphores for API-key-required adapters.
-        # Zero-auth adapters are intentionally excluded — they run ungated.
-        _concurrency_overrides = provider_concurrency or {}
-        self._semaphores: dict[str, threading.Semaphore] = {}
-        for adapter in self._adapters:
-            if getattr(adapter, "requires_api_key", False):
-                name = adapter.name
-                if name not in self._semaphores:
-                    cap = _concurrency_overrides.get(name, 4)
-                    self._semaphores[name] = threading.Semaphore(cap)
+        # Build per-provider semaphores for adapters that require an API key.
+        # Zero-auth adapters get no semaphore (unrestricted concurrency).
+        concurrency = provider_concurrency or {}
+        self._semaphores: dict[str, Semaphore] = {}
+        for adapter in adapters:
+            name = getattr(adapter, "name", "")
+            if getattr(adapter, "requires_api_key", False) and name:
+                limit = concurrency.get(name, 4)  # default cap: 4 for key-required providers
+                self._semaphores[name] = Semaphore(limit)
 
     def enrich_all(self, job_id: str, iocs: list[IOC]) -> None:
         """Enrich all enrichable IOCs in parallel across all matching adapters.
@@ -172,16 +180,14 @@ class EnrichmentOrchestrator:
         return "429" in error_lower or "rate limit" in error_lower
 
     def _do_lookup(self, adapter: Any, ioc: IOC) -> EnrichmentResult | EnrichmentError:
-        """Look up a single IOC via a specific adapter, retrying once on EnrichmentError.
+        """Look up a single IOC via a specific adapter, with per-provider semaphore gating.
 
-        Checks cache before calling adapter. Stores successful results in cache.
-        If the adapter has a semaphore (requires_api_key=True), the entire
-        lookup+retry body is executed while holding that semaphore so that
-        concurrent calls to the same rate-limited provider are capped.
+        Acquires the provider's semaphore (if one exists) before entering the lookup+retry
+        cycle, holding it for the full duration. This ensures requires_api_key providers
+        never exceed their configured concurrency cap while zero-auth providers run freely.
 
-        Calls adapter.lookup(ioc). If the result is an EnrichmentError,
-        retries the lookup exactly once and returns the second result regardless
-        of success or failure.
+        The semaphore wraps the *entire* cache-check + lookup + retry cycle (not per-attempt)
+        to avoid re-entrant deadlock on single-threaded semaphore exhaustion.
 
         Args:
             adapter: The adapter to use for this lookup.
@@ -193,26 +199,30 @@ class EnrichmentOrchestrator:
         """
         provider_name = getattr(adapter, "name", "")
         sem = self._semaphores.get(provider_name)
-
         if sem is not None:
             with sem:
-                return self._do_lookup_body(adapter, ioc, provider_name)
-        else:
-            return self._do_lookup_body(adapter, ioc, provider_name)
+                return self._do_lookup_inner(adapter, ioc, provider_name)
+        return self._do_lookup_inner(adapter, ioc, provider_name)
 
-    def _do_lookup_body(self, adapter: Any, ioc: IOC, provider_name: str) -> EnrichmentResult | EnrichmentError:
-        """Inner lookup+retry body, extracted so semaphore wrapping is clean.
+    def _do_lookup_inner(
+        self, adapter: Any, ioc: IOC, provider_name: str
+    ) -> EnrichmentResult | EnrichmentError:
+        """Execute the actual cache-check, lookup, retry, and cache-store cycle.
 
-        Called by _do_lookup either inside a semaphore context (for API-key
-        providers) or directly (for zero-auth providers).
+        Called by _do_lookup, optionally under a provider semaphore. Separated to
+        keep semaphore acquisition and lookup logic distinct.
+
+        Checks cache before calling adapter. Stores successful results in cache.
+        Retries exactly once on EnrichmentError; returns second result regardless.
 
         Args:
-            adapter:       The adapter to use.
+            adapter:       The adapter to use for this lookup.
             ioc:           The IOC to enrich.
-            provider_name: Pre-resolved adapter name string.
+            provider_name: Pre-resolved adapter name (avoids repeated getattr).
 
         Returns:
-            EnrichmentResult on success, EnrichmentError after two failures.
+            EnrichmentResult on success (first or retry attempt).
+            EnrichmentError if both attempts fail.
         """
         # Check cache
         if self._cache is not None and provider_name:
@@ -236,21 +246,27 @@ class EnrichmentOrchestrator:
         result = adapter.lookup(ioc)
         if isinstance(result, EnrichmentError):
             if self._is_rate_limit_error(result):
-                # Rate-limit (429): exponential backoff, up to 2 retries (3 total attempts).
-                # The semaphore is intentionally held during backoff sleeps — a backing-off
-                # request still occupies its concurrency slot.
-                for attempt in range(1, 3):  # attempt 1 and 2
-                    delay = (15 * (2 ** (attempt - 1))) + random.uniform(0, 2)
+                # 429: exponential backoff with jitter, up to _MAX_RATE_LIMIT_RETRIES
+                for attempt in range(1, _MAX_RATE_LIMIT_RETRIES + 1):
+                    delay = (
+                        _BACKOFF_BASE * (_BACKOFF_MULTIPLIER ** (attempt - 1))
+                        + random.uniform(0, _BACKOFF_JITTER)
+                    )
                     logger.warning(
-                        "Rate limit from %s for %s, attempt %d/3, backoff %.1fs",
-                        provider_name, ioc.value, attempt + 1, delay,
+                        "Rate limit (429) from %s for %s — backoff attempt %d, sleeping %.1fs",
+                        provider_name,
+                        ioc.value,
+                        attempt,
+                        delay,
                     )
                     time.sleep(delay)
                     result = adapter.lookup(ioc)
-                    if not isinstance(result, EnrichmentError) or not self._is_rate_limit_error(result):
+                    if not isinstance(result, EnrichmentError):
                         break
+                    if not self._is_rate_limit_error(result):
+                        break  # different error on retry — stop 429-backoff loop
             else:
-                # Non-rate-limit error: immediate single retry (existing behavior).
+                # Non-429 error: single immediate retry (existing behavior)
                 result = adapter.lookup(ioc)
 
         # Store successful results in cache

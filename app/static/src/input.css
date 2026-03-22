@@ -1233,35 +1233,6 @@
         white-space: nowrap;
     }
 
-    /* ---- Phase 4 Results UX — Consensus badge ---- */
-
-    .consensus-badge {
-        font-size: 0.75rem;
-        font-weight: 600;
-        padding: 0.125rem 0.5rem;
-        border-radius: var(--radius-sm);
-        white-space: nowrap;
-        flex-shrink: 0;
-    }
-
-    .consensus-badge--green {
-        color: var(--verdict-clean-text);
-        background-color: var(--verdict-clean-bg);
-        border: 1px solid var(--verdict-clean-border);
-    }
-
-    .consensus-badge--yellow {
-        color: var(--verdict-suspicious-text);
-        background-color: var(--verdict-suspicious-bg);
-        border: 1px solid var(--verdict-suspicious-border);
-    }
-
-    .consensus-badge--red {
-        color: var(--verdict-malicious-text);
-        background-color: var(--verdict-malicious-bg);
-        border: 1px solid var(--verdict-malicious-border);
-    }
-
     /* ---- Phase 4 Results UX — Verdict micro-bar ---- */
 
     .verdict-micro-bar {

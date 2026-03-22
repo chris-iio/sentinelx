@@ -1,12 +1,13 @@
 """IOC classifier — deterministic type detection from normalized strings.
 
-Classifies a normalized IOC string into one of eight IOCType values using
+Classifies a normalized IOC string into one of nine IOCType values using
 compiled regex patterns in strict precedence order. Returns an IOC dataclass
 or None if the string cannot be classified.
 
 Security:
 - Pure function: no side effects, no network calls
 - Strict precedence order prevents ambiguous classification
+- Email is checked BEFORE domain to prevent `user@evil.com` being classified as domain
 - ipaddress module used for IP validation (rejects invalid octets)
 """
 from __future__ import annotations

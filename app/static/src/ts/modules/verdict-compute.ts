@@ -63,19 +63,6 @@ export function computeConsensus(entries: VerdictEntry[]): { flagged: number; re
 }
 
 /**
- * Return the CSS modifier class for the consensus badge based on flagged count.
- * 0 flagged → green, 1-2 → yellow, 3+ → red.
- *
- * Phase 3: No longer consumed by row-factory (replaced by verdict micro-bar).
- * Kept exported for API stability.
- */
-export function consensusBadgeClass(flagged: number): string {
-  if (flagged === 0) return "consensus-badge--green";
-  if (flagged <= 2) return "consensus-badge--yellow";
-  return "consensus-badge--red";
-}
-
-/**
  * Compute attribution: find the "most detailed" provider to show in summary.
  * Heuristic: highest totalEngines wins. Ties broken by verdict severity descending.
  * Providers with no_data or error are excluded as candidates.

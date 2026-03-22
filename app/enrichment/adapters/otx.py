@@ -26,7 +26,7 @@ Verdict from pulse_info.count:
 
 404 response -> no_data (not an error) — MUST be checked BEFORE raise_for_status.
 
-Supports ALL 8 IOCType values including CVE (the first CVE-capable provider).
+Supports 8 IOCType values (all except EMAIL) including CVE (the first CVE-capable provider).
 
 Thread safety: a fresh requests.get call is used per lookup() call (no shared Session).
 """
@@ -66,8 +66,9 @@ _SUSPICIOUS_MIN = 1       # pulse_info.count >= this -> suspicious (below malici
 class OTXAdapter:
     """Adapter for the OTX AlienVault v1 API.
 
-    Supports all 8 IOC types including CVE — the first CVE-capable provider
-    in SentinelX. Uses GET requests with X-OTX-API-KEY header.
+    Supports 8 IOC types (IPV4, IPV6, DOMAIN, URL, MD5, SHA1, SHA256, CVE).
+    EMAIL is intentionally excluded — OTX has no email lookup endpoint.
+    Uses GET requests with X-OTX-API-KEY header.
 
     Verdict is derived from pulse_info.count in the response:
     - count >= 5  -> malicious
@@ -82,7 +83,10 @@ class OTXAdapter:
         allowed_hosts: SSRF allowlist -- only these hostnames may be contacted.
     """
 
-    supported_types: frozenset[IOCType] = frozenset(IOCType)  # ALL enum values
+    supported_types: frozenset[IOCType] = frozenset({
+        IOCType.IPV4, IOCType.IPV6, IOCType.DOMAIN, IOCType.URL,
+        IOCType.MD5, IOCType.SHA1, IOCType.SHA256, IOCType.CVE,
+    })  # EMAIL excluded — OTX has no email lookup endpoint
     name = "OTX AlienVault"
     requires_api_key = True
 
@@ -97,9 +101,11 @@ class OTXAdapter:
     def lookup(self, ioc: IOC) -> EnrichmentResult | EnrichmentError:
         """Enrich a single IOC using the OTX AlienVault API.
 
-        Supports all 8 IOC types. Validates the OTX endpoint against the SSRF
-        allowlist before any network call. Makes a GET request with full safety
-        controls and derives verdict from pulse_info.count.
+        Supports 8 IOC types (IPV4, IPV6, DOMAIN, URL, MD5, SHA1, SHA256, CVE).
+        EMAIL is not supported — callers should check supported_types before calling.
+        Validates the OTX endpoint against the SSRF allowlist before any network call.
+        Makes a GET request with full safety controls and derives verdict from
+        pulse_info.count.
 
         Response semantics:
           - pulse_info.count >= 5 -> verdict=malicious
