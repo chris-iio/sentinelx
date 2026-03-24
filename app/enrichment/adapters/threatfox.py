@@ -200,4 +200,7 @@ class TFAdapter:
             return EnrichmentError(ioc=ioc, provider="ThreatFox", error="Connection failed")
         except Exception:
             logger.exception("Unexpected error during ThreatFox lookup for %s", ioc.value)
-            return EnrichmentError(ioc=ioc, provider="ThreatFox", error="Unexpected error during lookup")
+            return EnrichmentError(
+                ioc=ioc, provider="ThreatFox",
+                error="Unexpected error during lookup",
+            )

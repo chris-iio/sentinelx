@@ -117,7 +117,7 @@ class DnsAdapter:
             "lookup_errors": [],
         }
 
-        for rdtype, key in _RECORD_TYPES:
+        for rdtype, _key in _RECORD_TYPES:
             try:
                 answers = resolver.resolve(ioc.value, rdtype)
                 if rdtype == "A":

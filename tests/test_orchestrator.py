@@ -455,7 +455,7 @@ class TestPerProviderSemaphore:
             adapters=[vt_adapter, dns_adapter], max_workers=20
         )
         orchestrator.enrich_all("job-dns-free", iocs)
-        elapsed = time.monotonic() - start
+        _ = time.monotonic() - start
 
         status = orchestrator.get_status("job-dns-free")
         # All 16 results must be present (8 VT + 8 DNS)

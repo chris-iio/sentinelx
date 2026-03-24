@@ -244,4 +244,7 @@ class VTAdapter:
             return EnrichmentError(ioc=ioc, provider="VirusTotal", error="Connection failed")
         except Exception:
             logger.exception("Unexpected error during VT lookup for %s", ioc.value)
-            return EnrichmentError(ioc=ioc, provider="VirusTotal", error="Unexpected error during lookup")
+            return EnrichmentError(
+                ioc=ioc, provider="VirusTotal",
+                error="Unexpected error during lookup",
+            )

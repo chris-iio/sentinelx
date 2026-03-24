@@ -28,6 +28,10 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock, Semaphore
 from typing import Any
 
+from app.cache.store import CacheStore
+from app.enrichment.models import EnrichmentError, EnrichmentResult
+from app.pipeline.models import IOC
+
 logger = logging.getLogger(__name__)
 
 # 429 / rate-limit backoff parameters
@@ -35,10 +39,6 @@ _BACKOFF_BASE = 15            # seconds for first retry delay
 _BACKOFF_MULTIPLIER = 2       # exponential factor per subsequent retry
 _BACKOFF_JITTER = 2.0         # max random jitter added to each delay (seconds)
 _MAX_RATE_LIMIT_RETRIES = 2   # extra retries on 429 (3 total attempts)
-
-from app.cache.store import CacheStore
-from app.enrichment.models import EnrichmentError, EnrichmentResult
-from app.pipeline.models import IOC
 
 
 class EnrichmentOrchestrator:
@@ -223,7 +223,7 @@ class EnrichmentOrchestrator:
             for attempt in range(1, _MAX_RATE_LIMIT_RETRIES + 1):
                 delay = (
                     _BACKOFF_BASE * (_BACKOFF_MULTIPLIER ** (attempt - 1))
-                    + random.uniform(0, _BACKOFF_JITTER)
+                    + random.uniform(0, _BACKOFF_JITTER)  # noqa: S311
                 )
                 logger.warning(
                     "Rate limit (429) from %s for %s — backoff attempt %d, sleeping %.1fs",
@@ -320,16 +320,6 @@ class EnrichmentOrchestrator:
             )
 
         return result
-
-    def _do_lookup_inner(
-        self, adapter: Any, ioc: IOC, provider_name: str
-    ) -> EnrichmentResult | EnrichmentError:
-        """Deprecated shim — delegates to _single_attempt().
-
-        Kept for backward compatibility with any code that calls this method directly.
-        _do_lookup() now manages the semaphore and retry loop itself.
-        """
-        return self._single_attempt(adapter, ioc, provider_name)
 
     def _is_rate_limit_error(self, result: Any) -> bool:
         """Return True if *result* is a rate-limit (429) EnrichmentError.

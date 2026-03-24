@@ -18,7 +18,6 @@ All HTTP calls are mocked using unittest.mock — no real API calls.
 """
 from __future__ import annotations
 
-import json
 from unittest.mock import MagicMock
 
 import requests

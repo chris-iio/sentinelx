@@ -1,13 +1,11 @@
 /**
  * Unit tests for verdict-compute.ts pure functions.
  *
- * Covers: computeWorstVerdict, computeConsensus,
- *         computeAttribution, findWorstEntry.
+ * Covers: computeWorstVerdict, computeAttribution, findWorstEntry.
  */
 
 import {
   computeWorstVerdict,
-  computeConsensus,
   computeAttribution,
   findWorstEntry,
   type VerdictEntry,
@@ -70,50 +68,6 @@ describe("computeWorstVerdict", () => {
 
   it("known_good alone returns known_good", () => {
     expect(computeWorstVerdict([entry({ provider: "NSRL", verdict: "known_good" })])).toBe("known_good");
-  });
-});
-
-/* ------------------------------------------------------------------ */
-/*  computeConsensus                                                   */
-/* ------------------------------------------------------------------ */
-
-describe("computeConsensus", () => {
-  it("returns {flagged:0, responded:0} for an empty array", () => {
-    expect(computeConsensus([])).toEqual({ flagged: 0, responded: 0 });
-  });
-
-  it("counts clean entries as responded but not flagged", () => {
-    const entries = [
-      entry({ provider: "VT", verdict: "clean" }),
-      entry({ provider: "TF", verdict: "clean" }),
-    ];
-    expect(computeConsensus(entries)).toEqual({ flagged: 0, responded: 2 });
-  });
-
-  it("counts malicious and suspicious as both flagged and responded", () => {
-    const entries = [
-      entry({ provider: "VT", verdict: "malicious" }),
-      entry({ provider: "TF", verdict: "suspicious" }),
-    ];
-    expect(computeConsensus(entries)).toEqual({ flagged: 2, responded: 2 });
-  });
-
-  it("excludes no_data and error from both counts", () => {
-    const entries = [
-      entry({ provider: "VT", verdict: "malicious" }),
-      entry({ provider: "MB", verdict: "no_data" }),
-      entry({ provider: "TF", verdict: "error" }),
-      entry({ provider: "SB", verdict: "clean" }),
-    ];
-    expect(computeConsensus(entries)).toEqual({ flagged: 1, responded: 2 });
-  });
-
-  it("all no_data/error entries → {flagged:0, responded:0}", () => {
-    const entries = [
-      entry({ provider: "VT", verdict: "no_data" }),
-      entry({ provider: "MB", verdict: "error" }),
-    ];
-    expect(computeConsensus(entries)).toEqual({ flagged: 0, responded: 0 });
   });
 });
 

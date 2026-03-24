@@ -12,7 +12,7 @@ All DNS calls are mocked using unittest.mock.patch -- no real DNS queries.
 """
 from __future__ import annotations
 
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import dns.exception
 import dns.resolver
@@ -735,7 +735,7 @@ class TestResolverLifetime:
     def test_resolver_lifetime_set_to_5_seconds(self) -> None:
         """resolver.lifetime must be set to 5.0 (not the HTTP TIMEOUT tuple)."""
         mock_resolver = _full_mock_resolver()
-        with patch("dns.resolver.Resolver", return_value=mock_resolver) as mock_cls:
+        with patch("dns.resolver.Resolver", return_value=mock_resolver):
             _make_adapter().lookup(DOMAIN_IOC)
 
         # Confirm lifetime was set to 5.0

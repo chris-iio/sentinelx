@@ -46,7 +46,7 @@ def test_no_safe_filter_in_templates():
                 violations.append(f"{template_file.name}:{line_no}: {line.strip()}")
 
     assert violations == [], (
-        f"Found |safe filter in templates (XSS risk):\n"
+        "Found |safe filter in templates (XSS risk):\n"
         + "\n".join(violations)
     )
 
@@ -96,6 +96,6 @@ def test_no_ioc_value_in_outbound_url():
                         )
 
     assert violations == [], (
-        f"Found IOC value used in URL construction (SSRF risk):\n"
+        "Found IOC value used in URL construction (SSRF risk):\n"
         + "\n".join(violations)
     )

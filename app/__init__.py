@@ -93,7 +93,9 @@ def create_app(config_override: dict | None = None) -> Flask:
         response.headers["X-Frame-Options"] = "SAMEORIGIN"
         response.headers["Referrer-Policy"] = "no-referrer"
         # SEC-20: Restrict browser features not needed by this app
-        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), payment=()"
+        response.headers["Permissions-Policy"] = (
+            "camera=(), microphone=(), geolocation=(), payment=()"
+        )
         return response
 
     # SEC-12: User-friendly 413 response with size limit stated

@@ -302,7 +302,6 @@ def test_analyze_online_creates_all_three_adapters(client):
 
 def test_enrichable_count_multi_provider(client):
     """SHA256 hash IOC yields enrichable_count=3 (VT + MB + TF all support hashes)."""
-    from app.pipeline.models import IOCType
 
     with (
         patch("app.routes.build_registry") as mock_build_registry,
@@ -505,7 +504,6 @@ def test_enrichment_error_serialization(client):
 
 def _make_three_result_orchestrator():
     """Return a mock orchestrator with 3 completed results for cursor tests."""
-    import app.routes as routes_module
     from app.enrichment.models import EnrichmentResult
     from app.pipeline.models import IOC, IOCType
 

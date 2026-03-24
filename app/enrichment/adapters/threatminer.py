@@ -9,8 +9,10 @@ Provides passive DNS history (IP/domain lookups) and related malware sample hash
   - SEC-16: SSRF allowlist enforced via validate_endpoint() before every network call
 
 ThreatMiner API v2 behavior:
-  - GET https://api.threatminer.org/v2/host.php?q={ip}&rt=2    -> IP passive DNS (domains that resolved to IP)
-  - GET https://api.threatminer.org/v2/domain.php?q={domain}&rt=2 -> Domain passive DNS (IPs domain resolved to)
+  - GET https://api.threatminer.org/v2/host.php?q={ip}&rt=2
+    -> IP passive DNS (domains that resolved to IP)
+  - GET https://api.threatminer.org/v2/domain.php?q={domain}&rt=2
+    -> Domain passive DNS (IPs domain resolved to)
   - GET https://api.threatminer.org/v2/domain.php?q={domain}&rt=4 -> Domain related samples
   - GET https://api.threatminer.org/v2/sample.php?q={hash}&rt=4   -> Hash related samples
   - HTTP 200 + body status_code "200": Results found
@@ -69,7 +71,8 @@ class ThreatMinerAdapter:
                   Results merged into single raw_stats dict.
       - MD5/SHA1/SHA256 -> sample.php rt=4 (related samples: hashes related to this sample)
 
-    All responses produce verdict=no_data — ThreatMiner data is analyst context, not threat detection.
+    All responses produce verdict=no_data — ThreatMiner data is
+    analyst context, not threat detection.
 
     Rate limit: 10 requests/minute. Exceeding returns HTTP 429 -> EnrichmentError("HTTP 429").
     For domain IOCs (2 calls), if the first call hits 429, the second is skipped.
@@ -188,7 +191,8 @@ class ThreatMinerAdapter:
             ioc: An IPV4 or IPV6 IOC.
 
         Returns:
-            EnrichmentResult with raw_stats={"passive_dns": ["domain1.com", ...]} (capped at _MAX_HOSTS).
+            EnrichmentResult with raw_stats={"passive_dns": ["domain1.com", ...]}
+            (capped at _MAX_HOSTS).
             raw_stats={} if body status_code is "404" or results are empty.
             EnrichmentError on network/SSRF failure.
         """
@@ -297,7 +301,8 @@ class ThreatMinerAdapter:
             ioc: An MD5, SHA1, or SHA256 IOC.
 
         Returns:
-            EnrichmentResult with raw_stats={"samples": ["sha256hash", ...]} (capped at _MAX_SAMPLES).
+            EnrichmentResult with raw_stats={"samples": ["sha256hash", ...]}
+            (capped at _MAX_SAMPLES).
             raw_stats={} if body status_code is "404" or results are empty.
             EnrichmentError on network/SSRF failure.
         """

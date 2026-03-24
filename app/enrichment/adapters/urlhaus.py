@@ -12,7 +12,8 @@ URLhaus API behavior (all endpoints are POST with form-encoded bodies):
   - POST /v1/host/     {"host": value}       Auth-Key header required
   - POST /v1/payload/  {"md5_hash": value}   Auth-Key header required
   - POST /v1/payload/  {"sha256_hash": value} Auth-Key header required
-  - All endpoints return HTTP 200 (not 404) for missing data — "no_results"/"no_result" in query_status
+  - All endpoints return HTTP 200 (not 404) for missing data —
+    "no_results"/"no_result" in query_status
   - Auth-Key header contains the API key
 
 Verdict logic:

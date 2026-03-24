@@ -97,7 +97,7 @@ def build_registry(
     """Build and return a ProviderRegistry with all 14 providers registered.
 
     Reads API keys from ConfigStore for key-requiring providers. Zero-auth providers
-    (Shodan InternetDB, CIRCL Hashlookup, ip-api.com IP Context, DNS Records,
+    (Shodan InternetDB, CIRCL Hashlookup, ipinfo.io IP Context, DNS Records,
     Cert History, ThreatMiner, ASN Intel) are registered unconditionally — they are
     always is_configured() == True.
 
@@ -111,7 +111,7 @@ def build_registry(
         - GreyNoise         (requires key — via get_provider_key("greynoise"))
         - AbuseIPDB         (requires key — via get_provider_key("abuseipdb"))
         - CIRCL Hashlookup  (zero-auth — NSRL known-good hash detection)
-        - IP Context        (zero-auth — GeoIP/rDNS/proxy flags via ip-api.com)
+        - IP Context        (zero-auth — GeoIP/rDNS via ipinfo.io)
         - DNS Records       (zero-auth — live DNS resolution via dnspython)
         - Cert History      (zero-auth — certificate transparency via crt.sh)
         - ThreatMiner       (zero-auth — passive DNS and related samples via ThreatMiner)

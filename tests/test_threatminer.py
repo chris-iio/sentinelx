@@ -18,7 +18,7 @@ ThreatMiner API behavior:
 """
 from __future__ import annotations
 
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import requests
 import requests.exceptions
@@ -370,7 +370,7 @@ class TestIPLookup:
             adapter = _make_adapter()
             adapter._session = MagicMock()
             adapter._session.get.return_value = _mock_get_returning(NO_DATA_RESPONSE)
-            result = adapter.lookup(ioc)
+            adapter.lookup(ioc)
 
         called_url = adapter._session.get.call_args.args[0]
         assert "host.php" in called_url, f"Expected host.php for IPv6, got: {called_url}"

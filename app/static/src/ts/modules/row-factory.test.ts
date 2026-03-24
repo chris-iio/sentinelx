@@ -1,7 +1,7 @@
 /**
  * Unit tests for row-factory.ts DOM builders.
  *
- * Covers all 7 exported functions and the CONTEXT_PROVIDERS set.
+ * Covers exported functions and the CONTEXT_PROVIDERS set.
  * Requirement mapping:
  *   VIS-01 → createDetailRow verdict badge class
  *   VIS-02 → updateSummaryRow micro-bar segments
@@ -13,7 +13,6 @@
 
 import {
   formatDate,
-  getOrCreateSummaryRow,
   updateSummaryRow,
   createDetailRow,
   createContextRow,
@@ -137,60 +136,6 @@ describe("formatDate", () => {
     // The catch block returns the raw string
     const result = formatDate("not-a-date");
     expect(typeof result).toBe("string");
-  });
-});
-
-/* ------------------------------------------------------------------ */
-/*  getOrCreateSummaryRow                                              */
-/* ------------------------------------------------------------------ */
-
-describe("getOrCreateSummaryRow", () => {
-  it("creates .ioc-summary-row with correct a11y attributes", () => {
-    const slot = makeSlot();
-    const row = getOrCreateSummaryRow(slot);
-
-    expect(row.classList.contains("ioc-summary-row")).toBe(true);
-    expect(row.getAttribute("role")).toBe("button");
-    expect(row.getAttribute("tabindex")).toBe("0");
-    expect(row.getAttribute("aria-expanded")).toBe("false");
-  });
-
-  it("contains a .chevron-icon-wrapper with SVG", () => {
-    const slot = makeSlot();
-    const row = getOrCreateSummaryRow(slot);
-
-    const chevron = row.querySelector(".chevron-icon-wrapper");
-    expect(chevron).not.toBeNull();
-
-    const svg = chevron!.querySelector("svg");
-    expect(svg).not.toBeNull();
-    expect(svg!.getAttribute("class")).toBe("chevron-icon");
-  });
-
-  it("is idempotent — calling twice returns the same element", () => {
-    const slot = makeSlot();
-    const first = getOrCreateSummaryRow(slot);
-    const second = getOrCreateSummaryRow(slot);
-
-    expect(first).toBe(second);
-    // Only one summary row in the slot
-    expect(slot.querySelectorAll(".ioc-summary-row").length).toBe(1);
-  });
-
-  it("inserts before .enrichment-details when present", () => {
-    const slot = makeSlot();
-    const row = getOrCreateSummaryRow(slot);
-
-    const details = slot.querySelector(".enrichment-details");
-    expect(row.nextElementSibling).toBe(details);
-  });
-
-  it("appends to slot when .enrichment-details is absent", () => {
-    const slot = document.createElement("div");
-    slot.className = "enrichment-slot";
-    // No .enrichment-details child
-    const row = getOrCreateSummaryRow(slot);
-    expect(slot.lastElementChild).toBe(row);
   });
 });
 

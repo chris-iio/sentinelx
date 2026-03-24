@@ -50,6 +50,9 @@ tools/
 # Node.js (not used — Tailwind standalone CLI only)
 node_modules/
 
+# TypeScript incremental build cache
+tsconfig.tsbuildinfo
+
 # Source maps (generated locally via make js-dev or js-watch)
 app/static/dist/*.map
 

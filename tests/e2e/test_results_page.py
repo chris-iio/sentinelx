@@ -452,7 +452,7 @@ def test_email_ioc_card_renders(page: Page, index_url: str) -> None:
 
     email_cards = results.cards_for_type("email")
     assert email_cards.count() >= 1, (
-        f"Expected at least 1 .ioc-card[data-ioc-type='email'], got 0"
+        "Expected at least 1 .ioc-card[data-ioc-type='email'], got 0"
     )
 
 

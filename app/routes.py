@@ -25,7 +25,10 @@ import uuid
 from collections import OrderedDict
 from threading import Lock, Thread
 
-from flask import Blueprint, abort, current_app, flash, jsonify, redirect, render_template, request, url_for
+from flask import (
+    Blueprint, abort, current_app, flash, jsonify,
+    redirect, render_template, request, url_for,
+)
 
 from app import limiter
 from app.cache.store import CacheStore

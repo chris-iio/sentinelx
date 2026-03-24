@@ -8,8 +8,7 @@ All HTTP calls are mocked using unittest.mock.patch — no real API calls.
 from __future__ import annotations
 
 import base64
-import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import requests
 
