@@ -31,6 +31,7 @@ from app.pipeline.models import IOC, IOCType
 from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.enrichment.adapters.urlhaus import URLhausAdapter
 from app.enrichment.provider import Provider
+from tests.helpers import make_mock_response
 
 
 ALLOWED_HOSTS = ["urlhaus-api.abuse.ch"]
@@ -104,19 +105,6 @@ URLHAUS_PAYLOAD_NOT_FOUND_RESPONSE = {
 }
 
 
-def _make_mock_post_response(status_code: int, body: dict | None = None) -> MagicMock:
-    """Build a mock requests.Response for POST requests."""
-    mock_resp = MagicMock()
-    mock_resp.status_code = status_code
-    if body is not None:
-        raw_bytes = json.dumps(body).encode()
-        mock_resp.iter_content = MagicMock(return_value=iter([raw_bytes]))
-    if status_code >= 400:
-        http_err = requests.exceptions.HTTPError(response=mock_resp)
-        mock_resp.raise_for_status = MagicMock(side_effect=http_err)
-    else:
-        mock_resp.raise_for_status = MagicMock()
-    return mock_resp
 
 
 def _make_adapter(api_key: str = "test-api-key", allowed_hosts: list[str] | None = None) -> URLhausAdapter:
@@ -194,10 +182,12 @@ class TestURLhausLookup:
             value="http://malicious.example.com/payload.exe",
             raw_match="http://malicious.example.com/payload.exe",
         )
-        mock_resp = _make_mock_post_response(200, URLHAUS_URL_LISTED_RESPONSE)
+        mock_resp = make_mock_response(200, URLHAUS_URL_LISTED_RESPONSE)
 
-        with patch("requests.post", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.post.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult), (
             f"Expected EnrichmentResult, got {type(result).__name__}: {result!r}"
@@ -212,10 +202,12 @@ class TestURLhausLookup:
             value="http://clean.example.com/",
             raw_match="http://clean.example.com/",
         )
-        mock_resp = _make_mock_post_response(200, URLHAUS_URL_NOT_FOUND_RESPONSE)
+        mock_resp = make_mock_response(200, URLHAUS_URL_NOT_FOUND_RESPONSE)
 
-        with patch("requests.post", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.post.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert result.verdict == "no_data"
@@ -223,10 +215,12 @@ class TestURLhausLookup:
     def test_ip_host_with_urls_count_returns_malicious(self) -> None:
         """IPv4 IOC with query_status='ok' and urls_count > 0 -> verdict=malicious."""
         ioc = IOC(type=IOCType.IPV4, value="1.2.3.4", raw_match="1.2.3.4")
-        mock_resp = _make_mock_post_response(200, URLHAUS_HOST_MALICIOUS_RESPONSE)
+        mock_resp = make_mock_response(200, URLHAUS_HOST_MALICIOUS_RESPONSE)
 
-        with patch("requests.post", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.post.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert result.verdict == "malicious"
@@ -234,10 +228,12 @@ class TestURLhausLookup:
     def test_ip_host_with_zero_urls_returns_no_data(self) -> None:
         """IPv4 IOC with query_status='ok' and urls_count=0 -> verdict=no_data."""
         ioc = IOC(type=IOCType.IPV4, value="10.0.0.1", raw_match="10.0.0.1")
-        mock_resp = _make_mock_post_response(200, URLHAUS_HOST_CLEAN_RESPONSE)
+        mock_resp = make_mock_response(200, URLHAUS_HOST_CLEAN_RESPONSE)
 
-        with patch("requests.post", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.post.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert result.verdict == "no_data"
@@ -245,10 +241,12 @@ class TestURLhausLookup:
     def test_ip_host_no_results_returns_no_data(self) -> None:
         """IPv4 IOC with query_status='no_results' -> verdict=no_data."""
         ioc = IOC(type=IOCType.IPV4, value="192.0.2.1", raw_match="192.0.2.1")
-        mock_resp = _make_mock_post_response(200, URLHAUS_HOST_NO_RESULTS_RESPONSE)
+        mock_resp = make_mock_response(200, URLHAUS_HOST_NO_RESULTS_RESPONSE)
 
-        with patch("requests.post", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.post.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert result.verdict == "no_data"
@@ -256,23 +254,27 @@ class TestURLhausLookup:
     def test_domain_uses_host_endpoint(self) -> None:
         """DOMAIN IOC -> POST to /v1/host/ endpoint."""
         ioc = IOC(type=IOCType.DOMAIN, value="evil.example.com", raw_match="evil.example.com")
-        mock_resp = _make_mock_post_response(200, URLHAUS_HOST_MALICIOUS_RESPONSE)
+        mock_resp = make_mock_response(200, URLHAUS_HOST_MALICIOUS_RESPONSE)
 
-        with patch("requests.post", return_value=mock_resp) as mock_post:
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.post.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
-        call_url = mock_post.call_args[0][0]
+        call_url = adapter._session.post.call_args[0][0]
         assert "/v1/host/" in call_url
 
     def test_md5_payload_lookup_returns_malicious(self) -> None:
         """MD5 IOC with query_status='ok' -> verdict=malicious."""
         md5 = "a" * 32
         ioc = IOC(type=IOCType.MD5, value=md5, raw_match=md5)
-        mock_resp = _make_mock_post_response(200, URLHAUS_PAYLOAD_MD5_RESPONSE)
+        mock_resp = make_mock_response(200, URLHAUS_PAYLOAD_MD5_RESPONSE)
 
-        with patch("requests.post", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.post.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert result.verdict == "malicious"
@@ -281,10 +283,12 @@ class TestURLhausLookup:
         """SHA256 IOC with query_status='ok' -> verdict=malicious."""
         sha256 = "b" * 64
         ioc = IOC(type=IOCType.SHA256, value=sha256, raw_match=sha256)
-        mock_resp = _make_mock_post_response(200, URLHAUS_PAYLOAD_SHA256_RESPONSE)
+        mock_resp = make_mock_response(200, URLHAUS_PAYLOAD_SHA256_RESPONSE)
 
-        with patch("requests.post", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.post.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert result.verdict == "malicious"
@@ -296,10 +300,12 @@ class TestURLhausLookup:
             value="http://malicious.example.com/payload.exe",
             raw_match="http://malicious.example.com/payload.exe",
         )
-        mock_resp = _make_mock_post_response(200, URLHAUS_URL_LISTED_RESPONSE)
+        mock_resp = make_mock_response(200, URLHAUS_URL_LISTED_RESPONSE)
 
-        with patch("requests.post", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.post.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         for key in ("query_status", "urls_count", "tags", "blacklists"):
@@ -312,30 +318,23 @@ class TestURLhausLookup:
             value="http://malicious.example.com/payload.exe",
             raw_match="http://malicious.example.com/payload.exe",
         )
-        mock_resp = _make_mock_post_response(200, URLHAUS_URL_LISTED_RESPONSE)
+        mock_resp = make_mock_response(200, URLHAUS_URL_LISTED_RESPONSE)
 
-        with patch("requests.post", return_value=mock_resp) as mock_post:
-            _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.post.return_value = mock_resp
+        adapter.lookup(ioc)
 
         # Must use 'data=' keyword arg (form-encoded), NOT 'json='
-        call_kwargs = mock_post.call_args[1]
+        call_kwargs = adapter._session.post.call_args[1]
         assert "data" in call_kwargs, "URLhaus POST must use data= (form-encoded body)"
         assert "json" not in call_kwargs, "URLhaus POST must NOT use json= parameter"
 
     def test_url_post_sends_auth_key_header(self) -> None:
         """URLhaus POST must include Auth-Key header with the API key."""
-        ioc = IOC(
-            type=IOCType.URL,
-            value="http://malicious.example.com/payload.exe",
-            raw_match="http://malicious.example.com/payload.exe",
-        )
-        mock_resp = _make_mock_post_response(200, URLHAUS_URL_LISTED_RESPONSE)
-
-        with patch("requests.post", return_value=mock_resp) as mock_post:
-            _make_adapter(api_key="my-secret-key").lookup(ioc)
-
-        call_kwargs = mock_post.call_args[1]
-        headers = call_kwargs.get("headers", {})
+        # Headers are set on the persistent session in __init__
+        adapter = _make_adapter(api_key="my-secret-key")
+        headers = dict(adapter._session.headers)
         assert "Auth-Key" in headers, "URLhaus POST must include Auth-Key header"
         assert headers["Auth-Key"] == "my-secret-key"
 
@@ -343,10 +342,12 @@ class TestURLhausLookup:
         """IPv6 IOC -> POST to /v1/host/ endpoint, can return malicious."""
         ipv6 = "2001:db8::1"
         ioc = IOC(type=IOCType.IPV6, value=ipv6, raw_match=ipv6)
-        mock_resp = _make_mock_post_response(200, URLHAUS_HOST_MALICIOUS_RESPONSE)
+        mock_resp = make_mock_response(200, URLHAUS_HOST_MALICIOUS_RESPONSE)
 
-        with patch("requests.post", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.post.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
 
@@ -354,10 +355,12 @@ class TestURLhausLookup:
         """MD5 IOC with query_status='no_result' -> verdict=no_data."""
         md5 = "c" * 32
         ioc = IOC(type=IOCType.MD5, value=md5, raw_match=md5)
-        mock_resp = _make_mock_post_response(200, URLHAUS_PAYLOAD_NOT_FOUND_RESPONSE)
+        mock_resp = make_mock_response(200, URLHAUS_PAYLOAD_NOT_FOUND_RESPONSE)
 
-        with patch("requests.post", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.post.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert result.verdict == "no_data"
@@ -392,8 +395,10 @@ class TestURLhausErrors:
             raw_match="http://malicious.example.com/payload.exe",
         )
 
-        with patch("requests.post", side_effect=requests.exceptions.Timeout("timed out")):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.post.side_effect = requests.exceptions.Timeout("timed out")
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentError)
         assert result.provider == "URLhaus"
@@ -406,10 +411,12 @@ class TestURLhausErrors:
             value="http://malicious.example.com/payload.exe",
             raw_match="http://malicious.example.com/payload.exe",
         )
-        mock_resp = _make_mock_post_response(500)
+        mock_resp = make_mock_response(500)
 
-        with patch("requests.post", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.post.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentError)
         assert result.provider == "URLhaus"
@@ -422,10 +429,12 @@ class TestURLhausErrors:
             value="http://malicious.example.com/payload.exe",
             raw_match="http://malicious.example.com/payload.exe",
         )
-        mock_resp = _make_mock_post_response(403)
+        mock_resp = make_mock_response(403)
 
-        with patch("requests.post", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.post.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentError)
         assert result.provider == "URLhaus"
@@ -440,9 +449,9 @@ class TestURLhausErrors:
         )
         adapter = URLhausAdapter(api_key="test-key", allowed_hosts=[])
 
-        with patch("requests.post") as mock_post:
-            mock_post.side_effect = AssertionError("Should not reach network")
-            result = adapter.lookup(ioc)
+        adapter._session = MagicMock()
+        adapter._session.post.side_effect = AssertionError("Should not reach network")
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentError), (
             "Expected EnrichmentError when host not in allowed_hosts (SSRF check)"

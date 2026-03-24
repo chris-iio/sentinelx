@@ -26,7 +26,8 @@ total_engines  = numDistinctUsers (number of distinct reporters)
 
 API key required — register at https://www.abuseipdb.com/
 
-Thread safety: a fresh requests.get call is used per lookup() call (no shared Session).
+Thread safety: a persistent requests.Session is created in __init__ and reused across
+lookup() calls (TCP connection pooling).
 """
 from __future__ import annotations
 
@@ -65,8 +66,8 @@ class AbuseIPDBAdapter:
     CRITICAL: Auth header is capital 'Key' (not lowercase 'key').
               Include 'Accept: application/json' or API may return HTML.
 
-    Thread safety: uses a standalone requests.get call per lookup() invocation.
-    No shared session state between calls.
+    Thread safety: uses a persistent requests.Session (self._session) created in __init__.
+    The session is reused across lookup() calls for TCP connection pooling.
 
     Args:
         api_key:       AbuseIPDB API key.
@@ -80,6 +81,11 @@ class AbuseIPDBAdapter:
     def __init__(self, api_key: str, allowed_hosts: list[str]) -> None:
         self._api_key = api_key
         self._allowed_hosts = allowed_hosts
+        self._session = requests.Session()
+        self._session.headers.update({
+            "Key": self._api_key,          # CRITICAL: capital 'Key' (AbuseIPDB convention)
+            "Accept": "application/json",  # Required: avoid HTML response
+        })
 
     def is_configured(self) -> bool:
         """Return True when a non-empty API key is set."""
@@ -124,7 +130,7 @@ class AbuseIPDBAdapter:
             return EnrichmentError(ioc=ioc, provider=self.name, error=str(exc))
 
         try:
-            resp = requests.get(
+            resp = self._session.get(
                 url,
                 headers={
                     "Key": self._api_key,          # CRITICAL: capital 'Key' (AbuseIPDB convention)
@@ -147,6 +153,10 @@ class AbuseIPDBAdapter:
         except requests.exceptions.HTTPError as exc:
             code = exc.response.status_code if exc.response is not None else "unknown"
             return EnrichmentError(ioc=ioc, provider=self.name, error=f"HTTP {code}")
+        except requests.exceptions.SSLError:
+            return EnrichmentError(ioc=ioc, provider=self.name, error="SSL/TLS error")
+        except requests.exceptions.ConnectionError:
+            return EnrichmentError(ioc=ioc, provider=self.name, error="Connection failed")
         except Exception:
             logger.exception(
                 "Unexpected error during AbuseIPDB lookup for %s", ioc.value

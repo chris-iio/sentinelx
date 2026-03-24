@@ -82,6 +82,23 @@ No routes.py changes needed — `provider_counts` will emit `"email": 0` which i
 - `python3 -c "from app.enrichment.adapters.otx import OTXAdapter; from app.pipeline.models import IOCType; assert IOCType.EMAIL not in OTXAdapter.supported_types; print('OTX OK')"` → prints `OTX OK`
 - `grep -q 'ioc-type-badge--email' app/static/src/input.css && echo 'CSS OK'` → prints `CSS OK`
 
+## Observability Impact
+
+**Signals changed by this task:**
+- `IOCType.EMAIL` is now a valid enum member — any code that iterates `list(IOCType)` will include it.
+- `OTXAdapter.supported_types` changes from a dynamic `frozenset(IOCType)` (all values) to an explicit frozenset of 8 types. Inspecting it now gives an accurate capability declaration with EMAIL absent.
+- The classifier's `_RE_EMAIL` pattern and position-8 branch are new code paths. A future agent can verify these are active by calling `classify("user@evil.com", "user@evil.com")` and asserting `result.type == IOCType.EMAIL`.
+
+**Inspection surface:**
+- `python3 -c "from app.pipeline.classifier import classify; print(classify('user@evil.com', 'user@evil.com'))"` — confirms live classification path.
+- `python3 -c "from app.enrichment.adapters.otx import OTXAdapter; print(sorted(t.value for t in OTXAdapter.supported_types))"` — lists OTX capabilities; EMAIL must be absent.
+
+**Failure state visibility:**
+- If this task is partially applied (enum added, OTX not fixed): importing `OTXAdapter` and calling `lookup()` on any email IOC raises `KeyError` inside `lookup()`, caught by the broad exception handler and surfaced as `EnrichmentError`. Observable via the UI's provider error display or unit test failure in `TestClassifyEmail`.
+- If the email classifier position is wrong (after domain): `TestClassifyEmail::test_email_before_domain_in_precedence` fails with `AssertionError` — the result type will be `IOCType.DOMAIN`.
+
+**No new log statements introduced** — classifier is a pure function; observability is via test assertions and Python REPL inspection.
+
 ## Inputs
 
 - `app/pipeline/models.py` — current `IOCType` enum with 8 values (IPV4 through CVE)

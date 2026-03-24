@@ -163,7 +163,7 @@ def analyze():
         provider_counts = json.dumps({
             ioc_type.value: registry.provider_count_for_type(ioc_type)
             for ioc_type in IOCType
-            if ioc_type not in (IOCType.CVE, IOCType.EMAIL)
+            if ioc_type != IOCType.CVE
         })
         provider_coverage = {
             "registered": len(registry.all()),
@@ -358,16 +358,20 @@ def enrichment_status(job_id: str):
     if status is None:
         return jsonify({"error": "job not found"}), 404
 
+    since = request.args.get("since", 0, type=int)
+
     cached_markers = orchestrator.cached_markers
     serialized_results = [
         _serialize_result(r, cached_markers) for r in status["results"]
     ]
+    sliced = serialized_results[since:]
 
     return jsonify(
         {
             "total": status["total"],
             "done": status["done"],
             "complete": status["complete"],
-            "results": serialized_results,
+            "results": sliced,
+            "next_since": len(serialized_results),
         }
     )

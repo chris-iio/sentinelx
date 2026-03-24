@@ -35,6 +35,9 @@ CREATE TABLE IF NOT EXISTS enrichment_cache (
 class CacheStore:
     """SQLite-backed enrichment result cache with TTL.
 
+    Uses a persistent connection opened at construction time and WAL journal
+    mode to allow concurrent readers without blocking writers.
+
     Args:
         db_path: Path to the SQLite database file.
                  Defaults to ~/.sentinelx/cache.db.
@@ -44,10 +47,10 @@ class CacheStore:
         self._db_path = db_path if db_path is not None else DEFAULT_DB_PATH
         self._lock = threading.Lock()
         self._db_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        conn = self._connect()
-        conn.execute(_CREATE_TABLE)
-        conn.commit()
-        conn.close()
+        self._conn = self._connect()
+        self._conn.execute("PRAGMA journal_mode=WAL")
+        self._conn.execute(_CREATE_TABLE)
+        self._conn.commit()
 
     def _connect(self) -> sqlite3.Connection:
         return sqlite3.connect(str(self._db_path), check_same_thread=False)
@@ -64,12 +67,11 @@ class CacheStore:
         Returns the result dict with an added 'cached_at' key, or None
         if not found or expired.
         """
-        with self._connect() as conn:
-            row = conn.execute(
-                "SELECT result_json, cached_at FROM enrichment_cache "
-                "WHERE ioc_value = ? AND ioc_type = ? AND provider = ?",
-                (ioc_value, ioc_type, provider),
-            ).fetchone()
+        row = self._conn.execute(
+            "SELECT result_json, cached_at FROM enrichment_cache "
+            "WHERE ioc_value = ? AND ioc_type = ? AND provider = ?",
+            (ioc_value, ioc_type, provider),
+        ).fetchone()
 
         if row is None:
             return None
@@ -96,20 +98,20 @@ class CacheStore:
         """Store or update a cached enrichment result."""
         now = datetime.datetime.now(tz=datetime.timezone.utc).isoformat()
         result_json = json.dumps(result_dict)
-        with self._lock, self._connect() as conn:
-            conn.execute(
+        with self._lock:
+            self._conn.execute(
                 "INSERT OR REPLACE INTO enrichment_cache "
                 "(ioc_value, ioc_type, provider, result_json, cached_at) "
                 "VALUES (?, ?, ?, ?, ?)",
                 (ioc_value, ioc_type, provider, result_json, now),
             )
-            conn.commit()
+            self._conn.commit()
 
     def clear(self) -> None:
         """Remove all cached entries."""
-        with self._lock, self._connect() as conn:
-            conn.execute("DELETE FROM enrichment_cache")
-            conn.commit()
+        with self._lock:
+            self._conn.execute("DELETE FROM enrichment_cache")
+            self._conn.commit()
 
     def get_all_for_ioc(self, ioc_value: str, ioc_type: str) -> list[dict]:
         """Return all cached results for one IOC across all providers.
@@ -119,12 +121,11 @@ class CacheStore:
         Returns:
             List of dicts, each with provider, cached_at, and all result fields.
         """
-        with self._connect() as conn:
-            rows = conn.execute(
-                "SELECT provider, result_json, cached_at FROM enrichment_cache "
-                "WHERE ioc_value = ? AND ioc_type = ?",
-                (ioc_value, ioc_type),
-            ).fetchall()
+        rows = self._conn.execute(
+            "SELECT provider, result_json, cached_at FROM enrichment_cache "
+            "WHERE ioc_value = ? AND ioc_type = ?",
+            (ioc_value, ioc_type),
+        ).fetchall()
 
         results: list[dict] = []
         for provider, result_json, cached_at in rows:
@@ -141,13 +142,34 @@ class CacheStore:
         Returns:
             Dict with 'total_entries' (int) and 'oldest' (ISO string or None).
         """
-        with self._connect() as conn:
-            count = conn.execute(
-                "SELECT COUNT(*) FROM enrichment_cache"
-            ).fetchone()[0]
-            oldest_row = conn.execute(
-                "SELECT MIN(cached_at) FROM enrichment_cache"
-            ).fetchone()
+        count = self._conn.execute(
+            "SELECT COUNT(*) FROM enrichment_cache"
+        ).fetchone()[0]
+        oldest_row = self._conn.execute(
+            "SELECT MIN(cached_at) FROM enrichment_cache"
+        ).fetchone()
 
         oldest = oldest_row[0] if oldest_row else None
         return {"total_entries": count, "oldest": oldest}
+
+    def purge_expired(self, ttl_seconds: int) -> int:
+        """Delete cache entries older than ttl_seconds.
+
+        Args:
+            ttl_seconds: Maximum age in seconds. Entries older than this
+                         are deleted.
+
+        Returns:
+            Number of rows deleted.
+        """
+        cutoff = (
+            datetime.datetime.now(tz=datetime.timezone.utc)
+            - datetime.timedelta(seconds=ttl_seconds)
+        ).isoformat()
+        with self._lock:
+            cursor = self._conn.execute(
+                "DELETE FROM enrichment_cache WHERE cached_at < ?",
+                (cutoff,),
+            )
+            self._conn.commit()
+            return cursor.rowcount

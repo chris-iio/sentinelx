@@ -97,11 +97,15 @@ function renderRelationshipGraph(container: HTMLElement): void {
   const edgeGroup = svgEl("g");
   edgeGroup.setAttribute("class", "graph-edges");
 
-  for (const edge of edges) {
-    const targetNode = providerNodes.find((n) => n.id === edge.to);
-    if (!targetNode) continue;
+  // Pre-built node index Map — O(1) lookup per edge instead of O(N) find+indexOf. R023.
+  const nodeIndexMap = new Map<string, number>(
+    providerNodes.map((n, i) => [n.id, i])
+  );
 
-    const idx = providerNodes.indexOf(targetNode);
+  for (const edge of edges) {
+    const idx = nodeIndexMap.get(edge.to);
+    if (idx === undefined) continue;
+
     const angle = (2 * Math.PI * idx) / providerNodes.length - Math.PI / 2;
     const px = cx + orbitRadius * Math.cos(angle);
     const py = cy + orbitRadius * Math.sin(angle);

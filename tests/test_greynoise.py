@@ -29,6 +29,7 @@ from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.enrichment.adapters.greynoise import GreyNoiseAdapter
 from app.enrichment.http_safety import MAX_RESPONSE_BYTES
 from app.enrichment.provider import Provider
+from tests.helpers import make_mock_response
 
 
 ALLOWED_HOSTS = ["api.greynoise.io"]
@@ -89,19 +90,6 @@ GREYNOISE_404_RESPONSE = {
 }
 
 
-def _make_mock_get_response(status_code: int, body: dict | None = None) -> MagicMock:
-    """Build a mock requests.Response for GET requests."""
-    mock_resp = MagicMock()
-    mock_resp.status_code = status_code
-    if body is not None:
-        raw_bytes = json.dumps(body).encode()
-        mock_resp.iter_content = MagicMock(return_value=iter([raw_bytes]))
-    if status_code >= 400:
-        http_err = requests.exceptions.HTTPError(response=mock_resp)
-        mock_resp.raise_for_status = MagicMock(side_effect=http_err)
-    else:
-        mock_resp.raise_for_status = MagicMock()
-    return mock_resp
 
 
 def _make_adapter(
@@ -168,10 +156,12 @@ class TestGreyNoiseLookup:
     def test_riot_true_returns_clean(self) -> None:
         """riot=True IP -> verdict 'clean' (known benign service like Google DNS)."""
         ioc = IOC(type=IOCType.IPV4, value="8.8.8.8", raw_match="8.8.8.8")
-        mock_resp = _make_mock_get_response(200, GREYNOISE_RIOT_RESPONSE)
+        mock_resp = make_mock_response(200, GREYNOISE_RIOT_RESPONSE)
 
-        with patch("requests.get", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult), (
             f"Expected EnrichmentResult, got {type(result).__name__}: {result!r}"
@@ -182,10 +172,12 @@ class TestGreyNoiseLookup:
     def test_classification_malicious_returns_malicious(self) -> None:
         """classification='malicious' IP -> verdict 'malicious'."""
         ioc = IOC(type=IOCType.IPV4, value="1.2.3.4", raw_match="1.2.3.4")
-        mock_resp = _make_mock_get_response(200, GREYNOISE_MALICIOUS_RESPONSE)
+        mock_resp = make_mock_response(200, GREYNOISE_MALICIOUS_RESPONSE)
 
-        with patch("requests.get", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert result.provider == "GreyNoise"
@@ -194,10 +186,12 @@ class TestGreyNoiseLookup:
     def test_noise_true_benign_classification_returns_suspicious(self) -> None:
         """noise=True and classification='benign' -> verdict 'suspicious' (mass scanner, not malicious)."""
         ioc = IOC(type=IOCType.IPV4, value="5.6.7.8", raw_match="5.6.7.8")
-        mock_resp = _make_mock_get_response(200, GREYNOISE_SUSPICIOUS_RESPONSE)
+        mock_resp = make_mock_response(200, GREYNOISE_SUSPICIOUS_RESPONSE)
 
-        with patch("requests.get", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert result.provider == "GreyNoise"
@@ -206,10 +200,12 @@ class TestGreyNoiseLookup:
     def test_noise_false_riot_false_no_classification_returns_no_data(self) -> None:
         """noise=False, riot=False, no classification -> verdict 'no_data'."""
         ioc = IOC(type=IOCType.IPV4, value="10.0.0.1", raw_match="10.0.0.1")
-        mock_resp = _make_mock_get_response(200, GREYNOISE_NO_DATA_RESPONSE)
+        mock_resp = make_mock_response(200, GREYNOISE_NO_DATA_RESPONSE)
 
-        with patch("requests.get", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert result.provider == "GreyNoise"
@@ -222,10 +218,12 @@ class TestGreyNoiseLookup:
         — not an error condition.
         """
         ioc = IOC(type=IOCType.IPV4, value="192.0.2.99", raw_match="192.0.2.99")
-        mock_resp = _make_mock_get_response(404, GREYNOISE_404_RESPONSE)
+        mock_resp = make_mock_response(404, GREYNOISE_404_RESPONSE)
 
-        with patch("requests.get", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult), (
             f"404 must return EnrichmentResult (not EnrichmentError), got {type(result).__name__}: {result!r}"
@@ -236,10 +234,12 @@ class TestGreyNoiseLookup:
     def test_404_is_not_enrichment_error(self) -> None:
         """404 response -> not isinstance EnrichmentError."""
         ioc = IOC(type=IOCType.IPV4, value="192.0.2.99", raw_match="192.0.2.99")
-        mock_resp = _make_mock_get_response(404, GREYNOISE_404_RESPONSE)
+        mock_resp = make_mock_response(404, GREYNOISE_404_RESPONSE)
 
-        with patch("requests.get", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert not isinstance(result, EnrichmentError), (
             "404 from GreyNoise is not an error — it means 'no data', not 'failure'"
@@ -258,10 +258,12 @@ class TestGreyNoiseLookup:
             "link": f"https://viz.greynoise.io/ip/{ipv6}",
             "last_seen": "2024-01-10",
         }
-        mock_resp = _make_mock_get_response(200, response_body)
+        mock_resp = make_mock_response(200, response_body)
 
-        with patch("requests.get", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert result.verdict == "malicious"
@@ -269,10 +271,12 @@ class TestGreyNoiseLookup:
     def test_raw_stats_content(self) -> None:
         """200 response -> raw_stats contains noise, riot, classification, name, link, last_seen."""
         ioc = IOC(type=IOCType.IPV4, value="8.8.8.8", raw_match="8.8.8.8")
-        mock_resp = _make_mock_get_response(200, GREYNOISE_RIOT_RESPONSE)
+        mock_resp = make_mock_response(200, GREYNOISE_RIOT_RESPONSE)
 
-        with patch("requests.get", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         for key in ("noise", "riot", "classification", "name", "link", "last_seen"):
@@ -281,10 +285,12 @@ class TestGreyNoiseLookup:
     def test_detection_count_malicious_is_one(self) -> None:
         """Malicious verdict -> detection_count=1, total_engines=1."""
         ioc = IOC(type=IOCType.IPV4, value="1.2.3.4", raw_match="1.2.3.4")
-        mock_resp = _make_mock_get_response(200, GREYNOISE_MALICIOUS_RESPONSE)
+        mock_resp = make_mock_response(200, GREYNOISE_MALICIOUS_RESPONSE)
 
-        with patch("requests.get", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert result.detection_count == 1
@@ -293,10 +299,12 @@ class TestGreyNoiseLookup:
     def test_detection_count_clean_is_zero(self) -> None:
         """Clean verdict (riot=True) -> detection_count=0, total_engines=1."""
         ioc = IOC(type=IOCType.IPV4, value="8.8.8.8", raw_match="8.8.8.8")
-        mock_resp = _make_mock_get_response(200, GREYNOISE_RIOT_RESPONSE)
+        mock_resp = make_mock_response(200, GREYNOISE_RIOT_RESPONSE)
 
-        with patch("requests.get", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert result.detection_count == 0
@@ -305,24 +313,21 @@ class TestGreyNoiseLookup:
     def test_scan_date_is_last_seen(self) -> None:
         """scan_date should equal body.last_seen value."""
         ioc = IOC(type=IOCType.IPV4, value="1.2.3.4", raw_match="1.2.3.4")
-        mock_resp = _make_mock_get_response(200, GREYNOISE_MALICIOUS_RESPONSE)
+        mock_resp = make_mock_response(200, GREYNOISE_MALICIOUS_RESPONSE)
 
-        with patch("requests.get", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert result.scan_date == GREYNOISE_MALICIOUS_RESPONSE["last_seen"]
 
     def test_auth_header_uses_lowercase_key(self) -> None:
         """CRITICAL: GreyNoise auth header must be lowercase 'key', NOT 'Key' or 'Authorization'."""
-        ioc = IOC(type=IOCType.IPV4, value="8.8.8.8", raw_match="8.8.8.8")
-        mock_resp = _make_mock_get_response(200, GREYNOISE_RIOT_RESPONSE)
-
-        with patch("requests.get", return_value=mock_resp) as mock_get:
-            _make_adapter(api_key="myapikey").lookup(ioc)
-
-        call_kwargs = mock_get.call_args.kwargs
-        headers = call_kwargs.get("headers", {})
+        # Headers are set on the persistent session in __init__
+        adapter = _make_adapter(api_key="myapikey")
+        headers = dict(adapter._session.headers)
         assert "key" in headers, (
             f"GreyNoise auth header must use lowercase 'key', got headers: {headers}"
         )
@@ -357,8 +362,10 @@ class TestGreyNoiseErrors:
         """Network timeout -> EnrichmentError with 'Timeout' in error."""
         ioc = IOC(type=IOCType.IPV4, value="8.8.8.8", raw_match="8.8.8.8")
 
-        with patch("requests.get", side_effect=requests.exceptions.Timeout("timed out")):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.side_effect = requests.exceptions.Timeout("timed out")
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentError)
         assert result.provider == "GreyNoise"
@@ -367,10 +374,12 @@ class TestGreyNoiseErrors:
     def test_http_500(self) -> None:
         """HTTP 500 -> EnrichmentError with 'HTTP 500' in error."""
         ioc = IOC(type=IOCType.IPV4, value="8.8.8.8", raw_match="8.8.8.8")
-        mock_resp = _make_mock_get_response(500)
+        mock_resp = make_mock_response(500)
 
-        with patch("requests.get", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentError)
         assert result.provider == "GreyNoise"
@@ -381,9 +390,9 @@ class TestGreyNoiseErrors:
         ioc = IOC(type=IOCType.IPV4, value="8.8.8.8", raw_match="8.8.8.8")
         adapter = GreyNoiseAdapter(api_key=TEST_API_KEY, allowed_hosts=[])
 
-        with patch("requests.get") as mock_get:
-            mock_get.side_effect = AssertionError("Should not reach network")
-            result = adapter.lookup(ioc)
+        adapter._session = MagicMock()
+        adapter._session.get.side_effect = AssertionError("Should not reach network")
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentError), (
             "Expected EnrichmentError when host not in allowed_hosts (SSRF check)"
@@ -404,8 +413,10 @@ class TestGreyNoiseErrors:
         mock_resp.raise_for_status = MagicMock()
         mock_resp.iter_content = MagicMock(return_value=iter([oversized_chunk]))
 
-        with patch("requests.get", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentError), (
             f"Expected EnrichmentError for oversized response, got {type(result).__name__}"

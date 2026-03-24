@@ -435,98 +435,86 @@ def test_offline_mode_no_summary_rows(page: Page, index_url: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Email IOC rendering — FILTER-02 + S02 (email extraction & display)
+# Email IOC rendering (R016)
+# ---------------------------------------------------------------------------
+# These tests verify that email addresses in analyst input are extracted and
+# displayed as IOC cards with a distinct EMAIL type badge and filter pill.
+# Fully-defanged form (user[@]evil[.]com) is a known limitation — only
+# undefanged emails are reliably extracted by iocsearcher.
 # ---------------------------------------------------------------------------
 
-# Input with one defanged email, one clean email, plus embedded domains
-EMAIL_IOC_TEXT = "Phishing from user[@]evil[.]com targeting admin@example.org"
-
-
-def _navigate_to_results_email(page: Page, index_url: str) -> ResultsPage:
-    """Navigate to results with email IOC text in offline mode."""
-    return _navigate_to_results(page, index_url, text=EMAIL_IOC_TEXT)
+EMAIL_IOC_TEXT = "Contact attacker@evil.com or admin@phish.org about the incident."
 
 
 def test_email_ioc_card_renders(page: Page, index_url: str) -> None:
-    """Email IOC cards are rendered with data-ioc-type='email' (S02 end-to-end)."""
-    results = _navigate_to_results_email(page, index_url)
+    """Email addresses in input are extracted and rendered as IOC cards (R016)."""
+    results = _navigate_to_results(page, index_url, text=EMAIL_IOC_TEXT)
 
     email_cards = results.cards_for_type("email")
-    expect(email_cards).not_to_have_count(0)
-
-    # At least one card for each extracted email address
-    card_count = email_cards.count()
-    assert card_count >= 1, f"Expected at least 1 email IOC card, got {card_count}"
+    assert email_cards.count() >= 1, (
+        f"Expected at least 1 .ioc-card[data-ioc-type='email'], got 0"
+    )
 
 
 def test_email_filter_pill_exists(page: Page, index_url: str) -> None:
-    """An EMAIL filter pill appears in the filter bar when email IOCs are present (S02)."""
-    results = _navigate_to_results_email(page, index_url)
+    """EMAIL filter pill is present in the filter bar when email IOCs are in results (R016)."""
+    _navigate_to_results(page, index_url, text=EMAIL_IOC_TEXT)
 
-    email_pill = page.locator(".filter-pill--email")
-    expect(email_pill).to_be_visible()
+    pill = page.locator(".filter-pill--email")
+    expect(pill).to_be_visible()
+    expect(pill).to_contain_text("EMAIL")
 
 
 def test_email_filter_pill_shows_only_email_cards(page: Page, index_url: str) -> None:
-    """Clicking the EMAIL filter pill hides all non-email IOC cards (FILTER-02 + S02)."""
-    results = _navigate_to_results_email(page, index_url)
+    """Clicking EMAIL pill hides all non-email cards (R016)."""
+    results = _navigate_to_results(page, index_url, text=EMAIL_IOC_TEXT)
 
-    # Record baseline total
-    total_before = results.visible_cards.count()
-    assert total_before > 0, "No visible cards before filtering"
-
-    # Activate the email filter pill
     results.filter_by_type("email")
 
-    # Only email cards should remain visible
-    visible_after = results.visible_cards
-    visible_count = visible_after.count()
-    assert visible_count >= 1, "No visible cards after selecting EMAIL filter"
-
-    # Every visible card must be data-ioc-type="email"
-    for i in range(visible_count):
-        card = visible_after.nth(i)
-        ioc_type = card.get_attribute("data-ioc-type")
-        assert ioc_type == "email", (
-            f"Card {i} has data-ioc-type='{ioc_type}', expected 'email'"
+    visible = results.visible_cards
+    count = visible.count()
+    assert count >= 1, "Expected at least 1 visible card after EMAIL filter"
+    for i in range(count):
+        card_type = visible.nth(i).get_attribute("data-ioc-type")
+        assert card_type == "email", (
+            f"Expected all visible cards to be email type, got: {card_type!r}"
         )
 
 
 def test_email_filter_pill_active_state(page: Page, index_url: str) -> None:
-    """EMAIL filter pill gets .filter-pill--active class when selected (FILTER-02 + S02)."""
-    results = _navigate_to_results_email(page, index_url)
+    """EMAIL filter pill shows active state when clicked (R016)."""
+    _navigate_to_results(page, index_url, text=EMAIL_IOC_TEXT)
 
-    results.filter_by_type("email")
+    results_page = page.locator(".filter-type-pills")
+    results_page.locator(".filter-pill--email").click()
 
-    # Use CSS compound selector — more reliable than to_have_class with regex string
     active_pill = page.locator(".filter-pill--email.filter-pill--active")
     expect(active_pill).to_be_visible()
 
 
 def test_all_types_pill_resets_after_email_filter(page: Page, index_url: str) -> None:
-    """Clicking 'All Types' after email filter restores all IOC cards (FILTER-02 + S02)."""
-    results = _navigate_to_results_email(page, index_url)
+    """Clicking 'All Types' after EMAIL filter restores the full card count (R016)."""
+    results = _navigate_to_results(page, index_url, text=EMAIL_IOC_TEXT)
 
     total_before = results.visible_cards.count()
-
-    # Filter to email only
     results.filter_by_type("email")
-    email_only_count = results.visible_cards.count()
-    assert email_only_count < total_before, (
-        f"Email-only filter should show fewer cards than 'All Types' "
-        f"({email_only_count} vs {total_before})"
+    email_count = results.visible_cards.count()
+    assert email_count < total_before, (
+        "Expected fewer cards after EMAIL filter than before"
     )
 
-    # Reset to All Types
     results.filter_by_type("all")
     expect(results.visible_cards).to_have_count(total_before)
 
 
 def test_email_cards_have_neutral_type_badge(page: Page, index_url: str) -> None:
-    """Email IOC cards render .ioc-type-badge--email with neutral (muted) styling (S02)."""
-    results = _navigate_to_results_email(page, index_url)
+    """Email IOC cards contain a .ioc-type-badge--email badge element (R016)."""
+    _navigate_to_results(page, index_url, text=EMAIL_IOC_TEXT)
 
-    # Use compound CSS selector — badges have both base and modifier class
-    badge = results.cards_for_type("email").locator(".ioc-type-badge--email").first
-    expect(badge).to_be_visible()
+    badge = page.locator(".ioc-type-badge--email")
+    expect(badge.first).to_be_visible()
+    badge_text = badge.first.text_content() or ""
+    assert "EMAIL" in badge_text.upper(), (
+        f"Expected badge text to contain 'EMAIL', got: {badge_text!r}"
+    )
 

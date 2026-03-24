@@ -563,12 +563,12 @@ class TestBackoff429:
         )
         assert adapter.lookup.call_count == 2
 
-    def test_non_429_does_not_trigger_sleep(self):
+    def test_non_429_retry_sleeps_1s(self):
         """Adapter returns generic Timeout error on first call, success on second.
 
         Expects:
-        - time.sleep NOT called (immediate retry for non-429)
-        - Final result is EnrichmentResult (immediate retry succeeded)
+        - time.sleep called exactly once with a 1s delay (new non-429 retry delay)
+        - Final result is EnrichmentResult (retry succeeded)
         - adapter.lookup called exactly 2 times
         """
         ioc = _make_ioc(IOCType.IPV4, "2.3.4.5")
@@ -586,8 +586,11 @@ class TestBackoff429:
         assert isinstance(status["results"][0], EnrichmentResult), (
             "Expected EnrichmentResult after immediate retry"
         )
-        assert mock_sleep.call_count == 0, (
-            f"time.sleep must NOT be called for non-429 errors, got {mock_sleep.call_count} calls"
+        assert mock_sleep.call_count == 1, (
+            "Non-429 retry should sleep exactly once (1s delay)"
+        )
+        assert mock_sleep.call_args_list[0][0][0] == 1, (
+            "Non-429 retry delay should be 1 second"
         )
         assert adapter.lookup.call_count == 2
 
@@ -668,3 +671,169 @@ class TestBackoff429:
         assert mock_sleep.call_count >= 1, (
             "'Rate limit exceeded' (no 429 code) must still trigger backoff sleep"
         )
+
+
+# ---------------------------------------------------------------------------
+# Tests — M004 S01 concurrency correctness fixes
+# ---------------------------------------------------------------------------
+
+
+class TestSemaphoreReleasedDuringBackoff:
+    """Prove that the semaphore is released before time.sleep() during 429 backoff.
+
+    Before the fix, the semaphore was held for the entire retry cycle (including
+    sleep), so all N slots slept simultaneously and starved every other queued IOC.
+    After the fix, the semaphore is released before sleep so other threads can run.
+    """
+
+    def test_semaphore_released_during_backoff_sleep(self):
+        """IOC-B should complete while IOC-A is sleeping after a 429.
+
+        Uses threading.Event coordination:
+        - IOC-A hits 429 → sets 'sleeping' event → (would) sleep
+        - IOC-B waits for 'sleeping' event → acquires semaphore → completes
+        - Assert IOC-B completed before mock_sleep returned (i.e. sem was released)
+
+        With semaphore cap=1, if the sem were held during sleep, IOC-B would
+        block waiting for IOC-A to wake up, and 'b_completed' would never be set.
+        """
+        sleeping_event = threading.Event()   # set when IOC-A is about to sleep
+        b_completed_event = threading.Event()  # set when IOC-B finishes its lookup
+        # We need to detect when IOC-B completes while the sleep mock is "sleeping"
+        b_completed_before_sleep_returns = threading.Event()
+
+        ioc_a = _make_ioc(IOCType.IPV4, "10.0.0.1")
+        ioc_b = _make_ioc(IOCType.IPV4, "10.0.0.2")
+
+        adapter = _make_keyed_adapter("VirusTotal", supported_types={IOCType.IPV4})
+        result_a = _make_result(ioc_a, provider="VirusTotal")
+        result_b = _make_result(ioc_b, provider="VirusTotal")
+
+        error_429 = _make_error(ioc_a, msg="HTTP 429", provider="VirusTotal")
+
+        call_count = {"a": 0, "b": 0}
+        call_lock = threading.Lock()
+
+        def side_effect(ioc):
+            with call_lock:
+                if ioc.value == ioc_a.value:
+                    call_count["a"] += 1
+                    if call_count["a"] == 1:
+                        return error_429  # first call → 429
+                    return result_a      # retry → success
+                else:
+                    call_count["b"] += 1
+                    result = result_b
+                    b_completed_event.set()
+                    return result
+
+        adapter.lookup.side_effect = side_effect
+
+        # Orchestrator with cap=1 so the behaviour is maximal — if sem were held
+        # during sleep, IOC-B could not proceed at all.
+        orchestrator = EnrichmentOrchestrator(
+            adapters=[adapter],
+            max_workers=4,
+            provider_concurrency={"VirusTotal": 1},
+        )
+
+        sleep_call_count = [0]
+
+        def fake_sleep(duration):
+            sleep_call_count[0] += 1
+            if sleep_call_count[0] == 1:
+                # Signal "about to sleep" — IOC-B can now try to acquire sem
+                sleeping_event.set()
+                # Wait briefly to give IOC-B a chance to acquire and complete
+                b_completed_event.wait(timeout=2.0)
+                if b_completed_event.is_set():
+                    b_completed_before_sleep_returns.set()
+
+        with patch("app.enrichment.orchestrator.time.sleep", side_effect=fake_sleep):
+            orchestrator.enrich_all("job-sem-sleep", [ioc_a, ioc_b])
+
+        status = orchestrator.get_status("job-sem-sleep")
+        assert len(status["results"]) == 2, (
+            f"Expected 2 results, got {len(status['results'])}"
+        )
+        assert b_completed_before_sleep_returns.is_set(), (
+            "IOC-B should have completed while IOC-A was sleeping (semaphore was not released "
+            "before sleep — bug still present)"
+        )
+
+
+class TestGetStatusListSnapshot:
+    """Prove that get_status() returns a snapshot of results, not the live list."""
+
+    def test_get_status_returns_list_snapshot(self):
+        """Mutating the returned results list must not affect the internal job results.
+
+        After enrich_all() completes:
+        1. Get status → capture returned results list.
+        2. Append a dummy item to the returned list.
+        3. Get status again → internal results should be unchanged (original length).
+        """
+        ioc = _make_ioc(IOCType.IPV4, "1.2.3.4")
+        adapter = _make_mock_adapter()
+        adapter.lookup.return_value = _make_result(ioc)
+
+        orchestrator = _make_orchestrator(adapter)
+        orchestrator.enrich_all("job-snapshot", [ioc])
+
+        status1 = orchestrator.get_status("job-snapshot")
+        original_len = len(status1["results"])
+        assert original_len == 1
+
+        # Mutate the returned list
+        dummy = _make_error(ioc, msg="dummy")
+        status1["results"].append(dummy)
+
+        # The internal job should be unaffected
+        status2 = orchestrator.get_status("job-snapshot")
+        assert len(status2["results"]) == original_len, (
+            f"Internal results list was mutated: expected {original_len} items, "
+            f"got {len(status2['results'])}. get_status() must return a list copy."
+        )
+
+
+class TestCachedMarkersLock:
+    """Prove that _cached_markers reads and writes are protected by _lock."""
+
+    def test_cached_markers_write_protected_by_lock(self):
+        """Concurrent cache hits must not corrupt _cached_markers.
+
+        Submits 8 IOCs concurrently to an adapter with a mock cache that always
+        returns hits. After completion, cached_markers must contain exactly 8 entries
+        (no missing entries, no KeyError).
+        """
+        iocs = [_make_ioc(IOCType.IPV4, f"10.0.0.{i}") for i in range(8)]
+
+        adapter = _make_keyed_adapter("VirusTotal", supported_types={IOCType.IPV4})
+
+        # Build cache mock that returns hits for all IOCs
+        cache_mock = MagicMock()
+        cache_mock.get.side_effect = lambda value, type_, provider, ttl: {
+            "provider": "VirusTotal",
+            "verdict": "clean",
+            "detection_count": 0,
+            "total_engines": 10,
+            "cached_at": "2024-01-01T00:00:00",
+        }
+
+        orchestrator = EnrichmentOrchestrator(
+            adapters=[adapter],
+            max_workers=8,
+            cache=cache_mock,
+        )
+
+        orchestrator.enrich_all("job-marker-lock", iocs)
+
+        markers = orchestrator.cached_markers
+        # All 8 IOCs should have a marker entry (no missing, no corruption)
+        assert len(markers) == 8, (
+            f"Expected 8 cached_markers entries, got {len(markers)}. "
+            "Concurrent writes without _lock can cause lost updates."
+        )
+        for ioc in iocs:
+            key = f"{ioc.value}|VirusTotal"
+            assert key in markers, f"Missing cached_markers entry for {key}"

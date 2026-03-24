@@ -117,8 +117,13 @@ class ResultsPage:
         return self.page.locator(".filter-search-input")
 
     def search(self, query: str) -> None:
-        """Type a search query into the filter search input."""
+        """Type a search query into the filter search input.
+
+        Waits 150ms after filling to allow the debounced applyFilter()
+        to fire (100ms debounce + margin).
+        """
         self.search_input.fill(query)
+        self.page.wait_for_timeout(150)
 
     @property
     def visible_cards(self) -> Locator:

@@ -162,3 +162,51 @@ class TestGetAllForIoc:
         assert "provider" in r
         assert isinstance(r["cached_at"], str)
         assert r["provider"] == "VT"
+
+
+class TestPurgeExpired:
+    """Tests for purge_expired() TTL-based bulk deletion."""
+
+    def test_purge_expired_deletes_old_entries(self, cache: CacheStore) -> None:
+        """purge_expired() removes entries older than ttl_seconds, keeps newer ones."""
+        import datetime
+        import json
+
+        # Insert a fresh entry via the normal API
+        cache.put("1.2.3.4", "ipv4", "VT", {"verdict": "clean"})
+
+        # Insert an "old" entry by writing directly to the DB with a past timestamp
+        old_ts = (
+            datetime.datetime.now(tz=datetime.timezone.utc)
+            - datetime.timedelta(hours=2)
+        ).isoformat()
+        cache._conn.execute(
+            "INSERT OR REPLACE INTO enrichment_cache "
+            "(ioc_value, ioc_type, provider, result_json, cached_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            ("evil.com", "domain", "TF", json.dumps({"verdict": "malicious"}), old_ts),
+        )
+        cache._conn.commit()
+
+        deleted = cache.purge_expired(ttl_seconds=3600)  # 1-hour TTL
+
+        assert deleted == 1
+        # Old entry gone
+        assert cache.get_all_for_ioc("evil.com", "domain") == []
+        # Fresh entry survives
+        assert cache.get("1.2.3.4", "ipv4", "VT", ttl_seconds=3600) is not None
+
+    def test_purge_expired_empty_db(self, cache: CacheStore) -> None:
+        """purge_expired() on empty DB returns 0 without error."""
+        result = cache.purge_expired(ttl_seconds=3600)
+        assert result == 0
+
+    def test_purge_expired_keeps_fresh_entries(self, cache: CacheStore) -> None:
+        """purge_expired() returns 0 and keeps all entries when none are expired."""
+        cache.put("1.2.3.4", "ipv4", "VT", {"verdict": "clean"})
+        cache.put("evil.com", "domain", "TF", {"verdict": "malicious"})
+
+        deleted = cache.purge_expired(ttl_seconds=86400)  # 24-hour TTL
+
+        assert deleted == 0
+        assert cache.stats()["total_entries"] == 2

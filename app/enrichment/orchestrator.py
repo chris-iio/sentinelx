@@ -9,8 +9,9 @@ Design decisions:
 - _semaphores dict: keyed by adapter name; built for adapters with requires_api_key=True;
   each semaphore limits peak concurrent lookups for that provider (default cap: 4).
 - Zero-auth adapters (requires_api_key=False) have no semaphore — unlimited concurrency.
-- Semaphore wraps entire lookup+retry cycle in _do_lookup (not per-attempt) to avoid
-  re-entrant deadlock.
+- Semaphore wraps each individual attempt (cache-check + lookup + cache-store) in _do_lookup,
+  but NOT the backoff sleep between retries. This prevents concurrent 429s from holding all
+  semaphore slots while sleeping, which would starve every other queued IOC.
 - OrderedDict for LRU eviction: simple FIFO eviction without external libraries
 - Lock protects all reads/writes to _jobs dict (thread safety)
 - enrich_all is designed to be called from a threading.Thread (Plan 03)
@@ -54,11 +55,6 @@ class EnrichmentOrchestrator:
 
     Per-provider semaphores cap rate-limited providers independently of zero-auth
     providers, ensuring VT rate limits do not starve Shodan, DNS, ip-api, etc.
-
-    The thread pool (max_workers=20 default) is intentionally large so that
-    zero-auth providers are never blocked by rate-limited providers.
-    Per-provider semaphores (built from requires_api_key=True adapters) are
-    the real concurrency gate — they cap API-key providers at 4 by default.
 
     Args:
         adapters:             List of adapter objects. Each IOC is dispatched to every
@@ -151,43 +147,53 @@ class EnrichmentOrchestrator:
             self._jobs[job_id]["complete"] = True
 
     def get_status(self, job_id: str) -> dict | None:
-        """Return a shallow copy of the job status dict, or None if not found.
+        """Return a snapshot of the job status dict, or None if not found.
 
-        Returns a shallow copy to prevent callers from mutating the internal state.
+        Returns a copy with a snapshot of the results list to prevent callers
+        from seeing concurrent mutations (RuntimeError: list changed size during
+        iteration) or from mutating internal state.
 
         Args:
             job_id: The job identifier returned by enrich_all.
 
         Returns:
-            Shallow copy of status dict with keys: total, done, results, complete.
+            Copy of status dict with keys: total, done, results, complete.
+            The results value is a new list (snapshot), not the live reference.
             None if job_id is not found (evicted or never created).
         """
         with self._lock:
             job = self._jobs.get(job_id)
             if job is None:
                 return None
-            return dict(job)
+            copy = dict(job)
+            copy["results"] = list(job["results"])
+            return copy
 
     @property
     def cached_markers(self) -> dict[str, str]:
-        """Return copy of cached result markers (ioc_value|provider -> cached_at)."""
-        return dict(self._cached_markers)
+        """Return copy of cached result markers (ioc_value|provider -> cached_at).
 
-    @staticmethod
-    def _is_rate_limit_error(result: EnrichmentError) -> bool:
-        """Check if an EnrichmentError indicates a rate limit (429) response."""
-        error_lower = result.error.lower()
-        return "429" in error_lower or "rate limit" in error_lower
+        Protected by _lock to prevent returning a partially-written snapshot when
+        worker threads are simultaneously updating _cached_markers.
+        """
+        with self._lock:
+            return dict(self._cached_markers)
 
     def _do_lookup(self, adapter: Any, ioc: IOC) -> EnrichmentResult | EnrichmentError:
         """Look up a single IOC via a specific adapter, with per-provider semaphore gating.
 
-        Acquires the provider's semaphore (if one exists) before entering the lookup+retry
-        cycle, holding it for the full duration. This ensures requires_api_key providers
-        never exceed their configured concurrency cap while zero-auth providers run freely.
+        The semaphore wraps each *individual attempt* (cache-check + adapter.lookup() +
+        cache-store) but is released before any backoff sleep between retries.  This
+        prevents a batch of concurrent 429s from holding all semaphore slots while
+        sleeping, which would starve every other queued IOC.
 
-        The semaphore wraps the *entire* cache-check + lookup + retry cycle (not per-attempt)
-        to avoid re-entrant deadlock on single-threaded semaphore exhaustion.
+        Control flow:
+          1. Acquire semaphore → _single_attempt() → release semaphore.
+          2a. On 429 error:     sleep (outside sem) → loop back to 1.
+          2b. On non-429 error: sleep 1s (outside sem) → loop back to 1 (once).
+          3. On success or retry exhaustion: return result.
+
+        try/finally guarantees semaphore release even when _single_attempt raises.
 
         Args:
             adapter: The adapter to use for this lookup.
@@ -195,25 +201,76 @@ class EnrichmentOrchestrator:
 
         Returns:
             EnrichmentResult on success (first or retry attempt).
-            EnrichmentError if both attempts fail.
+            EnrichmentError if all attempts fail.
         """
         provider_name = getattr(adapter, "name", "")
         sem = self._semaphores.get(provider_name)
-        if sem is not None:
-            with sem:
-                return self._do_lookup_inner(adapter, ioc, provider_name)
-        return self._do_lookup_inner(adapter, ioc, provider_name)
 
-    def _do_lookup_inner(
+        # --- First attempt (under semaphore) ---
+        if sem is not None:
+            sem.acquire()
+        try:
+            result = self._single_attempt(adapter, ioc, provider_name)
+        finally:
+            if sem is not None:
+                sem.release()
+
+        if not isinstance(result, EnrichmentError):
+            return result
+
+        if self._is_rate_limit_error(result):
+            # 429: exponential backoff with jitter, up to _MAX_RATE_LIMIT_RETRIES
+            for attempt in range(1, _MAX_RATE_LIMIT_RETRIES + 1):
+                delay = (
+                    _BACKOFF_BASE * (_BACKOFF_MULTIPLIER ** (attempt - 1))
+                    + random.uniform(0, _BACKOFF_JITTER)
+                )
+                logger.warning(
+                    "Rate limit (429) from %s for %s — backoff attempt %d, sleeping %.1fs",
+                    provider_name,
+                    ioc.value,
+                    attempt,
+                    delay,
+                )
+                # Sleep OUTSIDE semaphore — other threads can make progress
+                time.sleep(delay)
+
+                if sem is not None:
+                    sem.acquire()
+                try:
+                    result = self._single_attempt(adapter, ioc, provider_name)
+                finally:
+                    if sem is not None:
+                        sem.release()
+
+                if not isinstance(result, EnrichmentError):
+                    return result
+                if not self._is_rate_limit_error(result):
+                    break  # different error on retry — stop 429-backoff loop
+        else:
+            # Non-429 error: single retry after 1s delay (outside semaphore)
+            time.sleep(1)
+
+            if sem is not None:
+                sem.acquire()
+            try:
+                result = self._single_attempt(adapter, ioc, provider_name)
+            finally:
+                if sem is not None:
+                    sem.release()
+
+        return result
+
+    def _single_attempt(
         self, adapter: Any, ioc: IOC, provider_name: str
     ) -> EnrichmentResult | EnrichmentError:
-        """Execute the actual cache-check, lookup, retry, and cache-store cycle.
+        """Execute one cache-check + adapter.lookup() + cache-store attempt.
 
-        Called by _do_lookup, optionally under a provider semaphore. Separated to
-        keep semaphore acquisition and lookup logic distinct.
+        Must be called with the provider semaphore already acquired (if applicable).
+        Contains no retry or backoff logic — that lives in _do_lookup().
 
-        Checks cache before calling adapter. Stores successful results in cache.
-        Retries exactly once on EnrichmentError; returns second result regardless.
+        Cache hit path: reads from cache, records marker under _lock, returns cached result.
+        Cache miss path: calls adapter.lookup(), stores success in cache, returns result.
 
         Args:
             adapter:       The adapter to use for this lookup.
@@ -221,8 +278,8 @@ class EnrichmentOrchestrator:
             provider_name: Pre-resolved adapter name (avoids repeated getattr).
 
         Returns:
-            EnrichmentResult on success (first or retry attempt).
-            EnrichmentError if both attempts fail.
+            EnrichmentResult on success (cache hit or successful lookup).
+            EnrichmentError if adapter.lookup() returns one.
         """
         # Check cache
         if self._cache is not None and provider_name:
@@ -232,7 +289,8 @@ class EnrichmentOrchestrator:
             if cached is not None:
                 cached_at = cached.pop("cached_at", "")
                 cache_key = ioc.value + "|" + provider_name
-                self._cached_markers[cache_key] = cached_at
+                with self._lock:
+                    self._cached_markers[cache_key] = cached_at
                 return EnrichmentResult(
                     ioc=ioc,
                     provider=cached["provider"],
@@ -244,30 +302,6 @@ class EnrichmentOrchestrator:
                 )
 
         result = adapter.lookup(ioc)
-        if isinstance(result, EnrichmentError):
-            if self._is_rate_limit_error(result):
-                # 429: exponential backoff with jitter, up to _MAX_RATE_LIMIT_RETRIES
-                for attempt in range(1, _MAX_RATE_LIMIT_RETRIES + 1):
-                    delay = (
-                        _BACKOFF_BASE * (_BACKOFF_MULTIPLIER ** (attempt - 1))
-                        + random.uniform(0, _BACKOFF_JITTER)
-                    )
-                    logger.warning(
-                        "Rate limit (429) from %s for %s — backoff attempt %d, sleeping %.1fs",
-                        provider_name,
-                        ioc.value,
-                        attempt,
-                        delay,
-                    )
-                    time.sleep(delay)
-                    result = adapter.lookup(ioc)
-                    if not isinstance(result, EnrichmentError):
-                        break
-                    if not self._is_rate_limit_error(result):
-                        break  # different error on retry — stop 429-backoff loop
-            else:
-                # Non-429 error: single immediate retry (existing behavior)
-                result = adapter.lookup(ioc)
 
         # Store successful results in cache
         if self._cache is not None and provider_name and isinstance(result, EnrichmentResult):
@@ -286,6 +320,30 @@ class EnrichmentOrchestrator:
             )
 
         return result
+
+    def _do_lookup_inner(
+        self, adapter: Any, ioc: IOC, provider_name: str
+    ) -> EnrichmentResult | EnrichmentError:
+        """Deprecated shim — delegates to _single_attempt().
+
+        Kept for backward compatibility with any code that calls this method directly.
+        _do_lookup() now manages the semaphore and retry loop itself.
+        """
+        return self._single_attempt(adapter, ioc, provider_name)
+
+    def _is_rate_limit_error(self, result: Any) -> bool:
+        """Return True if *result* is a rate-limit (429) EnrichmentError.
+
+        Matches both numeric "429" and the string "rate limit" (case-insensitive)
+        so it handles all real-adapter error message variants:
+          - "Rate limit exceeded (429)"  — VirusTotal, AbuseIPDB
+          - "HTTP 429"                   — GreyNoise, ip-api, Shodan, ThreatMiner
+          - "Rate limit exceeded"        — any adapter not including the status code
+        """
+        if not isinstance(result, EnrichmentError):
+            return False
+        err = result.error.lower()
+        return "429" in err or "rate limit" in err
 
     def _evict_if_needed(self) -> None:
         """Evict the oldest job entry when the LRU limit is exceeded.

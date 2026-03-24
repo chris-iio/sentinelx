@@ -20,7 +20,8 @@ Verdict behavior:
 
 No API key required — CIRCL Hashlookup is a public zero-auth endpoint.
 
-Thread safety: a fresh requests.get call is used per lookup() call (no shared Session).
+Thread safety: a persistent requests.Session is created in __init__ and reused across
+lookup() calls (TCP connection pooling).
 """
 from __future__ import annotations
 
@@ -60,8 +61,8 @@ class HashlookupAdapter:
 
     No API key required — CIRCL Hashlookup is fully public.
 
-    Thread safety: uses a standalone requests.get call per lookup() invocation.
-    No shared session state between calls.
+    Thread safety: uses a persistent requests.Session (self._session) created in __init__.
+    The session is reused across lookup() calls for TCP connection pooling.
 
     Args:
         allowed_hosts: SSRF allowlist -- only these hostnames may be contacted.
@@ -73,6 +74,7 @@ class HashlookupAdapter:
 
     def __init__(self, allowed_hosts: list[str]) -> None:
         self._allowed_hosts = allowed_hosts
+        self._session = requests.Session()
 
     def is_configured(self) -> bool:
         """Always returns True -- CIRCL Hashlookup requires no API key."""
@@ -115,7 +117,7 @@ class HashlookupAdapter:
             return EnrichmentError(ioc=ioc, provider=self.name, error=str(exc))
 
         try:
-            resp = requests.get(
+            resp = self._session.get(
                 url,
                 timeout=TIMEOUT,           # SEC-04
                 allow_redirects=False,     # SEC-06
@@ -140,6 +142,10 @@ class HashlookupAdapter:
         except requests.exceptions.HTTPError as exc:
             code = exc.response.status_code if exc.response is not None else "unknown"
             return EnrichmentError(ioc=ioc, provider=self.name, error=f"HTTP {code}")
+        except requests.exceptions.SSLError:
+            return EnrichmentError(ioc=ioc, provider=self.name, error="SSL/TLS error")
+        except requests.exceptions.ConnectionError:
+            return EnrichmentError(ioc=ioc, provider=self.name, error="Connection failed")
         except Exception:
             logger.exception(
                 "Unexpected error during CIRCL Hashlookup lookup for %s", ioc.value

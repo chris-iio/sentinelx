@@ -24,6 +24,7 @@ from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.enrichment.adapters.hashlookup import HashlookupAdapter
 from app.enrichment.http_safety import MAX_RESPONSE_BYTES
 from app.enrichment.provider import Provider
+from tests.helpers import make_mock_response
 
 
 ALLOWED_HOSTS = ["hashlookup.circl.lu"]
@@ -53,19 +54,6 @@ HASHLOOKUP_FOUND_SHA256_RESPONSE = {
 }
 
 
-def _make_mock_get_response(status_code: int, body: dict | None = None) -> MagicMock:
-    """Build a mock requests.Response for GET requests."""
-    mock_resp = MagicMock()
-    mock_resp.status_code = status_code
-    if body is not None:
-        raw_bytes = json.dumps(body).encode()
-        mock_resp.iter_content = MagicMock(return_value=iter([raw_bytes]))
-    if status_code >= 400:
-        http_err = requests.exceptions.HTTPError(response=mock_resp)
-        mock_resp.raise_for_status = MagicMock(side_effect=http_err)
-    else:
-        mock_resp.raise_for_status = MagicMock()
-    return mock_resp
 
 
 def _make_adapter(allowed_hosts: list[str] | None = None) -> HashlookupAdapter:
@@ -80,10 +68,12 @@ class TestLookupFound:
         """MD5 hash found (200) -> verdict=known_good, detection_count=1, total_engines=1."""
         md5 = "a" * 32
         ioc = IOC(type=IOCType.MD5, value=md5, raw_match=md5)
-        mock_resp = _make_mock_get_response(200, HASHLOOKUP_FOUND_MD5_RESPONSE)
+        mock_resp = make_mock_response(200, HASHLOOKUP_FOUND_MD5_RESPONSE)
 
-        with patch("requests.get", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult), (
             f"Expected EnrichmentResult, got {type(result).__name__}: {result!r}"
@@ -97,10 +87,12 @@ class TestLookupFound:
         """SHA1 hash found (200) -> verdict=known_good."""
         sha1 = "b" * 40
         ioc = IOC(type=IOCType.SHA1, value=sha1, raw_match=sha1)
-        mock_resp = _make_mock_get_response(200, HASHLOOKUP_FOUND_SHA1_RESPONSE)
+        mock_resp = make_mock_response(200, HASHLOOKUP_FOUND_SHA1_RESPONSE)
 
-        with patch("requests.get", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert result.provider == "CIRCL Hashlookup"
@@ -110,10 +102,12 @@ class TestLookupFound:
         """SHA256 hash found (200) -> verdict=known_good."""
         sha256 = "c" * 64
         ioc = IOC(type=IOCType.SHA256, value=sha256, raw_match=sha256)
-        mock_resp = _make_mock_get_response(200, HASHLOOKUP_FOUND_SHA256_RESPONSE)
+        mock_resp = make_mock_response(200, HASHLOOKUP_FOUND_SHA256_RESPONSE)
 
-        with patch("requests.get", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert result.verdict == "known_good"
@@ -122,10 +116,12 @@ class TestLookupFound:
         """200 response -> raw_stats contains file_name and source keys."""
         md5 = "a" * 32
         ioc = IOC(type=IOCType.MD5, value=md5, raw_match=md5)
-        mock_resp = _make_mock_get_response(200, HASHLOOKUP_FOUND_MD5_RESPONSE)
+        mock_resp = make_mock_response(200, HASHLOOKUP_FOUND_MD5_RESPONSE)
 
-        with patch("requests.get", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert "file_name" in result.raw_stats, "raw_stats missing 'file_name'"
@@ -135,10 +131,12 @@ class TestLookupFound:
         """raw_stats['file_name'] is populated from API FileName field."""
         md5 = "a" * 32
         ioc = IOC(type=IOCType.MD5, value=md5, raw_match=md5)
-        mock_resp = _make_mock_get_response(200, HASHLOOKUP_FOUND_MD5_RESPONSE)
+        mock_resp = make_mock_response(200, HASHLOOKUP_FOUND_MD5_RESPONSE)
 
-        with patch("requests.get", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert result.raw_stats["file_name"] == "calc.exe"
@@ -147,10 +145,12 @@ class TestLookupFound:
         """raw_stats['source'] is populated from API source field."""
         md5 = "a" * 32
         ioc = IOC(type=IOCType.MD5, value=md5, raw_match=md5)
-        mock_resp = _make_mock_get_response(200, HASHLOOKUP_FOUND_MD5_RESPONSE)
+        mock_resp = make_mock_response(200, HASHLOOKUP_FOUND_MD5_RESPONSE)
 
-        with patch("requests.get", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert result.raw_stats["source"] == "NSRL"
@@ -159,10 +159,12 @@ class TestLookupFound:
         """raw_stats['db'] is populated from API db field."""
         md5 = "a" * 32
         ioc = IOC(type=IOCType.MD5, value=md5, raw_match=md5)
-        mock_resp = _make_mock_get_response(200, HASHLOOKUP_FOUND_MD5_RESPONSE)
+        mock_resp = make_mock_response(200, HASHLOOKUP_FOUND_MD5_RESPONSE)
 
-        with patch("requests.get", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert "db" in result.raw_stats
@@ -173,10 +175,12 @@ class TestLookupFound:
         md5 = "a" * 32
         ioc = IOC(type=IOCType.MD5, value=md5, raw_match=md5)
         minimal_response = {"MD5": md5}  # No FileName, source, db
-        mock_resp = _make_mock_get_response(200, minimal_response)
+        mock_resp = make_mock_response(200, minimal_response)
 
-        with patch("requests.get", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert result.raw_stats["file_name"] == ""
@@ -190,10 +194,12 @@ class TestLookupNotFound:
         """404 response -> EnrichmentResult(verdict='no_data'), detection_count=0, total_engines=0."""
         sha256 = "c" * 64
         ioc = IOC(type=IOCType.SHA256, value=sha256, raw_match=sha256)
-        mock_resp = _make_mock_get_response(404)
+        mock_resp = make_mock_response(404)
 
-        with patch("requests.get", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult), (
             f"404 must return EnrichmentResult (not EnrichmentError), got {type(result).__name__}: {result!r}"
@@ -206,10 +212,12 @@ class TestLookupNotFound:
         """404 response -> isinstance(result, EnrichmentResult) is True, NOT EnrichmentError."""
         sha1 = "b" * 40
         ioc = IOC(type=IOCType.SHA1, value=sha1, raw_match=sha1)
-        mock_resp = _make_mock_get_response(404)
+        mock_resp = make_mock_response(404)
 
-        with patch("requests.get", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult), (
             "404 from CIRCL Hashlookup is not an error — it means 'hash not in NSRL', not 'failure'"
@@ -220,10 +228,12 @@ class TestLookupNotFound:
         """404 -> raw_stats is empty dict {}."""
         md5 = "a" * 32
         ioc = IOC(type=IOCType.MD5, value=md5, raw_match=md5)
-        mock_resp = _make_mock_get_response(404)
+        mock_resp = make_mock_response(404)
 
-        with patch("requests.get", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert result.raw_stats == {}
@@ -254,10 +264,12 @@ class TestLookupErrors:
         """HTTP 400 (malformed hash) -> EnrichmentError with 'HTTP 400'."""
         md5 = "not-a-valid-hash"
         ioc = IOC(type=IOCType.MD5, value=md5, raw_match=md5)
-        mock_resp = _make_mock_get_response(400)
+        mock_resp = make_mock_response(400)
 
-        with patch("requests.get", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentError)
         assert result.provider == "CIRCL Hashlookup"
@@ -267,10 +279,12 @@ class TestLookupErrors:
         """HTTP 500 response -> EnrichmentError with 'HTTP 500' in error."""
         md5 = "a" * 32
         ioc = IOC(type=IOCType.MD5, value=md5, raw_match=md5)
-        mock_resp = _make_mock_get_response(500)
+        mock_resp = make_mock_response(500)
 
-        with patch("requests.get", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentError)
         assert result.provider == "CIRCL Hashlookup"
@@ -281,8 +295,10 @@ class TestLookupErrors:
         md5 = "a" * 32
         ioc = IOC(type=IOCType.MD5, value=md5, raw_match=md5)
 
-        with patch("requests.get", side_effect=requests.exceptions.Timeout("timed out")):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.side_effect = requests.exceptions.Timeout("timed out")
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentError)
         assert result.provider == "CIRCL Hashlookup"
@@ -294,9 +310,9 @@ class TestLookupErrors:
         ioc = IOC(type=IOCType.MD5, value=md5, raw_match=md5)
         adapter = HashlookupAdapter(allowed_hosts=[])
 
-        with patch("requests.get") as mock_get:
-            mock_get.side_effect = AssertionError("Should not reach network")
-            result = adapter.lookup(ioc)
+        adapter._session = MagicMock()
+        adapter._session.get.side_effect = AssertionError("Should not reach network")
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentError), (
             "Expected EnrichmentError when host not in allowed_hosts (SSRF check)"
@@ -321,8 +337,10 @@ class TestHTTPSafetyControls:
         mock_resp.raise_for_status = MagicMock()
         mock_resp.iter_content = MagicMock(return_value=iter([oversized_chunk]))
 
-        with patch("requests.get", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentError), (
             f"Expected EnrichmentError for oversized response, got {type(result).__name__}"
@@ -332,12 +350,14 @@ class TestHTTPSafetyControls:
         """SEC-06: requests.get must be called with allow_redirects=False."""
         md5 = "a" * 32
         ioc = IOC(type=IOCType.MD5, value=md5, raw_match=md5)
-        mock_resp = _make_mock_get_response(200, HASHLOOKUP_FOUND_MD5_RESPONSE)
+        mock_resp = make_mock_response(200, HASHLOOKUP_FOUND_MD5_RESPONSE)
 
-        with patch("requests.get", return_value=mock_resp) as mock_get:
-            _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.return_value = mock_resp
+        adapter.lookup(ioc)
 
-        call_kwargs = mock_get.call_args.kwargs
+        call_kwargs = adapter._session.get.call_args.kwargs
         assert call_kwargs.get("allow_redirects") is False, (
             "allow_redirects must be False (SEC-06)"
         )
@@ -346,12 +366,14 @@ class TestHTTPSafetyControls:
         """SEC-05: requests.get must be called with stream=True."""
         md5 = "a" * 32
         ioc = IOC(type=IOCType.MD5, value=md5, raw_match=md5)
-        mock_resp = _make_mock_get_response(200, HASHLOOKUP_FOUND_MD5_RESPONSE)
+        mock_resp = make_mock_response(200, HASHLOOKUP_FOUND_MD5_RESPONSE)
 
-        with patch("requests.get", return_value=mock_resp) as mock_get:
-            _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.return_value = mock_resp
+        adapter.lookup(ioc)
 
-        call_kwargs = mock_get.call_args.kwargs
+        call_kwargs = adapter._session.get.call_args.kwargs
         assert call_kwargs.get("stream") is True, "stream must be True (SEC-05)"
 
 
@@ -361,12 +383,14 @@ class TestURLPattern:
         """MD5 lookup URL uses /lookup/md5/{hash} path."""
         md5 = "a" * 32
         ioc = IOC(type=IOCType.MD5, value=md5, raw_match=md5)
-        mock_resp = _make_mock_get_response(200, HASHLOOKUP_FOUND_MD5_RESPONSE)
+        mock_resp = make_mock_response(200, HASHLOOKUP_FOUND_MD5_RESPONSE)
 
-        with patch("requests.get", return_value=mock_resp) as mock_get:
-            _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.return_value = mock_resp
+        adapter.lookup(ioc)
 
-        called_url = mock_get.call_args.args[0]
+        called_url = adapter._session.get.call_args.args[0]
         assert "/lookup/md5/" in called_url, f"Expected /lookup/md5/ in URL, got: {called_url}"
         assert md5 in called_url
 
@@ -374,24 +398,28 @@ class TestURLPattern:
         """SHA1 lookup URL uses /lookup/sha1/{hash} path."""
         sha1 = "b" * 40
         ioc = IOC(type=IOCType.SHA1, value=sha1, raw_match=sha1)
-        mock_resp = _make_mock_get_response(200, HASHLOOKUP_FOUND_SHA1_RESPONSE)
+        mock_resp = make_mock_response(200, HASHLOOKUP_FOUND_SHA1_RESPONSE)
 
-        with patch("requests.get", return_value=mock_resp) as mock_get:
-            _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.return_value = mock_resp
+        adapter.lookup(ioc)
 
-        called_url = mock_get.call_args.args[0]
+        called_url = adapter._session.get.call_args.args[0]
         assert "/lookup/sha1/" in called_url, f"Expected /lookup/sha1/ in URL, got: {called_url}"
 
     def test_sha256_url_uses_sha256_path_segment(self) -> None:
         """SHA256 lookup URL uses /lookup/sha256/{hash} path."""
         sha256 = "c" * 64
         ioc = IOC(type=IOCType.SHA256, value=sha256, raw_match=sha256)
-        mock_resp = _make_mock_get_response(200, HASHLOOKUP_FOUND_SHA256_RESPONSE)
+        mock_resp = make_mock_response(200, HASHLOOKUP_FOUND_SHA256_RESPONSE)
 
-        with patch("requests.get", return_value=mock_resp) as mock_get:
-            _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.return_value = mock_resp
+        adapter.lookup(ioc)
 
-        called_url = mock_get.call_args.args[0]
+        called_url = adapter._session.get.call_args.args[0]
         assert "/lookup/sha256/" in called_url, f"Expected /lookup/sha256/ in URL, got: {called_url}"
 
 

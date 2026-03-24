@@ -110,4 +110,6 @@ export interface EnrichmentStatus {
   complete: boolean;
   /** Incremental list of results received so far — may be partial. */
   results: EnrichmentItem[];
+  /** Cursor for the next poll — pass as ?since=N to receive only new results. */
+  next_since: number;
 }

@@ -69,8 +69,8 @@ function sortDetailRows(detailsContainer: HTMLElement, iocValue: string): void {
 }
 
 /**
- * Debounce updateSummaryRow at 100ms per IOC to limit DOM rebuilds to 1–2
- * during streaming enrichment instead of once per provider result (R017).
+ * Debounced wrapper for updateSummaryRow — keyed by ioc_value at 100ms.
+ * Limits summary row DOM rebuilds to 1–2 per IOC during streaming enrichment.
  */
 function debouncedUpdateSummaryRow(
   slot: HTMLElement,
@@ -78,7 +78,9 @@ function debouncedUpdateSummaryRow(
   iocVerdicts: Record<string, VerdictEntry[]>
 ): void {
   const existing = summaryTimers.get(iocValue);
-  if (existing !== undefined) clearTimeout(existing);
+  if (existing !== undefined) {
+    clearTimeout(existing);
+  }
   const timer = setTimeout(() => {
     summaryTimers.delete(iocValue);
     updateSummaryRow(slot, iocValue, iocVerdicts);
@@ -87,14 +89,13 @@ function debouncedUpdateSummaryRow(
 }
 
 /**
- * Find the copy button for a given IOC value by iterating .copy-btn elements.
+ * Find the copy button for a given IOC value using a targeted attribute selector.
+ * O(1) browser-native lookup — replaces the old O(N) querySelectorAll iteration.
+ * CSS.escape() handles IOC values with special characters (URLs, quotes, etc.).
  * Source: main.js findCopyButtonForIoc() (lines 571-579).
  */
 function findCopyButtonForIoc(iocValue: string): HTMLElement | null {
-  for (const btn of document.querySelectorAll<HTMLElement>(".copy-btn")) {
-    if (attr(btn, "data-value") === iocValue) return btn;
-  }
-  return null;
+  return document.querySelector<HTMLElement>('.copy-btn[data-value="' + CSS.escape(iocValue) + '"]');
 }
 
 /**
@@ -376,7 +377,7 @@ function renderEnrichmentResult(
     }
   }
 
-  // Update summary row (worst verdict + attribution + consensus) — debounced
+  // Update summary row (worst verdict + attribution + consensus)
   debouncedUpdateSummaryRow(slot, result.ioc_value, iocVerdicts);
 
   // Update pending indicator for remaining providers
@@ -385,10 +386,8 @@ function renderEnrichmentResult(
   // Compute worst verdict for this IOC
   const worstVerdict = computeWorstVerdict(iocVerdicts[result.ioc_value] ?? []);
 
-  // Update card verdict, dashboard, and sort
+  // Update card verdict (per-result — sets data-verdict on each card)
   updateCardVerdict(result.ioc_value, worstVerdict);
-  updateDashboardCounts();
-  sortCardsBySeverity();
 
   // Update copy button with worst verdict across all providers for this IOC
   updateCopyButtonWorstVerdict(result.ioc_value, iocVerdicts);
@@ -505,8 +504,8 @@ export function init(): void {
   // Wire expand/collapse toggles once at init (before polling starts)
   wireExpandToggles();
 
-  // Dedup key: "ioc_value|provider" — each provider result per IOC rendered once
-  const rendered: Record<string, boolean> = {};
+  // Cursor-based dedup: ?since=N returns only new results, no client-side tracking needed
+  let since = 0;
 
   // Per-IOC verdict tracking for worst-verdict copy/export computation
   // iocVerdicts[ioc_value] = [{provider, verdict, summaryText, detectionCount, totalEngines, statText}]
@@ -517,7 +516,7 @@ export function init(): void {
 
   // Use ReturnType<typeof setInterval> to avoid NodeJS.Timeout conflict
   const intervalId: ReturnType<typeof setInterval> = setInterval(function () {
-    fetch("/enrichment/status/" + jobId)
+    fetch("/enrichment/status/" + jobId + "?since=" + since)
       .then(function (resp) {
         if (!resp.ok) return null;
         return resp.json() as Promise<EnrichmentStatus>;
@@ -532,12 +531,8 @@ export function init(): void {
         for (let i = 0; i < results.length; i++) {
           const result = results[i];
           if (!result) continue;
-          const dedupKey = result.ioc_value + "|" + result.provider;
-          if (!rendered[dedupKey]) {
-            rendered[dedupKey] = true;
-            allResults.push(result);
-            renderEnrichmentResult(result, iocVerdicts, iocResultCounts);
-          }
+          allResults.push(result);
+          renderEnrichmentResult(result, iocVerdicts, iocResultCounts);
 
           // Show warning banner for rate-limit or auth errors
           if (result.type === "error" && result.error) {
@@ -560,6 +555,14 @@ export function init(): void {
             }
           }
         }
+
+        // Batch dashboard + sort once per tick (not per-result) — R023 O(N²) fix
+        if (results.length > 0) {
+          updateDashboardCounts();
+          sortCardsBySeverity();
+        }
+
+        since = data.next_since;
 
         if (data.complete) {
           clearInterval(intervalId);

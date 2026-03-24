@@ -137,6 +137,11 @@ class TFAdapter:
     def __init__(self, api_key: str, allowed_hosts: list[str]) -> None:
         self._api_key = api_key
         self._allowed_hosts = allowed_hosts
+        self._session = requests.Session()
+        self._session.headers.update({
+            "Content-Type": "application/json",
+            "Auth-Key": self._api_key,
+        })
 
     def is_configured(self) -> bool:
         """Return True if a non-empty API key is set."""
@@ -173,14 +178,8 @@ class TFAdapter:
         else:
             payload = {"query": "search_ioc", "search_term": ioc.value}
 
-        session = requests.Session()
-        session.headers.update({
-            "Content-Type": "application/json",
-            "Auth-Key": self._api_key,
-        })
-
         try:
-            resp = session.post(
+            resp = self._session.post(
                 TF_BASE,
                 json=payload,
                 timeout=TIMEOUT,          # SEC-04
@@ -195,6 +194,10 @@ class TFAdapter:
         except requests.exceptions.HTTPError as exc:
             code = exc.response.status_code if exc.response is not None else "unknown"
             return EnrichmentError(ioc=ioc, provider="ThreatFox", error=f"HTTP {code}")
+        except requests.exceptions.SSLError:
+            return EnrichmentError(ioc=ioc, provider="ThreatFox", error="SSL/TLS error")
+        except requests.exceptions.ConnectionError:
+            return EnrichmentError(ioc=ioc, provider="ThreatFox", error="Connection failed")
         except Exception:
             logger.exception("Unexpected error during ThreatFox lookup for %s", ioc.value)
             return EnrichmentError(ioc=ioc, provider="ThreatFox", error="Unexpected error during lookup")

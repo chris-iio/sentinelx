@@ -191,7 +191,7 @@ def test_analyze_deduplicates(client):
     count = data.count("192.168.1.1")
     # Should appear at least once (it was found) but not 3 times as separate entries
     assert count >= 1
-    assert count < 20  # Sanity: dedup guarantee is "not 3 separate IOC entries", not a strict HTML occurrence count
+    assert count < 20  # Sanity: not repeated many times as separate rows (richer M002/M003 template produces ~12 occurrences)
 
 
 # ---------------------------------------------------------------------------
@@ -495,5 +495,106 @@ def test_enrichment_error_serialization(client):
         assert r["error"] == "Timeout"
         assert r["ioc_value"] == "evil.com"
         assert r["ioc_type"] == "domain"
+    finally:
+        routes_module._orchestrators.pop(job_id, None)
+
+
+# ---------------------------------------------------------------------------
+# ?since= cursor tests
+# ---------------------------------------------------------------------------
+
+def _make_three_result_orchestrator():
+    """Return a mock orchestrator with 3 completed results for cursor tests."""
+    import app.routes as routes_module
+    from app.enrichment.models import EnrichmentResult
+    from app.pipeline.models import IOC, IOCType
+
+    ioc = IOC(type=IOCType.IPV4, value="1.2.3.4", raw_match="1.2.3.4")
+    results = [
+        EnrichmentResult(ioc=ioc, provider="VirusTotal", verdict="clean",
+                         detection_count=0, total_engines=70,
+                         scan_date=None, raw_stats={}),
+        EnrichmentResult(ioc=ioc, provider="AbuseIPDB", verdict="clean",
+                         detection_count=0, total_engines=1,
+                         scan_date=None, raw_stats={}),
+        EnrichmentResult(ioc=ioc, provider="Shodan", verdict="no_data",
+                         detection_count=0, total_engines=0,
+                         scan_date=None, raw_stats={}),
+    ]
+    mock_orch = MagicMock()
+    mock_orch.cached_markers = {}
+    mock_orch.get_status.return_value = {
+        "total": 3,
+        "done": 3,
+        "complete": True,
+        "results": results,
+    }
+    return mock_orch
+
+
+def test_enrichment_status_since_returns_slice(client):
+    """?since=2 returns only the 1 result at index 2 and next_since == 3."""
+    import app.routes as routes_module
+
+    mock_orch = _make_three_result_orchestrator()
+    job_id = "cursor_slice_job"
+    routes_module._orchestrators[job_id] = mock_orch
+    try:
+        response = client.get(f"/enrichment/status/{job_id}?since=2")
+        assert response.status_code == 200
+        data = response.get_json()
+        assert len(data["results"]) == 1
+        assert data["next_since"] == 3
+    finally:
+        routes_module._orchestrators.pop(job_id, None)
+
+
+def test_enrichment_status_since_zero_returns_all(client):
+    """?since=0 returns all 3 results and next_since == 3."""
+    import app.routes as routes_module
+
+    mock_orch = _make_three_result_orchestrator()
+    job_id = "cursor_zero_job"
+    routes_module._orchestrators[job_id] = mock_orch
+    try:
+        response = client.get(f"/enrichment/status/{job_id}?since=0")
+        assert response.status_code == 200
+        data = response.get_json()
+        assert len(data["results"]) == 3
+        assert data["next_since"] == 3
+    finally:
+        routes_module._orchestrators.pop(job_id, None)
+
+
+def test_enrichment_status_no_since_returns_all(client):
+    """No since param returns all 3 results (backward compat) and next_since == 3."""
+    import app.routes as routes_module
+
+    mock_orch = _make_three_result_orchestrator()
+    job_id = "cursor_nosince_job"
+    routes_module._orchestrators[job_id] = mock_orch
+    try:
+        response = client.get(f"/enrichment/status/{job_id}")
+        assert response.status_code == 200
+        data = response.get_json()
+        assert len(data["results"]) == 3
+        assert data["next_since"] == 3
+    finally:
+        routes_module._orchestrators.pop(job_id, None)
+
+
+def test_enrichment_status_since_beyond_length(client):
+    """?since=99 with 3 results returns 0 results and next_since == 3."""
+    import app.routes as routes_module
+
+    mock_orch = _make_three_result_orchestrator()
+    job_id = "cursor_beyond_job"
+    routes_module._orchestrators[job_id] = mock_orch
+    try:
+        response = client.get(f"/enrichment/status/{job_id}?since=99")
+        assert response.status_code == 200
+        data = response.get_json()
+        assert len(data["results"]) == 0
+        assert data["next_since"] == 3
     finally:
         routes_module._orchestrators.pop(job_id, None)

@@ -187,9 +187,10 @@ class TestProviderProtocol:
         """URL IOC -> EnrichmentError('Unsupported type') without any network call."""
         ioc = IOC(type=IOCType.URL, value="http://example.com", raw_match="http://example.com")
 
-        with patch("requests.get") as mock_get:
-            mock_get.side_effect = AssertionError("Should not reach network")
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.side_effect = AssertionError("Should not reach network")
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentError)
         assert result.provider == "ThreatMiner"
@@ -199,9 +200,10 @@ class TestProviderProtocol:
         """CVE IOC -> EnrichmentError without any network call."""
         ioc = IOC(type=IOCType.CVE, value="CVE-2021-44228", raw_match="CVE-2021-44228")
 
-        with patch("requests.get") as mock_get:
-            mock_get.side_effect = AssertionError("Should not reach network")
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.side_effect = AssertionError("Should not reach network")
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentError)
         assert "Unsupported" in result.error or "unsupported" in result.error.lower()
@@ -217,10 +219,11 @@ class TestIPLookup:
         """IPv4 lookup returns EnrichmentResult (not EnrichmentError)."""
         ioc = _make_ip_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.threatminer.read_limited", return_value=IP_PASSIVE_DNS_RESPONSE):
-            mock_get.return_value = _mock_get_returning(IP_PASSIVE_DNS_RESPONSE)
-            result = _make_adapter().lookup(ioc)
+        with patch("app.enrichment.adapters.threatminer.read_limited", return_value=IP_PASSIVE_DNS_RESPONSE):
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = _mock_get_returning(IP_PASSIVE_DNS_RESPONSE)
+            result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult), (
             f"Expected EnrichmentResult, got {type(result).__name__}: {result!r}"
@@ -230,10 +233,11 @@ class TestIPLookup:
         """IPv4 lookup returns passive_dns list in raw_stats."""
         ioc = _make_ip_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.threatminer.read_limited", return_value=IP_PASSIVE_DNS_RESPONSE):
-            mock_get.return_value = _mock_get_returning(IP_PASSIVE_DNS_RESPONSE)
-            result = _make_adapter().lookup(ioc)
+        with patch("app.enrichment.adapters.threatminer.read_limited", return_value=IP_PASSIVE_DNS_RESPONSE):
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = _mock_get_returning(IP_PASSIVE_DNS_RESPONSE)
+            result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert "passive_dns" in result.raw_stats
@@ -243,10 +247,11 @@ class TestIPLookup:
         """IPv4 passive_dns list contains the domain names from API response."""
         ioc = _make_ip_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.threatminer.read_limited", return_value=IP_PASSIVE_DNS_RESPONSE):
-            mock_get.return_value = _mock_get_returning(IP_PASSIVE_DNS_RESPONSE)
-            result = _make_adapter().lookup(ioc)
+        with patch("app.enrichment.adapters.threatminer.read_limited", return_value=IP_PASSIVE_DNS_RESPONSE):
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = _mock_get_returning(IP_PASSIVE_DNS_RESPONSE)
+            result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         passive_dns = result.raw_stats["passive_dns"]
@@ -258,24 +263,26 @@ class TestIPLookup:
         """IP lookup must call host.php endpoint (not domain.php or sample.php)."""
         ioc = _make_ip_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.threatminer.read_limited", return_value=IP_PASSIVE_DNS_RESPONSE):
-            mock_get.return_value = _mock_get_returning(IP_PASSIVE_DNS_RESPONSE)
-            _make_adapter().lookup(ioc)
+        with patch("app.enrichment.adapters.threatminer.read_limited", return_value=IP_PASSIVE_DNS_RESPONSE):
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = _mock_get_returning(IP_PASSIVE_DNS_RESPONSE)
+            adapter.lookup(ioc)
 
-        called_url = mock_get.call_args.args[0]
+        called_url = adapter._session.get.call_args.args[0]
         assert "host.php" in called_url, f"Expected host.php in URL, got: {called_url}"
 
     def test_ip_lookup_uses_rt_2(self) -> None:
         """IP lookup must use rt=2 (passive DNS)."""
         ioc = _make_ip_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.threatminer.read_limited", return_value=IP_PASSIVE_DNS_RESPONSE):
-            mock_get.return_value = _mock_get_returning(IP_PASSIVE_DNS_RESPONSE)
-            _make_adapter().lookup(ioc)
+        with patch("app.enrichment.adapters.threatminer.read_limited", return_value=IP_PASSIVE_DNS_RESPONSE):
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = _mock_get_returning(IP_PASSIVE_DNS_RESPONSE)
+            adapter.lookup(ioc)
 
-        call_kwargs = mock_get.call_args
+        call_kwargs = adapter._session.get.call_args
         params = call_kwargs.kwargs.get("params", {}) or (call_kwargs.args[1] if len(call_kwargs.args) > 1 else {})
         assert params.get("rt") == "2", f"Expected rt='2', got: {params}"
 
@@ -292,10 +299,11 @@ class TestIPLookup:
             ],
         }
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.threatminer.read_limited", return_value=many_results):
-            mock_get.return_value = _mock_get_returning(many_results)
-            result = _make_adapter().lookup(ioc)
+        with patch("app.enrichment.adapters.threatminer.read_limited", return_value=many_results):
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = _mock_get_returning(many_results)
+            result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert len(result.raw_stats["passive_dns"]) <= 25, (
@@ -306,10 +314,11 @@ class TestIPLookup:
         """IP lookup verdict is always 'no_data' (informational context, not threat signal)."""
         ioc = _make_ip_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.threatminer.read_limited", return_value=IP_PASSIVE_DNS_RESPONSE):
-            mock_get.return_value = _mock_get_returning(IP_PASSIVE_DNS_RESPONSE)
-            result = _make_adapter().lookup(ioc)
+        with patch("app.enrichment.adapters.threatminer.read_limited", return_value=IP_PASSIVE_DNS_RESPONSE):
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = _mock_get_returning(IP_PASSIVE_DNS_RESPONSE)
+            result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert result.verdict == "no_data"
@@ -318,10 +327,11 @@ class TestIPLookup:
         """detection_count is always 0 for ThreatMiner results."""
         ioc = _make_ip_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.threatminer.read_limited", return_value=IP_PASSIVE_DNS_RESPONSE):
-            mock_get.return_value = _mock_get_returning(IP_PASSIVE_DNS_RESPONSE)
-            result = _make_adapter().lookup(ioc)
+        with patch("app.enrichment.adapters.threatminer.read_limited", return_value=IP_PASSIVE_DNS_RESPONSE):
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = _mock_get_returning(IP_PASSIVE_DNS_RESPONSE)
+            result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert result.detection_count == 0
@@ -330,10 +340,11 @@ class TestIPLookup:
         """total_engines is always 0 for ThreatMiner results."""
         ioc = _make_ip_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.threatminer.read_limited", return_value=IP_PASSIVE_DNS_RESPONSE):
-            mock_get.return_value = _mock_get_returning(IP_PASSIVE_DNS_RESPONSE)
-            result = _make_adapter().lookup(ioc)
+        with patch("app.enrichment.adapters.threatminer.read_limited", return_value=IP_PASSIVE_DNS_RESPONSE):
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = _mock_get_returning(IP_PASSIVE_DNS_RESPONSE)
+            result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert result.total_engines == 0
@@ -342,10 +353,11 @@ class TestIPLookup:
         """scan_date is always None for ThreatMiner results."""
         ioc = _make_ip_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.threatminer.read_limited", return_value=IP_PASSIVE_DNS_RESPONSE):
-            mock_get.return_value = _mock_get_returning(IP_PASSIVE_DNS_RESPONSE)
-            result = _make_adapter().lookup(ioc)
+        with patch("app.enrichment.adapters.threatminer.read_limited", return_value=IP_PASSIVE_DNS_RESPONSE):
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = _mock_get_returning(IP_PASSIVE_DNS_RESPONSE)
+            result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert result.scan_date is None
@@ -354,12 +366,13 @@ class TestIPLookup:
         """IPv6 lookup also uses host.php (same endpoint as IPv4)."""
         ioc = IOC(type=IOCType.IPV6, value="2001:db8::1", raw_match="2001:db8::1")
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.threatminer.read_limited", return_value=NO_DATA_RESPONSE):
-            mock_get.return_value = _mock_get_returning(NO_DATA_RESPONSE)
-            result = _make_adapter().lookup(ioc)
+        with patch("app.enrichment.adapters.threatminer.read_limited", return_value=NO_DATA_RESPONSE):
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = _mock_get_returning(NO_DATA_RESPONSE)
+            result = adapter.lookup(ioc)
 
-        called_url = mock_get.call_args.args[0]
+        called_url = adapter._session.get.call_args.args[0]
         assert "host.php" in called_url, f"Expected host.php for IPv6, got: {called_url}"
 
 
@@ -373,11 +386,12 @@ class TestDomainLookup:
         """Domain lookup returns EnrichmentResult (not EnrichmentError)."""
         ioc = _make_domain_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.threatminer.read_limited") as mock_read:
-            mock_get.return_value = _mock_get_returning({})
+        with patch("app.enrichment.adapters.threatminer.read_limited") as mock_read:
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = _mock_get_returning({})
             mock_read.side_effect = [DOMAIN_PASSIVE_DNS_RESPONSE, DOMAIN_SAMPLES_RESPONSE]
-            result = _make_adapter().lookup(ioc)
+            result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult), (
             f"Expected EnrichmentResult, got {type(result).__name__}: {result!r}"
@@ -387,27 +401,29 @@ class TestDomainLookup:
         """Domain lookup makes exactly 2 API calls (rt=2 passive DNS + rt=4 related samples)."""
         ioc = _make_domain_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.threatminer.read_limited") as mock_read:
-            mock_get.return_value = _mock_get_returning({})
+        with patch("app.enrichment.adapters.threatminer.read_limited") as mock_read:
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = _mock_get_returning({})
             mock_read.side_effect = [DOMAIN_PASSIVE_DNS_RESPONSE, DOMAIN_SAMPLES_RESPONSE]
-            _make_adapter().lookup(ioc)
+            adapter.lookup(ioc)
 
-        assert mock_get.call_count == 2, (
-            f"Domain lookup must make exactly 2 API calls (rt=2 + rt=4), got {mock_get.call_count}"
+        assert adapter._session.get.call_count == 2, (
+            f"Domain lookup must make exactly 2 API calls (rt=2 + rt=4), got {adapter._session.get.call_count}"
         )
 
     def test_domain_lookup_first_call_uses_rt_2(self) -> None:
         """First API call for domain must use rt=2 (passive DNS)."""
         ioc = _make_domain_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.threatminer.read_limited") as mock_read:
-            mock_get.return_value = _mock_get_returning({})
+        with patch("app.enrichment.adapters.threatminer.read_limited") as mock_read:
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = _mock_get_returning({})
             mock_read.side_effect = [DOMAIN_PASSIVE_DNS_RESPONSE, DOMAIN_SAMPLES_RESPONSE]
-            _make_adapter().lookup(ioc)
+            adapter.lookup(ioc)
 
-        first_call = mock_get.call_args_list[0]
+        first_call = adapter._session.get.call_args_list[0]
         params = first_call.kwargs.get("params", {})
         assert params.get("rt") == "2", f"First call must use rt='2', got: {params}"
 
@@ -415,13 +431,14 @@ class TestDomainLookup:
         """Second API call for domain must use rt=4 (related samples)."""
         ioc = _make_domain_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.threatminer.read_limited") as mock_read:
-            mock_get.return_value = _mock_get_returning({})
+        with patch("app.enrichment.adapters.threatminer.read_limited") as mock_read:
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = _mock_get_returning({})
             mock_read.side_effect = [DOMAIN_PASSIVE_DNS_RESPONSE, DOMAIN_SAMPLES_RESPONSE]
-            _make_adapter().lookup(ioc)
+            adapter.lookup(ioc)
 
-        second_call = mock_get.call_args_list[1]
+        second_call = adapter._session.get.call_args_list[1]
         params = second_call.kwargs.get("params", {})
         assert params.get("rt") == "4", f"Second call must use rt='4', got: {params}"
 
@@ -429,13 +446,14 @@ class TestDomainLookup:
         """Domain lookup must call domain.php endpoint."""
         ioc = _make_domain_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.threatminer.read_limited") as mock_read:
-            mock_get.return_value = _mock_get_returning({})
+        with patch("app.enrichment.adapters.threatminer.read_limited") as mock_read:
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = _mock_get_returning({})
             mock_read.side_effect = [DOMAIN_PASSIVE_DNS_RESPONSE, DOMAIN_SAMPLES_RESPONSE]
-            _make_adapter().lookup(ioc)
+            adapter.lookup(ioc)
 
-        for call_args in mock_get.call_args_list:
+        for call_args in adapter._session.get.call_args_list:
             called_url = call_args.args[0]
             assert "domain.php" in called_url, f"Domain lookup must use domain.php, got: {called_url}"
 
@@ -443,11 +461,12 @@ class TestDomainLookup:
         """Domain lookup result contains both passive_dns and samples in raw_stats."""
         ioc = _make_domain_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.threatminer.read_limited") as mock_read:
-            mock_get.return_value = _mock_get_returning({})
+        with patch("app.enrichment.adapters.threatminer.read_limited") as mock_read:
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = _mock_get_returning({})
             mock_read.side_effect = [DOMAIN_PASSIVE_DNS_RESPONSE, DOMAIN_SAMPLES_RESPONSE]
-            result = _make_adapter().lookup(ioc)
+            result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert "passive_dns" in result.raw_stats, "raw_stats must contain 'passive_dns'"
@@ -457,11 +476,12 @@ class TestDomainLookup:
         """Domain lookup passive_dns list contains IP addresses."""
         ioc = _make_domain_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.threatminer.read_limited") as mock_read:
-            mock_get.return_value = _mock_get_returning({})
+        with patch("app.enrichment.adapters.threatminer.read_limited") as mock_read:
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = _mock_get_returning({})
             mock_read.side_effect = [DOMAIN_PASSIVE_DNS_RESPONSE, DOMAIN_SAMPLES_RESPONSE]
-            result = _make_adapter().lookup(ioc)
+            result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         passive_dns = result.raw_stats["passive_dns"]
@@ -472,11 +492,12 @@ class TestDomainLookup:
         """Domain lookup samples list contains SHA-256 hashes."""
         ioc = _make_domain_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.threatminer.read_limited") as mock_read:
-            mock_get.return_value = _mock_get_returning({})
+        with patch("app.enrichment.adapters.threatminer.read_limited") as mock_read:
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = _mock_get_returning({})
             mock_read.side_effect = [DOMAIN_PASSIVE_DNS_RESPONSE, DOMAIN_SAMPLES_RESPONSE]
-            result = _make_adapter().lookup(ioc)
+            result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         samples = result.raw_stats["samples"]
@@ -494,11 +515,12 @@ class TestDomainLookup:
             ],
         }
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.threatminer.read_limited") as mock_read:
-            mock_get.return_value = _mock_get_returning({})
+        with patch("app.enrichment.adapters.threatminer.read_limited") as mock_read:
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = _mock_get_returning({})
             mock_read.side_effect = [many_ips, DOMAIN_SAMPLES_RESPONSE]
-            result = _make_adapter().lookup(ioc)
+            result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert len(result.raw_stats["passive_dns"]) <= 25, (
@@ -514,11 +536,12 @@ class TestDomainLookup:
             "results": [f"{'a' * 63}{i:01d}" for i in range(25)],
         }
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.threatminer.read_limited") as mock_read:
-            mock_get.return_value = _mock_get_returning({})
+        with patch("app.enrichment.adapters.threatminer.read_limited") as mock_read:
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = _mock_get_returning({})
             mock_read.side_effect = [DOMAIN_PASSIVE_DNS_RESPONSE, many_samples]
-            result = _make_adapter().lookup(ioc)
+            result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert len(result.raw_stats["samples"]) <= 20, (
@@ -529,11 +552,12 @@ class TestDomainLookup:
         """Domain lookup verdict is always 'no_data'."""
         ioc = _make_domain_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.threatminer.read_limited") as mock_read:
-            mock_get.return_value = _mock_get_returning({})
+        with patch("app.enrichment.adapters.threatminer.read_limited") as mock_read:
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = _mock_get_returning({})
             mock_read.side_effect = [DOMAIN_PASSIVE_DNS_RESPONSE, DOMAIN_SAMPLES_RESPONSE]
-            result = _make_adapter().lookup(ioc)
+            result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert result.verdict == "no_data"
@@ -549,10 +573,11 @@ class TestHashLookup:
         """SHA256 lookup returns EnrichmentResult."""
         ioc = _make_sha256_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.threatminer.read_limited", return_value=HASH_SAMPLES_RESPONSE):
-            mock_get.return_value = _mock_get_returning(HASH_SAMPLES_RESPONSE)
-            result = _make_adapter().lookup(ioc)
+        with patch("app.enrichment.adapters.threatminer.read_limited", return_value=HASH_SAMPLES_RESPONSE):
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = _mock_get_returning(HASH_SAMPLES_RESPONSE)
+            result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult), (
             f"Expected EnrichmentResult, got {type(result).__name__}: {result!r}"
@@ -562,10 +587,11 @@ class TestHashLookup:
         """SHA256 lookup returns samples list in raw_stats."""
         ioc = _make_sha256_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.threatminer.read_limited", return_value=HASH_SAMPLES_RESPONSE):
-            mock_get.return_value = _mock_get_returning(HASH_SAMPLES_RESPONSE)
-            result = _make_adapter().lookup(ioc)
+        with patch("app.enrichment.adapters.threatminer.read_limited", return_value=HASH_SAMPLES_RESPONSE):
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = _mock_get_returning(HASH_SAMPLES_RESPONSE)
+            result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert "samples" in result.raw_stats
@@ -575,10 +601,11 @@ class TestHashLookup:
         """SHA256 lookup samples list contains the related hashes from API response."""
         ioc = _make_sha256_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.threatminer.read_limited", return_value=HASH_SAMPLES_RESPONSE):
-            mock_get.return_value = _mock_get_returning(HASH_SAMPLES_RESPONSE)
-            result = _make_adapter().lookup(ioc)
+        with patch("app.enrichment.adapters.threatminer.read_limited", return_value=HASH_SAMPLES_RESPONSE):
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = _mock_get_returning(HASH_SAMPLES_RESPONSE)
+            result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         samples = result.raw_stats["samples"]
@@ -589,24 +616,26 @@ class TestHashLookup:
         """Hash lookup must call sample.php endpoint."""
         ioc = _make_sha256_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.threatminer.read_limited", return_value=HASH_SAMPLES_RESPONSE):
-            mock_get.return_value = _mock_get_returning(HASH_SAMPLES_RESPONSE)
-            _make_adapter().lookup(ioc)
+        with patch("app.enrichment.adapters.threatminer.read_limited", return_value=HASH_SAMPLES_RESPONSE):
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = _mock_get_returning(HASH_SAMPLES_RESPONSE)
+            adapter.lookup(ioc)
 
-        called_url = mock_get.call_args.args[0]
+        called_url = adapter._session.get.call_args.args[0]
         assert "sample.php" in called_url, f"Expected sample.php, got: {called_url}"
 
     def test_hash_lookup_uses_rt_4(self) -> None:
         """Hash lookup must use rt=4 (related samples)."""
         ioc = _make_sha256_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.threatminer.read_limited", return_value=HASH_SAMPLES_RESPONSE):
-            mock_get.return_value = _mock_get_returning(HASH_SAMPLES_RESPONSE)
-            _make_adapter().lookup(ioc)
+        with patch("app.enrichment.adapters.threatminer.read_limited", return_value=HASH_SAMPLES_RESPONSE):
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = _mock_get_returning(HASH_SAMPLES_RESPONSE)
+            adapter.lookup(ioc)
 
-        call_kwargs = mock_get.call_args
+        call_kwargs = adapter._session.get.call_args
         params = call_kwargs.kwargs.get("params", {})
         assert params.get("rt") == "4", f"Expected rt='4', got: {params}"
 
@@ -619,10 +648,11 @@ class TestHashLookup:
             "results": [f"{'a' * 63}{i:01d}" for i in range(25)],
         }
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.threatminer.read_limited", return_value=many_samples):
-            mock_get.return_value = _mock_get_returning(many_samples)
-            result = _make_adapter().lookup(ioc)
+        with patch("app.enrichment.adapters.threatminer.read_limited", return_value=many_samples):
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = _mock_get_returning(many_samples)
+            result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert len(result.raw_stats["samples"]) <= 20, (
@@ -633,34 +663,37 @@ class TestHashLookup:
         """MD5 hash lookup also uses sample.php."""
         ioc = _make_md5_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.threatminer.read_limited", return_value=HASH_SAMPLES_RESPONSE):
-            mock_get.return_value = _mock_get_returning(HASH_SAMPLES_RESPONSE)
-            _make_adapter().lookup(ioc)
+        with patch("app.enrichment.adapters.threatminer.read_limited", return_value=HASH_SAMPLES_RESPONSE):
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = _mock_get_returning(HASH_SAMPLES_RESPONSE)
+            adapter.lookup(ioc)
 
-        called_url = mock_get.call_args.args[0]
+        called_url = adapter._session.get.call_args.args[0]
         assert "sample.php" in called_url
 
     def test_sha1_lookup_uses_sample_php(self) -> None:
         """SHA1 hash lookup also uses sample.php."""
         ioc = IOC(type=IOCType.SHA1, value="da39a3ee5e6b4b0d3255bfef95601890afd80709", raw_match="da39a3ee5e6b4b0d3255bfef95601890afd80709")
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.threatminer.read_limited", return_value=HASH_SAMPLES_RESPONSE):
-            mock_get.return_value = _mock_get_returning(HASH_SAMPLES_RESPONSE)
-            _make_adapter().lookup(ioc)
+        with patch("app.enrichment.adapters.threatminer.read_limited", return_value=HASH_SAMPLES_RESPONSE):
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = _mock_get_returning(HASH_SAMPLES_RESPONSE)
+            adapter.lookup(ioc)
 
-        called_url = mock_get.call_args.args[0]
+        called_url = adapter._session.get.call_args.args[0]
         assert "sample.php" in called_url
 
     def test_hash_lookup_verdict_is_no_data(self) -> None:
         """Hash lookup verdict is always 'no_data'."""
         ioc = _make_sha256_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.threatminer.read_limited", return_value=HASH_SAMPLES_RESPONSE):
-            mock_get.return_value = _mock_get_returning(HASH_SAMPLES_RESPONSE)
-            result = _make_adapter().lookup(ioc)
+        with patch("app.enrichment.adapters.threatminer.read_limited", return_value=HASH_SAMPLES_RESPONSE):
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = _mock_get_returning(HASH_SAMPLES_RESPONSE)
+            result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert result.verdict == "no_data"
@@ -677,11 +710,12 @@ class TestHashLookup:
             ],
         }
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.threatminer.read_limited", return_value=dict_results):
-            mock_get.return_value = _mock_get_returning(dict_results)
+        with patch("app.enrichment.adapters.threatminer.read_limited", return_value=dict_results):
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = _mock_get_returning(dict_results)
             # Should not raise an exception
-            result = _make_adapter().lookup(ioc)
+            result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         # At minimum the plain string result should be included
@@ -698,10 +732,11 @@ class TestNoDataHandling:
         """IP lookup with body status_code '404' returns EnrichmentResult(verdict='no_data')."""
         ioc = _make_ip_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.threatminer.read_limited", return_value=NO_DATA_RESPONSE):
-            mock_get.return_value = _mock_get_returning(NO_DATA_RESPONSE)
-            result = _make_adapter().lookup(ioc)
+        with patch("app.enrichment.adapters.threatminer.read_limited", return_value=NO_DATA_RESPONSE):
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = _mock_get_returning(NO_DATA_RESPONSE)
+            result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult), (
             f"status_code '404' in body must return EnrichmentResult (no_data), not EnrichmentError. Got: {result!r}"
@@ -712,10 +747,11 @@ class TestNoDataHandling:
         """IP lookup with body status_code '404' returns empty raw_stats."""
         ioc = _make_ip_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.threatminer.read_limited", return_value=NO_DATA_RESPONSE):
-            mock_get.return_value = _mock_get_returning(NO_DATA_RESPONSE)
-            result = _make_adapter().lookup(ioc)
+        with patch("app.enrichment.adapters.threatminer.read_limited", return_value=NO_DATA_RESPONSE):
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = _mock_get_returning(NO_DATA_RESPONSE)
+            result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert result.raw_stats == {}
@@ -724,10 +760,11 @@ class TestNoDataHandling:
         """IP lookup with status_code '200' but empty results returns no_data."""
         ioc = _make_ip_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.threatminer.read_limited", return_value=EMPTY_RESULTS_RESPONSE):
-            mock_get.return_value = _mock_get_returning(EMPTY_RESULTS_RESPONSE)
-            result = _make_adapter().lookup(ioc)
+        with patch("app.enrichment.adapters.threatminer.read_limited", return_value=EMPTY_RESULTS_RESPONSE):
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = _mock_get_returning(EMPTY_RESULTS_RESPONSE)
+            result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert result.verdict == "no_data"
@@ -736,11 +773,12 @@ class TestNoDataHandling:
         """Domain lookup with both calls returning status_code '404' returns no_data."""
         ioc = _make_domain_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.threatminer.read_limited") as mock_read:
-            mock_get.return_value = _mock_get_returning({})
+        with patch("app.enrichment.adapters.threatminer.read_limited") as mock_read:
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = _mock_get_returning({})
             mock_read.side_effect = [NO_DATA_RESPONSE, NO_DATA_RESPONSE]
-            result = _make_adapter().lookup(ioc)
+            result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert result.verdict == "no_data"
@@ -750,11 +788,12 @@ class TestNoDataHandling:
         """Domain with passive DNS '404' but samples data -> samples included, passive_dns absent or empty."""
         ioc = _make_domain_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.threatminer.read_limited") as mock_read:
-            mock_get.return_value = _mock_get_returning({})
+        with patch("app.enrichment.adapters.threatminer.read_limited") as mock_read:
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = _mock_get_returning({})
             mock_read.side_effect = [NO_DATA_RESPONSE, DOMAIN_SAMPLES_RESPONSE]
-            result = _make_adapter().lookup(ioc)
+            result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         # samples should be populated from the second call
@@ -764,11 +803,12 @@ class TestNoDataHandling:
         """Domain with passive DNS data but samples '404' -> passive_dns included, samples absent or empty."""
         ioc = _make_domain_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.threatminer.read_limited") as mock_read:
-            mock_get.return_value = _mock_get_returning({})
+        with patch("app.enrichment.adapters.threatminer.read_limited") as mock_read:
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = _mock_get_returning({})
             mock_read.side_effect = [DOMAIN_PASSIVE_DNS_RESPONSE, NO_DATA_RESPONSE]
-            result = _make_adapter().lookup(ioc)
+            result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         # passive_dns should be populated from the first call
@@ -778,10 +818,11 @@ class TestNoDataHandling:
         """Hash lookup with body status_code '404' returns EnrichmentResult(verdict='no_data')."""
         ioc = _make_sha256_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.threatminer.read_limited", return_value=NO_DATA_RESPONSE):
-            mock_get.return_value = _mock_get_returning(NO_DATA_RESPONSE)
-            result = _make_adapter().lookup(ioc)
+        with patch("app.enrichment.adapters.threatminer.read_limited", return_value=NO_DATA_RESPONSE):
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = _mock_get_returning(NO_DATA_RESPONSE)
+            result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult), (
             f"Body '404' must return EnrichmentResult, got {type(result).__name__}: {result!r}"
@@ -792,10 +833,11 @@ class TestNoDataHandling:
         """Hash lookup with body status_code '404' returns empty raw_stats."""
         ioc = _make_sha256_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.threatminer.read_limited", return_value=NO_DATA_RESPONSE):
-            mock_get.return_value = _mock_get_returning(NO_DATA_RESPONSE)
-            result = _make_adapter().lookup(ioc)
+        with patch("app.enrichment.adapters.threatminer.read_limited", return_value=NO_DATA_RESPONSE):
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = _mock_get_returning(NO_DATA_RESPONSE)
+            result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert result.raw_stats == {}
@@ -815,8 +857,10 @@ class TestHTTPErrors:
         http_err = requests.exceptions.HTTPError(response=mock_resp)
         mock_resp.raise_for_status = MagicMock(side_effect=http_err)
 
-        with patch("requests.get", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentError), (
             f"HTTP 429 must return EnrichmentError, got {type(result).__name__}: {result!r}"
@@ -832,8 +876,10 @@ class TestHTTPErrors:
         http_err = requests.exceptions.HTTPError(response=mock_resp)
         mock_resp.raise_for_status = MagicMock(side_effect=http_err)
 
-        with patch("requests.get", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentError)
         assert "403" in result.error
@@ -842,8 +888,10 @@ class TestHTTPErrors:
         """Network timeout for IP lookup -> EnrichmentError('Timeout')."""
         ioc = _make_ip_ioc()
 
-        with patch("requests.get", side_effect=requests.exceptions.Timeout("timed out")):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.side_effect = requests.exceptions.Timeout("timed out")
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentError)
         assert result.provider == "ThreatMiner"
@@ -853,8 +901,10 @@ class TestHTTPErrors:
         """Unexpected exception for IP lookup -> EnrichmentError('Unexpected error')."""
         ioc = _make_ip_ioc()
 
-        with patch("requests.get", side_effect=RuntimeError("boom")):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.side_effect = RuntimeError("boom")
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentError)
         assert "Unexpected" in result.error or "unexpected" in result.error.lower()
@@ -867,15 +917,17 @@ class TestHTTPErrors:
         http_err = requests.exceptions.HTTPError(response=mock_resp)
         mock_resp.raise_for_status = MagicMock(side_effect=http_err)
 
-        with patch("requests.get", return_value=mock_resp) as mock_get:
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentError), (
             f"HTTP 429 on first domain call must return EnrichmentError, got {type(result).__name__}"
         )
         assert "429" in result.error
-        assert mock_get.call_count == 1, (
-            f"After 429 on first domain call, must NOT make second call. Got {mock_get.call_count} calls."
+        assert adapter._session.get.call_count == 1, (
+            f"After 429 on first domain call, must NOT make second call. Got {adapter._session.get.call_count} calls."
         )
 
     def test_ssrf_validation_blocks_disallowed_host(self) -> None:
@@ -883,9 +935,9 @@ class TestHTTPErrors:
         ioc = _make_ip_ioc()
         adapter = ThreatMinerAdapter(allowed_hosts=[])
 
-        with patch("requests.get") as mock_get:
-            mock_get.side_effect = AssertionError("Should not reach network")
-            result = adapter.lookup(ioc)
+        adapter._session = MagicMock()
+        adapter._session.get.side_effect = AssertionError("Should not reach network")
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentError), (
             "Expected EnrichmentError when host not in allowed_hosts (SSRF check)"
@@ -904,8 +956,10 @@ class TestHTTPErrors:
         http_err = requests.exceptions.HTTPError(response=mock_resp)
         mock_resp.raise_for_status = MagicMock(side_effect=http_err)
 
-        with patch("requests.get", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentError)
         assert "500" in result.error
@@ -922,12 +976,13 @@ class TestHTTPSafetyControls:
         from app.enrichment.http_safety import TIMEOUT
         ioc = _make_ip_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.threatminer.read_limited", return_value=IP_PASSIVE_DNS_RESPONSE):
-            mock_get.return_value = _mock_get_returning(IP_PASSIVE_DNS_RESPONSE)
-            _make_adapter().lookup(ioc)
+        with patch("app.enrichment.adapters.threatminer.read_limited", return_value=IP_PASSIVE_DNS_RESPONSE):
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = _mock_get_returning(IP_PASSIVE_DNS_RESPONSE)
+            adapter.lookup(ioc)
 
-        call_kwargs = mock_get.call_args.kwargs
+        call_kwargs = adapter._session.get.call_args.kwargs
         assert call_kwargs.get("timeout") == TIMEOUT, (
             f"Expected timeout={TIMEOUT!r} (SEC-04), got {call_kwargs.get('timeout')!r}"
         )
@@ -936,12 +991,13 @@ class TestHTTPSafetyControls:
         """requests.get must be called with allow_redirects=False (SEC-06)."""
         ioc = _make_ip_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.threatminer.read_limited", return_value=IP_PASSIVE_DNS_RESPONSE):
-            mock_get.return_value = _mock_get_returning(IP_PASSIVE_DNS_RESPONSE)
-            _make_adapter().lookup(ioc)
+        with patch("app.enrichment.adapters.threatminer.read_limited", return_value=IP_PASSIVE_DNS_RESPONSE):
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = _mock_get_returning(IP_PASSIVE_DNS_RESPONSE)
+            adapter.lookup(ioc)
 
-        call_kwargs = mock_get.call_args.kwargs
+        call_kwargs = adapter._session.get.call_args.kwargs
         assert call_kwargs.get("allow_redirects") is False, (
             "allow_redirects must be False (SEC-06)"
         )
@@ -950,23 +1006,25 @@ class TestHTTPSafetyControls:
         """requests.get must be called with stream=True (SEC-05)."""
         ioc = _make_ip_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.threatminer.read_limited", return_value=IP_PASSIVE_DNS_RESPONSE):
-            mock_get.return_value = _mock_get_returning(IP_PASSIVE_DNS_RESPONSE)
-            _make_adapter().lookup(ioc)
+        with patch("app.enrichment.adapters.threatminer.read_limited", return_value=IP_PASSIVE_DNS_RESPONSE):
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = _mock_get_returning(IP_PASSIVE_DNS_RESPONSE)
+            adapter.lookup(ioc)
 
-        call_kwargs = mock_get.call_args.kwargs
+        call_kwargs = adapter._session.get.call_args.kwargs
         assert call_kwargs.get("stream") is True, "stream must be True (SEC-05)"
 
     def test_validate_endpoint_called_for_ip(self) -> None:
         """validate_endpoint must be called before making the HTTP request for IP lookup (SEC-16)."""
         ioc = _make_ip_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.threatminer.validate_endpoint") as mock_validate, \
+        with patch("app.enrichment.adapters.threatminer.validate_endpoint") as mock_validate, \
              patch("app.enrichment.adapters.threatminer.read_limited", return_value=IP_PASSIVE_DNS_RESPONSE):
-            mock_get.return_value = _mock_get_returning(IP_PASSIVE_DNS_RESPONSE)
-            _make_adapter().lookup(ioc)
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = _mock_get_returning(IP_PASSIVE_DNS_RESPONSE)
+            adapter.lookup(ioc)
 
         mock_validate.assert_called_once()
         called_url = mock_validate.call_args.args[0]
@@ -976,12 +1034,13 @@ class TestHTTPSafetyControls:
         """validate_endpoint must be called for BOTH domain API calls (SEC-16)."""
         ioc = _make_domain_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.threatminer.validate_endpoint") as mock_validate, \
+        with patch("app.enrichment.adapters.threatminer.validate_endpoint") as mock_validate, \
              patch("app.enrichment.adapters.threatminer.read_limited") as mock_read:
-            mock_get.return_value = _mock_get_returning({})
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = _mock_get_returning({})
             mock_read.side_effect = [DOMAIN_PASSIVE_DNS_RESPONSE, DOMAIN_SAMPLES_RESPONSE]
-            _make_adapter().lookup(ioc)
+            adapter.lookup(ioc)
 
         assert mock_validate.call_count == 2, (
             f"validate_endpoint must be called twice for domain lookup (once per API call). Got {mock_validate.call_count}"
@@ -991,12 +1050,13 @@ class TestHTTPSafetyControls:
         """requests.get must be called with params dict (NOT f-string URL with value embedded)."""
         ioc = _make_ip_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.threatminer.read_limited", return_value=IP_PASSIVE_DNS_RESPONSE):
-            mock_get.return_value = _mock_get_returning(IP_PASSIVE_DNS_RESPONSE)
-            _make_adapter().lookup(ioc)
+        with patch("app.enrichment.adapters.threatminer.read_limited", return_value=IP_PASSIVE_DNS_RESPONSE):
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = _mock_get_returning(IP_PASSIVE_DNS_RESPONSE)
+            adapter.lookup(ioc)
 
-        call_kwargs = mock_get.call_args.kwargs
+        call_kwargs = adapter._session.get.call_args.kwargs
         assert "params" in call_kwargs, "requests.get must be called with params= kwarg (not f-string URL)"
         assert "q" in call_kwargs["params"], "params must contain 'q' key"
         assert call_kwargs["params"]["q"] == "1.2.3.4"

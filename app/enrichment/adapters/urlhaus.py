@@ -24,7 +24,8 @@ Verdict logic:
 Supported IOC types: URL, IPv4, IPv6, DOMAIN, MD5, SHA256
 NOT supported: SHA1, CVE
 
-Thread safety: a fresh requests.post call is used per lookup() call (no shared Session).
+Thread safety: a persistent requests.Session is created in __init__ and reused across
+lookup() calls (TCP connection pooling).
 """
 from __future__ import annotations
 
@@ -84,6 +85,11 @@ class URLhausAdapter:
     def __init__(self, api_key: str, allowed_hosts: list[str]) -> None:
         self._api_key = api_key
         self._allowed_hosts = allowed_hosts
+        self._session = requests.Session()
+        self._session.headers.update({
+            "Auth-Key": self._api_key,
+            "Accept": "application/json",
+        })
 
     def is_configured(self) -> bool:
         """Return True if a non-empty API key is set."""
@@ -127,13 +133,9 @@ class URLhausAdapter:
             return EnrichmentError(ioc=ioc, provider=self.name, error=str(exc))
 
         try:
-            resp = requests.post(
+            resp = self._session.post(
                 url,
                 data={body_key: ioc.value},           # form-encoded (not JSON)
-                headers={
-                    "Auth-Key": self._api_key,
-                    "Accept": "application/json",
-                },
                 timeout=TIMEOUT,                       # SEC-04
                 allow_redirects=False,                 # SEC-06
                 stream=True,                           # SEC-05 setup
@@ -146,6 +148,10 @@ class URLhausAdapter:
         except requests.exceptions.HTTPError as exc:
             code = exc.response.status_code if exc.response is not None else "unknown"
             return EnrichmentError(ioc=ioc, provider=self.name, error=f"HTTP {code}")
+        except requests.exceptions.SSLError:
+            return EnrichmentError(ioc=ioc, provider=self.name, error="SSL/TLS error")
+        except requests.exceptions.ConnectionError:
+            return EnrichmentError(ioc=ioc, provider=self.name, error="Connection failed")
         except Exception:
             logger.exception(
                 "Unexpected error during URLhaus lookup for %s", ioc.value

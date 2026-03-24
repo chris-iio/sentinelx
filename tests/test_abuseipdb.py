@@ -31,6 +31,7 @@ from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.enrichment.adapters.abuseipdb import AbuseIPDBAdapter
 from app.enrichment.http_safety import MAX_RESPONSE_BYTES
 from app.enrichment.provider import Provider
+from tests.helpers import make_mock_response
 
 
 ALLOWED_HOSTS = ["api.abuseipdb.com"]
@@ -104,19 +105,6 @@ ABUSEIPDB_NO_DATA_RESPONSE = _make_response_body(
 )
 
 
-def _make_mock_get_response(status_code: int, body: dict | None = None) -> MagicMock:
-    """Build a mock requests.Response for GET requests."""
-    mock_resp = MagicMock()
-    mock_resp.status_code = status_code
-    if body is not None:
-        raw_bytes = json.dumps(body).encode()
-        mock_resp.iter_content = MagicMock(return_value=iter([raw_bytes]))
-    if status_code >= 400:
-        http_err = requests.exceptions.HTTPError(response=mock_resp)
-        mock_resp.raise_for_status = MagicMock(side_effect=http_err)
-    else:
-        mock_resp.raise_for_status = MagicMock()
-    return mock_resp
 
 
 def _make_adapter(
@@ -183,10 +171,12 @@ class TestAbuseIPDBLookup:
     def test_high_score_returns_malicious(self) -> None:
         """abuseConfidenceScore >= 75 -> verdict 'malicious'."""
         ioc = IOC(type=IOCType.IPV4, value="1.2.3.4", raw_match="1.2.3.4")
-        mock_resp = _make_mock_get_response(200, ABUSEIPDB_MALICIOUS_RESPONSE)
+        mock_resp = make_mock_response(200, ABUSEIPDB_MALICIOUS_RESPONSE)
 
-        with patch("requests.get", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult), (
             f"Expected EnrichmentResult, got {type(result).__name__}: {result!r}"
@@ -197,10 +187,12 @@ class TestAbuseIPDBLookup:
     def test_medium_score_returns_suspicious(self) -> None:
         """25 <= abuseConfidenceScore < 75 -> verdict 'suspicious'."""
         ioc = IOC(type=IOCType.IPV4, value="5.6.7.8", raw_match="5.6.7.8")
-        mock_resp = _make_mock_get_response(200, ABUSEIPDB_SUSPICIOUS_RESPONSE)
+        mock_resp = make_mock_response(200, ABUSEIPDB_SUSPICIOUS_RESPONSE)
 
-        with patch("requests.get", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert result.provider == "AbuseIPDB"
@@ -209,10 +201,12 @@ class TestAbuseIPDBLookup:
     def test_low_score_with_reports_returns_clean(self) -> None:
         """score < 25 AND totalReports > 0 -> verdict 'clean'."""
         ioc = IOC(type=IOCType.IPV4, value="9.10.11.12", raw_match="9.10.11.12")
-        mock_resp = _make_mock_get_response(200, ABUSEIPDB_CLEAN_RESPONSE)
+        mock_resp = make_mock_response(200, ABUSEIPDB_CLEAN_RESPONSE)
 
-        with patch("requests.get", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert result.provider == "AbuseIPDB"
@@ -221,10 +215,12 @@ class TestAbuseIPDBLookup:
     def test_zero_reports_returns_no_data(self) -> None:
         """totalReports == 0 -> verdict 'no_data' (not in database)."""
         ioc = IOC(type=IOCType.IPV4, value="192.0.2.1", raw_match="192.0.2.1")
-        mock_resp = _make_mock_get_response(200, ABUSEIPDB_NO_DATA_RESPONSE)
+        mock_resp = make_mock_response(200, ABUSEIPDB_NO_DATA_RESPONSE)
 
-        with patch("requests.get", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert result.provider == "AbuseIPDB"
@@ -233,10 +229,12 @@ class TestAbuseIPDBLookup:
     def test_detection_count_equals_total_reports(self) -> None:
         """detection_count must equal totalReports from response."""
         ioc = IOC(type=IOCType.IPV4, value="1.2.3.4", raw_match="1.2.3.4")
-        mock_resp = _make_mock_get_response(200, ABUSEIPDB_MALICIOUS_RESPONSE)
+        mock_resp = make_mock_response(200, ABUSEIPDB_MALICIOUS_RESPONSE)
 
-        with patch("requests.get", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         expected_reports = ABUSEIPDB_MALICIOUS_RESPONSE["data"]["totalReports"]
@@ -245,10 +243,12 @@ class TestAbuseIPDBLookup:
     def test_total_engines_equals_num_distinct_users(self) -> None:
         """total_engines must equal numDistinctUsers from response."""
         ioc = IOC(type=IOCType.IPV4, value="1.2.3.4", raw_match="1.2.3.4")
-        mock_resp = _make_mock_get_response(200, ABUSEIPDB_MALICIOUS_RESPONSE)
+        mock_resp = make_mock_response(200, ABUSEIPDB_MALICIOUS_RESPONSE)
 
-        with patch("requests.get", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         expected_users = ABUSEIPDB_MALICIOUS_RESPONSE["data"]["numDistinctUsers"]
@@ -257,10 +257,12 @@ class TestAbuseIPDBLookup:
     def test_scan_date_is_last_reported_at(self) -> None:
         """scan_date must equal data.lastReportedAt from response."""
         ioc = IOC(type=IOCType.IPV4, value="1.2.3.4", raw_match="1.2.3.4")
-        mock_resp = _make_mock_get_response(200, ABUSEIPDB_MALICIOUS_RESPONSE)
+        mock_resp = make_mock_response(200, ABUSEIPDB_MALICIOUS_RESPONSE)
 
-        with patch("requests.get", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         expected_date = ABUSEIPDB_MALICIOUS_RESPONSE["data"]["lastReportedAt"]
@@ -269,10 +271,12 @@ class TestAbuseIPDBLookup:
     def test_raw_stats_content(self) -> None:
         """200 response -> raw_stats contains expected keys."""
         ioc = IOC(type=IOCType.IPV4, value="1.2.3.4", raw_match="1.2.3.4")
-        mock_resp = _make_mock_get_response(200, ABUSEIPDB_MALICIOUS_RESPONSE)
+        mock_resp = make_mock_response(200, ABUSEIPDB_MALICIOUS_RESPONSE)
 
-        with patch("requests.get", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         for key in ("abuseConfidenceScore", "totalReports", "numDistinctUsers",
@@ -282,10 +286,12 @@ class TestAbuseIPDBLookup:
     def test_raw_stats_values_match_response(self) -> None:
         """raw_stats values must match response data fields."""
         ioc = IOC(type=IOCType.IPV4, value="1.2.3.4", raw_match="1.2.3.4")
-        mock_resp = _make_mock_get_response(200, ABUSEIPDB_SUSPICIOUS_RESPONSE)
+        mock_resp = make_mock_response(200, ABUSEIPDB_SUSPICIOUS_RESPONSE)
 
-        with patch("requests.get", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         data = ABUSEIPDB_SUSPICIOUS_RESPONSE["data"]
         assert isinstance(result, EnrichmentResult)
@@ -303,10 +309,12 @@ class TestAbuseIPDBLookup:
             total_reports=25,
             ip_address=ipv6,
         )
-        mock_resp = _make_mock_get_response(200, response_body)
+        mock_resp = make_mock_response(200, response_body)
 
-        with patch("requests.get", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert result.verdict == "malicious"
@@ -318,10 +326,12 @@ class TestAbuseIPDBLookup:
             abuse_confidence_score=75,
             total_reports=5,
         )
-        mock_resp = _make_mock_get_response(200, response_body)
+        mock_resp = make_mock_response(200, response_body)
 
-        with patch("requests.get", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert result.verdict == "malicious"
@@ -333,24 +343,21 @@ class TestAbuseIPDBLookup:
             abuse_confidence_score=25,
             total_reports=5,
         )
-        mock_resp = _make_mock_get_response(200, response_body)
+        mock_resp = make_mock_response(200, response_body)
 
-        with patch("requests.get", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert result.verdict == "suspicious"
 
     def test_auth_header_uses_capital_key(self) -> None:
         """CRITICAL: AbuseIPDB auth header must be capital 'Key' (not lowercase 'key')."""
-        ioc = IOC(type=IOCType.IPV4, value="1.2.3.4", raw_match="1.2.3.4")
-        mock_resp = _make_mock_get_response(200, ABUSEIPDB_NO_DATA_RESPONSE)
-
-        with patch("requests.get", return_value=mock_resp) as mock_get:
-            _make_adapter(api_key="myapikey").lookup(ioc)
-
-        call_kwargs = mock_get.call_args.kwargs
-        headers = call_kwargs.get("headers", {})
+        adapter = _make_adapter(api_key="myapikey")
+        # Headers are set on the persistent session in __init__
+        headers = dict(adapter._session.headers)
         assert "Key" in headers, (
             f"AbuseIPDB auth header must use capital 'Key', got headers: {headers}"
         )
@@ -359,14 +366,9 @@ class TestAbuseIPDBLookup:
 
     def test_accept_header_present(self) -> None:
         """'Accept: application/json' header must be included to avoid HTML response."""
-        ioc = IOC(type=IOCType.IPV4, value="1.2.3.4", raw_match="1.2.3.4")
-        mock_resp = _make_mock_get_response(200, ABUSEIPDB_NO_DATA_RESPONSE)
-
-        with patch("requests.get", return_value=mock_resp) as mock_get:
-            _make_adapter().lookup(ioc)
-
-        call_kwargs = mock_get.call_args.kwargs
-        headers = call_kwargs.get("headers", {})
+        adapter = _make_adapter()
+        # Accept header is set on the persistent session in __init__
+        headers = dict(adapter._session.headers)
         assert headers.get("Accept") == "application/json", (
             "AbuseIPDB requires 'Accept: application/json' or it may return HTML"
         )
@@ -374,12 +376,14 @@ class TestAbuseIPDBLookup:
     def test_no_redirect_flag(self) -> None:
         """SEC-06: allow_redirects must be False for all requests."""
         ioc = IOC(type=IOCType.IPV4, value="1.2.3.4", raw_match="1.2.3.4")
-        mock_resp = _make_mock_get_response(200, ABUSEIPDB_NO_DATA_RESPONSE)
+        mock_resp = make_mock_response(200, ABUSEIPDB_NO_DATA_RESPONSE)
 
-        with patch("requests.get", return_value=mock_resp) as mock_get:
-            _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.return_value = mock_resp
+        adapter.lookup(ioc)
 
-        call_kwargs = mock_get.call_args.kwargs
+        call_kwargs = adapter._session.get.call_args.kwargs
         assert call_kwargs.get("allow_redirects") is False, (
             "SEC-06: allow_redirects must be False"
         )
@@ -411,8 +415,10 @@ class TestAbuseIPDBErrors:
         """Network timeout -> EnrichmentError with 'Timeout' in error."""
         ioc = IOC(type=IOCType.IPV4, value="1.2.3.4", raw_match="1.2.3.4")
 
-        with patch("requests.get", side_effect=requests.exceptions.Timeout("timed out")):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.side_effect = requests.exceptions.Timeout("timed out")
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentError)
         assert result.provider == "AbuseIPDB"
@@ -421,10 +427,12 @@ class TestAbuseIPDBErrors:
     def test_http_500(self) -> None:
         """HTTP 500 -> EnrichmentError with 'HTTP 500' in error."""
         ioc = IOC(type=IOCType.IPV4, value="1.2.3.4", raw_match="1.2.3.4")
-        mock_resp = _make_mock_get_response(500)
+        mock_resp = make_mock_response(500)
 
-        with patch("requests.get", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentError)
         assert result.provider == "AbuseIPDB"
@@ -433,10 +441,12 @@ class TestAbuseIPDBErrors:
     def test_rate_limit_429_returns_specific_message(self) -> None:
         """HTTP 429 -> EnrichmentError with 'Rate limit exceeded (429)' message."""
         ioc = IOC(type=IOCType.IPV4, value="1.2.3.4", raw_match="1.2.3.4")
-        mock_resp = _make_mock_get_response(429)
+        mock_resp = make_mock_response(429)
 
-        with patch("requests.get", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentError)
         assert result.provider == "AbuseIPDB"
@@ -448,9 +458,9 @@ class TestAbuseIPDBErrors:
         ioc = IOC(type=IOCType.IPV4, value="1.2.3.4", raw_match="1.2.3.4")
         adapter = AbuseIPDBAdapter(api_key=TEST_API_KEY, allowed_hosts=[])
 
-        with patch("requests.get") as mock_get:
-            mock_get.side_effect = AssertionError("Should not reach network")
-            result = adapter.lookup(ioc)
+        adapter._session = MagicMock()
+        adapter._session.get.side_effect = AssertionError("Should not reach network")
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentError), (
             "Expected EnrichmentError when host not in allowed_hosts (SSRF check)"
@@ -471,8 +481,10 @@ class TestAbuseIPDBErrors:
         mock_resp.raise_for_status = MagicMock()
         mock_resp.iter_content = MagicMock(return_value=iter([oversized_chunk]))
 
-        with patch("requests.get", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentError), (
             f"Expected EnrichmentError for oversized response, got {type(result).__name__}"

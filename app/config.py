@@ -32,7 +32,7 @@ class Config:
     # SSRF prevention: allowlist of permitted outbound API hostnames (SEC-16)
     # Phase 2: VirusTotal; Phase 3: MalwareBazaar and ThreatFox (abuse.ch) added.
     # Phase 25: Shodan InternetDB (zero-auth)
-    # v6.0 Phase 01-01: ip-api.com GeoIP (zero-auth, HTTP-only free tier)
+    # v6.0 Phase 01-01: ipinfo.io GeoIP (zero-auth, HTTPS)
     # v6.0 Phase 01-01: CIRCL Hashlookup NSRL (zero-auth)
     # v6.0 Phase 02-03: crt.sh Certificate Transparency (zero-auth)
     # v6.0 Phase 03-01: ThreatMiner passive DNS (zero-auth)
@@ -45,7 +45,7 @@ class Config:
         "otx.alienvault.com",      # Phase 03-01: OTX AlienVault (free-key)
         "api.greynoise.io",        # Phase 03-02: GreyNoise Community (free-key)
         "api.abuseipdb.com",       # Phase 03-02: AbuseIPDB (free-key)
-        "ip-api.com",              # v6.0 Phase 01-01: ip-api.com GeoIP (zero-auth)
+        "ipinfo.io",               # v6.0 Phase 01-01: ipinfo.io GeoIP (zero-auth, HTTPS)
         "hashlookup.circl.lu",     # v6.0 Phase 01-01: CIRCL Hashlookup NSRL (zero-auth)
         "crt.sh",                  # v6.0 Phase 02-03: crt.sh Certificate Transparency (zero-auth)
         "api.threatminer.org",     # v6.0 Phase 03-01: ThreatMiner passive DNS (zero-auth)

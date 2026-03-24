@@ -1,80 +1,157 @@
 ---
-estimated_steps: 4
-estimated_files: 1
-skills_used:
-  - test
+estimated_steps: 7
+estimated_files: 3
 ---
 
-# T02: Test row-factory.ts DOM builders covering all visual redesign requirements
+# T02: Add category section headers and no-data collapse
 
 **Slice:** S03 — Visual Redesign
 **Milestone:** M001
 
 ## Description
 
-Every visual requirement (VIS-01, VIS-02, VIS-03, GRP-01, GRP-02, CTX-01, CTX-02) is implemented through exported functions in `row-factory.ts`. This task writes jsdom-based unit tests proving the DOM output of each function satisfies its requirement. The test framework (vitest + jsdom) was bootstrapped in T01.
+Deliver VIS-03 (category section headers) and GRP-02 (no-data collapse). These changes add structure to the `.enrichment-details` container: provider rows are visually grouped under "Reputation" and "Infrastructure Context" headers, and no-data/error rows are hidden by default behind a clickable count summary.
 
-Key requirement-to-function mapping:
-- **VIS-01** (verdict badge prominence): Tested indirectly — CSS-only change, but `createDetailRow` must produce `.verdict-badge` with correct class. The `.verdict-label` sizing is CSS-only (tested visually, not unit-tested).
-- **VIS-02** (micro-bar): `updateSummaryRow()` must create `.verdict-micro-bar` with correct segment counts and widths instead of `.consensus-badge`.
-- **VIS-03** (category labels): Template now has `.provider-section-header` elements in `.enrichment-section--context` and `.enrichment-section--reputation`. The JS routes rows to the correct section container. `enrichment.ts` dispatches to sections via `.enrichment-section--reputation` / `.enrichment-section--context` / `.enrichment-section--no-data`.
-- **GRP-01** (three sections): Template has three `.enrichment-section` containers. Routing is in `enrichment.ts` (not row-factory). Tested by verifying `createDetailRow` and `createContextRow` produce correct classes that match section selectors.
-- **GRP-02** (no-data collapse): `injectSectionHeadersAndNoDataSummary()` creates `.no-data-summary-row` with count text, wires click toggle for `.no-data-expanded`.
-- **CTX-01** (inline context): `updateContextLine()` populates `.ioc-context-line` with context provider data.
-- **CTX-02** (staleness): `updateSummaryRow()` creates `.staleness-badge` when entries have `cachedAt`.
+Both features share a critical timing constraint: they must be injected AFTER enrichment completes (when `markEnrichmentComplete()` fires), not per-result. The `sortDetailRows()` function re-sorts `.provider-detail-row` elements on each result — injecting section headers during live enrichment would cause them to become mispositioned after sorts. Post-enrichment injection into the final sorted order avoids this entirely.
+
+**Key interaction:** `sortDetailRows()` moves `.provider-detail-row` elements but ignores non-`.provider-detail-row` elements. Section headers (`.provider-section-header`) and the no-data summary row (`.no-data-summary-row`) are NOT `.provider-detail-row` — they stay in place once inserted. This is the correct behavior.
+
+**CONTEXT_PROVIDERS set:** `["IP Context", "DNS Records", "Cert History", "ThreatMiner", "ASN Intel"]` — these are "Infrastructure Context". Everything else is "Reputation".
+
+**Relevant skill:** `frontend-design` — load for CSS/DOM builder guidance.
 
 ## Steps
 
-1. Create `app/static/src/ts/modules/row-factory.test.ts`. Import all exported functions from row-factory.ts. Before each test, set up a minimal DOM structure that mirrors the real template (enrichment-slot with enrichment-details, enrichment sections, ioc-context-line, etc.).
+1. **CSS — Add new classes for section headers, no-data collapse.** In `app/static/src/input.css`, add after the micro-bar classes (added in T01):
+   ```css
+   /* VIS-03: Category section headers */
+   .provider-section-header {
+       font-size: 0.65rem;
+       font-weight: 700;
+       text-transform: uppercase;
+       letter-spacing: 0.08em;
+       color: var(--text-muted);
+       padding: 0.4rem 0.5rem 0.15rem;
+       margin-top: 0.25rem;
+       border-top: 1px solid var(--border);
+   }
+   .provider-section-header:first-child {
+       margin-top: 0;
+       border-top: none;
+   }
+   
+   /* GRP-02: No-data collapse */
+   .provider-row--no-data {
+       display: none;
+   }
+   .no-data-expanded .provider-row--no-data {
+       display: flex;
+   }
+   .no-data-summary-row {
+       display: flex;
+       align-items: center;
+       gap: 0.5rem;
+       padding: 0.35rem 0.5rem;
+       font-size: 0.75rem;
+       color: var(--text-muted);
+       cursor: pointer;
+       border-top: 1px solid var(--border);
+       transition: color var(--duration-fast) ease;
+   }
+   .no-data-summary-row:hover {
+       color: var(--text-secondary);
+   }
+   ```
 
-2. Write tests for summary row creation and updates:
-   - `getOrCreateSummaryRow()`: creates `.ioc-summary-row` with `role="button"`, `tabindex="0"`, `aria-expanded="false"`, and `.chevron-icon-wrapper` SVG. Idempotent — calling twice returns same element.
-   - `updateSummaryRow()` — **VIS-02 coverage**: with mixed verdict entries (e.g., 2 malicious, 1 clean, 1 no_data), verify `.verdict-micro-bar` exists, contains correct number of `.micro-bar-segment` children, each with correct `--malicious`/`--clean`/`--no_data` class and percentage width. Verify `title` attribute on micro-bar encodes counts. Verify NO `.consensus-badge` element exists.
-   - `updateSummaryRow()` — **CTX-02 coverage**: with entries that have `cachedAt` timestamps, verify `.staleness-badge` exists with "cached Xh ago" text. With no cached entries, verify no staleness badge.
-   - `updateSummaryRow()` — edge case: zero-length entries array → early return, no crash.
+2. **TypeScript — Add `.provider-row--no-data` class in `createDetailRow()`.** In `app/static/src/ts/modules/row-factory.ts`, find `createDetailRow()` (around line 314). After the line `row.className = "provider-detail-row";` (line ~321), add logic to append `.provider-row--no-data` when verdict is `"no_data"` or `"error"`:
+   ```typescript
+   const isNoData = verdict === "no_data" || verdict === "error";
+   row.className = "provider-detail-row" + (isNoData ? " provider-row--no-data" : "");
+   ```
+   This ensures no-data rows are hidden via CSS from the moment they are created. The existing `data-verdict` attribute is still set normally.
 
-3. Write tests for detail and context row creation:
-   - `createDetailRow()` — verdict rows: verify `.provider-detail-row` class, `data-verdict` attribute, `.verdict-badge` with correct class, `.provider-detail-name` text, `.provider-detail-stat` text. With cache, verify `.cache-badge`.
-   - `createDetailRow()` — **GRP-02 coverage**: when verdict is "no_data", verify row has class `provider-row--no-data`. When verdict is "error", also has `provider-row--no-data`. When verdict is "malicious", does NOT have `provider-row--no-data`.
-   - `createContextRow()` — **GRP-01 coverage**: verify `.provider-detail-row.provider-context-row`, `data-verdict="context"`, no `.verdict-badge`, context fields rendered from `raw_stats`.
-   - `injectSectionHeadersAndNoDataSummary()` — **GRP-02 coverage**: create a slot with `.enrichment-section--no-data` containing 3 `.provider-row--no-data` elements. Call function. Verify `.no-data-summary-row` exists with text "3 providers had no record". Simulate click → verify `.no-data-expanded` class toggles on section. Verify `aria-expanded` updates.
-   - `injectSectionHeadersAndNoDataSummary()` — edge case: zero no-data rows → no summary row created.
+3. **TypeScript — Add `createSectionHeader()` helper.** In `row-factory.ts`, add and export:
+   ```typescript
+   export function createSectionHeader(label: string): HTMLElement {
+     const header = document.createElement("div");
+     header.className = "provider-section-header";
+     header.setAttribute("data-section-label", label);
+     header.textContent = label;
+     return header;
+   }
+   ```
 
-4. Write tests for CTX-01 inline context:
-   - `updateContextLine()` — **CTX-01 coverage**: with "IP Context" provider and `raw_stats.geo`, verify `.context-field` span with `data-context-provider="IP Context"` and geo text. With "ASN Intel" and no prior IP Context, verify ASN span. With "ASN Intel" after IP Context, verify ASN span NOT added (IP Context takes priority). With "DNS Records" and `raw_stats.a` array, verify A-record text. Upsert behavior: calling twice with same provider updates text, doesn't duplicate spans.
+4. **TypeScript — Add `injectSectionHeadersAndNoDataSummary()`.** In `row-factory.ts`, add and export this function. It takes a `.enrichment-slot` element (not `.enrichment-details`) so it can find the details container itself.
+
+   **Section header logic (VIS-03):** Scan all `.provider-detail-row` elements in DOM order. Track whether each is a context row (has `.provider-context-row` class). When the category changes from the previous row, insert a `.provider-section-header` before that row. Use `CONTEXT_PROVIDERS` set or `.provider-context-row` class to detect category.
+
+   Important detail: after `sortDetailRows()`, context rows are pinned to the TOP of the container. So the DOM order will be: [context rows...] then [verdict rows...]. The function should produce:
+   - "Infrastructure Context" header before the first context row (if any context rows exist)
+   - "Reputation" header before the first non-context row (if any non-context rows exist)
+
+   **No-data summary logic (GRP-02):** Count `.provider-row--no-data` elements. If count > 0, create a `.no-data-summary-row` div with text like "5 providers had no record". Insert it before the first `.provider-row--no-data` element. Wire a click handler that toggles `.no-data-expanded` on the `.enrichment-details` container and sets `aria-expanded` on the summary row.
+
+   **Edge cases:**
+   - Zero no-data rows → skip summary row creation entirely
+   - Zero context rows → skip "Infrastructure Context" header
+   - Zero verdict (non-context) rows → skip "Reputation" header
+   - Empty details container → return early
+
+5. **TypeScript — Wire into `markEnrichmentComplete()`.** In `app/static/src/ts/modules/enrichment.ts`, import `injectSectionHeadersAndNoDataSummary` from `row-factory.ts`. In the `markEnrichmentComplete()` function (around line 175), after the existing completion logic, add a call to inject headers and no-data summary for each enrichment slot:
+   ```typescript
+   document.querySelectorAll<HTMLElement>(".enrichment-slot").forEach(slot => {
+     injectSectionHeadersAndNoDataSummary(slot);
+   });
+   ```
+   Place this AFTER any existing sort/finalization logic in `markEnrichmentComplete()`.
+
+6. **Verify CSS builds.** Run `make css` — confirm no errors.
+
+7. **Verify TypeScript builds and E2E.** Run `make typecheck && make js-dev && pytest tests/ -m e2e --tb=short -q` — confirm zero TS errors and 89/91 E2E baseline.
 
 ## Must-Haves
 
-- [ ] `row-factory.test.ts` covers all 6 exported functions from row-factory.ts
-- [ ] VIS-02: test asserts micro-bar segments exist with correct classes and widths
-- [ ] GRP-02: test asserts `provider-row--no-data` class on no-data rows AND no-data-summary-row click toggle
-- [ ] CTX-01: test asserts context-field spans for IP Context, ASN Intel, DNS Records with correct priority logic
-- [ ] CTX-02: test asserts staleness-badge presence/absence based on cachedAt
-- [ ] All tests pass: `npx vitest run` zero failures
-- [ ] ≥20 test assertions in row-factory.test.ts
+- [ ] CSS: `.provider-section-header` styled as uppercase, muted, small label with border-top separator
+- [ ] CSS: `.provider-row--no-data` has `display:none`; `.no-data-expanded .provider-row--no-data` has `display:flex`
+- [ ] CSS: `.no-data-summary-row` styled as muted, clickable with hover state
+- [ ] `createDetailRow()` adds `.provider-row--no-data` class for `no_data` and `error` verdicts
+- [ ] `createSectionHeader(label)` exported from `row-factory.ts`
+- [ ] `injectSectionHeadersAndNoDataSummary(slot)` exported from `row-factory.ts`
+- [ ] Section headers placed BEFORE each category's first row in final sorted DOM order
+- [ ] No-data summary row shows correct count and wires click → `.no-data-expanded` toggle
+- [ ] `aria-expanded` attribute on `.no-data-summary-row` tracks toggle state
+- [ ] `markEnrichmentComplete()` in `enrichment.ts` calls injection function for all slots
+- [ ] Edge cases handled: zero no-data rows, zero context rows, zero verdict rows, empty container
+- [ ] No E2E-locked class renamed or removed
+- [ ] `make typecheck && make js-dev && make css` all pass
+- [ ] 89/91 E2E baseline maintained
 
 ## Verification
 
-- `npx vitest run` — all tests pass (both verdict-compute and row-factory), exit code 0
-- `npx vitest run --reporter=verbose 2>&1 | grep -c "✓"` ≥ 30 total across both test files
-
-## Inputs
-
-- `app/static/src/ts/modules/row-factory.ts` — the module under test (561 LOC)
-- `app/static/src/ts/modules/verdict-compute.ts` — imported by row-factory for VerdictEntry type and computation
-- `app/static/src/ts/types/api.ts` — EnrichmentResultItem, EnrichmentItem types
-- `app/static/src/ts/types/ioc.ts` — VerdictKey, VERDICT_LABELS
-- `app/static/src/ts/modules/verdict-compute.test.ts` — T01 output, confirms test framework works
-- `vitest.config.ts` — T01 output, test framework configuration
-- `package.json` — T01 output, dependencies
+- `make css` — CSS builds successfully
+- `make typecheck` — zero TypeScript errors
+- `make js-dev` — esbuild bundles successfully
+- `pytest tests/ -m e2e --tb=short -q` — 89/91 baseline maintained
+- `grep -n "provider-row--no-data\|provider-section-header\|no-data-summary-row\|injectSectionHeaders" app/static/src/ts/modules/row-factory.ts` — confirms all new functions exist
+- `grep -n "injectSectionHeaders" app/static/src/ts/modules/enrichment.ts` — confirms call wired in `markEnrichmentComplete()`
 
 ## Observability Impact
 
-- **New signal:** `npx vitest run` now includes row-factory.test.ts — 54 additional test cases validating all 7 visual redesign requirements (VIS-01, VIS-02, VIS-03, GRP-01, GRP-02, CTX-01, CTX-02).
-- **Inspection:** `npx vitest run --reporter=verbose` shows per-test pass/fail with describe paths prefixed by requirement IDs (e.g., "VIS-02: creates micro-bar …").
-- **Failure visibility:** Any DOM structure regression in row-factory.ts will surface as a vitest assertion failure with expected/actual diffs showing the mismatched class, attribute, or text content.
-- **Coverage:** `npx vitest run --reporter=json` can be parsed to confirm every exported function has at least one covering test.
+- **New DOM elements:** `.provider-section-header` (inspect via `document.querySelectorAll('.provider-section-header')`) and `.no-data-summary-row` (inspect via `document.querySelectorAll('.no-data-summary-row')`) appear inside `.enrichment-details` after enrichment completes.
+- **Collapse state:** `.no-data-summary-row[aria-expanded]` tracks whether hidden no-data rows are shown; the parent `.enrichment-details` gains/loses `.no-data-expanded` class on toggle.
+- **Hidden rows:** `.provider-row--no-data` elements have `display:none` by default — count them via `document.querySelectorAll('.provider-row--no-data').length` to verify no-data detection is working.
+- **Failure visibility:** If `injectSectionHeadersAndNoDataSummary()` throws, section headers and the collapse summary will be absent after enrichment completes — detectable by zero `.provider-section-header` elements when provider rows exist. TypeScript compilation errors surface via `make typecheck`; CSS build errors via `make css`.
+- **Edge-case inspection:** Zero no-data rows → no `.no-data-summary-row` in DOM. Zero context rows → no "Infrastructure Context" header. Zero verdict rows → no "Reputation" header. All inspectable via DevTools element count queries.
+
+## Inputs
+
+- `app/static/src/input.css` — with T01 changes already applied (micro-bar classes present)
+- `app/static/src/ts/modules/row-factory.ts` — with T01 changes already applied (micro-bar in updateSummaryRow); contains `createDetailRow()` (line ~314), `createContextRow()` (line ~281), `CONTEXT_PROVIDERS` set (line ~147)
+- `app/static/src/ts/modules/enrichment.ts` — contains `markEnrichmentComplete()` (line ~175), `sortDetailRows()` (line ~42), `renderEnrichmentResult()` (line ~202)
+- T01 task summary — confirms micro-bar is in place and typecheck passes
 
 ## Expected Output
 
-- `app/static/src/ts/modules/row-factory.test.ts` — new test file with ≥20 assertions covering all visual requirements
+- `app/static/src/input.css` — new CSS classes for section headers, no-data collapse, and summary row
+- `app/static/src/ts/modules/row-factory.ts` — `createSectionHeader()`, `injectSectionHeadersAndNoDataSummary()` exported; `createDetailRow()` adds `.provider-row--no-data` class
+- `app/static/src/ts/modules/enrichment.ts` — `markEnrichmentComplete()` calls injection function for all slots

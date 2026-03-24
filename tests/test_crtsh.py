@@ -75,10 +75,11 @@ class TestCertDataExtraction:
         """3 cert records -> cert_count=3 in raw_stats."""
         ioc = _make_domain_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.crtsh.read_limited", return_value=SAMPLE_CERTS):
-            mock_get.return_value = MagicMock(status_code=200, raise_for_status=MagicMock())
-            result = _make_adapter().lookup(ioc)
+        with patch("app.enrichment.adapters.crtsh.read_limited", return_value=SAMPLE_CERTS):
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = MagicMock(status_code=200, raise_for_status=MagicMock())
+            result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert result.raw_stats["cert_count"] == 3
@@ -87,10 +88,11 @@ class TestCertDataExtraction:
         """earliest date is the minimum not_before (first 10 chars) across all certs."""
         ioc = _make_domain_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.crtsh.read_limited", return_value=SAMPLE_CERTS):
-            mock_get.return_value = MagicMock(status_code=200, raise_for_status=MagicMock())
-            result = _make_adapter().lookup(ioc)
+        with patch("app.enrichment.adapters.crtsh.read_limited", return_value=SAMPLE_CERTS):
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = MagicMock(status_code=200, raise_for_status=MagicMock())
+            result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert result.raw_stats["earliest"] == "2023-06-01"
@@ -99,10 +101,11 @@ class TestCertDataExtraction:
         """latest date is the maximum not_before (first 10 chars) across all certs."""
         ioc = _make_domain_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.crtsh.read_limited", return_value=SAMPLE_CERTS):
-            mock_get.return_value = MagicMock(status_code=200, raise_for_status=MagicMock())
-            result = _make_adapter().lookup(ioc)
+        with patch("app.enrichment.adapters.crtsh.read_limited", return_value=SAMPLE_CERTS):
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = MagicMock(status_code=200, raise_for_status=MagicMock())
+            result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert result.raw_stats["latest"] == "2024-02-01"
@@ -111,10 +114,11 @@ class TestCertDataExtraction:
         """Subdomains from all name_value fields are collected."""
         ioc = _make_domain_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.crtsh.read_limited", return_value=SAMPLE_CERTS):
-            mock_get.return_value = MagicMock(status_code=200, raise_for_status=MagicMock())
-            result = _make_adapter().lookup(ioc)
+        with patch("app.enrichment.adapters.crtsh.read_limited", return_value=SAMPLE_CERTS):
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = MagicMock(status_code=200, raise_for_status=MagicMock())
+            result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         subdomains = result.raw_stats["subdomains"]
@@ -127,10 +131,11 @@ class TestCertDataExtraction:
         """*.example.com in name_value is stripped to example.com."""
         ioc = _make_domain_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.crtsh.read_limited", return_value=SAMPLE_CERTS):
-            mock_get.return_value = MagicMock(status_code=200, raise_for_status=MagicMock())
-            result = _make_adapter().lookup(ioc)
+        with patch("app.enrichment.adapters.crtsh.read_limited", return_value=SAMPLE_CERTS):
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = MagicMock(status_code=200, raise_for_status=MagicMock())
+            result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         subdomains = result.raw_stats["subdomains"]
@@ -141,10 +146,11 @@ class TestCertDataExtraction:
         """Duplicate subdomains across multiple cert records are deduplicated."""
         ioc = _make_domain_ioc()
         # All 3 certs contain "example.com" — should appear only once
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.crtsh.read_limited", return_value=SAMPLE_CERTS):
-            mock_get.return_value = MagicMock(status_code=200, raise_for_status=MagicMock())
-            result = _make_adapter().lookup(ioc)
+        with patch("app.enrichment.adapters.crtsh.read_limited", return_value=SAMPLE_CERTS):
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = MagicMock(status_code=200, raise_for_status=MagicMock())
+            result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         subdomains = result.raw_stats["subdomains"]
@@ -162,10 +168,11 @@ class TestCertDataExtraction:
             }
         ]
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.crtsh.read_limited", return_value=certs_with_uppercase):
-            mock_get.return_value = MagicMock(status_code=200, raise_for_status=MagicMock())
-            result = _make_adapter().lookup(ioc)
+        with patch("app.enrichment.adapters.crtsh.read_limited", return_value=certs_with_uppercase):
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = MagicMock(status_code=200, raise_for_status=MagicMock())
+            result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         subdomains = result.raw_stats["subdomains"]
@@ -178,10 +185,11 @@ class TestCertDataExtraction:
         """Subdomain list is in alphabetical order."""
         ioc = _make_domain_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.crtsh.read_limited", return_value=SAMPLE_CERTS):
-            mock_get.return_value = MagicMock(status_code=200, raise_for_status=MagicMock())
-            result = _make_adapter().lookup(ioc)
+        with patch("app.enrichment.adapters.crtsh.read_limited", return_value=SAMPLE_CERTS):
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = MagicMock(status_code=200, raise_for_status=MagicMock())
+            result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         subdomains = result.raw_stats["subdomains"]
@@ -203,10 +211,11 @@ class TestCertDataExtraction:
             }
         ]
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.crtsh.read_limited", return_value=many_subs_cert):
-            mock_get.return_value = MagicMock(status_code=200, raise_for_status=MagicMock())
-            result = _make_adapter().lookup(ioc)
+        with patch("app.enrichment.adapters.crtsh.read_limited", return_value=many_subs_cert):
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = MagicMock(status_code=200, raise_for_status=MagicMock())
+            result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert len(result.raw_stats["subdomains"]) == 50, (
@@ -231,10 +240,11 @@ class TestCertDataExtraction:
             },
         ]
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.crtsh.read_limited", return_value=certs_with_null):
-            mock_get.return_value = MagicMock(status_code=200, raise_for_status=MagicMock())
-            result = _make_adapter().lookup(ioc)
+        with patch("app.enrichment.adapters.crtsh.read_limited", return_value=certs_with_null):
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = MagicMock(status_code=200, raise_for_status=MagicMock())
+            result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         # Only the cert with valid date should contribute
@@ -259,10 +269,11 @@ class TestCertDataExtraction:
             },
         ]
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.crtsh.read_limited", return_value=certs_with_null_name):
-            mock_get.return_value = MagicMock(status_code=200, raise_for_status=MagicMock())
-            result = _make_adapter().lookup(ioc)
+        with patch("app.enrichment.adapters.crtsh.read_limited", return_value=certs_with_null_name):
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = MagicMock(status_code=200, raise_for_status=MagicMock())
+            result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert "sub.example.com" in result.raw_stats["subdomains"]
@@ -279,10 +290,11 @@ class TestCertDataExtraction:
             }
         ]
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.crtsh.read_limited", return_value=certs):
-            mock_get.return_value = MagicMock(status_code=200, raise_for_status=MagicMock())
-            result = _make_adapter().lookup(ioc)
+        with patch("app.enrichment.adapters.crtsh.read_limited", return_value=certs):
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = MagicMock(status_code=200, raise_for_status=MagicMock())
+            result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert result.raw_stats["earliest"] == "2024-03-15"
@@ -292,10 +304,11 @@ class TestCertDataExtraction:
         """verdict is always 'no_data' for crt.sh (CT history, not a threat verdict)."""
         ioc = _make_domain_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.crtsh.read_limited", return_value=SAMPLE_CERTS):
-            mock_get.return_value = MagicMock(status_code=200, raise_for_status=MagicMock())
-            result = _make_adapter().lookup(ioc)
+        with patch("app.enrichment.adapters.crtsh.read_limited", return_value=SAMPLE_CERTS):
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = MagicMock(status_code=200, raise_for_status=MagicMock())
+            result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert result.verdict == "no_data"
@@ -304,10 +317,11 @@ class TestCertDataExtraction:
         """detection_count is always 0 (crt.sh doesn't provide threat detection)."""
         ioc = _make_domain_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.crtsh.read_limited", return_value=SAMPLE_CERTS):
-            mock_get.return_value = MagicMock(status_code=200, raise_for_status=MagicMock())
-            result = _make_adapter().lookup(ioc)
+        with patch("app.enrichment.adapters.crtsh.read_limited", return_value=SAMPLE_CERTS):
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = MagicMock(status_code=200, raise_for_status=MagicMock())
+            result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert result.detection_count == 0
@@ -316,10 +330,11 @@ class TestCertDataExtraction:
         """total_engines is always 0 (crt.sh is a certificate registry, not a scanner)."""
         ioc = _make_domain_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.crtsh.read_limited", return_value=SAMPLE_CERTS):
-            mock_get.return_value = MagicMock(status_code=200, raise_for_status=MagicMock())
-            result = _make_adapter().lookup(ioc)
+        with patch("app.enrichment.adapters.crtsh.read_limited", return_value=SAMPLE_CERTS):
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = MagicMock(status_code=200, raise_for_status=MagicMock())
+            result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert result.total_engines == 0
@@ -328,10 +343,11 @@ class TestCertDataExtraction:
         """scan_date is always None (crt.sh doesn't have a scan date concept)."""
         ioc = _make_domain_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.crtsh.read_limited", return_value=SAMPLE_CERTS):
-            mock_get.return_value = MagicMock(status_code=200, raise_for_status=MagicMock())
-            result = _make_adapter().lookup(ioc)
+        with patch("app.enrichment.adapters.crtsh.read_limited", return_value=SAMPLE_CERTS):
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = MagicMock(status_code=200, raise_for_status=MagicMock())
+            result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert result.scan_date is None
@@ -343,10 +359,11 @@ class TestEmptyResponse:
         """Empty [] response -> EnrichmentResult(verdict='no_data')."""
         ioc = _make_domain_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.crtsh.read_limited", return_value=[]):
-            mock_get.return_value = MagicMock(status_code=200, raise_for_status=MagicMock())
-            result = _make_adapter().lookup(ioc)
+        with patch("app.enrichment.adapters.crtsh.read_limited", return_value=[]):
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = MagicMock(status_code=200, raise_for_status=MagicMock())
+            result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult), (
             f"Empty response must return EnrichmentResult, got {type(result).__name__}: {result!r}"
@@ -357,10 +374,11 @@ class TestEmptyResponse:
         """Empty [] response -> raw_stats is {} (empty dict)."""
         ioc = _make_domain_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.crtsh.read_limited", return_value=[]):
-            mock_get.return_value = MagicMock(status_code=200, raise_for_status=MagicMock())
-            result = _make_adapter().lookup(ioc)
+        with patch("app.enrichment.adapters.crtsh.read_limited", return_value=[]):
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = MagicMock(status_code=200, raise_for_status=MagicMock())
+            result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert result.raw_stats == {}
@@ -369,10 +387,11 @@ class TestEmptyResponse:
         """Empty [] response -> detection_count=0."""
         ioc = _make_domain_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.crtsh.read_limited", return_value=[]):
-            mock_get.return_value = MagicMock(status_code=200, raise_for_status=MagicMock())
-            result = _make_adapter().lookup(ioc)
+        with patch("app.enrichment.adapters.crtsh.read_limited", return_value=[]):
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = MagicMock(status_code=200, raise_for_status=MagicMock())
+            result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
         assert result.detection_count == 0
@@ -388,8 +407,10 @@ class TestHTTPErrors:
         http_err = requests.exceptions.HTTPError(response=mock_resp)
         mock_resp.raise_for_status = MagicMock(side_effect=http_err)
 
-        with patch("requests.get", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentError), (
             f"HTTP 502 must return EnrichmentError, got {type(result).__name__}: {result!r}"
@@ -405,8 +426,10 @@ class TestHTTPErrors:
         http_err = requests.exceptions.HTTPError(response=mock_resp)
         mock_resp.raise_for_status = MagicMock(side_effect=http_err)
 
-        with patch("requests.get", return_value=mock_resp):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.return_value = mock_resp
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentError)
         assert "HTTP 500" in result.error
@@ -415,8 +438,10 @@ class TestHTTPErrors:
         """Network timeout -> EnrichmentError with 'Timeout' in error."""
         ioc = _make_domain_ioc()
 
-        with patch("requests.get", side_effect=requests.exceptions.Timeout("timed out")):
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.side_effect = requests.exceptions.Timeout("timed out")
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentError)
         assert result.provider == "Cert History"
@@ -427,9 +452,9 @@ class TestHTTPErrors:
         ioc = _make_domain_ioc()
         adapter = CrtShAdapter(allowed_hosts=[])
 
-        with patch("requests.get") as mock_get:
-            mock_get.side_effect = AssertionError("Should not reach network")
-            result = adapter.lookup(ioc)
+        adapter._session = MagicMock()
+        adapter._session.get.side_effect = AssertionError("Should not reach network")
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentError), (
             "Expected EnrichmentError when host not in allowed_hosts (SSRF check)"
@@ -444,9 +469,10 @@ class TestHTTPErrors:
         """IPV4 IOC -> EnrichmentError('Unsupported type') without any network call."""
         ioc = IOC(type=IOCType.IPV4, value="8.8.8.8", raw_match="8.8.8.8")
 
-        with patch("requests.get") as mock_get:
-            mock_get.side_effect = AssertionError("Should not reach network")
-            result = _make_adapter().lookup(ioc)
+        adapter = _make_adapter()
+        adapter._session = MagicMock()
+        adapter._session.get.side_effect = AssertionError("Should not reach network")
+        result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentError)
         assert result.provider == "Cert History"
@@ -460,12 +486,13 @@ class TestHTTPSafetyControls:
         from app.enrichment.http_safety import TIMEOUT
         ioc = _make_domain_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.crtsh.read_limited", return_value=SAMPLE_CERTS):
-            mock_get.return_value = MagicMock(status_code=200, raise_for_status=MagicMock())
-            _make_adapter().lookup(ioc)
+        with patch("app.enrichment.adapters.crtsh.read_limited", return_value=SAMPLE_CERTS):
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = MagicMock(status_code=200, raise_for_status=MagicMock())
+            adapter.lookup(ioc)
 
-        call_kwargs = mock_get.call_args.kwargs
+        call_kwargs = adapter._session.get.call_args.kwargs
         assert call_kwargs.get("timeout") == TIMEOUT, (
             f"Expected timeout={TIMEOUT!r} (SEC-04), got {call_kwargs.get('timeout')!r}"
         )
@@ -474,12 +501,13 @@ class TestHTTPSafetyControls:
         """requests.get must be called with allow_redirects=False (SEC-06)."""
         ioc = _make_domain_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.crtsh.read_limited", return_value=SAMPLE_CERTS):
-            mock_get.return_value = MagicMock(status_code=200, raise_for_status=MagicMock())
-            _make_adapter().lookup(ioc)
+        with patch("app.enrichment.adapters.crtsh.read_limited", return_value=SAMPLE_CERTS):
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = MagicMock(status_code=200, raise_for_status=MagicMock())
+            adapter.lookup(ioc)
 
-        call_kwargs = mock_get.call_args.kwargs
+        call_kwargs = adapter._session.get.call_args.kwargs
         assert call_kwargs.get("allow_redirects") is False, (
             "allow_redirects must be False (SEC-06)"
         )
@@ -488,23 +516,25 @@ class TestHTTPSafetyControls:
         """requests.get must be called with stream=True (SEC-05)."""
         ioc = _make_domain_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.crtsh.read_limited", return_value=SAMPLE_CERTS):
-            mock_get.return_value = MagicMock(status_code=200, raise_for_status=MagicMock())
-            _make_adapter().lookup(ioc)
+        with patch("app.enrichment.adapters.crtsh.read_limited", return_value=SAMPLE_CERTS):
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = MagicMock(status_code=200, raise_for_status=MagicMock())
+            adapter.lookup(ioc)
 
-        call_kwargs = mock_get.call_args.kwargs
+        call_kwargs = adapter._session.get.call_args.kwargs
         assert call_kwargs.get("stream") is True, "stream must be True (SEC-05)"
 
     def test_validate_endpoint_called(self) -> None:
         """validate_endpoint must be called before making the HTTP request (SEC-16)."""
         ioc = _make_domain_ioc()
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.crtsh.validate_endpoint") as mock_validate, \
+        with patch("app.enrichment.adapters.crtsh.validate_endpoint") as mock_validate, \
              patch("app.enrichment.adapters.crtsh.read_limited", return_value=SAMPLE_CERTS):
-            mock_get.return_value = MagicMock(status_code=200, raise_for_status=MagicMock())
-            _make_adapter().lookup(ioc)
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = MagicMock(status_code=200, raise_for_status=MagicMock())
+            adapter.lookup(ioc)
 
         mock_validate.assert_called_once()
         called_url = mock_validate.call_args.args[0]
@@ -514,12 +544,13 @@ class TestHTTPSafetyControls:
         """URL must contain the domain value and &output=json query params."""
         ioc = _make_domain_ioc("evil.com")
 
-        with patch("requests.get") as mock_get, \
-             patch("app.enrichment.adapters.crtsh.read_limited", return_value=[]):
-            mock_get.return_value = MagicMock(status_code=200, raise_for_status=MagicMock())
-            _make_adapter().lookup(ioc)
+        with patch("app.enrichment.adapters.crtsh.read_limited", return_value=[]):
+            adapter = _make_adapter()
+            adapter._session = MagicMock()
+            adapter._session.get.return_value = MagicMock(status_code=200, raise_for_status=MagicMock())
+            adapter.lookup(ioc)
 
-        called_url = mock_get.call_args.args[0]
+        called_url = adapter._session.get.call_args.args[0]
         assert "evil.com" in called_url
         assert "output=json" in called_url
         assert "crt.sh" in called_url

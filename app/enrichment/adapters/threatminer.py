@@ -30,7 +30,8 @@ Results caps:
   - _MAX_HOSTS=25: passive_dns list (both IP and domain lookups)
   - _MAX_SAMPLES=20: samples list (both domain and hash lookups)
 
-Thread safety: a fresh requests.get call is used per _call() invocation (no shared Session).
+Thread safety: a persistent requests.Session is created in __init__ and reused across
+_call() invocations (TCP connection pooling).
 """
 from __future__ import annotations
 
@@ -75,8 +76,8 @@ class ThreatMinerAdapter:
 
     No API key required — ThreatMiner is fully public.
 
-    Thread safety: uses standalone requests.get calls per lookup() invocation.
-    No shared session state between calls.
+    Thread safety: uses a persistent requests.Session (self._session) created in __init__.
+    The session is reused across lookup() calls for TCP connection pooling.
 
     Args:
         allowed_hosts: SSRF allowlist -- only these hostnames may be contacted.
@@ -96,6 +97,7 @@ class ThreatMinerAdapter:
 
     def __init__(self, allowed_hosts: list[str]) -> None:
         self._allowed_hosts = allowed_hosts
+        self._session = requests.Session()
 
     def is_configured(self) -> bool:
         """Always returns True -- ThreatMiner requires no API key."""
@@ -151,7 +153,7 @@ class ThreatMinerAdapter:
             return EnrichmentError(ioc=ioc, provider=self.name, error=str(exc))
 
         try:
-            resp = requests.get(
+            resp = self._session.get(
                 base_url,
                 params={"q": ioc.value, "rt": rt},
                 timeout=TIMEOUT,           # SEC-04
@@ -165,6 +167,10 @@ class ThreatMinerAdapter:
         except requests.exceptions.HTTPError as exc:
             code = exc.response.status_code if exc.response is not None else "unknown"
             return EnrichmentError(ioc=ioc, provider=self.name, error=f"HTTP {code}")
+        except requests.exceptions.SSLError:
+            return EnrichmentError(ioc=ioc, provider=self.name, error="SSL/TLS error")
+        except requests.exceptions.ConnectionError:
+            return EnrichmentError(ioc=ioc, provider=self.name, error="Connection failed")
         except Exception:
             logger.exception(
                 "Unexpected error during ThreatMiner lookup for %s", ioc.value

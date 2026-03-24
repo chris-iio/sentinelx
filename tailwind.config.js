@@ -16,6 +16,7 @@ module.exports = {
     "ioc-type-badge--sha1",
     "ioc-type-badge--sha256",
     "ioc-type-badge--cve",
+    "ioc-type-badge--email",
     // Dynamic JS classes: verdict-label--{verdict}
     "verdict-label--malicious",
     "verdict-label--suspicious",
@@ -39,6 +40,7 @@ module.exports = {
     "filter-pill--sha1",
     "filter-pill--sha256",
     "filter-pill--cve",
+    "filter-pill--email",
   ],
   theme: {
     extend: {},

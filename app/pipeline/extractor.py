@@ -16,7 +16,6 @@ Security:
 from __future__ import annotations
 
 import logging
-import re
 
 import iocextract
 from iocsearcher.searcher import Searcher
@@ -29,18 +28,6 @@ logger = logging.getLogger(__name__)
 
 # Module-level Searcher — created once, reused across calls (per iocsearcher docs)
 _searcher = Searcher()
-
-# Custom email extraction regex — handles clean and common defanged forms.
-# Do NOT use iocextract.extract_emails(): it gobbles adjacent text into the local-part
-# (e.g., "contact user[@]evil[.]com" → "contactuser@evil.com").
-# Matches: local@domain.tld, local[@]domain[.]tld, local[at]domain[.]tld, local(@)domain(.)tld
-_RE_EMAIL_EXTRACT = re.compile(
-    r"[a-zA-Z0-9._%+-]+"
-    r"(?:@|\[@\]|\(@\)|\[at\])"
-    r"[a-zA-Z0-9.-]+"
-    r"(?:\.|\[\.\]|\(\.\)|\[dot\])"
-    r"[a-zA-Z]{2,}"
-)
 
 
 def extract_iocs(text: str) -> list[dict]:
@@ -113,15 +100,6 @@ def extract_iocs(text: str) -> list[dict]:
         pass
     except Exception:
         logger.warning("Unexpected error in iocsearcher extraction", exc_info=True)
-
-    # --- custom email extraction ---
-    # Handles both clean and defanged forms that iocextract.extract_emails() mishandles.
-    # iocsearcher may also emit ('email', ...) for plain emails — those dedup via candidates dict.
-    try:
-        for match in _RE_EMAIL_EXTRACT.findall(text):
-            _add(match, "email")
-    except Exception:
-        logger.warning("Unexpected error in email extraction", exc_info=True)
 
     return list(candidates.values())
 

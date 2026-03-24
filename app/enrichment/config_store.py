@@ -39,11 +39,20 @@ class ConfigStore:
 
     def __init__(self, config_path: Path | None = None) -> None:
         self._config_path = config_path if config_path is not None else CONFIG_PATH
+        self._cached_cfg: configparser.ConfigParser | None = None
 
     def _read_config(self) -> configparser.ConfigParser:
-        """Read and return the config file as a ConfigParser instance."""
+        """Read and return the config file as a ConfigParser instance.
+
+        The parsed result is cached in memory. Subsequent calls return the
+        cached parser without re-reading the file. The cache is invalidated
+        by _save_config() so writes are always reflected on the next read.
+        """
+        if self._cached_cfg is not None:
+            return self._cached_cfg
         cfg = configparser.ConfigParser()
         cfg.read(self._config_path)
+        self._cached_cfg = cfg
         return cfg
 
     def _save_config(self, cfg: configparser.ConfigParser) -> None:
@@ -52,6 +61,7 @@ class ConfigStore:
         fd = os.open(str(self._config_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, "w") as fh:
             cfg.write(fh)
+        self._cached_cfg = None
 
     def _set_value(self, section: str, key: str, value: str) -> None:
         """Set a single value in the config file, creating the section if needed."""

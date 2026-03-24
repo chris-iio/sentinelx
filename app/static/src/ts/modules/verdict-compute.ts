@@ -43,26 +43,6 @@ export function computeWorstVerdict(entries: VerdictEntry[]): VerdictKey {
 }
 
 /**
- * Compute consensus: count flagged (malicious/suspicious) and responded
- * (malicious + suspicious + clean) providers.
- * Per design: no_data and error do NOT count as votes.
- */
-export function computeConsensus(entries: VerdictEntry[]): { flagged: number; responded: number } {
-  let flagged = 0;
-  let responded = 0;
-  for (const entry of entries) {
-    if (entry.verdict === "malicious" || entry.verdict === "suspicious") {
-      flagged++;
-      responded++;
-    } else if (entry.verdict === "clean") {
-      responded++;
-    }
-    // error and no_data do NOT count
-  }
-  return { flagged, responded };
-}
-
-/**
  * Compute attribution: find the "most detailed" provider to show in summary.
  * Heuristic: highest totalEngines wins. Ties broken by verdict severity descending.
  * Providers with no_data or error are excluded as candidates.

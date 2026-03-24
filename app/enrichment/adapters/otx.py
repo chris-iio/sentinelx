@@ -28,7 +28,8 @@ Verdict from pulse_info.count:
 
 Supports 8 IOCType values (all except EMAIL) including CVE (the first CVE-capable provider).
 
-Thread safety: a fresh requests.get call is used per lookup() call (no shared Session).
+Thread safety: uses a persistent requests.Session created in __init__; concurrent
+lookup() calls are safe as session state is read-only after initialization.
 """
 from __future__ import annotations
 
@@ -93,6 +94,11 @@ class OTXAdapter:
     def __init__(self, api_key: str, allowed_hosts: list[str]) -> None:
         self._api_key = api_key
         self._allowed_hosts = allowed_hosts
+        self._session = requests.Session()
+        self._session.headers.update({
+            "X-OTX-API-KEY": self._api_key,
+            "Accept": "application/json",
+        })
 
     def is_configured(self) -> bool:
         """Return True if a non-empty API key is set."""
@@ -133,12 +139,8 @@ class OTXAdapter:
             return EnrichmentError(ioc=ioc, provider=self.name, error=str(exc))
 
         try:
-            resp = requests.get(
+            resp = self._session.get(
                 url,
-                headers={
-                    "X-OTX-API-KEY": self._api_key,
-                    "Accept": "application/json",
-                },
                 timeout=TIMEOUT,               # SEC-04
                 allow_redirects=False,         # SEC-06
                 stream=True,                   # SEC-05 setup
@@ -162,6 +164,10 @@ class OTXAdapter:
         except requests.exceptions.HTTPError as exc:
             code = exc.response.status_code if exc.response is not None else "unknown"
             return EnrichmentError(ioc=ioc, provider=self.name, error=f"HTTP {code}")
+        except requests.exceptions.SSLError:
+            return EnrichmentError(ioc=ioc, provider=self.name, error="SSL/TLS error")
+        except requests.exceptions.ConnectionError:
+            return EnrichmentError(ioc=ioc, provider=self.name, error="Connection failed")
         except Exception:
             logger.exception(
                 "Unexpected error during OTX lookup for %s", ioc.value

@@ -230,7 +230,7 @@ function createContextFields(result: EnrichmentResultItem): HTMLElement | null {
  * Injects chevron SVG icon into the summary row on creation (SEC-08: no innerHTML).
  * Sets role="button", tabindex="0", aria-expanded="false" for accessibility.
  */
-export function getOrCreateSummaryRow(slot: HTMLElement): HTMLElement {
+function getOrCreateSummaryRow(slot: HTMLElement): HTMLElement {
   const existing = slot.querySelector<HTMLElement>(".ioc-summary-row");
   if (existing) return existing;
 

@@ -63,12 +63,17 @@ const VERDICT_SEVERITY = [
   "malicious",
 ] as const satisfies readonly RankedVerdict[];
 
+/** Pre-built severity lookup Map — O(1) instead of O(N) array scan. R023. */
+const SEVERITY_MAP: ReadonlyMap<string, number> = new Map(
+  VERDICT_SEVERITY.map((v, i) => [v, i])
+);
+
 /**
  * Returns the severity index for a verdict key.
  * Higher index = higher severity. Returns -1 if not found (e.g. known_good).
  */
 export function verdictSeverityIndex(verdict: VerdictKey): number {
-  return (VERDICT_SEVERITY as readonly string[]).indexOf(verdict);
+  return SEVERITY_MAP.get(verdict) ?? -1;
 }
 
 /**

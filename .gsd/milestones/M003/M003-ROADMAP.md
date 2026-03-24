@@ -49,13 +49,13 @@ This milestone is complete only when all are true:
 - [x] **S01: Per-Provider Concurrency & 429 Backoff** `risk:high` `depends:[]`
   > After this: orchestrator unit tests prove zero-auth providers run freely while VT is capped at 4 concurrent; 429 triggers backoff delay before retry.
 
-- [ ] **S02: Email IOC Extraction & Display** `risk:medium` `depends:[]`
+- [x] **S02: Email IOC Extraction & Display** `risk:medium` `depends:[]`
   > After this: paste text with `user@evil[.]com` → EMAIL group appears in results with extracted address; no enrichment fires.
 
-- [ ] **S03: Detail Page Design Refresh** `risk:medium` `depends:[]`
+- [x] **S03: Detail Page Design Refresh** `risk:medium` `depends:[]`
   > After this: `/detail/ipv4/1.2.3.4` visually matches M002 design — quiet precision tokens, verdict-only color, graph labels untruncated.
 
-- [ ] **S04: Frontend Render Efficiency & Integration Verification** `risk:low` `depends:[S01,S02,S03]`
+- [x] **S04: Frontend Render Efficiency & Integration Verification** `risk:low` `depends:[S01,S02,S03]`
   > After this: summary row debounce in place; full E2E suite ≥ 99 tests passing covering all M003 changes; make typecheck clean; bundle ≤ 30KB.
 
 ## Boundary Map

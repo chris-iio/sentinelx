@@ -172,6 +172,11 @@ class VTAdapter:
     def __init__(self, api_key: str, allowed_hosts: list[str]) -> None:
         self._api_key = api_key
         self._allowed_hosts = allowed_hosts
+        self._session = requests.Session()
+        self._session.headers.update({
+            "x-apikey": self._api_key,
+            "Accept": "application/json",
+        })
 
     def is_configured(self) -> bool:
         """Return True when a non-empty API key has been provided."""
@@ -205,11 +210,8 @@ class VTAdapter:
         except ValueError as exc:
             return EnrichmentError(ioc=ioc, provider="VirusTotal", error=str(exc))
 
-        session = requests.Session()
-        session.headers.update({"x-apikey": self._api_key, "Accept": "application/json"})
-
         try:
-            resp = session.get(
+            resp = self._session.get(
                 url,
                 timeout=TIMEOUT,          # SEC-04
                 allow_redirects=False,    # SEC-06
@@ -236,6 +238,10 @@ class VTAdapter:
             return EnrichmentError(ioc=ioc, provider="VirusTotal", error="Timeout")
         except requests.exceptions.HTTPError as exc:
             return _map_http_error(ioc, exc)
+        except requests.exceptions.SSLError:
+            return EnrichmentError(ioc=ioc, provider="VirusTotal", error="SSL/TLS error")
+        except requests.exceptions.ConnectionError:
+            return EnrichmentError(ioc=ioc, provider="VirusTotal", error="Connection failed")
         except Exception:
             logger.exception("Unexpected error during VT lookup for %s", ioc.value)
             return EnrichmentError(ioc=ioc, provider="VirusTotal", error="Unexpected error during lookup")

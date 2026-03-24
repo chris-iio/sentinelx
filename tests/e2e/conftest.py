@@ -118,6 +118,7 @@ MOCK_ENRICHMENT_RESPONSE_8888 = {
     "total": 2,
     "done": 2,
     "complete": True,
+    "next_since": 2,
     "results": [
         {
             "type": "result",

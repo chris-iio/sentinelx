@@ -8,12 +8,19 @@ Security scaffold is established here, before any routes are registered:
 - SEC-15: debug=False hardcoded — never from environment
 - SEC-21: Rate limiting via Flask-Limiter (in-memory, per-route)
 """
+import logging
+import os
+
 from flask import Flask
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_wtf.csrf import CSRFProtect
 
+logger = logging.getLogger(__name__)
+
 csrf = CSRFProtect()
+# SEC-21: Rate limiting — memory:// is acceptable for single-process local tool.
+# limits library has no filesystem backend; Redis/Memcached require infrastructure.
 limiter = Limiter(key_func=get_remote_address, storage_uri="memory://")
 
 
@@ -37,6 +44,11 @@ def create_app(config_override: dict | None = None) -> Flask:
 
     # Apply base config from Config class attributes
     app.config["SECRET_KEY"] = config.SECRET_KEY
+    if not os.environ.get("SECRET_KEY"):
+        logger.warning(
+            "SECRET_KEY not set in environment — using auto-generated key. "
+            "Sessions and CSRF tokens will not persist across restarts."
+        )
     app.config["TRUSTED_HOSTS"] = config.TRUSTED_HOSTS
     app.config["MAX_CONTENT_LENGTH"] = config.MAX_CONTENT_LENGTH  # SEC-12
     app.config["WTF_CSRF_ENABLED"] = config.WTF_CSRF_ENABLED  # SEC-10
@@ -68,7 +80,15 @@ def create_app(config_override: dict | None = None) -> Flask:
     # SEC-09: Security headers on every response
     @app.after_request
     def set_security_headers(response):  # type: ignore[return]
-        response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self'; "
+            "style-src 'self'; "
+            "connect-src 'self'; "
+            "img-src 'self'; "
+            "font-src 'self'; "
+            "object-src 'none'"
+        )
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "SAMEORIGIN"
         response.headers["Referrer-Policy"] = "no-referrer"

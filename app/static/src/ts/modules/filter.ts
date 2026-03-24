@@ -113,14 +113,18 @@ export function init(): void {
     });
   });
 
-  // Search input handler
+  // Search input handler (debounced at 100ms — R023 O(N²) fix)
   const searchInput = document.getElementById(
     "filter-search-input"
   ) as HTMLInputElement | null;
   if (searchInput) {
+    let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
     searchInput.addEventListener("input", () => {
       filterState.search = searchInput.value;
-      applyFilter();
+      if (searchDebounceTimer !== null) clearTimeout(searchDebounceTimer);
+      searchDebounceTimer = setTimeout(() => {
+        applyFilter();
+      }, 100);
     });
   }
 

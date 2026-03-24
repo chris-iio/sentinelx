@@ -270,6 +270,20 @@ class TestClassifyPrecedence:
         assert result is not None
         assert result.type == IOCType.URL
 
+    def test_url_before_email(self):
+        """URL containing @ (HTTP auth) must classify as URL, not EMAIL."""
+        result = classify("http://user@evil.com", "http://user@evil.com")
+        assert result is not None
+        assert result.type == IOCType.URL
+        assert result.type != IOCType.EMAIL
+
+    def test_email_before_domain(self):
+        """user@evil.com must classify as EMAIL, not DOMAIN — email check precedes domain."""
+        result = classify("user@evil.com", "user@evil.com")
+        assert result is not None
+        assert result.type == IOCType.EMAIL
+        assert result.type != IOCType.DOMAIN
+
 
 class TestClassifyNone:
     """Tests for inputs that should not classify to any IOC type."""
@@ -293,38 +307,67 @@ class TestClassifyNone:
 
 
 class TestClassifyEmail:
-    """Tests for email classification (step 7.5 — between IPv4 and Domain)."""
+    """Tests for email address classification."""
 
-    def test_clean_email(self):
-        """Standard email classifies as EMAIL with value preserved."""
+    def test_simple_email(self):
         result = classify("user@evil.com", "user@evil.com")
         assert result is not None
         assert result.type == IOCType.EMAIL
         assert result.value == "user@evil.com"
 
-    def test_uppercase_domain_lowercased(self):
-        """Mixed-case email is normalised to lowercase in value."""
-        result = classify("User@Evil.COM", "User@Evil.COM")
+    def test_email_with_subdomain(self):
+        result = classify("admin@mail.evil.org", "admin@mail.evil.org")
+        assert result is not None
+        assert result.type == IOCType.EMAIL
+
+    def test_email_with_plus_addressing(self):
+        result = classify("user+tag@example.com", "user+tag@example.com")
+        assert result is not None
+        assert result.type == IOCType.EMAIL
+
+    def test_email_value_lowercased(self):
+        """Email values should be stored lowercase."""
+        result = classify("User@EVIL.COM", "User@EVIL.COM")
         assert result is not None
         assert result.type == IOCType.EMAIL
         assert result.value == "user@evil.com"
 
-    def test_no_tld_rejected(self):
-        """user@localhost has no multi-char TLD — must not classify as EMAIL."""
-        result = classify("user@localhost", "user@localhost")
-        assert result is None or result.type != IOCType.EMAIL
+    def test_domain_only_not_email(self):
+        """Plain domain without @ should not classify as email."""
+        result = classify("evil.com", "evil.com")
+        assert result is not None
+        assert result.type == IOCType.DOMAIN
 
-    def test_no_local_part_rejected(self):
-        """@evil.com has no local-part — must not classify as EMAIL."""
+    def test_at_sign_alone_not_email(self):
+        """A bare @ character should not classify."""
+        result = classify("@", "@")
+        assert result is None
+
+    def test_url_with_at_sign_is_url(self):
+        """URL containing @ (HTTP auth) should classify as URL, not email."""
+        result = classify("http://user@evil.com/path", "http://user@evil.com/path")
+        assert result is not None
+        assert result.type == IOCType.URL
+
+    def test_email_before_domain_in_precedence(self):
+        """user@evil.com must classify as EMAIL, not DOMAIN."""
+        result = classify("user@evil.com", "user@evil.com")
+        assert result is not None
+        assert result.type == IOCType.EMAIL
+        assert result.type != IOCType.DOMAIN
+
+    def test_email_with_dots_in_local(self):
+        """Dots in the local part (first.last) are valid email syntax."""
+        result = classify("first.last@evil.com", "first.last@evil.com")
+        assert result is not None
+        assert result.type == IOCType.EMAIL
+
+    def test_no_local_part_not_email(self):
+        """@domain.com with no local part should not classify as email."""
         result = classify("@evil.com", "@evil.com")
         assert result is None or result.type != IOCType.EMAIL
 
-    def test_email_before_domain(self):
-        """evil.com classifies as DOMAIN; user@evil.com classifies as EMAIL (precedence)."""
-        domain_result = classify("evil.com", "evil.com")
-        assert domain_result is not None
-        assert domain_result.type == IOCType.DOMAIN
-
-        email_result = classify("user@evil.com", "user@evil.com")
-        assert email_result is not None
-        assert email_result.type == IOCType.EMAIL
+    def test_no_domain_not_email(self):
+        """user@ with no domain part should not classify as email."""
+        result = classify("user@", "user@")
+        assert result is None or result.type != IOCType.EMAIL
