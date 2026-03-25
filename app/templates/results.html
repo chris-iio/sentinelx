@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="page-results"{% if mode == "online" and job_id %} data-job-id="{{ job_id }}" data-mode="{{ mode }}" data-provider-counts="{{ provider_counts }}"{% else %} data-mode="{{ mode }}"{% endif %}>
+<div class="page-results"{% if mode == "online" and job_id %} data-job-id="{{ job_id }}" data-mode="{{ mode }}" data-provider-counts="{{ provider_counts }}"{% if history_results %} data-history-results='{{ history_results }}'{% endif %}{% else %} data-mode="{{ mode }}"{% endif %}>
 
     <div class="results-header">
         <div class="mode-indicator mode-{{ mode }}">

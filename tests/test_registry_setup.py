@@ -57,7 +57,7 @@ class TestBuildRegistry:
             allowed_hosts=_make_allowed_hosts(),
             config_store=_make_config_store(),
         )
-        assert len(registry.all()) == 14
+        assert len(registry.all()) == 15
 
     def test_registry_contains_virustotal(self):
         """build_registry() registers a provider named 'VirusTotal'."""
@@ -410,3 +410,25 @@ class TestBuildRegistry:
         asn_intel = next(p for p in registry.all() if p.name == "ASN Intel")
         assert IOCType.IPV4 in asn_intel.supported_types
         assert IOCType.IPV6 in asn_intel.supported_types
+
+    def test_registry_contains_whois(self):
+        """build_registry() registers a provider named 'WHOIS'."""
+        from app.enrichment.setup import build_registry
+
+        registry = build_registry(
+            allowed_hosts=_make_allowed_hosts(),
+            config_store=_make_config_store(),
+        )
+        names = [p.name for p in registry.all()]
+        assert "WHOIS" in names
+
+    def test_whois_is_always_configured(self):
+        """WhoisAdapter is configured even without any API key (zero-auth)."""
+        from app.enrichment.setup import build_registry
+
+        registry = build_registry(
+            allowed_hosts=_make_allowed_hosts(),
+            config_store=_make_config_store(None),
+        )
+        whois = next(p for p in registry.all() if p.name == "WHOIS")
+        assert whois.is_configured() is True

@@ -44,9 +44,9 @@ Pattern: in `_navigate_online_with_mock()`, call `setup_enrichment_route_mock(pa
 
 ---
 
-## SentinelX detail link route is /detail/<ioc_type>/<ioc_value>, not /ioc/
+## SentinelX detail link route is /ioc/<ioc_type>/<ioc_value>, not /detail/
 
-The `injectDetailLink()` function in enrichment.ts builds links using the Flask route `/detail/<ioc_type>/<ioc_value>`. Test assertions checking the href of `.detail-link` should match `/detail/` not `/ioc/`. The plan incorrectly assumed `/ioc/` — inspecting actual DOM output (or the Flask route table) is the definitive source.
+The `injectDetailLink()` function in enrichment.ts and history.ts builds links using the Flask route `/ioc/<ioc_type>/<ioc_value>`. Test assertions checking the href of `.detail-link` should match `/ioc/` not `/detail/`. The Flask blueprint route is `@bp.route("/ioc/<ioc_type>/<path:ioc_value>")` in `app/routes.py`.
 
 ---
 
@@ -306,3 +306,115 @@ M004 planned `safe_request()` consolidation, registry caching in `create_app()`,
 **Rule:** When a task or slice is re-scoped, the summary must explicitly document what was NOT delivered, not silently inherit success claims from the original plan. Milestone closers must independently verify every success criterion, not trust slice summaries.
 
 Discovered: M004 closer verification
+
+---
+
+### safe_request() uses method-specific dispatch, not session.request()
+
+`safe_request()` calls `session.get()` / `session.post()` via `getattr(session, method.lower())` — NOT `session.request()`. This is because all existing adapter tests mock `session.get` or `session.post` directly. If `safe_request()` used `session.request()`, those mocks would not intercept HTTP calls, and all adapter tests would fail with `JSONDecodeError: Expecting value` (the MagicMock returns an empty mock for `iter_content`, which produces no bytes, which fails JSON parsing).
+
+**Implication for S02:** Most adapter migrations work with existing test mocks unchanged. However, adapters whose tests patched `read_limited` or `validate_endpoint` on the adapter module (crt.sh, ThreatMiner) required test updates — those symbols are no longer imported by the adapter. Switch to `make_mock_response` with `iter_content` (the Shodan test pattern). URLhaus tests also needed a minor assertion update: `safe_request()` always passes `json=None` as a kwarg, so `json not in kwargs` assertions must become `json is None` checks.
+
+Discovered: M005/S01/T02 — D042, updated M005/S02/T02
+
+---
+
+## safe_request() POST adapters: json_payload= vs data= parameter names
+
+`safe_request()` uses `json_payload=` (not `json=`) for JSON request bodies and `data=` for form-encoded bodies. This avoids shadowing Python's built-in `json` module name. When migrating a POST adapter:
+- JSON body (e.g., ThreatFox): `safe_request(..., method="POST", json_payload=payload)`
+- Form body (e.g., URLhaus): `safe_request(..., method="POST", data={key: value})`
+
+Discovered: M005/S02/T02
+
+---
+
+## Test pattern for routes using app.registry: assign directly, don't mock build_registry
+
+After M005/S03, `analyze()` reads `current_app.registry` (cached at startup). Tests that need a custom registry for route testing should assign directly to the test app:
+
+```python
+mock_registry = MagicMock()
+mock_registry.configured.return_value = [mock_provider]
+mock_registry.all.return_value = [mock_provider]
+mock_registry.providers_for_type.return_value = [MagicMock()]
+mock_registry.provider_count_for_type.return_value = 2
+client.application.registry = mock_registry
+```
+
+Do NOT patch `app.routes.build_registry` — that function is no longer called in `analyze()`. Only `settings_post()` calls it, and only to rebuild the cache.
+
+Discovered: M005/S03/T01
+
+---
+
+## Consolidation refactors that remove imports break tests patching those symbols
+
+When migrating code from inline patterns to a shared helper (e.g., `safe_request()`), any test that patches the old symbols at the adapter module level (e.g., `@patch("app.enrichment.adapters.crtsh.read_limited")`) will fail with `AttributeError` after the adapter stops importing those symbols. The fix is mechanical: switch tests to mock the shared helper's inputs instead (e.g., `make_mock_response` with `iter_content`).
+
+**Plan implication:** Slice plans claiming "zero test file changes" for consolidation refactors are overly optimistic. Budget for 1-3 test files needing mock updates per migration batch.
+
+Discovered: M005/S02/T02 (crt.sh, ThreatMiner, URLhaus tests required updates)
+
+---
+
+## JS replay modules: duplicate small private functions rather than refactoring exports
+
+When building history.ts to replay stored results through the same rendering pipeline as enrichment.ts, two functions (`injectDetailLink`, `initExportButton`) were closure-bound and module-private. Exporting them would require refactoring enrichment.ts's internal state management (e.g., `allResults` is module-private and used by the export function).
+
+**Pattern:** Duplicate small utility functions (≤20 lines each) in the new module rather than widening the export surface of a complex existing module. history.ts maintains its own `allResults` array and its own export button setup, independent of enrichment.ts's module-private state.
+
+**Exception:** `wireExpandToggles()` was successfully exported because it's pure event delegation with no closure dependencies — safe to share.
+
+**Rule:** Before exporting from enrichment.ts, check if the function reads or writes module-level state (`allResults`, `iocVerdicts`, `iocResultCounts`). If it does, duplicate instead.
+
+Discovered: M006/S01/T03
+
+---
+
+## HistoryStore.save_analysis() accepts optional analysis_id for id reuse
+
+The enrichment job_id (UUID4 hex generated at submit time) is reused as the history row id by passing it as `analysis_id` to `save_analysis()`. This keeps the same id across the polling endpoint (`/enrichment/status/<job_id>`) and the history reload route (`/history/<id>`).
+
+If `analysis_id` is not provided, save_analysis() generates a new UUID4 hex — backward-compatible for any caller that doesn't need id coordination.
+
+Discovered: M006/S01/T02
+
+---
+
+## python-whois datetime polymorphism: creation_date/expiration_date can be datetime, list, None, or str
+
+The `python-whois` library returns `creation_date` and `expiration_date` in inconsistent shapes depending on the registrar's WHOIS response:
+- `datetime` — single date (most common)
+- `list[datetime]` — some registrars return multiple dates (e.g., initial registration + last update)
+- `None` — field not present in WHOIS response
+- `str` — unparseable date string passed through verbatim
+
+The WhoisAdapter `_normalise_datetime()` helper handles all four cases: datetime → isoformat(), list → first element isoformat(), None → None, str → passthrough. Always use this normalizer; never assume a single datetime.
+
+Discovered: M006/S02/T01
+
+---
+
+## WHOIS adapter: no HTTP safety imports — uses port 43 directly
+
+The WhoisAdapter uses `python-whois` which queries WHOIS servers on port 43 directly — no HTTP requests, no `requests` library, no SSRF surface. The adapter must NOT import `http_safety.py`, `validate_endpoint`, or `safe_request`. The `allowed_hosts` parameter is accepted for API compatibility with the Provider protocol but is unused.
+
+Docstrings must also avoid literal strings "http_safety", "validate_endpoint", "safe_request" — the verification grep (`grep -c '...' whois_lookup.py`) checks the entire file including comments.
+
+Discovered: M006/S02/T01
+
+---
+
+## PROVIDER_CONTEXT_FIELDS must be updated atomically with backend provider registration
+
+When adding a new enrichment provider, the frontend `PROVIDER_CONTEXT_FIELDS` map in `row-factory.ts` must be updated in the **same task** as the backend provider registration in `setup.py`. During M006/S02, the task summary claimed the frontend fields were added but the code change was missing — caught only during slice closure verification. The frontend renders context fields via this map; a missing entry means the provider's data silently won't render.
+
+**Checklist for adding a provider:**
+1. `app/enrichment/adapters/<name>.py` — adapter class
+2. `app/enrichment/setup.py` — register in build_registry()
+3. `app/static/src/ts/modules/row-factory.ts` — add to CONTEXT_PROVIDERS and PROVIDER_CONTEXT_FIELDS
+4. `tests/test_registry_setup.py` — update provider count assertion
+5. `make typecheck && make js` — verify frontend compiles
+
+Discovered: M006/S02 slice closure

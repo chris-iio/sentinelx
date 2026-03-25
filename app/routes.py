@@ -36,8 +36,9 @@ from app.enrichment.config_store import ConfigStore
 from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.enrichment.orchestrator import EnrichmentOrchestrator
 from app.enrichment.setup import PROVIDER_INFO, build_registry
+from app.enrichment.history_store import HistoryStore
 from app.pipeline.extractor import run_pipeline
-from app.pipeline.models import IOCType, group_by_type
+from app.pipeline.models import IOC, IOCType, group_by_type
 
 bp = Blueprint("main", __name__)
 
@@ -95,11 +96,59 @@ def _serialize_result(
     }
 
 
+def _serialize_ioc(ioc: IOC) -> dict:
+    """Serialize an IOC to a JSON-safe dict for history storage."""
+    return {
+        "type": ioc.type.value,
+        "value": ioc.value,
+        "raw_match": ioc.raw_match,
+    }
+
+
+def _run_enrichment_and_save(
+    orchestrator: EnrichmentOrchestrator,
+    job_id: str,
+    iocs: list[IOC],
+    input_text: str,
+    mode: str,
+) -> None:
+    """Run enrichment and save results to history.
+
+    Wraps orchestrator.enrich_all() — after enrichment completes,
+    serializes results and persists to HistoryStore.  Failures during
+    history save are silently ignored so enrichment results are still
+    available to the polling endpoint.
+    """
+    orchestrator.enrich_all(job_id, iocs)
+
+    try:
+        status = orchestrator.get_status(job_id)
+        if status is None:
+            return
+        serialized_results = [_serialize_result(r) for r in status["results"]]
+        serialized_iocs = [_serialize_ioc(ioc) for ioc in iocs]
+        store = HistoryStore()
+        store.save_analysis(
+            input_text=input_text,
+            mode=mode,
+            iocs=serialized_iocs,
+            results=serialized_results,
+            analysis_id=job_id,
+        )
+    except Exception:
+        pass  # history save failure must not break enrichment flow
+
+
 @bp.route("/")
 @limiter.limit("60 per minute")
 def index():
-    """Home page — shows the IOC paste form."""
-    return render_template("index.html")
+    """Home page — shows the IOC paste form with recent analyses."""
+    try:
+        store = HistoryStore()
+        recent_analyses = store.list_recent(limit=10)
+    except Exception:
+        recent_analyses = []
+    return render_template("index.html", recent_analyses=recent_analyses)
 
 
 @bp.route("/analyze", methods=["POST"])
@@ -153,8 +202,8 @@ def analyze():
                 _orchestrators.popitem(last=False)
 
         thread = Thread(
-            target=orchestrator.enrich_all,
-            args=(job_id, iocs),
+            target=_run_enrichment_and_save,
+            args=(orchestrator, job_id, iocs, text, mode),
             daemon=True,
         )
         thread.start()
@@ -188,6 +237,51 @@ def analyze():
         total_count=total_count,
         no_results=no_results,
         **template_extras,
+    )
+
+
+@bp.route("/history/<analysis_id>")
+@limiter.limit("30 per minute")
+def history_detail(analysis_id: str):
+    """Reload a past analysis from history.
+
+    Reconstructs IOC objects from stored JSON, groups them, and renders
+    results.html with the same template variables as live analysis.
+    Sets job_id='history' (truthy) so enrichment slots render, and
+    passes history_results for JS replay of stored results.
+    """
+    store = HistoryStore()
+    record = store.load_analysis(analysis_id)
+    if record is None:
+        abort(404)
+
+    # Reconstruct IOC objects from stored dicts
+    iocs = [
+        IOC(
+            type=IOCType(d["type"]),
+            value=d["value"],
+            raw_match=d["raw_match"],
+        )
+        for d in record["iocs"]
+    ]
+    grouped = group_by_type(iocs)
+    total_count = record["total_count"]
+    no_results = total_count == 0
+    enrichable_count = len(record["results"])
+
+    history_results = json.dumps(record["results"])
+
+    return render_template(
+        "results.html",
+        grouped={} if no_results else grouped,
+        mode="online",
+        total_count=total_count,
+        no_results=no_results,
+        job_id="history",
+        enrichable_count=enrichable_count,
+        provider_counts="{}",
+        provider_coverage={"registered": 0, "configured": 0, "needs_key": 0},
+        history_results=history_results,
     )
 
 

@@ -13,6 +13,7 @@ import { init as initClipboard } from "./modules/clipboard";
 import { init as initCards } from "./modules/cards";
 import { init as initFilter } from "./modules/filter";
 import { init as initEnrichment } from "./modules/enrichment";
+import { init as initHistory } from "./modules/history";
 import { init as initSettings } from "./modules/settings";
 import { init as initUi } from "./modules/ui";
 import { init as initGraph } from "./modules/graph";
@@ -23,6 +24,7 @@ function init(): void {
   initCards();
   initFilter();
   initEnrichment();
+  initHistory();
   initSettings();
   initUi();
   initGraph();

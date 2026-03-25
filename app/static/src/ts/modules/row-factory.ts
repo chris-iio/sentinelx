@@ -153,13 +153,20 @@ const PROVIDER_CONTEXT_FIELDS: Record<string, ContextFieldDef[]> = {
     { key: "rir",       label: "RIR",       type: "text" },
     { key: "allocated", label: "Allocated", type: "text" },
   ],
+  WHOIS: [
+    { key: "registrar",       label: "Registrar", type: "text" },
+    { key: "creation_date",   label: "Created",   type: "text" },
+    { key: "expiration_date", label: "Expires",   type: "text" },
+    { key: "name_servers",    label: "NS",         type: "tags" },
+    { key: "org",             label: "Org",        type: "text" },
+  ],
 };
 
 /**
  * Providers that use the context row rendering path (no verdict badge, pinned to top).
  * Extend this set when adding new context-only providers.
  */
-export const CONTEXT_PROVIDERS = new Set(["IP Context", "DNS Records", "Cert History", "ThreatMiner", "ASN Intel"]);
+export const CONTEXT_PROVIDERS = new Set(["IP Context", "DNS Records", "Cert History", "ThreatMiner", "ASN Intel", "WHOIS"]);
 
 /**
  * Create a labeled context field element with the provider-context-field class.

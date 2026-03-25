@@ -16,6 +16,7 @@ from app.enrichment.adapters.asn_cymru import CymruASNAdapter
 from app.enrichment.adapters.crtsh import CrtShAdapter
 from app.enrichment.adapters.threatminer import ThreatMinerAdapter
 from app.enrichment.adapters.dns_lookup import DnsAdapter
+from app.enrichment.adapters.whois_lookup import WhoisAdapter
 from app.enrichment.adapters.greynoise import GreyNoiseAdapter
 from app.enrichment.adapters.hashlookup import HashlookupAdapter
 from app.enrichment.adapters.ip_api import IPApiAdapter
@@ -94,12 +95,12 @@ def build_registry(
     allowed_hosts: list[str],
     config_store: ConfigStore,
 ) -> ProviderRegistry:
-    """Build and return a ProviderRegistry with all 14 providers registered.
+    """Build and return a ProviderRegistry with all 15 providers registered.
 
     Reads API keys from ConfigStore for key-requiring providers. Zero-auth providers
     (Shodan InternetDB, CIRCL Hashlookup, ipinfo.io IP Context, DNS Records,
-    Cert History, ThreatMiner, ASN Intel) are registered unconditionally — they are
-    always is_configured() == True.
+    Cert History, ThreatMiner, ASN Intel, WHOIS) are registered unconditionally —
+    they are always is_configured() == True.
 
     Registered providers:
         - VirusTotal        (requires key — via get_vt_api_key)
@@ -116,13 +117,14 @@ def build_registry(
         - Cert History      (zero-auth — certificate transparency via crt.sh)
         - ThreatMiner       (zero-auth — passive DNS and related samples via ThreatMiner)
         - ASN Intel         (zero-auth — ASN/BGP context via Team Cymru DNS mapping)
+        - WHOIS             (zero-auth — domain registration data via python-whois)
 
     Args:
         allowed_hosts: SSRF allowlist passed to each adapter for outbound calls.
         config_store: ConfigStore instance used to read provider API keys.
 
     Returns:
-        ProviderRegistry with all 14 providers registered.
+        ProviderRegistry with all 15 providers registered.
     """
     registry = ProviderRegistry()
 
@@ -155,5 +157,6 @@ def build_registry(
     registry.register(CrtShAdapter(allowed_hosts=allowed_hosts))
     registry.register(ThreatMinerAdapter(allowed_hosts=allowed_hosts))
     registry.register(CymruASNAdapter(allowed_hosts=allowed_hosts))
+    registry.register(WhoisAdapter(allowed_hosts=allowed_hosts))
 
     return registry

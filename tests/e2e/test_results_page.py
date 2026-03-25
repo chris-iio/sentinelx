@@ -410,10 +410,10 @@ def test_detail_link_injected_after_enrichment_complete(page: Page, index_url: s
     expect(results.detail_link_footers).not_to_have_count(0)
     expect(results.detail_links).not_to_have_count(0)
 
-    # Detail link href must contain /detail/ path
+    # Detail link href must contain /ioc/ path (matches Flask route)
     first_link_href = results.detail_links.first.get_attribute("href") or ""
-    assert "/detail/" in first_link_href, (
-        f"Expected detail link href to contain '/detail/', got: '{first_link_href}'"
+    assert "/ioc/" in first_link_href, (
+        f"Expected detail link href to contain '/ioc/', got: '{first_link_href}'"
     )
 
 

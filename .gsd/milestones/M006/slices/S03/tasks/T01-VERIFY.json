@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T01",
+  "unitId": "M006/S03/T01",
+  "timestamp": 1774439847720,
+  "passed": true,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "grep -c '/ioc/' app/static/dist/main.js",
+      "exitCode": 0,
+      "durationMs": 3,
+      "verdict": "pass"
+    },
+    {
+      "command": "python3 -m pytest tests/e2e/test_results_page.py::test_detail_link_injected_after_enrichment_complete -x -v",
+      "exitCode": 0,
+      "durationMs": 4079,
+      "verdict": "pass"
+    },
+    {
+      "command": "python3 -m pytest tests/ -x -q --ignore=tests/e2e",
+      "exitCode": 0,
+      "durationMs": 10039,
+      "verdict": "pass"
+    }
+  ]
+}

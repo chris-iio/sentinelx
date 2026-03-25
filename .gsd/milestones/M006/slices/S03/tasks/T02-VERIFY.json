@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T02",
+  "unitId": "M006/S03/T02",
+  "timestamp": 1774440159330,
+  "passed": true,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "python3 -m pytest tests/e2e/test_url_e2e.py -x -v",
+      "exitCode": 0,
+      "durationMs": 6672,
+      "verdict": "pass"
+    }
+  ]
+}

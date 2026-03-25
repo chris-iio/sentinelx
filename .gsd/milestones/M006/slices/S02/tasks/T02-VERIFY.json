@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T02",
+  "unitId": "M006/S02/T02",
+  "timestamp": 1774438979866,
+  "passed": false,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "python -m pytest tests/test_registry_setup.py -v",
+      "exitCode": 127,
+      "durationMs": 19,
+      "verdict": "fail"
+    },
+    {
+      "command": "make typecheck",
+      "exitCode": 0,
+      "durationMs": 319,
+      "verdict": "pass"
+    },
+    {
+      "command": "python -m pytest --tb=short -q",
+      "exitCode": 127,
+      "durationMs": 19,
+      "verdict": "fail"
+    }
+  ],
+  "retryAttempt": 1,
+  "maxRetries": 2
+}

@@ -213,7 +213,7 @@ function injectDetailLink(slot: HTMLElement): void {
   const anchor = document.createElement("a");
   anchor.className = "detail-link";
   anchor.textContent = "View full detail \u2192";
-  anchor.setAttribute("href", "/detail/" + iocType + "/" + encodeURIComponent(iocValue));
+  anchor.setAttribute("href", "/ioc/" + iocType + "/" + encodeURIComponent(iocValue));
 
   footer.appendChild(anchor);
   details.appendChild(footer);
@@ -401,8 +401,11 @@ function renderEnrichmentResult(
  * Toggles .is-open on both the summary row and its .enrichment-details container.
  * Updates aria-expanded on the summary row accordingly.
  * Multiple rows remain independently expandable — no accordion logic.
+ *
+ * Exported for reuse by history.ts — history replay needs the same expand/collapse
+ * behavior but runs outside the enrichment polling guard.
  */
-function wireExpandToggles(): void {
+export function wireExpandToggles(): void {
   const pageResults = document.querySelector<HTMLElement>(".page-results");
   if (!pageResults) return;
 
