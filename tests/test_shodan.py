@@ -263,7 +263,7 @@ class TestLookupErrors:
 
         assert isinstance(result, EnrichmentError)
         assert result.provider == "Shodan InternetDB"
-        assert "Timeout" in result.error or "timeout" in result.error.lower()
+        assert "Timeout" in result.error or "timed out" in result.error.lower()
 
     def test_http_500(self) -> None:
         """HTTP 500 response -> EnrichmentError with 'HTTP 500' in error."""

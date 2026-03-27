@@ -368,7 +368,7 @@ class TestGreyNoiseErrors:
 
         assert isinstance(result, EnrichmentError)
         assert result.provider == "GreyNoise"
-        assert "timeout" in result.error.lower() or "Timeout" in result.error
+        assert "timed out" in result.error.lower() or "Timeout" in result.error
 
     def test_http_500(self) -> None:
         """HTTP 500 -> EnrichmentError with 'HTTP 500' in error."""

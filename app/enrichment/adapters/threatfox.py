@@ -23,9 +23,8 @@ from __future__ import annotations
 import logging
 
 import requests
-import requests.exceptions
 
-from app.enrichment.http_safety import TIMEOUT, read_limited, validate_endpoint
+from app.enrichment.http_safety import safe_request
 from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.pipeline.models import IOC, IOCType
 
@@ -167,40 +166,17 @@ class TFAdapter:
                 ioc=ioc, provider="ThreatFox", error="Unsupported type"
             )
 
-        try:
-            validate_endpoint(TF_BASE, self._allowed_hosts)
-        except ValueError as exc:
-            return EnrichmentError(ioc=ioc, provider="ThreatFox", error=str(exc))
-
         # Determine payload: hash types use search_hash; others use search_ioc
         if ioc.type in _HASH_TYPES:
             payload = {"query": "search_hash", "hash": ioc.value}
         else:
             payload = {"query": "search_ioc", "search_term": ioc.value}
 
-        try:
-            resp = self._session.post(
-                TF_BASE,
-                json=payload,
-                timeout=TIMEOUT,          # SEC-04
-                allow_redirects=False,    # SEC-06
-                stream=True,              # SEC-05 setup
-            )
-            resp.raise_for_status()
-            body = read_limited(resp)   # SEC-05: byte cap enforced here
-            return _parse_response(ioc, body)
-        except requests.exceptions.Timeout:
-            return EnrichmentError(ioc=ioc, provider="ThreatFox", error="Timeout")
-        except requests.exceptions.HTTPError as exc:
-            code = exc.response.status_code if exc.response is not None else "unknown"
-            return EnrichmentError(ioc=ioc, provider="ThreatFox", error=f"HTTP {code}")
-        except requests.exceptions.SSLError:
-            return EnrichmentError(ioc=ioc, provider="ThreatFox", error="SSL/TLS error")
-        except requests.exceptions.ConnectionError:
-            return EnrichmentError(ioc=ioc, provider="ThreatFox", error="Connection failed")
-        except Exception:
-            logger.exception("Unexpected error during ThreatFox lookup for %s", ioc.value)
-            return EnrichmentError(
-                ioc=ioc, provider="ThreatFox",
-                error="Unexpected error during lookup",
-            )
+        result = safe_request(
+            self._session, TF_BASE, self._allowed_hosts, ioc, "ThreatFox",
+            method="POST",
+            json_payload=payload,
+        )
+        if not isinstance(result, dict):
+            return result
+        return _parse_response(ioc, result)

@@ -34,9 +34,8 @@ from __future__ import annotations
 import logging
 
 import requests
-import requests.exceptions
 
-from app.enrichment.http_safety import TIMEOUT, read_limited, validate_endpoint
+from app.enrichment.http_safety import safe_request
 from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.pipeline.models import IOC, IOCType
 
@@ -124,46 +123,20 @@ class AbuseIPDBAdapter:
 
         url = f"{ABUSEIPDB_BASE}?ipAddress={ioc.value}&maxAgeInDays=90"
 
-        try:
-            validate_endpoint(url, self._allowed_hosts)
-        except ValueError as exc:
-            return EnrichmentError(ioc=ioc, provider=self.name, error=str(exc))
-
-        try:
-            resp = self._session.get(
-                url,
-                headers={
-                    "Key": self._api_key,          # CRITICAL: capital 'Key' (AbuseIPDB convention)
-                    "Accept": "application/json",  # Required: avoid HTML response
-                },
-                timeout=TIMEOUT,                   # SEC-04
-                allow_redirects=False,             # SEC-06
-                stream=True,                       # SEC-05 setup
-            )
-            # Special handling for rate limit before raise_for_status
+        def _429_hook(resp):
             if resp.status_code == 429:
                 return EnrichmentError(
                     ioc=ioc, provider=self.name, error="Rate limit exceeded (429)"
                 )
-            resp.raise_for_status()
-            body = read_limited(resp)              # SEC-05: byte cap enforced
-            return _parse_response(ioc, body, self.name)
-        except requests.exceptions.Timeout:
-            return EnrichmentError(ioc=ioc, provider=self.name, error="Timeout")
-        except requests.exceptions.HTTPError as exc:
-            code = exc.response.status_code if exc.response is not None else "unknown"
-            return EnrichmentError(ioc=ioc, provider=self.name, error=f"HTTP {code}")
-        except requests.exceptions.SSLError:
-            return EnrichmentError(ioc=ioc, provider=self.name, error="SSL/TLS error")
-        except requests.exceptions.ConnectionError:
-            return EnrichmentError(ioc=ioc, provider=self.name, error="Connection failed")
-        except Exception:
-            logger.exception(
-                "Unexpected error during AbuseIPDB lookup for %s", ioc.value
-            )
-            return EnrichmentError(
-                ioc=ioc, provider=self.name, error="Unexpected error during lookup"
-            )
+            return None
+
+        result = safe_request(
+            self._session, url, self._allowed_hosts, ioc, self.name,
+            pre_raise_hook=_429_hook,
+        )
+        if not isinstance(result, dict):
+            return result
+        return _parse_response(ioc, result, self.name)
 
 
 def _parse_response(ioc: IOC, body: dict, provider_name: str) -> EnrichmentResult:

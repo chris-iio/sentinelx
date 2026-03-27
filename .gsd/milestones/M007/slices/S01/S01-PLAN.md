@@ -72,7 +72,7 @@
   - Estimate: 45m
   - Files: app/enrichment/http_safety.py, tests/test_http_safety.py
   - Verify: python3 -m pytest tests/test_http_safety.py -v && python3 -m pytest -x -q
-- [ ] **T02: Migrate 6 GET adapters to safe_request() (crtsh, threatminer, shodan, hashlookup, ip_api, otx)** — Migrate the first batch of 6 GET adapters to use safe_request(). These are the simpler adapters — no per-request headers, no POST, no complex pre-raise hooks beyond 404→no_data.
+- [x] **T02: Migrated 6 GET adapters (crtsh, threatminer, shodan, hashlookup, ip_api, otx) from inline HTTP boilerplate to safe_request(), removing 258 lines of duplicated exception handling** — Migrate the first batch of 6 GET adapters to use safe_request(). These are the simpler adapters — no per-request headers, no POST, no complex pre-raise hooks beyond 404→no_data.
 
 ## Steps
 
@@ -127,7 +127,7 @@
   - Estimate: 45m
   - Files: app/enrichment/adapters/crtsh.py, app/enrichment/adapters/threatminer.py, app/enrichment/adapters/shodan.py, app/enrichment/adapters/hashlookup.py, app/enrichment/adapters/ip_api.py, app/enrichment/adapters/otx.py
   - Verify: python3 -m pytest tests/test_crtsh.py tests/test_threatminer.py tests/test_shodan.py tests/test_hashlookup.py tests/test_ip_api.py tests/test_otx.py -v && python3 -m pytest -x -q
-- [ ] **T03: Migrate remaining 6 adapters (abuseipdb, greynoise, virustotal, malwarebazaar, threatfox, urlhaus) and run final verification** — Migrate the second batch of 6 adapters — these have more variation: POST methods, per-request headers to remove, VT's custom HTTP error handling, and AbuseIPDB's 429 pre-raise hook. Final slice-level verification at the end.
+- [x] **T03: Migrated remaining 6 adapters (abuseipdb, greynoise, virustotal, malwarebazaar, threatfox, urlhaus) to safe_request(), completing full 12-adapter consolidation with zero regressions** — Migrate the second batch of 6 adapters — these have more variation: POST methods, per-request headers to remove, VT's custom HTTP error handling, and AbuseIPDB's 429 pre-raise hook. Final slice-level verification at the end.
 
 ## Steps
 

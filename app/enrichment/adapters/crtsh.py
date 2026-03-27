@@ -2,11 +2,7 @@
 
 Implements domain enrichment via the crt.sh Certificate Transparency search API.
 Returns CT history (cert count, date range, subdomains from SANs) without requiring
-an API key. Applies all HTTP safety controls matching the provider pattern:
-  - SEC-04: timeout=(5, 30) on all requests
-  - SEC-05: stream=True + byte counting, 1 MB response cap via read_limited()
-  - SEC-06: allow_redirects=False on all requests
-  - SEC-16: SSRF allowlist enforced via validate_endpoint() before every network call
+an API key. Delegates all HTTP safety controls to safe_request() in http_safety.py.
 
 crt.sh API behavior:
   - GET https://crt.sh/?q={domain}&output=json
@@ -14,7 +10,7 @@ crt.sh API behavior:
   - 200 + empty list: No certs found -> verdict=no_data, raw_stats={}
   - 502: Common transient error -> EnrichmentError("HTTP 502")
   - Other HTTP errors: -> EnrichmentError("HTTP {code}")
-  - Timeout: -> EnrichmentError("Timeout")
+  - Timeout: -> EnrichmentError("Request timed out")
 
 Verdict semantics:
   - All responses: verdict=no_data — CT history is informational (not a threat signal)
@@ -28,9 +24,8 @@ from __future__ import annotations
 import logging
 
 import requests
-import requests.exceptions
 
-from app.enrichment.http_safety import TIMEOUT, read_limited, validate_endpoint
+from app.enrichment.http_safety import safe_request
 from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.pipeline.models import IOC, IOCType
 
@@ -102,37 +97,10 @@ class CrtShAdapter:
 
         url = f"{CRTSH_BASE}/?q={ioc.value}&output=json"
 
-        try:
-            validate_endpoint(url, self._allowed_hosts)
-        except ValueError as exc:
-            return EnrichmentError(ioc=ioc, provider=self.name, error=str(exc))
-
-        try:
-            resp = self._session.get(
-                url,
-                timeout=TIMEOUT,           # SEC-04
-                allow_redirects=False,     # SEC-06
-                stream=True,               # SEC-05 setup
-            )
-            resp.raise_for_status()
-            body = read_limited(resp)      # SEC-05: byte cap enforced; returns parsed JSON list
-            return _parse_response(ioc, body, self.name)
-        except requests.exceptions.Timeout:
-            return EnrichmentError(ioc=ioc, provider=self.name, error="Timeout")
-        except requests.exceptions.HTTPError as exc:
-            code = exc.response.status_code if exc.response is not None else "unknown"
-            return EnrichmentError(ioc=ioc, provider=self.name, error=f"HTTP {code}")
-        except requests.exceptions.SSLError:
-            return EnrichmentError(ioc=ioc, provider=self.name, error="SSL/TLS error")
-        except requests.exceptions.ConnectionError:
-            return EnrichmentError(ioc=ioc, provider=self.name, error="Connection failed")
-        except Exception:
-            logger.exception(
-                "Unexpected error during crt.sh lookup for %s", ioc.value
-            )
-            return EnrichmentError(
-                ioc=ioc, provider=self.name, error="Unexpected error during lookup"
-            )
+        result = safe_request(self._session, url, self._allowed_hosts, ioc, self.name)
+        if isinstance(result, EnrichmentError):
+            return result
+        return _parse_response(ioc, result, self.name)
 
 
 def _parse_response(ioc: IOC, body: list, provider_name: str) -> EnrichmentResult:

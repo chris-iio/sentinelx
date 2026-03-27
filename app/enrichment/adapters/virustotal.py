@@ -17,9 +17,8 @@ import datetime
 import logging
 
 import requests
-import requests.exceptions
 
-from app.enrichment.http_safety import TIMEOUT, read_limited, validate_endpoint
+from app.enrichment.http_safety import safe_request
 from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.pipeline.models import IOC, IOCType
 
@@ -119,31 +118,6 @@ def _parse_response(ioc: IOC, body: dict) -> EnrichmentResult:
     )
 
 
-def _map_http_error(ioc: IOC, err: requests.exceptions.HTTPError) -> EnrichmentError:
-    """Map HTTP error codes to typed enrichment errors.
-
-    Note: 404 is handled directly in lookup() before raise_for_status() fires,
-    so this function only receives non-404 error codes.
-
-    Args:
-        ioc: The IOC that was queried.
-        err: The HTTPError raised by raise_for_status().
-
-    Returns:
-        EnrichmentError with a human-readable message for the status code.
-    """
-    response = err.response
-    code: int | str = response.status_code if response is not None else "unknown"
-
-    if code == 429:
-        return EnrichmentError(ioc=ioc, provider="VirusTotal", error="Rate limit exceeded (429)")
-    if code in (401, 403):
-        return EnrichmentError(
-            ioc=ioc, provider="VirusTotal", error=f"Authentication error ({code})"
-        )
-    return EnrichmentError(ioc=ioc, provider="VirusTotal", error=f"HTTP {code}")
-
-
 class VTAdapter:
     """Adapter for the VirusTotal API v3.
 
@@ -205,21 +179,7 @@ class VTAdapter:
         endpoint_fn = ENDPOINT_MAP[ioc.type]
         url = endpoint_fn(ioc.value)  # type: ignore[call-arg]
 
-        try:
-            validate_endpoint(url, self._allowed_hosts)
-        except ValueError as exc:
-            return EnrichmentError(ioc=ioc, provider="VirusTotal", error=str(exc))
-
-        try:
-            resp = self._session.get(
-                url,
-                timeout=TIMEOUT,          # SEC-04
-                allow_redirects=False,    # SEC-06
-                stream=True,              # SEC-05 setup
-            )
-            # Handle error status codes before reading body (avoids JSON parse
-            # errors on error responses that have no/invalid body).
-            # 404 is special: check it first and return "no_data" (Pitfall 1).
+        def _vt_hook(resp):
             if resp.status_code == 404:
                 return EnrichmentResult(
                     ioc=ioc,
@@ -230,21 +190,22 @@ class VTAdapter:
                     scan_date=None,
                     raw_stats={},
                 )
-            # For other 4xx/5xx: raise before reading body so _map_http_error fires
-            resp.raise_for_status()
-            body = read_limited(resp)  # SEC-05: byte cap enforced here (success only)
-            return _parse_response(ioc, body)
-        except requests.exceptions.Timeout:
-            return EnrichmentError(ioc=ioc, provider="VirusTotal", error="Timeout")
-        except requests.exceptions.HTTPError as exc:
-            return _map_http_error(ioc, exc)
-        except requests.exceptions.SSLError:
-            return EnrichmentError(ioc=ioc, provider="VirusTotal", error="SSL/TLS error")
-        except requests.exceptions.ConnectionError:
-            return EnrichmentError(ioc=ioc, provider="VirusTotal", error="Connection failed")
-        except Exception:
-            logger.exception("Unexpected error during VT lookup for %s", ioc.value)
-            return EnrichmentError(
-                ioc=ioc, provider="VirusTotal",
-                error="Unexpected error during lookup",
-            )
+            if resp.status_code == 429:
+                return EnrichmentError(
+                    ioc=ioc, provider="VirusTotal",
+                    error="Rate limit exceeded (429)",
+                )
+            if resp.status_code in (401, 403):
+                return EnrichmentError(
+                    ioc=ioc, provider="VirusTotal",
+                    error=f"Authentication error ({resp.status_code})",
+                )
+            return None
+
+        result = safe_request(
+            self._session, url, self._allowed_hosts, ioc, "VirusTotal",
+            pre_raise_hook=_vt_hook,
+        )
+        if not isinstance(result, dict):
+            return result
+        return _parse_response(ioc, result)

@@ -1,12 +1,8 @@
 """OTX AlienVault API adapter.
 
 Implements IP, domain, URL, hash (MD5/SHA1/SHA256), and CVE enrichment against
-the OTX AlienVault v1 API with full HTTP safety controls matching the ShodanAdapter
-pattern:
-  - SEC-04: timeout=(5, 30) on all requests
-  - SEC-05: stream=True + byte counting, 1 MB response cap
-  - SEC-06: allow_redirects=False on all requests
-  - SEC-07/SEC-16: ALLOWED_API_HOSTS allowlist enforced before every network call
+the OTX AlienVault v1 API. Delegates all HTTP safety controls to safe_request()
+in http_safety.py.
 
 OTX API behavior (all endpoints are GET with X-OTX-API-KEY header):
   - GET /api/v1/indicators/IPv4/{value}/general
@@ -24,7 +20,7 @@ Verdict from pulse_info.count:
   - count 1-4  -> suspicious
   - count == 0 -> no_data
 
-404 response -> no_data (not an error) — MUST be checked BEFORE raise_for_status.
+404 response -> no_data (not an error) — handled via pre_raise_hook.
 
 Supports 8 IOCType values (all except EMAIL) including CVE (the first CVE-capable provider).
 
@@ -36,9 +32,8 @@ from __future__ import annotations
 import logging
 
 import requests
-import requests.exceptions
 
-from app.enrichment.http_safety import TIMEOUT, read_limited, validate_endpoint
+from app.enrichment.http_safety import safe_request
 from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.pipeline.models import IOC, IOCType
 
@@ -133,19 +128,7 @@ class OTXAdapter:
         otx_type = _OTX_TYPE_MAP[ioc.type]
         url = f"{OTX_BASE}/{otx_type}/{ioc.value}/general"
 
-        try:
-            validate_endpoint(url, self._allowed_hosts)
-        except ValueError as exc:
-            return EnrichmentError(ioc=ioc, provider=self.name, error=str(exc))
-
-        try:
-            resp = self._session.get(
-                url,
-                timeout=TIMEOUT,               # SEC-04
-                allow_redirects=False,         # SEC-06
-                stream=True,                   # SEC-05 setup
-            )
-            # CRITICAL: check 404 BEFORE raise_for_status — 404 means "not in OTX", not an error
+        def _404_hook(resp):
             if resp.status_code == 404:
                 return EnrichmentResult(
                     ioc=ioc,
@@ -156,25 +139,15 @@ class OTXAdapter:
                     scan_date=None,
                     raw_stats={},
                 )
-            resp.raise_for_status()
-            body = read_limited(resp)          # SEC-05: byte cap enforced
-            return _parse_response(ioc, body, self.name)
-        except requests.exceptions.Timeout:
-            return EnrichmentError(ioc=ioc, provider=self.name, error="Timeout")
-        except requests.exceptions.HTTPError as exc:
-            code = exc.response.status_code if exc.response is not None else "unknown"
-            return EnrichmentError(ioc=ioc, provider=self.name, error=f"HTTP {code}")
-        except requests.exceptions.SSLError:
-            return EnrichmentError(ioc=ioc, provider=self.name, error="SSL/TLS error")
-        except requests.exceptions.ConnectionError:
-            return EnrichmentError(ioc=ioc, provider=self.name, error="Connection failed")
-        except Exception:
-            logger.exception(
-                "Unexpected error during OTX lookup for %s", ioc.value
-            )
-            return EnrichmentError(
-                ioc=ioc, provider=self.name, error="Unexpected error during lookup"
-            )
+            return None
+
+        result = safe_request(
+            self._session, url, self._allowed_hosts, ioc, self.name,
+            pre_raise_hook=_404_hook,
+        )
+        if not isinstance(result, dict):
+            return result
+        return _parse_response(ioc, result, self.name)
 
 
 def _parse_response(ioc: IOC, body: dict, provider_name: str) -> EnrichmentResult:

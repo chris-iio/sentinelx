@@ -327,7 +327,7 @@ class TestURLhausLookup:
         # Must use 'data=' keyword arg (form-encoded), NOT 'json='
         call_kwargs = adapter._session.post.call_args[1]
         assert "data" in call_kwargs, "URLhaus POST must use data= (form-encoded body)"
-        assert "json" not in call_kwargs, "URLhaus POST must NOT use json= parameter"
+        assert call_kwargs.get("json") is None, "URLhaus POST must NOT send a json body"
 
     def test_url_post_sends_auth_key_header(self) -> None:
         """URLhaus POST must include Auth-Key header with the API key."""
@@ -401,7 +401,7 @@ class TestURLhausErrors:
 
         assert isinstance(result, EnrichmentError)
         assert result.provider == "URLhaus"
-        assert "Timeout" in result.error or "timeout" in result.error.lower()
+        assert "Timeout" in result.error or "timed out" in result.error.lower()
 
     def test_http_500_returns_error(self) -> None:
         """HTTP 500 response -> EnrichmentError with 'HTTP 500' in error."""

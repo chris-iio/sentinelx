@@ -150,11 +150,11 @@ def safe_request(
         return EnrichmentError(ioc=ioc, provider=provider, error="Connection failed")
     except ValueError as exc:
         return EnrichmentError(
-            ioc=ioc, provider=provider, error="Endpoint validation failed"
+            ioc=ioc, provider=provider, error=str(exc) or "Endpoint validation failed"
         )
     except Exception as exc:
         logger.warning(
             "safe_request unexpected error provider=%s ioc=%s: %s",
             provider, ioc.value, exc,
         )
-        return EnrichmentError(ioc=ioc, provider=provider, error=str(exc))
+        return EnrichmentError(ioc=ioc, provider=provider, error=f"Unexpected error: {exc}")

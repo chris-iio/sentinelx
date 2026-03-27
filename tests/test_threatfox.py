@@ -184,7 +184,7 @@ class TestEdgeCases:
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentError)
-        assert "Timeout" in result.error or "timeout" in result.error.lower()
+        assert "Timeout" in result.error or "timed out" in result.error.lower()
 
     def test_lookup_http_error(self) -> None:
         """HTTP error from server -> EnrichmentError."""

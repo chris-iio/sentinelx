@@ -31,9 +31,8 @@ from __future__ import annotations
 import logging
 
 import requests
-import requests.exceptions
 
-from app.enrichment.http_safety import TIMEOUT, read_limited, validate_endpoint
+from app.enrichment.http_safety import safe_request
 from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.pipeline.models import IOC, IOCType
 
@@ -116,23 +115,7 @@ class GreyNoiseAdapter:
 
         url = f"{GREYNOISE_BASE}/{ioc.value}"
 
-        try:
-            validate_endpoint(url, self._allowed_hosts)
-        except ValueError as exc:
-            return EnrichmentError(ioc=ioc, provider=self.name, error=str(exc))
-
-        try:
-            resp = self._session.get(
-                url,
-                headers={
-                    "key": self._api_key,       # CRITICAL: lowercase 'key' (GreyNoise convention)
-                    "Accept": "application/json",
-                },
-                timeout=TIMEOUT,               # SEC-04
-                allow_redirects=False,         # SEC-06
-                stream=True,                   # SEC-05 setup
-            )
-            # CRITICAL: check 404 BEFORE raise_for_status — 404 means "no data", not an error
+        def _404_hook(resp):
             if resp.status_code == 404:
                 return EnrichmentResult(
                     ioc=ioc,
@@ -143,25 +126,15 @@ class GreyNoiseAdapter:
                     scan_date=None,
                     raw_stats={},
                 )
-            resp.raise_for_status()
-            body = read_limited(resp)          # SEC-05: byte cap enforced
-            return _parse_response(ioc, body, self.name)
-        except requests.exceptions.Timeout:
-            return EnrichmentError(ioc=ioc, provider=self.name, error="Timeout")
-        except requests.exceptions.HTTPError as exc:
-            code = exc.response.status_code if exc.response is not None else "unknown"
-            return EnrichmentError(ioc=ioc, provider=self.name, error=f"HTTP {code}")
-        except requests.exceptions.SSLError:
-            return EnrichmentError(ioc=ioc, provider=self.name, error="SSL/TLS error")
-        except requests.exceptions.ConnectionError:
-            return EnrichmentError(ioc=ioc, provider=self.name, error="Connection failed")
-        except Exception:
-            logger.exception(
-                "Unexpected error during GreyNoise lookup for %s", ioc.value
-            )
-            return EnrichmentError(
-                ioc=ioc, provider=self.name, error="Unexpected error during lookup"
-            )
+            return None
+
+        result = safe_request(
+            self._session, url, self._allowed_hosts, ioc, self.name,
+            pre_raise_hook=_404_hook,
+        )
+        if not isinstance(result, dict):
+            return result
+        return _parse_response(ioc, result, self.name)
 
 
 def _parse_response(ioc: IOC, body: dict, provider_name: str) -> EnrichmentResult:

@@ -522,7 +522,7 @@ class TestLookupErrors:
 
         assert isinstance(result, EnrichmentError)
         assert result.provider == "IP Context"
-        assert "Timeout" in result.error or "timeout" in result.error.lower()
+        assert "Timeout" in result.error or "timed out" in result.error.lower()
 
     def test_ssrf_validation_blocks_disallowed_host(self) -> None:
         """Adapter with allowed_hosts=[] -> EnrichmentError before network call."""

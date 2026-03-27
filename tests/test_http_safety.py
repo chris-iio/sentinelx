@@ -99,7 +99,7 @@ class TestSafeRequestSSRF:
         result = safe_request(session, bad_url, ALLOWED, IOC, PROVIDER)
 
         assert isinstance(result, EnrichmentError)
-        assert "Endpoint validation failed" in result.error
+        assert "not in allowed_hosts" in result.error or "SSRF" in result.error
         # Must NOT make any network call
         session.get.assert_not_called()
 

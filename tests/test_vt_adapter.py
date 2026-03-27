@@ -250,7 +250,7 @@ class TestLookupErrors:
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentError)
-        assert "Timeout" in result.error or "timeout" in result.error.lower()
+        assert "Timeout" in result.error or "timed out" in result.error.lower()
 
 
 class TestHTTPSafetyControls:

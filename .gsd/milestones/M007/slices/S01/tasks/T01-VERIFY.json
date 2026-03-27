@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T01",
+  "unitId": "M007/S01/T01",
+  "timestamp": 1774615365054,
+  "passed": false,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "python3 -m pytest tests/test_http_safety.py -v",
+      "exitCode": 0,
+      "durationMs": 306,
+      "verdict": "pass"
+    },
+    {
+      "command": "python3 -m pytest -x -q",
+      "exitCode": 1,
+      "durationMs": 90756,
+      "verdict": "fail"
+    }
+  ],
+  "retryAttempt": 1,
+  "maxRetries": 2
+}

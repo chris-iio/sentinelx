@@ -2,11 +2,8 @@
 
 Implements multi-IOC-type enrichment via the ThreatMiner API v2 (api.threatminer.org).
 Provides passive DNS history (IP/domain lookups) and related malware sample hashes
-(domain/hash lookups) without requiring an API key. Applies all HTTP safety controls:
-  - SEC-04: timeout=(5, 30) on all requests
-  - SEC-05: stream=True + byte counting, 1 MB response cap via read_limited()
-  - SEC-06: allow_redirects=False on all requests
-  - SEC-16: SSRF allowlist enforced via validate_endpoint() before every network call
+(domain/hash lookups) without requiring an API key. Delegates all HTTP safety controls
+to safe_request() in http_safety.py.
 
 ThreatMiner API v2 behavior:
   - GET https://api.threatminer.org/v2/host.php?q={ip}&rt=2
@@ -19,7 +16,7 @@ ThreatMiner API v2 behavior:
   - HTTP 200 + body status_code "404": No results -> verdict=no_data (NOT an HTTP error)
   - HTTP 429: Rate limited (>10 req/min) -> EnrichmentError("HTTP 429")
   - HTTP 403: Blocked/IP ban -> EnrichmentError("HTTP 403")
-  - Timeout: -> EnrichmentError("Timeout")
+  - Timeout: -> EnrichmentError("Request timed out")
 
 CRITICAL: ThreatMiner always returns HTTP 200, even for "not found" responses.
 The body's status_code field (a string "404", not int) is the authoritative signal.
@@ -40,9 +37,8 @@ from __future__ import annotations
 import logging
 
 import requests
-import requests.exceptions
 
-from app.enrichment.http_safety import TIMEOUT, read_limited, validate_endpoint
+from app.enrichment.http_safety import safe_request
 from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.pipeline.models import IOC, IOCType
 
@@ -136,7 +132,7 @@ class ThreatMinerAdapter:
             return self._lookup_hash(ioc)
 
     def _call(self, ioc: IOC, base_url: str, rt: str) -> dict | EnrichmentError:
-        """Make one ThreatMiner API call with full HTTP safety controls.
+        """Make one ThreatMiner API call via safe_request().
 
         Validates the endpoint against the SSRF allowlist, then makes a GET request
         with the IOC value as the 'q' parameter and the resource type as 'rt'.
@@ -150,37 +146,8 @@ class ThreatMinerAdapter:
             Parsed JSON dict on success.
             EnrichmentError on SSRF block, HTTP error, timeout, or unexpected failure.
         """
-        try:
-            validate_endpoint(base_url, self._allowed_hosts)
-        except ValueError as exc:
-            return EnrichmentError(ioc=ioc, provider=self.name, error=str(exc))
-
-        try:
-            resp = self._session.get(
-                base_url,
-                params={"q": ioc.value, "rt": rt},
-                timeout=TIMEOUT,           # SEC-04
-                allow_redirects=False,     # SEC-06
-                stream=True,               # SEC-05 setup
-            )
-            resp.raise_for_status()
-            return read_limited(resp)      # SEC-05: byte cap enforced
-        except requests.exceptions.Timeout:
-            return EnrichmentError(ioc=ioc, provider=self.name, error="Timeout")
-        except requests.exceptions.HTTPError as exc:
-            code = exc.response.status_code if exc.response is not None else "unknown"
-            return EnrichmentError(ioc=ioc, provider=self.name, error=f"HTTP {code}")
-        except requests.exceptions.SSLError:
-            return EnrichmentError(ioc=ioc, provider=self.name, error="SSL/TLS error")
-        except requests.exceptions.ConnectionError:
-            return EnrichmentError(ioc=ioc, provider=self.name, error="Connection failed")
-        except Exception:
-            logger.exception(
-                "Unexpected error during ThreatMiner lookup for %s", ioc.value
-            )
-            return EnrichmentError(
-                ioc=ioc, provider=self.name, error="Unexpected error"
-            )
+        url = f"{base_url}?q={ioc.value}&rt={rt}"
+        return safe_request(self._session, url, self._allowed_hosts, ioc, self.name)
 
     def _lookup_ip(self, ioc: IOC) -> EnrichmentResult | EnrichmentError:
         """Look up passive DNS history for an IP address.

@@ -459,7 +459,7 @@ class TestOTXErrors:
 
         assert isinstance(result, EnrichmentError)
         assert result.provider == "OTX AlienVault"
-        assert "Timeout" in result.error or "timeout" in result.error.lower()
+        assert "Timeout" in result.error or "timed out" in result.error.lower()
 
     def test_http_500_returns_error(self) -> None:
         """HTTP 500 response -> EnrichmentError with 'HTTP 500' in error."""
