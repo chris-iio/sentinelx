@@ -85,7 +85,15 @@ class HistoryStore:
         self._db_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         self._conn = self._connect()
         self._conn.execute("PRAGMA journal_mode=WAL")
+        self._conn.execute("PRAGMA synchronous=NORMAL")
+        self._conn.execute("PRAGMA busy_timeout=5000")
+        self._conn.execute("PRAGMA cache_size=-8000")
+        self._conn.execute("PRAGMA temp_store=MEMORY")
         self._conn.execute(_CREATE_TABLE)
+        self._conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_history_created_at "
+            "ON analysis_history (created_at DESC)"
+        )
         self._conn.commit()
 
     def _connect(self) -> sqlite3.Connection:
@@ -154,13 +162,14 @@ class HistoryStore:
             List of dicts with keys: id, input_text (truncated to 120
             chars), mode, total_count, top_verdict, created_at.
         """
-        rows = self._conn.execute(
-            "SELECT id, input_text, mode, total_count, top_verdict, created_at "
-            "FROM analysis_history "
-            "ORDER BY created_at DESC "
-            "LIMIT ?",
-            (limit,),
-        ).fetchall()
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT id, input_text, mode, total_count, top_verdict, created_at "
+                "FROM analysis_history "
+                "ORDER BY created_at DESC "
+                "LIMIT ?",
+                (limit,),
+            ).fetchall()
 
         return [
             {
@@ -181,13 +190,14 @@ class HistoryStore:
             Dict with all columns (iocs and results deserialized from
             JSON), or None if the id does not exist.
         """
-        row = self._conn.execute(
-            "SELECT id, input_text, mode, iocs_json, results_json, "
-            "       total_count, top_verdict, created_at "
-            "FROM analysis_history "
-            "WHERE id = ?",
-            (analysis_id,),
-        ).fetchone()
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT id, input_text, mode, iocs_json, results_json, "
+                "       total_count, top_verdict, created_at "
+                "FROM analysis_history "
+                "WHERE id = ?",
+                (analysis_id,),
+            ).fetchone()
 
         if row is None:
             return None

@@ -72,6 +72,29 @@ def create_app(config_override: dict | None = None) -> Flask:
     # Validate configuration: fail fast if required env vars missing (SEC-03)
     config.validate()
 
+    # --- Singleton stores & cached registry ---
+    # Create shared CacheStore and HistoryStore once at startup.  Route handlers
+    # read current_app.cache_store / current_app.history_store instead of
+    # re-instantiating per-request (avoids SQLite connection churn + PRAGMA overhead).
+    from .cache.store import CacheStore
+    from .enrichment.history_store import HistoryStore
+
+    app.cache_store = CacheStore()
+    app.history_store = HistoryStore()
+
+    # Registry is built once at startup and cached on the app.  Rebuilt only
+    # when settings are saved (settings_post route invalidates it).
+    from .enrichment.config_store import ConfigStore
+    from .enrichment.setup import build_registry
+
+    config_store = ConfigStore()
+    allowed_hosts = app.config.get("ALLOWED_API_HOSTS", [])
+    app.registry = build_registry(allowed_hosts=allowed_hosts, config_store=config_store)
+
+    # Static asset cache-control (24 hours) — avoids re-downloading ~568KB
+    # of fonts/JS/CSS on every page navigation.
+    app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 86400
+
     # Register blueprint (routes registered after security config is complete)
     from .routes import bp
 

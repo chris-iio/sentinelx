@@ -1,21 +1,20 @@
 ---
 id: M006
-title: "Analyst Workflow & Coverage — Context"
+title: "Analyst Workflow & Coverage"
 status: complete
-completed_at: 2026-03-25T12:29:26.135Z
+completed_at: 2026-03-25T12:46:16.121Z
 key_decisions:
-  - Used UUID4 hex as history row id (not autoincrement) — avoids leaking analysis count
+  - UUID4 hex as history row id — avoids leaking analysis count
   - top_verdict computed at save time and stored in the row — avoids re-parsing results_json on every list_recent()
-  - History save failures silently caught — enrichment results must always be available regardless of persistence issues
+  - History save failures silently caught — enrichment results always available regardless of persistence issues
   - WhoisAdapter uses verdict='no_data' always — WHOIS is informational context, not a threat verdict source
-  - WhoisAdapter handles FailedParsingWhoisOutputError and UnknownTldError as graceful degrades rather than hard failures
-  - Detail link href uses /ioc/<type>/<value> matching Flask route, not /detail/
-  - Replace transition:all with explicit property list on .btn to follow 'never use transition: all' design principle
-  - Map .alert-error hardcoded #ff6b6b to var(--verdict-malicious-text) design token
+  - WhoisAdapter registered in zero-auth section (no API key, always configured) matching DnsAdapter/CrtShAdapter pattern
+  - Detail link href uses /ioc/<type>/<value> matching the Flask route, not /detail/
+  - Replace transition:all with explicit property list on .btn to follow design principles
+  - JS replay pattern: history.ts replays stored results through same rendering pipeline as live enrichment — single codepath, two entry points
 key_files:
   - app/enrichment/history_store.py
   - app/enrichment/adapters/whois_lookup.py
-  - app/enrichment/setup.py
   - app/routes.py
   - app/static/src/ts/modules/history.ts
   - app/static/src/ts/modules/enrichment.ts
@@ -23,85 +22,85 @@ key_files:
   - app/static/src/input.css
   - app/templates/index.html
   - app/templates/results.html
+  - app/enrichment/setup.py
   - tests/test_history_store.py
   - tests/test_history_routes.py
   - tests/test_whois_lookup.py
   - tests/e2e/test_url_e2e.py
-  - requirements.txt
 lessons_learned:
-  - JS replay pattern (history.ts) reusing the same rendering pipeline as live enrichment avoids divergence — single rendering codepath with two entry points is much more maintainable than duplicating rendering logic
-  - Non-HTTP adapters (WHOIS on port 43, DNS on port 53) must not import http_safety.py — protocol-specific adapters have different security surfaces
-  - python-whois datetime fields are polymorphic (single datetime, list, None, str) — always normalize with a helper before storing
-  - Frontend detail link hrefs must match Flask routes exactly (/ioc/ not /detail/) — E2E tests are essential for catching this class of bug that unit tests miss
-  - PROVIDER_CONTEXT_FIELDS in row-factory.ts must be updated atomically with backend provider registration — the T02 task summary claimed it was done but the code change was missing, caught only during slice closure verification
-  - The HistoryStore WAL-mode SQLite pattern (same as CacheStore) is now proven twice — it's the standard for any new local persistence needs
+  - PROVIDER_CONTEXT_FIELDS must be updated atomically with backend provider registration — S02 task summary claimed the frontend was updated but the code change was missing, caught only at slice closure
+  - Non-HTTP adapters (WHOIS port 43, DNS port 53) must not import http_safety.py — verification greps check the entire file including docstrings
+  - python-whois returns polymorphic datetime fields (datetime, list, None, str) — always normalize through a helper function
+  - JS replay architecture (batch replay through existing rendering functions) is simpler and more reliable than building a separate rendering path for stored data
+  - Background thread wrapper pattern for secondary concerns (persistence) that must not affect primary flow (enrichment) — failures are silently caught
+  - When verification greps check for literal strings, docstrings must also avoid those strings to prevent false positives
 ---
 
-# M006: Analyst Workflow & Coverage — Context
+# M006: Analyst Workflow & Coverage
 
-**Closed four analyst-facing gaps: persistent analysis history with home-page listing and full replay, WHOIS domain enrichment as the 15th provider, URL IOC end-to-end polish with 8 E2E tests, and input page redesign to quiet-precision design tokens.**
+**Added analysis history persistence (SQLite HistoryStore + /history/<id> replay), WHOIS domain enrichment (15th provider), URL IOC end-to-end polish (detail link fix + 8 E2E tests), and input page design token completion — 1043 tests, zero failures.**
 
 ## What Happened
 
-M006 delivered four independent-but-coherent improvements that make SentinelX more useful as a daily analysis tool without adding infrastructure complexity.
+M006 closed four gaps that kept SentinelX from being a practical local tool: ephemeral results, missing WHOIS data, broken URL IOC links, and design inconsistency on the home page.
 
-**S01 — Analysis History & Persistence (high risk, delivered clean).** Added HistoryStore class following the CacheStore SQLite WAL-mode pattern. Every online analysis is now persisted with UUID4 hex ID, top_verdict computed at save time, and full IOC/results JSON. The home page shows the 10 most recent analyses with verdict badges, IOC counts, and timestamps. Clicking any entry navigates to /history/<id> where a JS replay module (history.ts) pushes stored results through the exact same rendering pipeline as live enrichment — single rendering codepath, two entry points. 20 unit tests + 13 route integration tests. Background save failures are silently caught so enrichment always works regardless of persistence issues.
+**S01 — Analysis History & Persistence (high risk).** Created HistoryStore following the CacheStore SQLite WAL-mode pattern — save_analysis() serializes IOCs and results to JSON with UUID4 hex IDs, list_recent() returns lightweight summaries ordered by timestamp, load_analysis() reconstructs full rows. Wired into three Flask touch points: a background thread wrapper saves results after enrichment (failures silently caught), GET /history/<id> loads and renders stored analysis, and index() queries recent analyses for the home page list. The JS replay module (history.ts) detects data-history-results on the results page and replays all stored results through the existing rendering pipeline — single rendering codepath, two entry points (live polling vs batch replay). 33 new tests (20 unit + 13 route integration).
 
-**S02 — WHOIS Domain Enrichment (medium risk, delivered clean).** Created WhoisAdapter as the 15th enrichment provider using python-whois on port 43 — no HTTP, no SSRF surface. WHOIS always returns verdict='no_data' since it's informational context, not a threat signal. A _normalise_datetime() helper handles python-whois's polymorphic date returns (single, list, None, str). Error handling maps all python-whois exception types to the correct enrichment model responses. Frontend renders registrar, Created, Expires, NS (as tags), and Org in context field rows. 56 unit tests cover every path. Registered in zero-auth section matching DnsAdapter/CrtShAdapter pattern.
+**S02 — WHOIS Domain Enrichment (medium risk).** Added WhoisAdapter as the 15th enrichment provider using python-whois (direct WHOIS protocol on port 43, no HTTP, no API key, no SSRF surface). Always returns verdict='no_data' — WHOIS is informational context, not a threat verdict source. A _normalise_datetime() helper handles python-whois's polymorphic date returns. All python-whois exceptions mapped to the correct enrichment model types. Frontend PROVIDER_CONTEXT_FIELDS updated with registrar, Created, Expires, NS (tags), Org. 56 unit tests + 2 registry tests.
 
-**S03 — URL IOC End-to-End Polish (low risk, delivered clean).** Discovered and fixed a broken detail link: injectDetailLink() in both enrichment.ts and history.ts built hrefs with /detail/ but the Flask route is /ioc/. Fixed both files, rebuilt JS. Created 8 E2E Playwright tests covering URL card rendering, type badge, filter pill, enrichment with URLhaus/VT mocks, and detail link href — following the exact email IOC test pattern for consistency.
+**S03 — URL IOC End-to-End Polish (low risk).** Fixed a bug where injectDetailLink() in both enrichment.ts and history.ts built hrefs using /detail/ instead of the Flask route's /ioc/ prefix — every "View full detail →" link was returning 404. Created 8 E2E Playwright tests covering URL card rendering, type badge, filter pill, enrichment with mocked URLhaus/VT, and detail link href.
 
-**S04 — Input Page Redesign (low risk, delivered clean).** Fixed .page-index flex-direction from row to column so the input card and recent analyses list stack vertically. Audited all index page CSS: replaced 3 hardcoded transition timings with design tokens, replaced transition:all on .btn with explicit property list, replaced hardcoded #ff6b6b on .alert-error with var(--verdict-malicious-text). No template changes needed — S01's recent analyses section was already fully tokenized.
+**S04 — Input Page Redesign (low risk, depends S01).** Fixed .page-index flex-direction from row to column (input card and recent analyses list were side-by-side instead of stacking). Full audit replaced 5 hardcoded CSS values with design tokens: mode toggle transitions → --duration-fast/--ease-out-quart, .btn transition:all → explicit property list, .alert-error #ff6b6b → var(--verdict-malicious-text). The recent analyses section from S01 was already fully tokenized.
 
-All four slices delivered without blockers or replans. The full test suite grew from ~960 to 1043 tests with zero regressions.
+Net result: 20 files changed, +2477/-30 lines of non-GSD code. Test count grew from 960 to 1043. All 1043 tests pass. JS and CSS builds clean. No regressions.
 
 ## Success Criteria Results
 
-### 1. Analyst can submit IOCs, close the tab, return to the home page, see the past analysis in a recent list, click it, and see full results reloaded from stored data
-**✅ MET.** S01 delivered HistoryStore with save_analysis()/list_recent()/load_analysis(), the /history/<id> route, recent analyses list on the home page, and history.ts JS replay module. 20 unit tests + 13 route integration tests verify the full roundtrip. test_history_detail_returns_200 confirms stored analysis loads. test_index_shows_recent_analyses confirms home page listing.
+**1. ✅ Analyst can submit IOCs, close the tab, return to the home page, see the past analysis in a recent list, click it, and see full results reloaded from stored data.**
+Evidence: HistoryStore.save_analysis() persists every online analysis to SQLite (app/enrichment/history_store.py). index() route queries list_recent(limit=10) and renders recent analyses with verdict badges (tests/test_history_routes.py: test_index_shows_recent_analyses, test_index_shows_verdict_badge). GET /history/<id> loads stored data and renders results.html with data-history-results for JS replay (test_history_detail_200). history.ts replays stored results through the same rendering pipeline as live enrichment. 20 unit + 13 route tests verify the full loop.
 
-### 2. Domain IOC enrichment includes WHOIS data (registrar, creation date, expiry, name servers) alongside DNS records and other provider results
-**✅ MET.** S02 delivered WhoisAdapter as the 15th provider. 56 unit tests verify registrar/creation_date/expiration_date/name_servers/org extraction. WHOIS is in CONTEXT_PROVIDERS and PROVIDER_CONTEXT_FIELDS in row-factory.ts. Registry test confirms 15 providers registered.
+**2. ✅ Domain IOC enrichment includes WHOIS data (registrar, creation date, expiry, name servers) alongside DNS records and other provider results.**
+Evidence: WhoisAdapter registered as 15th provider in setup.py. Returns registrar, creation_date, expiration_date, name_servers, org in raw_stats. PROVIDER_CONTEXT_FIELDS in row-factory.ts maps these to frontend context fields. 56 unit tests verify extraction, datetime polymorphism, and error handling (tests/test_whois_lookup.py). Registry test confirms 15 providers (tests/test_registry_setup.py).
 
-### 3. URL IOCs pasted in free-form text are extracted, enriched by URLhaus/OTX/VT/ThreatFox, displayed with correct filter pill, and accessible on the detail page
-**✅ MET.** S03 fixed broken /detail/ → /ioc/ links and added 8 E2E Playwright tests covering: URL card rendering, type badge ("URL"), filter pill visibility/filtering/active state/reset, enrichment summary row with URLhaus/VT mock, and detail link href containing /ioc/url/. Flask test client confirms GET /ioc/url/https://evil.com/payload.exe returns HTTP 200.
+**3. ✅ URL IOCs pasted in free-form text are extracted, enriched by URLhaus/OTX/VT/ThreatFox, displayed with correct filter pill, and accessible on the detail page.**
+Evidence: Detail link href fixed from /detail/ to /ioc/ in both enrichment.ts and history.ts. 8 E2E Playwright tests in tests/e2e/test_url_e2e.py verify: URL card rendering, type badge ("URL"), filter pill visibility, filter pill filtering, active state CSS, "All Types" reset, enrichment summary row with URLhaus/VT, and detail link href containing /ioc/url/. Flask test client confirms GET /ioc/url/https://evil.com/payload.exe returns HTTP 200.
 
-### 4. Home page and results page share the same visual language — zinc tokens, Inter Variable typography, verdict-only color accents
-**✅ MET.** S04 fixed .page-index flex layout, replaced all remaining hardcoded colors (#ff6b6b) and transition timings with design tokens. Zero hardcoded colors remain in index page CSS. All pages now use the same token system.
+**4. ✅ Home page and results page share the same visual language — zinc tokens, Inter Variable typography, verdict-only color accents.**
+Evidence: .page-index flex-direction fixed to column (line 278 of input.css). All mode toggle transitions use --duration-fast/--ease-out-quart. .btn uses explicit property list instead of transition:all. .alert-error uses var(--verdict-malicious-text) instead of hardcoded #ff6b6b. Zero hardcoded colors or timings remain in index page CSS. Verified by grep and git diff.
 
-### 5. All existing 960+ tests pass plus new tests for history, WHOIS, and URL flows
-**✅ MET.** Full test suite: 1043 passed in 52.71s, zero failures, zero regressions. New tests: 20 (history store) + 13 (history routes) + 56 (WHOIS) + 8 (URL E2E) + 2 (registry WHOIS) + assorted = 83+ new tests.
+**5. ✅ All existing 960+ tests pass plus new tests for history, WHOIS, and URL flows.**
+Evidence: `python3 -m pytest --tb=short -q` → 1043 passed in 52.57s, zero failures. Test count grew from 960 to 1043. `make js` and `make css` both build cleanly.
 
 ## Definition of Done Results
 
-- **All 4 slices marked [x]:** ✅ S01, S02, S03, S04 all complete with summaries.
-- **All slice summaries exist:** ✅ S01-SUMMARY.md, S02-SUMMARY.md, S03-SUMMARY.md, S04-SUMMARY.md all present.
-- **Cross-slice integration (S01→S04):** ✅ S04 consumed S01's recent analyses list HTML structure and styled it with design tokens. No changes to S01's template structure were needed.
-- **No blockers discovered:** ✅ All 4 slices delivered without replans.
-- **Code changes verified:** ✅ 20 files changed, 2477 insertions across app code, templates, CSS, JS, and tests.
-- **Full test suite green:** ✅ 1043 passed, 0 failed.
+**All 4 slices marked [x] in ROADMAP.md:** S01 ✅, S02 ✅, S03 ✅, S04 ✅.
+
+**All 4 slice summaries exist:** S01-SUMMARY.md ✅, S02-SUMMARY.md ✅, S03-SUMMARY.md ✅, S04-SUMMARY.md ✅.
+
+**Cross-slice integration (S01 → S04):** S04 consumed the recent analyses list HTML structure from S01 — the list was already fully tokenized and only the .page-index flex layout and surrounding CSS needed fixing. No integration issues.
+
+**Code changes verified:** `git diff --stat HEAD~1 HEAD -- ':!.gsd/'` shows 20 files changed, +2477/-30 lines. Real implementation code, not just planning artifacts.
+
+**Full test suite passes:** 1043/1043 tests pass (52.57s), zero failures, zero regressions.
+
+**JS and CSS builds clean:** `make js` (30.2kb bundle), `make css` — both exit 0.
 
 ## Requirement Outcomes
 
-### R030 — Analysis History Persistence
-**Active → Validated.** HistoryStore persists every online analysis to SQLite. load_analysis reconstructs full results via /history/<id>. 20 unit + 13 route tests verify roundtrip persistence.
+**R013** (quality-attribute): active → **validated** in S04. Evidence: .page-index uses flex-direction:column, all transitions tokenized, .alert-error uses var(--verdict-malicious-text), .btn uses explicit property list. 1043 tests pass.
 
-### R031 — Recent Analyses Home Page
-**Active → Validated.** Home page shows recent analyses with timestamp, IOC count, verdict badge. Click navigates to /history/<id> for full reload. Verified by test_index_shows_recent_analyses, test_index_shows_verdict_badge.
+**R030** (core-capability): active → **validated** in S01. Evidence: HistoryStore persists every online analysis to SQLite. load_analysis reconstructs full results via /history/<id>. 20 unit + 13 route tests verify roundtrip persistence.
 
-### R032 — WHOIS Domain Enrichment
-**Active → Validated.** WhoisAdapter registered as 15th provider. 56 unit tests verify: registrar/creation_date/expiration_date/name_servers/org extraction, datetime polymorphism, domain-not-found handling, quota/command errors, graceful degrade. WHOIS in CONTEXT_PROVIDERS and PROVIDER_CONTEXT_FIELDS. 1035+ tests pass, typecheck clean.
+**R031** (primary-user-loop): active → **validated** in S01. Evidence: Home page shows recent analyses with timestamp, IOC count, verdict badge. Click navigates to /history/<id> for full reload. Verified by test_index_shows_recent_analyses, test_index_shows_verdict_badge.
 
-### R033 — URL IOC End-to-End
-**Active → Validated.** 8 E2E Playwright tests verify URL IOC extraction, card rendering with type badge, filter pill, enrichment with mocked URLhaus/VT, and detail link href at /ioc/url/. Flask test client confirms /ioc/url/https://evil.com/payload.exe returns HTTP 200. 930+ unit tests pass.
+**R032** (core-capability): active → **validated** in S02. Evidence: WhoisAdapter registered as 15th provider. 56 unit tests verify registrar/creation_date/expiration_date/name_servers/org extraction, datetime polymorphism, domain-not-found handling, quota/command errors, graceful degrade.
 
-### R013 — Design Token Consistency
-**Active → Validated.** .page-index uses flex-direction:column + align-items:center. All transitions use --duration-fast/--ease-out-quart tokens. .alert-error uses var(--verdict-malicious-text). .btn uses explicit property list. All 1043 tests pass with zero regressions.
+**R033** (core-capability): active → **validated** in S03. Evidence: 8 E2E Playwright tests verify URL IOC extraction, card rendering with type badge, filter pill, enrichment with mocked URLhaus/VT, and detail link href at /ioc/url/. Flask test client confirms HTTP 200 for URL path.
 
 ## Deviations
 
-Minor deviations, all backward-compatible: Extended save_analysis() with optional analysis_id parameter to reuse enrichment job_id (plan assumed new UUID always). T02 URL E2E produced 8 tests instead of planned 5-7 — added type badge and enrichment summary row tests for better coverage. PROVIDER_CONTEXT_FIELDS WHOIS entry was missing after T02 and had to be added during slice closure verification.
+Minor deviations, all backward-compatible: (1) Extended save_analysis() with optional analysis_id parameter to reuse enrichment job_id instead of always generating new UUID. (2) S03/T02 produced 8 E2E tests instead of planned 5-7, matching email IOC test granularity. (3) S02 PROVIDER_CONTEXT_FIELDS entry was added at slice closure instead of during T02 — the task summary incorrectly claimed it was done. No material deviations from milestone scope or architecture.
 
 ## Follow-ups
 
-History deletion/management UI. Pagination or infinite scroll for history list beyond 10 entries. Two remaining transition:all usages on results page components (.filter-pill, .chevron-icon-wrapper) could be converted to explicit property lists.
+Future: add history deletion/management UI. Future: add pagination or infinite scroll for history list beyond 10 entries. Two transition:all usages remain on results page components (filter-pill, chevron-icon-wrapper lines 794/866 in input.css) — could be converted to explicit property lists in a future cleanup pass.

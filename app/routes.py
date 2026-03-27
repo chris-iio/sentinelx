@@ -21,9 +21,11 @@ Security:
 """
 
 import json
+import logging
 import uuid
 from collections import OrderedDict
-from threading import Lock, Thread
+from concurrent.futures import ThreadPoolExecutor
+from threading import Lock
 
 from flask import (
     Blueprint, abort, current_app, flash, jsonify,
@@ -31,14 +33,14 @@ from flask import (
 )
 
 from app import limiter
-from app.cache.store import CacheStore
 from app.enrichment.config_store import ConfigStore
 from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.enrichment.orchestrator import EnrichmentOrchestrator
 from app.enrichment.setup import PROVIDER_INFO, build_registry
-from app.enrichment.history_store import HistoryStore
 from app.pipeline.extractor import run_pipeline
 from app.pipeline.models import IOC, IOCType, group_by_type
+
+logger = logging.getLogger(__name__)
 
 bp = Blueprint("main", __name__)
 
@@ -48,6 +50,10 @@ bp = Blueprint("main", __name__)
 _MAX_ORCHESTRATORS = 200
 _orchestrators: OrderedDict[str, EnrichmentOrchestrator] = OrderedDict()
 _orch_lock = Lock()
+
+# Shared thread pool for enrichment jobs — caps concurrent enrichments to 4.
+# Each enrichment spawns its own inner ThreadPoolExecutor (bounded at 20 workers).
+_enrichment_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="enrich")
 
 
 def _mask_key(key: str | None) -> str | None:
@@ -111,12 +117,13 @@ def _run_enrichment_and_save(
     iocs: list[IOC],
     input_text: str,
     mode: str,
+    history_store: object,
 ) -> None:
     """Run enrichment and save results to history.
 
     Wraps orchestrator.enrich_all() — after enrichment completes,
     serializes results and persists to HistoryStore.  Failures during
-    history save are silently ignored so enrichment results are still
+    history save are logged but do not break enrichment — results remain
     available to the polling endpoint.
     """
     orchestrator.enrich_all(job_id, iocs)
@@ -127,8 +134,7 @@ def _run_enrichment_and_save(
             return
         serialized_results = [_serialize_result(r) for r in status["results"]]
         serialized_iocs = [_serialize_ioc(ioc) for ioc in iocs]
-        store = HistoryStore()
-        store.save_analysis(
+        history_store.save_analysis(  # type: ignore[union-attr]
             input_text=input_text,
             mode=mode,
             iocs=serialized_iocs,
@@ -136,7 +142,7 @@ def _run_enrichment_and_save(
             analysis_id=job_id,
         )
     except Exception:
-        pass  # history save failure must not break enrichment flow
+        logger.warning("Failed to save analysis %s to history", job_id, exc_info=True)
 
 
 @bp.route("/")
@@ -144,8 +150,7 @@ def _run_enrichment_and_save(
 def index():
     """Home page — shows the IOC paste form with recent analyses."""
     try:
-        store = HistoryStore()
-        recent_analyses = store.list_recent(limit=10)
+        recent_analyses = current_app.history_store.list_recent(limit=10)
     except Exception:
         recent_analyses = []
     return render_template("index.html", recent_analyses=recent_analyses)
@@ -176,9 +181,7 @@ def analyze():
     # Online mode — launch background enrichment
     template_extras: dict = {}
     if mode == "online":
-        config_store = ConfigStore()
-        allowed_hosts = current_app.config.get("ALLOWED_API_HOSTS", [])
-        registry = build_registry(allowed_hosts=allowed_hosts, config_store=config_store)
+        registry = current_app.registry
 
         if not registry.configured():
             flash(
@@ -188,7 +191,8 @@ def analyze():
             return redirect(url_for("main.settings_get"))
 
         job_id = uuid.uuid4().hex
-        cache = CacheStore()
+        cache = current_app.cache_store
+        config_store = ConfigStore()
         cache_ttl_hours = config_store.get_cache_ttl()
         orchestrator = EnrichmentOrchestrator(
             adapters=registry.configured(),
@@ -201,21 +205,24 @@ def analyze():
             while len(_orchestrators) > _MAX_ORCHESTRATORS:
                 _orchestrators.popitem(last=False)
 
-        thread = Thread(
-            target=_run_enrichment_and_save,
-            args=(orchestrator, job_id, iocs, text, mode),
-            daemon=True,
+        _enrichment_pool.submit(
+            _run_enrichment_and_save,
+            orchestrator, job_id, iocs, text, mode,
+            current_app.history_store,
         )
-        thread.start()
 
+        # Precompute type→providers map (avoids repeated providers_for_type calls)
+        type_providers = {
+            ioc_type: registry.providers_for_type(ioc_type)
+            for ioc_type in IOCType
+            if ioc_type != IOCType.CVE
+        }
         enrichable_count = sum(
-            len(registry.providers_for_type(ioc.type))
+            len(type_providers.get(ioc.type, []))
             for ioc in iocs
         )
         provider_counts = json.dumps({
-            ioc_type.value: registry.provider_count_for_type(ioc_type)
-            for ioc_type in IOCType
-            if ioc_type != IOCType.CVE
+            t.value: len(ps) for t, ps in type_providers.items()
         })
         provider_coverage = {
             "registered": len(registry.all()),
@@ -250,7 +257,7 @@ def history_detail(analysis_id: str):
     Sets job_id='history' (truthy) so enrichment slots render, and
     passes history_results for JS replay of stored results.
     """
-    store = HistoryStore()
+    store = current_app.history_store
     record = store.load_analysis(analysis_id)
     if record is None:
         abort(404)
@@ -311,7 +318,7 @@ def settings_get():
             "masked_key": _mask_key(key),
             "configured": key is not None,
         })
-    cache = CacheStore()
+    cache = current_app.cache_store
     cache_stats = cache.stats()
     cache_ttl = config_store.get_cache_ttl()
     return render_template(
@@ -351,6 +358,10 @@ def settings_post():
     else:
         config_store.set_provider_key(provider_id, api_key)
 
+    # Rebuild cached registry so new API key takes effect immediately
+    allowed_hosts = current_app.config.get("ALLOWED_API_HOSTS", [])
+    current_app.registry = build_registry(allowed_hosts=allowed_hosts, config_store=config_store)
+
     flash(f"API key saved for {provider_id}.", "success")
     return redirect(url_for("main.settings_get"))
 
@@ -359,8 +370,7 @@ def settings_post():
 @limiter.limit("10 per minute")
 def cache_clear():
     """Clear all cached enrichment results."""
-    cache = CacheStore()
-    cache.clear()
+    current_app.cache_store.clear()
     flash("Cache cleared.", "success")
     return redirect(url_for("main.settings_get"))
 
@@ -399,7 +409,7 @@ def ioc_detail(ioc_type: str, ioc_value: str) -> str:
     if ioc_type not in valid_types:
         abort(404)
 
-    cache = CacheStore()
+    cache = current_app.cache_store
     provider_results = cache.get_all_for_ioc(ioc_value, ioc_type)
 
     # Build graph data: central IOC node + one node per provider
@@ -458,17 +468,21 @@ def enrichment_status(job_id: str):
     since = request.args.get("since", 0, type=int)
 
     cached_markers = orchestrator.cached_markers
-    serialized_results = [
-        _serialize_result(r, cached_markers) for r in status["results"]
+
+    # Slice BEFORE serializing: only serialize new results since the cursor.
+    # Avoids O(total) serialization per poll tick — reduces to O(new_results).
+    all_results = status["results"]
+    new_results = all_results[since:]
+    serialized = [
+        _serialize_result(r, cached_markers) for r in new_results
     ]
-    sliced = serialized_results[since:]
 
     return jsonify(
         {
             "total": status["total"],
             "done": status["done"],
             "complete": status["complete"],
-            "results": sliced,
-            "next_since": len(serialized_results),
+            "results": serialized,
+            "next_since": len(all_results),
         }
     )

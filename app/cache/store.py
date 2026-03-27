@@ -49,7 +49,15 @@ class CacheStore:
         self._db_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         self._conn = self._connect()
         self._conn.execute("PRAGMA journal_mode=WAL")
+        self._conn.execute("PRAGMA synchronous=NORMAL")  # safe with WAL; avoids fsync per commit
+        self._conn.execute("PRAGMA busy_timeout=5000")    # retry on lock instead of instant error
+        self._conn.execute("PRAGMA cache_size=-8000")     # 8MB page cache
+        self._conn.execute("PRAGMA temp_store=MEMORY")
         self._conn.execute(_CREATE_TABLE)
+        self._conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_cache_cached_at "
+            "ON enrichment_cache (cached_at)"
+        )
         self._conn.commit()
 
     def _connect(self) -> sqlite3.Connection:
@@ -67,11 +75,12 @@ class CacheStore:
         Returns the result dict with an added 'cached_at' key, or None
         if not found or expired.
         """
-        row = self._conn.execute(
-            "SELECT result_json, cached_at FROM enrichment_cache "
-            "WHERE ioc_value = ? AND ioc_type = ? AND provider = ?",
-            (ioc_value, ioc_type, provider),
-        ).fetchone()
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT result_json, cached_at FROM enrichment_cache "
+                "WHERE ioc_value = ? AND ioc_type = ? AND provider = ?",
+                (ioc_value, ioc_type, provider),
+            ).fetchone()
 
         if row is None:
             return None
@@ -121,11 +130,12 @@ class CacheStore:
         Returns:
             List of dicts, each with provider, cached_at, and all result fields.
         """
-        rows = self._conn.execute(
-            "SELECT provider, result_json, cached_at FROM enrichment_cache "
-            "WHERE ioc_value = ? AND ioc_type = ?",
-            (ioc_value, ioc_type),
-        ).fetchall()
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT provider, result_json, cached_at FROM enrichment_cache "
+                "WHERE ioc_value = ? AND ioc_type = ?",
+                (ioc_value, ioc_type),
+            ).fetchall()
 
         results: list[dict] = []
         for provider, result_json, cached_at in rows:
@@ -142,12 +152,13 @@ class CacheStore:
         Returns:
             Dict with 'total_entries' (int) and 'oldest' (ISO string or None).
         """
-        count = self._conn.execute(
-            "SELECT COUNT(*) FROM enrichment_cache"
-        ).fetchone()[0]
-        oldest_row = self._conn.execute(
-            "SELECT MIN(cached_at) FROM enrichment_cache"
-        ).fetchone()
+        with self._lock:
+            count = self._conn.execute(
+                "SELECT COUNT(*) FROM enrichment_cache"
+            ).fetchone()[0]
+            oldest_row = self._conn.execute(
+                "SELECT MIN(cached_at) FROM enrichment_cache"
+            ).fetchone()
 
         oldest = oldest_row[0] if oldest_row else None
         return {"total_entries": count, "oldest": oldest}
