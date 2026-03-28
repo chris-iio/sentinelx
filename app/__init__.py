@@ -96,9 +96,11 @@ def create_app(config_override: dict | None = None) -> Flask:
     app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 86400
 
     # Register blueprint (routes registered after security config is complete)
-    from .routes import bp
+    from .routes import bp, bp_api
 
     app.register_blueprint(bp)
+    app.register_blueprint(bp_api)
+    csrf.exempt(bp_api)  # API routes are stateless JSON — no CSRF tokens
 
     # SEC-09: Security headers on every response
     @app.after_request

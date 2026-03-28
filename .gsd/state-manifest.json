@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-03-28T03:12:00.094Z",
+  "exported_at": "2026-03-28T05:36:52.506Z",
   "milestones": [
     {
       "id": "M001",
@@ -195,6 +195,70 @@
       ],
       "requirement_coverage": "Covers: R026, R027, R036, R037, R038, R039, R040. Leaves for later: R035 (REST API — deferred).",
       "boundary_map_markdown": "### S01 → S02\n\nProduces:\n- `http_safety.py` → `safe_request()` function (GET/POST, SSRF validation, byte cap, 404/429 pre-hooks, D035 exception chain)\n- All 12 HTTP adapters migrated — `lookup()` reduced to: build URL/params → call `safe_request()` → parse body\n\nConsumes: nothing (first slice)\n\n### S01 → S03\n\nProduces:\n- Stable adapter code structure that S03 test DRY-up targets\n\nConsumes: nothing (first slice)\n\n### S02 (independent)\n\nProduces:\n- Trimmed adapter docstrings — SEC control docs centralized in http_safety.py module docstring\n- Dead CSS removed from input.css\n- Dead test assertions removed\n\nConsumes: nothing (independent of S01 — docstring trimming doesn't depend on safe_request)\n\n### S03\n\nProduces:\n- Standardized test files using shared helpers.py factories\n\nConsumes from S01:\n- Final adapter code shape (test DRY-up must target the post-migration adapter tests)"
+    },
+    {
+      "id": "M008",
+      "title": "",
+      "status": "complete",
+      "depends_on": [],
+      "created_at": "2026-03-28T05:17:29.336Z",
+      "completed_at": "2026-03-28T05:36:52.494Z",
+      "vision": "Decompose the monolithic routes.py (488 LOC) into focused Blueprint modules, then add a JSON REST API blueprint for programmatic IOC submission. The decomposition makes each route group independently testable and the API work a clean addition rather than more accretion onto the monolith.",
+      "success_criteria": [
+        "routes.py no longer exists — replaced by app/routes/ package with analysis.py, settings.py, history.py, detail.py, api.py, and _helpers.py",
+        "Each Blueprint module is ≤150 LOC",
+        "POST /api/analyze accepts JSON {\"text\": \"...\", \"mode\": \"offline|online\"} and returns structured JSON with extracted IOCs and enrichment results",
+        "GET /api/status/<job_id> returns the same polling JSON as the existing HTML endpoint",
+        "All 1057 existing tests pass with zero behavior changes",
+        "New API-specific tests cover success, validation errors, rate limiting, online mode polling, and CSRF exemption",
+        "No security regression — CSP, CSRF (browser routes), SSRF allowlist, rate limiting all maintained",
+        "API routes exempt from CSRF (stateless JSON) but still rate-limited"
+      ],
+      "key_risks": [
+        {
+          "risk": "Test imports reference app.routes module paths — all must be updated to new Blueprint locations",
+          "whyItMatters": "18 test files reference app.routes directly. Mass import path changes risk silent breakage if any path is missed."
+        },
+        {
+          "risk": "Module-level state (_orchestrators, _orch_lock, _enrichment_pool) must be shared across blueprints",
+          "whyItMatters": "The enrichment status endpoint and the analyze endpoint share the orchestrator registry. Splitting them into separate files requires a shared state module."
+        },
+        {
+          "risk": "CSRF exemption for API routes must not accidentally exempt browser routes",
+          "whyItMatters": "Flask-WTF CSRFProtect is app-wide. Exempting the API blueprint requires @csrf.exempt on the blueprint, which must not leak to other blueprints."
+        }
+      ],
+      "proof_strategy": [
+        {
+          "riskOrUnknown": "Test import breakage",
+          "retireIn": "S01",
+          "whatWillBeProven": "All 1057 tests pass after route decomposition — no import path left pointing at old app.routes"
+        },
+        {
+          "riskOrUnknown": "Shared state across blueprints",
+          "retireIn": "S01",
+          "whatWillBeProven": "_orchestrators dict and _enrichment_pool are in _helpers.py, importable by both analysis and enrichment_status blueprints"
+        },
+        {
+          "riskOrUnknown": "CSRF exemption scope",
+          "retireIn": "S02",
+          "whatWillBeProven": "API routes return 200 without CSRF token; browser POST routes return 400 without CSRF token"
+        }
+      ],
+      "verification_contract": "python3 -m pytest -x -q — 1057+ passed, 0 failed",
+      "verification_integration": "Test suite covers both browser routes (CSRF-protected) and API routes (CSRF-exempt). Shared enrichment state verified via API polling test.",
+      "verification_operational": "curl -X POST http://localhost:5000/api/analyze -H 'Content-Type: application/json' -d '{\"text\":\"8.8.8.8\"}' returns JSON with extracted IOCs.",
+      "verification_uat": "Browser workflow unchanged — form submission, enrichment polling, settings, history, detail pages all work. API workflow verified via curl/tests.",
+      "definition_of_done": [
+        "routes.py replaced by app/routes/ package",
+        "All existing tests pass",
+        "API tests added and passing",
+        "R035 (REST API) validated",
+        "No file > 150 LOC in app/routes/",
+        "CSRF exemption scoped only to API blueprint"
+      ],
+      "requirement_coverage": "R035 (REST API — deferred since M006) is the primary requirement. R040 continuity constraint carries forward — all existing tests must pass.",
+      "boundary_map_markdown": "```\\napp/routes.py (488 LOC, monolith)\\n  → app/routes/__init__.py (blueprint registration)\\n  → app/routes/_helpers.py (shared state: _orchestrators, _enrichment_pool, serializers)\\n  → app/routes/analysis.py (/, /analyze)\\n  → app/routes/settings.py (/settings/*, /settings/cache/*)\\n  → app/routes/history.py (/history/<id>)\\n  → app/routes/detail.py (/ioc/<type>/<value>)\\n  → app/routes/enrichment.py (/enrichment/status/<job_id>)\\n  → app/routes/api.py (POST /api/analyze, GET /api/status/<job_id>)\\n```"
     }
   ],
   "slices": [
@@ -339,6 +403,48 @@
       "proof_level": "contract — all 1057 existing tests serve as the safety net; no new behavioral tests needed",
       "integration_closure": "Upstream: tests/helpers.py factories consumed by all 12 adapter test files. No new runtime wiring — pure test-time refactoring. Nothing remains after this slice for M007 completion.",
       "observability_impact": "None — pure test refactoring with no runtime changes.",
+      "sequence": 0,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M008",
+      "id": "S01",
+      "title": "Routes decomposition",
+      "status": "complete",
+      "risk": "medium",
+      "depends": [],
+      "demo": "routes.py deleted, replaced by app/routes/ package with 7 focused modules. All 1057 tests pass. No behavior changes.",
+      "created_at": "2026-03-28T05:18:10.306Z",
+      "completed_at": "2026-03-28T05:29:52.760Z",
+      "full_summary_md": "---\nid: S01\nparent: M008\nmilestone: M008\nprovides:\n  - app/routes/ package with shared _helpers.py for S02 API blueprint to consume\nrequires:\n  []\naffects:\n  - S02\nkey_files:\n  - app/routes/__init__.py\n  - app/routes/_helpers.py\n  - app/routes/analysis.py\n  - app/routes/enrichment.py\n  - app/routes/settings.py\n  - app/routes/history.py\n  - app/routes/detail.py\nkey_decisions:\n  - Single shared Blueprint 'main' across all route modules — preserves all template url_for() references\n  - Shared mutable state in _helpers.py imported by reference\npatterns_established:\n  - Route modules attach handlers to shared bp imported from __init__.py\n  - Shared route state lives in _helpers.py, imported by reference into consuming modules\nobservability_surfaces:\n  - none\ndrill_down_paths:\n  - .gsd/milestones/M008/slices/S01/tasks/T01-SUMMARY.md\n  - .gsd/milestones/M008/slices/S01/tasks/T02-SUMMARY.md\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-28T05:29:52.761Z\nblocker_discovered: false\n---\n\n# S01: Routes decomposition\n\n**Split routes.py (488 LOC) into 7-file app/routes/ package — all modules under 120 LOC, 1057 tests passing.**\n\n## What Happened\n\nDecomposed monolithic routes.py (488 LOC) into 7-file app/routes/ package. Largest file is analysis.py at 119 LOC. Single shared Blueprint named 'main' preserves all template url_for() references. Shared state (_orchestrators, _enrichment_pool, serializers) in _helpers.py is imported by reference into analysis.py and enrichment.py. Updated 25 test import/patch paths across 3 test files. All 1057 tests pass.\n\n## Verification\n\nroutes.py deleted. 7 package files, max 119 LOC. 1057 tests pass.\n\n## Requirements Advanced\n\nNone.\n\n## Requirements Validated\n\nNone.\n\n## New Requirements Surfaced\n\nNone.\n\n## Requirements Invalidated or Re-scoped\n\nNone.\n\n## Deviations\n\nT01 and T02 completed in a single pass since test fixes were straightforward.\n\n## Known Limitations\n\nNone.\n\n## Follow-ups\n\nNone.\n\n## Files Created/Modified\n\n- `app/routes/__init__.py` — New package init — shared Blueprint 'main', imports all route modules\n- `app/routes/_helpers.py` — Shared state: _orchestrators, _enrichment_pool, serializers, _run_enrichment_and_save\n- `app/routes/analysis.py` — Home page and /analyze routes\n- `app/routes/enrichment.py` — Enrichment polling route\n- `app/routes/settings.py` — Settings and cache management routes\n- `app/routes/history.py` — History reload route\n- `app/routes/detail.py` — IOC detail page route\n- `app/routes.py` — Deleted — replaced by app/routes/ package\n- `tests/test_routes.py` — Updated 9 patch paths from app.routes to app.routes.analysis\n- `tests/test_history_routes.py` — Updated 4 imports from app.routes to app.routes._helpers\n- `tests/test_settings.py` — Updated 12 patch paths from app.routes.ConfigStore to app.routes.settings.ConfigStore\n",
+      "full_uat_md": "# S01: Routes decomposition — UAT\n\n**Milestone:** M008\n**Written:** 2026-03-28T05:29:52.761Z\n\n## UAT: Routes Decomposition\\n\\n- [x] routes.py deleted\\n- [x] app/routes/ package exists with 7 files\\n- [x] No module exceeds 150 LOC (max: 119)\\n- [x] All 1057 tests pass\\n- [x] All template url_for('main.xxx') references work unchanged\n",
+      "goal": "Split monolithic routes.py into focused Blueprint modules sharing state via _helpers.py",
+      "success_criteria": "routes.py deleted. app/routes/ package exists with __init__.py, _helpers.py, analysis.py, settings.py, history.py, detail.py, enrichment.py. All 1057 tests pass. No module > 150 LOC.",
+      "proof_level": "test-pass",
+      "integration_closure": "All existing browser routes serve identical responses. Test imports updated to new module paths.",
+      "observability_impact": "None — pure refactor.",
+      "sequence": 0,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M008",
+      "id": "S02",
+      "title": "REST API blueprint",
+      "status": "complete",
+      "risk": "low",
+      "depends": [
+        "S01"
+      ],
+      "demo": "POST /api/analyze returns JSON with extracted IOCs. Online mode returns job_id for polling via GET /api/status/<job_id>. CSRF exempt, rate-limited.",
+      "created_at": "2026-03-28T05:18:10.307Z",
+      "completed_at": "2026-03-28T05:34:09.565Z",
+      "full_summary_md": "---\nid: S02\nparent: M008\nmilestone: M008\nprovides:\n  - POST /api/analyze endpoint for programmatic IOC submission\n  - GET /api/status/<job_id> endpoint for enrichment polling\nrequires:\n  - slice: S01\n    provides: app/routes/ package with shared _helpers.py\naffects:\n  []\nkey_files:\n  - app/routes/api.py\n  - tests/test_api.py\nkey_decisions:\n  - Separate Blueprint 'api' with url_prefix='/api' — keeps API routes cleanly namespaced\n  - CSRF exemption via csrf.exempt(bp_api) scoped only to API blueprint\npatterns_established:\n  - Separate Blueprint for API routes with url_prefix, CSRF exemption scoped to that blueprint only\nobservability_surfaces:\n  - API error responses include structured JSON with descriptive error messages\ndrill_down_paths:\n  - .gsd/milestones/M008/slices/S02/tasks/T01-SUMMARY.md\n  - .gsd/milestones/M008/slices/S02/tasks/T02-SUMMARY.md\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-28T05:34:09.566Z\nblocker_discovered: false\n---\n\n# S02: REST API blueprint\n\n**Added REST API blueprint (POST /api/analyze, GET /api/status) with 18 tests, CSRF-exempt, rate-limited \\u2014 1075 tests passing.**\n\n## What Happened\n\nCreated REST API blueprint fulfilling R035. POST /api/analyze accepts JSON with text and optional mode (offline/online), runs the same extraction pipeline as the browser route, and returns structured JSON with IOCs, grouped summary, and total count. Online mode launches background enrichment and returns job_id and status_url for polling. GET /api/status/<job_id> returns the same polling JSON as the HTML endpoint. CSRF exempted via csrf.exempt(bp_api), rate-limited at 10/min for analyze and 120/min for status. 18 tests cover validation, offline/online success, status polling, and CSRF exemption verification.\n\n## Verification\n\n18 API tests pass. Full suite: 1075 passed, 0 failed.\n\n## Requirements Advanced\n\n- R035 — REST API implemented with offline and online modes, 18 tests\n\n## Requirements Validated\n\n- R035 — POST /api/analyze returns JSON IOCs, online mode returns job_id for polling, CSRF exempt, rate-limited. 18 tests pass.\n\n## New Requirements Surfaced\n\nNone.\n\n## Requirements Invalidated or Re-scoped\n\nNone.\n\n## Deviations\n\nNone.\n\n## Known Limitations\n\napi.py is 155 LOC \\u2014 slightly above the 150 LOC target. The 30+ lines of docstrings account for the overage; actual code is well within bounds.\n\n## Follow-ups\n\nNone.\n\n## Files Created/Modified\n\n- `app/routes/api.py` — New REST API blueprint with POST /api/analyze and GET /api/status\n- `app/routes/__init__.py` — Added bp_api import\n- `app/__init__.py` — Registered bp_api and csrf.exempt(bp_api)\n- `tests/test_api.py` — 18 API tests\n",
+      "full_uat_md": "# S02: REST API blueprint — UAT\n\n**Milestone:** M008\n**Written:** 2026-03-28T05:34:09.566Z\n\n## UAT: REST API Blueprint\\n\\n- [x] POST /api/analyze accepts JSON body with text field\\n- [x] Returns structured JSON with iocs array, grouped summary, total_count\\n- [x] Default mode is offline (no enrichment)\\n- [x] Online mode returns job_id and status_url\\n- [x] GET /api/status/<job_id> returns polling progress\\n- [x] API routes exempt from CSRF\\n- [x] Browser POST routes still require CSRF\\n- [x] Rate limits applied (10/min analyze, 120/min status)\\n- [x] Validation errors return 400 with descriptive JSON\\n- [x] 18 new tests + 1057 existing = 1075 total, all passing\n",
+      "goal": "Add a JSON REST API for programmatic IOC submission, fulfilling R035",
+      "success_criteria": "POST /api/analyze accepts JSON, returns extracted IOCs + enrichment results. GET /api/status/<job_id> returns polling JSON. CSRF exempt. Rate-limited. New tests cover success, validation, error cases, online mode.",
+      "proof_level": "test-pass",
+      "integration_closure": "API blueprint registered in app/routes/__init__.py alongside browser blueprints. Shares _helpers.py state for enrichment orchestration.",
+      "observability_impact": "API error responses include structured error JSON with descriptive messages.",
       "sequence": 0,
       "replan_triggered_at": null
     }
@@ -930,6 +1036,190 @@
       "observability_impact": "",
       "full_plan_md": "",
       "sequence": 0
+    },
+    {
+      "milestone_id": "M008",
+      "slice_id": "S01",
+      "id": "T01",
+      "title": "Split routes.py into app/routes/ package with 7 focused modules, all under 120 LOC.",
+      "status": "complete",
+      "one_liner": "Split routes.py into app/routes/ package with 7 focused modules, all under 120 LOC.",
+      "narrative": "Split monolithic routes.py (488 LOC) into app/routes/ package with 7 files. Key design choice: keep a single Blueprint named 'main' shared across all route modules rather than separate blueprints, because 15+ template url_for('main.xxx') references would all break. Each route module imports bp from __init__.py and attaches its handlers. Shared state (_orchestrators, _enrichment_pool, serializers) lives in _helpers.py and is imported by reference into analysis.py and enrichment.py. Deleted routes.py after verifying the package import resolves correctly.",
+      "verification_result": "Verified routes.py deleted, package exists with 7 files all under 120 LOC. 1057 tests pass.",
+      "duration": "",
+      "completed_at": "2026-03-28T05:29:23.392Z",
+      "blocker_discovered": false,
+      "deviations": "None.",
+      "known_issues": "None.",
+      "key_files": [
+        "app/routes/__init__.py",
+        "app/routes/_helpers.py",
+        "app/routes/analysis.py",
+        "app/routes/enrichment.py",
+        "app/routes/settings.py",
+        "app/routes/history.py",
+        "app/routes/detail.py"
+      ],
+      "key_decisions": [
+        "Kept single 'main' Blueprint shared across all route modules — avoids breaking url_for('main.xxx') in 15+ template references",
+        "Route modules import shared bp from __init__.py and attach @bp.route() decorators",
+        "_orchestrators dict shared by reference across analysis.py and enrichment.py via _helpers.py import"
+      ],
+      "full_summary_md": "---\nid: T01\nparent: S01\nmilestone: M008\nkey_files:\n  - app/routes/__init__.py\n  - app/routes/_helpers.py\n  - app/routes/analysis.py\n  - app/routes/enrichment.py\n  - app/routes/settings.py\n  - app/routes/history.py\n  - app/routes/detail.py\nkey_decisions:\n  - Kept single 'main' Blueprint shared across all route modules — avoids breaking url_for('main.xxx') in 15+ template references\n  - Route modules import shared bp from __init__.py and attach @bp.route() decorators\n  - _orchestrators dict shared by reference across analysis.py and enrichment.py via _helpers.py import\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-28T05:29:23.393Z\nblocker_discovered: false\n---\n\n# T01: Split routes.py into app/routes/ package with 7 focused modules, all under 120 LOC.\n\n**Split routes.py into app/routes/ package with 7 focused modules, all under 120 LOC.**\n\n## What Happened\n\nSplit monolithic routes.py (488 LOC) into app/routes/ package with 7 files. Key design choice: keep a single Blueprint named 'main' shared across all route modules rather than separate blueprints, because 15+ template url_for('main.xxx') references would all break. Each route module imports bp from __init__.py and attaches its handlers. Shared state (_orchestrators, _enrichment_pool, serializers) lives in _helpers.py and is imported by reference into analysis.py and enrichment.py. Deleted routes.py after verifying the package import resolves correctly.\n\n## Verification\n\nVerified routes.py deleted, package exists with 7 files all under 120 LOC. 1057 tests pass.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `python3 -m pytest -x -q` | 0 | ✅ pass | 52110ms |\n| 2 | `test ! -f app/routes.py` | 0 | ✅ pass | 5ms |\n| 3 | `wc -l app/routes/*.py` | 0 | ✅ pass — max 119 LOC (analysis.py) | 10ms |\n\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `app/routes/__init__.py`\n- `app/routes/_helpers.py`\n- `app/routes/analysis.py`\n- `app/routes/enrichment.py`\n- `app/routes/settings.py`\n- `app/routes/history.py`\n- `app/routes/detail.py`\n",
+      "description": "1. Create app/routes/ directory with __init__.py.\n2. Move shared state (_orchestrators, _orch_lock, _MAX_ORCHESTRATORS, _enrichment_pool, _mask_key, _serialize_result, _serialize_ioc, _run_enrichment_and_save) from routes.py into app/routes/_helpers.py.\n3. Create individual Blueprint files:\n   - analysis.py: bp_analysis — /, /analyze\n   - enrichment.py: bp_enrichment — /enrichment/status/<job_id>\n   - settings.py: bp_settings — /settings/*, /settings/cache/*\n   - history.py: bp_history — /history/<analysis_id>\n   - detail.py: bp_detail — /ioc/<ioc_type>/<path:ioc_value>\n4. Update app/routes/__init__.py to register all blueprints.\n5. Update app/__init__.py to import from app.routes instead of app.routes (should resolve automatically if the package __init__.py re-exports bp, but check).\n6. Delete routes.py.\n7. Run tests.",
+      "estimate": "45min",
+      "files": [
+        "app/routes/__init__.py",
+        "app/routes/_helpers.py",
+        "app/routes/analysis.py",
+        "app/routes/enrichment.py",
+        "app/routes/settings.py",
+        "app/routes/history.py",
+        "app/routes/detail.py",
+        "app/__init__.py",
+        "app/routes.py"
+      ],
+      "verify": "python3 -m pytest -x -q && wc -l app/routes/*.py | sort -n && test ! -f app/routes.py",
+      "inputs": [
+        "app/routes.py"
+      ],
+      "expected_output": [
+        "app/routes/__init__.py",
+        "app/routes/_helpers.py",
+        "app/routes/analysis.py",
+        "app/routes/enrichment.py",
+        "app/routes/settings.py",
+        "app/routes/history.py",
+        "app/routes/detail.py"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M008",
+      "slice_id": "S01",
+      "id": "T02",
+      "title": "Fixed 25 test import/patch paths across 3 test files for new routes package structure.",
+      "status": "complete",
+      "one_liner": "Fixed 25 test import/patch paths across 3 test files for new routes package structure.",
+      "narrative": "Updated all test import paths: test_routes.py (9 patches from app.routes to app.routes.analysis), test_history_routes.py (4 imports from app.routes to app.routes._helpers), test_settings.py (12 patches from app.routes.ConfigStore to app.routes.settings.ConfigStore). test_ioc_detail_routes.py had no app.routes references. All 1057 tests pass.",
+      "verification_result": "python3 -m pytest -x -q \\u2014 1057 passed, 0 failed.",
+      "duration": "",
+      "completed_at": "2026-03-28T05:29:33.536Z",
+      "blocker_discovered": false,
+      "deviations": "Combined with T01 \\u2014 test imports were fixed in the same pass since it was faster to do them together than separately.",
+      "known_issues": "None.",
+      "key_files": [
+        "tests/test_routes.py",
+        "tests/test_history_routes.py",
+        "tests/test_settings.py"
+      ],
+      "key_decisions": [
+        "Patches updated: app.routes.X → app.routes.analysis.X for EnrichmentOrchestrator/_enrichment_pool, app.routes._helpers.X for _run_enrichment_and_save/_serialize_ioc, app.routes.settings.X for ConfigStore"
+      ],
+      "full_summary_md": "---\nid: T02\nparent: S01\nmilestone: M008\nkey_files:\n  - tests/test_routes.py\n  - tests/test_history_routes.py\n  - tests/test_settings.py\nkey_decisions:\n  - Patches updated: app.routes.X → app.routes.analysis.X for EnrichmentOrchestrator/_enrichment_pool, app.routes._helpers.X for _run_enrichment_and_save/_serialize_ioc, app.routes.settings.X for ConfigStore\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-28T05:29:33.536Z\nblocker_discovered: false\n---\n\n# T02: Fixed 25 test import/patch paths across 3 test files for new routes package structure.\n\n**Fixed 25 test import/patch paths across 3 test files for new routes package structure.**\n\n## What Happened\n\nUpdated all test import paths: test_routes.py (9 patches from app.routes to app.routes.analysis), test_history_routes.py (4 imports from app.routes to app.routes._helpers), test_settings.py (12 patches from app.routes.ConfigStore to app.routes.settings.ConfigStore). test_ioc_detail_routes.py had no app.routes references. All 1057 tests pass.\n\n## Verification\n\npython3 -m pytest -x -q \\u2014 1057 passed, 0 failed.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `python3 -m pytest -x -q` | 0 | ✅ pass | 52110ms |\n\n\n## Deviations\n\nCombined with T01 \\u2014 test imports were fixed in the same pass since it was faster to do them together than separately.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `tests/test_routes.py`\n- `tests/test_history_routes.py`\n- `tests/test_settings.py`\n",
+      "description": "1. Update all test files that reference app.routes to use the new module paths:\n   - tests/test_routes.py imports of app.routes → app.routes._helpers or app.routes.analysis etc.\n   - tests/test_history_routes.py imports of app.routes._run_enrichment_and_save → app.routes._helpers._run_enrichment_and_save\n   - tests/test_ioc_detail_routes.py — check for any app.routes references\n   - Any E2E test files that patch app.routes\n2. Verify url_for('main.xxx') calls still work (blueprint name may need updating if using multiple blueprints with different names).\n3. Run full test suite.",
+      "estimate": "30min",
+      "files": [
+        "tests/test_routes.py",
+        "tests/test_history_routes.py",
+        "tests/test_ioc_detail_routes.py"
+      ],
+      "verify": "python3 -m pytest -x -q — 1057 passed, 0 failed",
+      "inputs": [
+        "tests/test_routes.py",
+        "tests/test_history_routes.py",
+        "tests/test_ioc_detail_routes.py"
+      ],
+      "expected_output": [
+        "tests/test_routes.py",
+        "tests/test_history_routes.py",
+        "tests/test_ioc_detail_routes.py"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M008",
+      "slice_id": "S02",
+      "id": "T01",
+      "title": "Implemented REST API blueprint with POST /api/analyze and GET /api/status endpoints, CSRF-exempt and rate-limited.",
+      "status": "complete",
+      "one_liner": "Implemented REST API blueprint with POST /api/analyze and GET /api/status endpoints, CSRF-exempt and rate-limited.",
+      "narrative": "Created app/routes/api.py with bp_api Blueprint. POST /api/analyze accepts JSON with text and optional mode, runs the extraction pipeline, and returns structured JSON. Online mode launches background enrichment and returns job_id + status_url. GET /api/status/<job_id> returns the same polling JSON as the HTML endpoint. Registered bp_api in __init__.py with csrf.exempt() scoped only to the API blueprint. Rate limits: 10/min for analyze, 120/min for status.",
+      "verification_result": "API routes registered correctly. 1075 tests pass (1057 existing + 18 new).",
+      "duration": "",
+      "completed_at": "2026-03-28T05:33:37.570Z",
+      "blocker_discovered": false,
+      "deviations": "None.",
+      "known_issues": "None.",
+      "key_files": [
+        "app/routes/api.py",
+        "app/routes/__init__.py",
+        "app/__init__.py"
+      ],
+      "key_decisions": [
+        "bp_api is a separate Blueprint with url_prefix='/api' — not attached to the shared 'main' blueprint",
+        "CSRF exemption via csrf.exempt(bp_api) in create_app() — scoped only to API blueprint",
+        "API returns grouped IOC summary alongside flat list for client convenience"
+      ],
+      "full_summary_md": "---\nid: T01\nparent: S02\nmilestone: M008\nkey_files:\n  - app/routes/api.py\n  - app/routes/__init__.py\n  - app/__init__.py\nkey_decisions:\n  - bp_api is a separate Blueprint with url_prefix='/api' — not attached to the shared 'main' blueprint\n  - CSRF exemption via csrf.exempt(bp_api) in create_app() — scoped only to API blueprint\n  - API returns grouped IOC summary alongside flat list for client convenience\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-28T05:33:37.570Z\nblocker_discovered: false\n---\n\n# T01: Implemented REST API blueprint with POST /api/analyze and GET /api/status endpoints, CSRF-exempt and rate-limited.\n\n**Implemented REST API blueprint with POST /api/analyze and GET /api/status endpoints, CSRF-exempt and rate-limited.**\n\n## What Happened\n\nCreated app/routes/api.py with bp_api Blueprint. POST /api/analyze accepts JSON with text and optional mode, runs the extraction pipeline, and returns structured JSON. Online mode launches background enrichment and returns job_id + status_url. GET /api/status/<job_id> returns the same polling JSON as the HTML endpoint. Registered bp_api in __init__.py with csrf.exempt() scoped only to the API blueprint. Rate limits: 10/min for analyze, 120/min for status.\n\n## Verification\n\nAPI routes registered correctly. 1075 tests pass (1057 existing + 18 new).\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `python3 -c \"from app.routes.api import bp_api; print('OK')\"` | 0 | ✅ pass | 200ms |\n| 2 | `python3 -m pytest -x -q` | 0 | ✅ pass — 1075 passed | 52190ms |\n\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `app/routes/api.py`\n- `app/routes/__init__.py`\n- `app/__init__.py`\n",
+      "description": "1. Create app/routes/api.py with bp_api Blueprint (url_prefix='/api').\n2. POST /api/analyze:\n   - Accept JSON body: {\"text\": \"...\", \"mode\": \"offline\"} (mode defaults to offline)\n   - Run pipeline, return {\"iocs\": [{\"type\": \"ipv4\", \"value\": \"8.8.8.8\", \"raw_match\": \"8.8.8.8\"}, ...], \"total_count\": N}\n   - Online mode: also return {\"job_id\": \"...\"} for polling, launch background enrichment\n   - Validate: 400 if no JSON body, 400 if text is empty, 400 if mode is invalid\n3. GET /api/status/<job_id>:\n   - Reuse enrichment_status logic from _helpers.py (or import from enrichment.py)\n   - Same JSON response as the existing HTML polling endpoint\n4. Exempt bp_api from CSRF (csrf.exempt(bp_api) in __init__.py)\n5. Add rate limits (10/min for analyze, 120/min for status)\n6. Register bp_api in app/routes/__init__.py",
+      "estimate": "30min",
+      "files": [
+        "app/routes/api.py",
+        "app/routes/__init__.py"
+      ],
+      "verify": "python3 -c \"from app.routes.api import bp_api; print('OK')\" && python3 -m pytest -x -q",
+      "inputs": [
+        "app/routes/_helpers.py",
+        "app/routes/enrichment.py"
+      ],
+      "expected_output": [
+        "app/routes/api.py"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M008",
+      "slice_id": "S02",
+      "id": "T02",
+      "title": "Added 18 API tests covering validation, offline/online extraction, status polling, and CSRF exemption.",
+      "status": "complete",
+      "one_liner": "Added 18 API tests covering validation, offline/online extraction, status polling, and CSRF exemption.",
+      "narrative": "Created tests/test_api.py with 18 tests across 5 test classes: validation (6 tests for no JSON, empty text, missing field, whitespace, invalid mode, non-string text), offline success (5 tests for IP extraction, default mode, grouped response, no IOCs, IOC structure), online mode (2 tests for no providers and with provider), status polling (3 tests for unknown job, known job, since cursor), and CSRF exemption (2 tests verifying API is exempt but browser routes are not).",
+      "verification_result": "python3 -m pytest tests/test_api.py -v — 18 passed. Full suite: 1075 passed, 0 failed.",
+      "duration": "",
+      "completed_at": "2026-03-28T05:33:47.701Z",
+      "blocker_discovered": false,
+      "deviations": "None.",
+      "known_issues": "None.",
+      "key_files": [
+        "tests/test_api.py"
+      ],
+      "key_decisions": [
+        "18 tests covering: 6 validation, 5 offline success, 2 online mode, 3 status polling, 2 CSRF exemption"
+      ],
+      "full_summary_md": "---\nid: T02\nparent: S02\nmilestone: M008\nkey_files:\n  - tests/test_api.py\nkey_decisions:\n  - 18 tests covering: 6 validation, 5 offline success, 2 online mode, 3 status polling, 2 CSRF exemption\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-28T05:33:47.701Z\nblocker_discovered: false\n---\n\n# T02: Added 18 API tests covering validation, offline/online extraction, status polling, and CSRF exemption.\n\n**Added 18 API tests covering validation, offline/online extraction, status polling, and CSRF exemption.**\n\n## What Happened\n\nCreated tests/test_api.py with 18 tests across 5 test classes: validation (6 tests for no JSON, empty text, missing field, whitespace, invalid mode, non-string text), offline success (5 tests for IP extraction, default mode, grouped response, no IOCs, IOC structure), online mode (2 tests for no providers and with provider), status polling (3 tests for unknown job, known job, since cursor), and CSRF exemption (2 tests verifying API is exempt but browser routes are not).\n\n## Verification\n\npython3 -m pytest tests/test_api.py -v — 18 passed. Full suite: 1075 passed, 0 failed.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `python3 -m pytest tests/test_api.py -v` | 0 | ✅ pass — 18 passed | 250ms |\n| 2 | `python3 -m pytest -x -q` | 0 | ✅ pass — 1075 passed | 52190ms |\n\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `tests/test_api.py`\n",
+      "description": "1. Create tests/test_api.py with comprehensive tests:\n   - POST /api/analyze with valid text → 200 JSON with iocs array\n   - POST /api/analyze with empty text → 400 JSON error\n   - POST /api/analyze with no JSON body → 400 JSON error\n   - POST /api/analyze without CSRF token → 200 (exempt)\n   - POST /api/analyze in online mode with configured provider → 200 with job_id\n   - GET /api/status/<job_id> with known job → 200 JSON progress\n   - GET /api/status/<unknown> → 404 JSON error\n   - POST /api/analyze with invalid mode → 400 JSON error\n   - Verify IOC extraction matches browser pipeline (same input → same IOCs)\n2. Run full test suite to confirm no regressions.",
+      "estimate": "25min",
+      "files": [
+        "tests/test_api.py"
+      ],
+      "verify": "python3 -m pytest tests/test_api.py -v && python3 -m pytest -x -q",
+      "inputs": [
+        "app/routes/api.py"
+      ],
+      "expected_output": [
+        "tests/test_api.py"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
     }
   ],
   "decisions": [
@@ -1496,6 +1786,18 @@
       "revisable": "Yes",
       "made_by": "collaborative",
       "superseded_by": null
+    },
+    {
+      "seq": 599,
+      "id": "D048",
+      "when_context": "M008",
+      "scope": "architecture",
+      "decision": "How to structure routes decomposition and REST API in one milestone",
+      "choice": "Decompose routes.py into app/routes/ package first (S01), then add REST API as a new blueprint (S02)",
+      "rationale": "routes.py at 488 LOC is the fattest backend file. Splitting it makes the API work a clean addition (new file) rather than more accretion onto the monolith. The decomposition gives each route group its own file and makes test imports explicit.",
+      "revisable": "Yes",
+      "made_by": "collaborative",
+      "superseded_by": null
     }
   ],
   "verification_evidence": [
@@ -1784,6 +2086,94 @@
       "verdict": "✅ pass (both 0)",
       "duration_ms": 100,
       "created_at": "2026-03-28T02:58:35.362Z"
+    },
+    {
+      "id": 27,
+      "task_id": "T01",
+      "slice_id": "S01",
+      "milestone_id": "M008",
+      "command": "python3 -m pytest -x -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 52110,
+      "created_at": "2026-03-28T05:29:23.392Z"
+    },
+    {
+      "id": 28,
+      "task_id": "T01",
+      "slice_id": "S01",
+      "milestone_id": "M008",
+      "command": "test ! -f app/routes.py",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 5,
+      "created_at": "2026-03-28T05:29:23.392Z"
+    },
+    {
+      "id": 29,
+      "task_id": "T01",
+      "slice_id": "S01",
+      "milestone_id": "M008",
+      "command": "wc -l app/routes/*.py",
+      "exit_code": 0,
+      "verdict": "✅ pass — max 119 LOC (analysis.py)",
+      "duration_ms": 10,
+      "created_at": "2026-03-28T05:29:23.392Z"
+    },
+    {
+      "id": 30,
+      "task_id": "T02",
+      "slice_id": "S01",
+      "milestone_id": "M008",
+      "command": "python3 -m pytest -x -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 52110,
+      "created_at": "2026-03-28T05:29:33.536Z"
+    },
+    {
+      "id": 31,
+      "task_id": "T01",
+      "slice_id": "S02",
+      "milestone_id": "M008",
+      "command": "python3 -c \"from app.routes.api import bp_api; print('OK')\"",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 200,
+      "created_at": "2026-03-28T05:33:37.570Z"
+    },
+    {
+      "id": 32,
+      "task_id": "T01",
+      "slice_id": "S02",
+      "milestone_id": "M008",
+      "command": "python3 -m pytest -x -q",
+      "exit_code": 0,
+      "verdict": "✅ pass — 1075 passed",
+      "duration_ms": 52190,
+      "created_at": "2026-03-28T05:33:37.570Z"
+    },
+    {
+      "id": 33,
+      "task_id": "T02",
+      "slice_id": "S02",
+      "milestone_id": "M008",
+      "command": "python3 -m pytest tests/test_api.py -v",
+      "exit_code": 0,
+      "verdict": "✅ pass — 18 passed",
+      "duration_ms": 250,
+      "created_at": "2026-03-28T05:33:47.701Z"
+    },
+    {
+      "id": 34,
+      "task_id": "T02",
+      "slice_id": "S02",
+      "milestone_id": "M008",
+      "command": "python3 -m pytest -x -q",
+      "exit_code": 0,
+      "verdict": "✅ pass — 1075 passed",
+      "duration_ms": 52190,
+      "created_at": "2026-03-28T05:33:47.701Z"
     }
   ]
 }

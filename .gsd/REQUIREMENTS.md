@@ -428,14 +428,14 @@ This file is the explicit capability and coverage contract for the project.
 
 ### R035 — A JSON API endpoint (POST /api/analyze) accepts text input and returns extracted IOCs with enrichment results programmatically.
 - Class: integration
-- Status: deferred
+- Status: validated
 - Description: A JSON API endpoint (POST /api/analyze) accepts text input and returns extracted IOCs with enrichment results programmatically.
 - Why it matters: Enables scripting, SOAR webhooks, and CI/CD integration without browser access.
 - Source: user
-- Primary owning slice: none
+- Primary owning slice: M008/S02
 - Supporting slices: none
-- Validation: unmapped
-- Notes: User explicitly deferred from M006. Candidate for future milestone.
+- Validation: validated — POST /api/analyze returns JSON IOCs, GET /api/status/<job_id> returns polling JSON, CSRF exempt, rate-limited. 18 tests pass.
+- Notes: Implemented in M008. Also includes GET /api/status/<job_id> for online mode enrichment polling.
 
 ## Traceability
 
@@ -474,7 +474,7 @@ This file is the explicit capability and coverage contract for the project.
 | R031 | primary-user-loop | validated | M006/S01 | M006/S04 | validated |
 | R032 | core-capability | validated | M006/S02 | none | validated |
 | R033 | core-capability | validated | M006/S03 | none | validated |
-| R035 | integration | deferred | none | none | unmapped |
+| R035 | integration | validated | M008/S02 | none | validated |
 | R036 | quality-attribute | validated | M007/S01 | none | validated |
 | R037 | quality-attribute | validated | M007/S02 | none | validated |
 | R038 | quality-attribute | validated | M007/S02 | none | validated |
@@ -485,5 +485,5 @@ This file is the explicit capability and coverage contract for the project.
 
 - Active requirements: 0
 - Mapped to slices: 7
-- Validated: 40
+- Validated: 41
 - Unmapped active requirements: 0

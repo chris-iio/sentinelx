@@ -79,7 +79,7 @@ class TestEnrichmentSaveWrapper:
 
     def test_save_called_after_enrichment(self):
         """The wrapper calls enrich_all then saves to HistoryStore."""
-        from app.routes import _run_enrichment_and_save
+        from app.routes._helpers import _run_enrichment_and_save
 
         mock_orch = MagicMock()
         mock_orch.enrich_all.return_value = None
@@ -106,7 +106,7 @@ class TestEnrichmentSaveWrapper:
 
     def test_save_failure_does_not_break_enrichment(self):
         """If HistoryStore.save_analysis raises, enrichment still completes."""
-        from app.routes import _run_enrichment_and_save
+        from app.routes._helpers import _run_enrichment_and_save
 
         mock_orch = MagicMock()
         mock_orch.enrich_all.return_value = None
@@ -131,7 +131,7 @@ class TestEnrichmentSaveWrapper:
 
     def test_save_skipped_when_status_none(self):
         """If orchestrator.get_status returns None, save is skipped."""
-        from app.routes import _run_enrichment_and_save
+        from app.routes._helpers import _run_enrichment_and_save
 
         mock_orch = MagicMock()
         mock_orch.enrich_all.return_value = None
@@ -253,7 +253,7 @@ class TestSerializeIoc:
 
     def test_serialize_ioc(self):
         """_serialize_ioc returns a dict with type, value, raw_match."""
-        from app.routes import _serialize_ioc
+        from app.routes._helpers import _serialize_ioc
 
         ioc = IOC(type=IOCType.DOMAIN, value="example.com", raw_match="example[.]com")
         result = _serialize_ioc(ioc)

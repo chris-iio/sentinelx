@@ -41,7 +41,7 @@ def test_get_settings_page_shows_info_text(client):
 
 def test_get_settings_page_no_key_configured(client):
     """GET /settings when no key is configured shows empty/masked field."""
-    with patch("app.routes.ConfigStore") as MockStore:
+    with patch("app.routes.settings.ConfigStore") as MockStore:
         mock_instance = MagicMock()
         mock_instance.get_vt_api_key.return_value = None
         mock_instance.get_provider_key.return_value = None
@@ -70,7 +70,7 @@ def test_get_settings_page_shows_provider_id_fields(client):
 
 def test_get_settings_configured_badge(client):
     """GET /settings shows 'Configured' badge when VT key is set."""
-    with patch("app.routes.ConfigStore") as MockStore:
+    with patch("app.routes.settings.ConfigStore") as MockStore:
         mock_instance = MagicMock()
         mock_instance.get_vt_api_key.return_value = "abcdef1234567890"
         mock_instance.get_provider_key.return_value = None
@@ -83,7 +83,7 @@ def test_get_settings_configured_badge(client):
 
 def test_get_settings_not_configured_badge(client):
     """GET /settings shows 'Not configured' badge when no key is set."""
-    with patch("app.routes.ConfigStore") as MockStore:
+    with patch("app.routes.settings.ConfigStore") as MockStore:
         mock_instance = MagicMock()
         mock_instance.get_vt_api_key.return_value = None
         mock_instance.get_provider_key.return_value = None
@@ -101,7 +101,7 @@ def test_get_settings_not_configured_badge(client):
 
 def test_save_vt_api_key(client, tmp_path):
     """POST /settings with provider_id=virustotal saves via set_vt_api_key and redirects."""
-    with patch("app.routes.ConfigStore") as MockStore:
+    with patch("app.routes.settings.ConfigStore") as MockStore:
         mock_instance = MagicMock()
         mock_instance.get_vt_api_key.return_value = "test123"
         mock_instance.get_provider_key.return_value = None
@@ -122,7 +122,7 @@ def test_save_vt_api_key(client, tmp_path):
 
 def test_save_provider_key_for_urlhaus(client, tmp_path):
     """POST /settings with provider_id=urlhaus saves via set_provider_key and redirects."""
-    with patch("app.routes.ConfigStore") as MockStore:
+    with patch("app.routes.settings.ConfigStore") as MockStore:
         mock_instance = MagicMock()
         mock_instance.get_vt_api_key.return_value = None
         mock_instance.get_provider_key.return_value = None
@@ -140,7 +140,7 @@ def test_save_provider_key_for_urlhaus(client, tmp_path):
 
 def test_save_api_key_follows_redirect(client):
     """POST /settings with valid key, following redirect, shows success message."""
-    with patch("app.routes.ConfigStore") as MockStore:
+    with patch("app.routes.settings.ConfigStore") as MockStore:
         mock_instance = MagicMock()
         mock_instance.get_vt_api_key.return_value = "saved-key-abcd"
         mock_instance.get_provider_key.return_value = None
@@ -157,7 +157,7 @@ def test_save_api_key_follows_redirect(client):
 
 def test_save_empty_key_rejected(client):
     """POST /settings with empty api_key shows error and does not call set_vt_api_key."""
-    with patch("app.routes.ConfigStore") as MockStore:
+    with patch("app.routes.settings.ConfigStore") as MockStore:
         mock_instance = MagicMock()
         MockStore.return_value = mock_instance
 
@@ -175,7 +175,7 @@ def test_save_empty_key_rejected(client):
 
 def test_save_whitespace_only_key_rejected(client):
     """POST /settings with whitespace-only api_key is treated as empty and rejected."""
-    with patch("app.routes.ConfigStore") as MockStore:
+    with patch("app.routes.settings.ConfigStore") as MockStore:
         mock_instance = MagicMock()
         MockStore.return_value = mock_instance
 
@@ -190,7 +190,7 @@ def test_save_whitespace_only_key_rejected(client):
 
 def test_save_unknown_provider_id_rejected(client):
     """POST /settings with unknown provider_id shows error and does not save."""
-    with patch("app.routes.ConfigStore") as MockStore:
+    with patch("app.routes.settings.ConfigStore") as MockStore:
         mock_instance = MagicMock()
         mock_instance.get_vt_api_key.return_value = None
         mock_instance.get_provider_key.return_value = None
@@ -209,7 +209,7 @@ def test_save_unknown_provider_id_rejected(client):
 
 def test_save_missing_provider_id_rejected(client):
     """POST /settings with no provider_id shows error and does not save."""
-    with patch("app.routes.ConfigStore") as MockStore:
+    with patch("app.routes.settings.ConfigStore") as MockStore:
         mock_instance = MagicMock()
         mock_instance.get_vt_api_key.return_value = None
         mock_instance.get_provider_key.return_value = None
@@ -232,7 +232,7 @@ def test_save_missing_provider_id_rejected(client):
 
 def test_settings_page_masks_key(client):
     """GET /settings when a key is configured shows only last 4 chars (masked)."""
-    with patch("app.routes.ConfigStore") as MockStore:
+    with patch("app.routes.settings.ConfigStore") as MockStore:
         mock_instance = MagicMock()
         # 32-char key — last 4 should be visible, rest masked
         mock_instance.get_vt_api_key.return_value = "abcdef1234567890abcdef1234567890"
@@ -251,7 +251,7 @@ def test_settings_page_masks_key(client):
 
 def test_settings_page_masks_short_key(client):
     """GET /settings with a key of 4 chars or fewer shows no key (masks everything)."""
-    with patch("app.routes.ConfigStore") as MockStore:
+    with patch("app.routes.settings.ConfigStore") as MockStore:
         mock_instance = MagicMock()
         mock_instance.get_vt_api_key.return_value = "abcd"
         mock_instance.get_provider_key.return_value = None

@@ -478,3 +478,30 @@ For mechanical test refactoring across many files (e.g., replacing 181 `adapter.
 The pattern: do the bulk replacement via regex, then grep for remaining patterns, then fix edge cases manually.
 
 Discovered: M007/S03
+
+---
+
+## Routes package: shared Blueprint preserves template url_for() references
+
+When splitting a monolithic routes.py into an app/routes/ package, keep a single shared Blueprint if templates reference `url_for('blueprint_name.xxx')`. Creating separate blueprints with different names would break every `url_for('main.index')`, `url_for('main.settings_get')`, etc. across all templates.
+
+**Pattern:** `app/routes/__init__.py` creates `bp = Blueprint("main", __name__)` and each route module imports it:
+```python
+# app/routes/analysis.py
+from . import bp
+
+@bp.route("/")
+def index(): ...
+```
+
+API routes use a separate Blueprint (`bp_api = Blueprint("api", __name__, url_prefix="/api")`) since they don't share url_for() references with templates.
+
+Discovered: M008/S01
+
+---
+
+## CSRF exemption must be scoped to the API blueprint only
+
+`csrf.exempt(bp_api)` in `create_app()` exempts only the API blueprint from CSRF validation. Browser routes on the shared `bp` (main) blueprint remain CSRF-protected. Always verify with a paired test: API POST succeeds without CSRF token AND browser POST fails without CSRF token.
+
+Discovered: M008/S02
