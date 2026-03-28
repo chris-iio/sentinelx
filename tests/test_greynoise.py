@@ -23,12 +23,19 @@ from unittest.mock import MagicMock
 import requests
 import requests.exceptions
 
-from app.pipeline.models import IOC, IOCType
+from app.pipeline.models import IOCType
 from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.enrichment.adapters.greynoise import GreyNoiseAdapter
 from app.enrichment.http_safety import MAX_RESPONSE_BYTES
 from app.enrichment.provider import Provider
-from tests.helpers import make_mock_response
+from tests.helpers import (
+    make_mock_response,
+    make_domain_ioc,
+    make_ipv4_ioc,
+    make_ipv6_ioc,
+    make_url_ioc,
+    mock_adapter_session,
+)
 
 
 ALLOWED_HOSTS = ["api.greynoise.io"]
@@ -154,12 +161,11 @@ class TestGreyNoiseLookup:
 
     def test_riot_true_returns_clean(self) -> None:
         """riot=True IP -> verdict 'clean' (known benign service like Google DNS)."""
-        ioc = IOC(type=IOCType.IPV4, value="8.8.8.8", raw_match="8.8.8.8")
+        ioc = make_ipv4_ioc("8.8.8.8")
         mock_resp = make_mock_response(200, GREYNOISE_RIOT_RESPONSE)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult), (
@@ -170,12 +176,11 @@ class TestGreyNoiseLookup:
 
     def test_classification_malicious_returns_malicious(self) -> None:
         """classification='malicious' IP -> verdict 'malicious'."""
-        ioc = IOC(type=IOCType.IPV4, value="1.2.3.4", raw_match="1.2.3.4")
+        ioc = make_ipv4_ioc("1.2.3.4")
         mock_resp = make_mock_response(200, GREYNOISE_MALICIOUS_RESPONSE)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
@@ -184,12 +189,11 @@ class TestGreyNoiseLookup:
 
     def test_noise_true_benign_classification_returns_suspicious(self) -> None:
         """noise=True and classification='benign' -> verdict 'suspicious' (mass scanner, not malicious)."""
-        ioc = IOC(type=IOCType.IPV4, value="5.6.7.8", raw_match="5.6.7.8")
+        ioc = make_ipv4_ioc("5.6.7.8")
         mock_resp = make_mock_response(200, GREYNOISE_SUSPICIOUS_RESPONSE)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
@@ -198,12 +202,11 @@ class TestGreyNoiseLookup:
 
     def test_noise_false_riot_false_no_classification_returns_no_data(self) -> None:
         """noise=False, riot=False, no classification -> verdict 'no_data'."""
-        ioc = IOC(type=IOCType.IPV4, value="10.0.0.1", raw_match="10.0.0.1")
+        ioc = make_ipv4_ioc("10.0.0.1")
         mock_resp = make_mock_response(200, GREYNOISE_NO_DATA_RESPONSE)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
@@ -216,12 +219,11 @@ class TestGreyNoiseLookup:
         GreyNoise 404 means the IP is not in their database, which is 'no data'
         — not an error condition.
         """
-        ioc = IOC(type=IOCType.IPV4, value="192.0.2.99", raw_match="192.0.2.99")
+        ioc = make_ipv4_ioc("192.0.2.99")
         mock_resp = make_mock_response(404, GREYNOISE_404_RESPONSE)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult), (
@@ -232,12 +234,11 @@ class TestGreyNoiseLookup:
 
     def test_404_is_not_enrichment_error(self) -> None:
         """404 response -> not isinstance EnrichmentError."""
-        ioc = IOC(type=IOCType.IPV4, value="192.0.2.99", raw_match="192.0.2.99")
+        ioc = make_ipv4_ioc("192.0.2.99")
         mock_resp = make_mock_response(404, GREYNOISE_404_RESPONSE)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
         result = adapter.lookup(ioc)
 
         assert not isinstance(result, EnrichmentError), (
@@ -247,7 +248,7 @@ class TestGreyNoiseLookup:
     def test_ipv6_lookup_works(self) -> None:
         """IPv6 IOC with malicious classification -> verdict 'malicious'."""
         ipv6 = "2001:db8::bad"
-        ioc = IOC(type=IOCType.IPV6, value=ipv6, raw_match=ipv6)
+        ioc = make_ipv6_ioc(ipv6)
         response_body = {
             "ip": ipv6,
             "noise": True,
@@ -260,8 +261,7 @@ class TestGreyNoiseLookup:
         mock_resp = make_mock_response(200, response_body)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
@@ -269,12 +269,11 @@ class TestGreyNoiseLookup:
 
     def test_raw_stats_content(self) -> None:
         """200 response -> raw_stats contains noise, riot, classification, name, link, last_seen."""
-        ioc = IOC(type=IOCType.IPV4, value="8.8.8.8", raw_match="8.8.8.8")
+        ioc = make_ipv4_ioc("8.8.8.8")
         mock_resp = make_mock_response(200, GREYNOISE_RIOT_RESPONSE)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
@@ -283,12 +282,11 @@ class TestGreyNoiseLookup:
 
     def test_detection_count_malicious_is_one(self) -> None:
         """Malicious verdict -> detection_count=1, total_engines=1."""
-        ioc = IOC(type=IOCType.IPV4, value="1.2.3.4", raw_match="1.2.3.4")
+        ioc = make_ipv4_ioc("1.2.3.4")
         mock_resp = make_mock_response(200, GREYNOISE_MALICIOUS_RESPONSE)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
@@ -297,12 +295,11 @@ class TestGreyNoiseLookup:
 
     def test_detection_count_clean_is_zero(self) -> None:
         """Clean verdict (riot=True) -> detection_count=0, total_engines=1."""
-        ioc = IOC(type=IOCType.IPV4, value="8.8.8.8", raw_match="8.8.8.8")
+        ioc = make_ipv4_ioc("8.8.8.8")
         mock_resp = make_mock_response(200, GREYNOISE_RIOT_RESPONSE)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
@@ -311,12 +308,11 @@ class TestGreyNoiseLookup:
 
     def test_scan_date_is_last_seen(self) -> None:
         """scan_date should equal body.last_seen value."""
-        ioc = IOC(type=IOCType.IPV4, value="1.2.3.4", raw_match="1.2.3.4")
+        ioc = make_ipv4_ioc("1.2.3.4")
         mock_resp = make_mock_response(200, GREYNOISE_MALICIOUS_RESPONSE)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
@@ -340,7 +336,7 @@ class TestGreyNoiseErrors:
 
     def test_unsupported_type_domain(self) -> None:
         """DOMAIN IOC -> EnrichmentError, provider='GreyNoise', error contains 'Unsupported'."""
-        ioc = IOC(type=IOCType.DOMAIN, value="evil.com", raw_match="evil.com")
+        ioc = make_domain_ioc("evil.com")
 
         result = _make_adapter().lookup(ioc)
 
@@ -350,7 +346,7 @@ class TestGreyNoiseErrors:
 
     def test_unsupported_type_url(self) -> None:
         """URL IOC -> EnrichmentError (URLs not supported by GreyNoise IP endpoint)."""
-        ioc = IOC(type=IOCType.URL, value="http://evil.com/path", raw_match="http://evil.com/path")
+        ioc = make_url_ioc("http://evil.com/path")
 
         result = _make_adapter().lookup(ioc)
 
@@ -359,11 +355,10 @@ class TestGreyNoiseErrors:
 
     def test_timeout(self) -> None:
         """Network timeout -> EnrichmentError with 'Timeout' in error."""
-        ioc = IOC(type=IOCType.IPV4, value="8.8.8.8", raw_match="8.8.8.8")
+        ioc = make_ipv4_ioc("8.8.8.8")
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.side_effect = requests.exceptions.Timeout("timed out")
+        mock_adapter_session(adapter, side_effect=requests.exceptions.Timeout("timed out"))
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentError)
@@ -372,12 +367,11 @@ class TestGreyNoiseErrors:
 
     def test_http_500(self) -> None:
         """HTTP 500 -> EnrichmentError with 'HTTP 500' in error."""
-        ioc = IOC(type=IOCType.IPV4, value="8.8.8.8", raw_match="8.8.8.8")
+        ioc = make_ipv4_ioc("8.8.8.8")
         mock_resp = make_mock_response(500)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentError)
@@ -386,11 +380,10 @@ class TestGreyNoiseErrors:
 
     def test_ssrf_validation_blocks_disallowed_host(self) -> None:
         """Adapter with allowed_hosts=[] -> EnrichmentError before network call."""
-        ioc = IOC(type=IOCType.IPV4, value="8.8.8.8", raw_match="8.8.8.8")
+        ioc = make_ipv4_ioc("8.8.8.8")
         adapter = GreyNoiseAdapter(api_key=TEST_API_KEY, allowed_hosts=[])
 
-        adapter._session = MagicMock()
-        adapter._session.get.side_effect = AssertionError("Should not reach network")
+        mock_adapter_session(adapter, side_effect=AssertionError("Should not reach network"))
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentError), (
@@ -404,7 +397,7 @@ class TestGreyNoiseErrors:
 
     def test_response_size_limit(self) -> None:
         """SEC-05: Responses exceeding 1 MB must be rejected with EnrichmentError."""
-        ioc = IOC(type=IOCType.IPV4, value="8.8.8.8", raw_match="8.8.8.8")
+        ioc = make_ipv4_ioc("8.8.8.8")
 
         oversized_chunk = b"x" * (MAX_RESPONSE_BYTES + 1)
         mock_resp = MagicMock()
@@ -413,8 +406,7 @@ class TestGreyNoiseErrors:
         mock_resp.iter_content = MagicMock(return_value=iter([oversized_chunk]))
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentError), (

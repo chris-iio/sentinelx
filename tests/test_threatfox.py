@@ -11,11 +11,20 @@ from unittest.mock import MagicMock
 
 import requests
 
-from app.pipeline.models import IOC, IOCType
+from app.pipeline.models import IOCType
 from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.enrichment.adapters.threatfox import TFAdapter
 from app.enrichment.http_safety import MAX_RESPONSE_BYTES
-from tests.helpers import make_mock_response
+from tests.helpers import (
+    make_mock_response,
+    make_cve_ioc,
+    make_domain_ioc,
+    make_ipv4_ioc,
+    make_md5_ioc,
+    make_sha256_ioc,
+    make_url_ioc,
+    mock_adapter_session,
+)
 
 
 ALLOWED_HOSTS = ["threatfox-api.abuse.ch"]
@@ -64,14 +73,12 @@ def _tf_no_result_response() -> dict:
 class TestLookupTypeCoverage:
     def test_lookup_sha256_found_high_confidence(self) -> None:
         """search_hash for SHA256 with confidence=90 -> verdict=malicious."""
-        sha256 = "a" * 64
-        ioc = IOC(type=IOCType.SHA256, value=sha256, raw_match=sha256)
+        ioc = make_sha256_ioc("a" * 64)
         body = _tf_hit_response(confidence_level=90, ioc_type="sha256_hash")
         mock_resp = make_mock_response(200, body)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.post.return_value = mock_resp
+        mock_adapter_session(adapter, method="post", response=mock_resp)
 
         result = adapter.lookup(ioc)
 
@@ -85,13 +92,12 @@ class TestLookupTypeCoverage:
 
     def test_lookup_domain_found_low_confidence(self) -> None:
         """search_ioc for domain with confidence=50 -> verdict=suspicious."""
-        ioc = IOC(type=IOCType.DOMAIN, value="evil.example.com", raw_match="evil.example.com")
+        ioc = make_domain_ioc("evil.example.com")
         body = _tf_hit_response(confidence_level=50, ioc_type="domain")
         mock_resp = make_mock_response(200, body)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.post.return_value = mock_resp
+        mock_adapter_session(adapter, method="post", response=mock_resp)
 
         result = adapter.lookup(ioc)
 
@@ -100,13 +106,12 @@ class TestLookupTypeCoverage:
 
     def test_lookup_ip_found(self) -> None:
         """search_ioc for IPv4 with confidence=80 -> verdict=malicious."""
-        ioc = IOC(type=IOCType.IPV4, value="1.2.3.4", raw_match="1.2.3.4")
+        ioc = make_ipv4_ioc()
         body = _tf_hit_response(confidence_level=80, ioc_type="ip:port")
         mock_resp = make_mock_response(200, body)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.post.return_value = mock_resp
+        mock_adapter_session(adapter, method="post", response=mock_resp)
 
         result = adapter.lookup(ioc)
 
@@ -116,14 +121,12 @@ class TestLookupTypeCoverage:
 
     def test_lookup_url_found(self) -> None:
         """search_ioc for URL -> EnrichmentResult with correct fields."""
-        url_val = "http://evil.example.com/malware"
-        ioc = IOC(type=IOCType.URL, value=url_val, raw_match=url_val)
+        ioc = make_url_ioc("http://evil.example.com/malware")
         body = _tf_hit_response(confidence_level=85, ioc_type="url")
         mock_resp = make_mock_response(200, body)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.post.return_value = mock_resp
+        mock_adapter_session(adapter, method="post", response=mock_resp)
 
         result = adapter.lookup(ioc)
 
@@ -132,14 +135,12 @@ class TestLookupTypeCoverage:
 
     def test_lookup_md5_found(self) -> None:
         """search_hash for MD5 -> EnrichmentResult."""
-        md5 = "d" * 32
-        ioc = IOC(type=IOCType.MD5, value=md5, raw_match=md5)
+        ioc = make_md5_ioc("d" * 32)
         body = _tf_hit_response(confidence_level=75, ioc_type="md5_hash")
         mock_resp = make_mock_response(200, body)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.post.return_value = mock_resp
+        mock_adapter_session(adapter, method="post", response=mock_resp)
 
         result = adapter.lookup(ioc)
 
@@ -152,12 +153,11 @@ class TestLookupTypeCoverage:
 class TestEdgeCases:
     def test_lookup_not_found(self) -> None:
         """query_status=no_result -> verdict=no_data, detection_count=0."""
-        ioc = IOC(type=IOCType.SHA256, value="b" * 64, raw_match="b" * 64)
+        ioc = make_sha256_ioc("b" * 64)
         mock_resp = make_mock_response(200, _tf_no_result_response())
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.post.return_value = mock_resp
+        mock_adapter_session(adapter, method="post", response=mock_resp)
 
         result = adapter.lookup(ioc)
 
@@ -167,7 +167,7 @@ class TestEdgeCases:
 
     def test_lookup_unsupported_type_cve(self) -> None:
         """CVE IOC type -> EnrichmentError with 'Unsupported type'."""
-        ioc = IOC(type=IOCType.CVE, value="CVE-2024-1234", raw_match="CVE-2024-1234")
+        ioc = make_cve_ioc("CVE-2024-1234")
         result = _make_adapter().lookup(ioc)
 
         assert isinstance(result, EnrichmentError)
@@ -175,11 +175,10 @@ class TestEdgeCases:
 
     def test_lookup_timeout(self) -> None:
         """requests.Timeout -> EnrichmentError with 'Timeout'."""
-        ioc = IOC(type=IOCType.IPV4, value="1.2.3.4", raw_match="1.2.3.4")
+        ioc = make_ipv4_ioc()
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.post.side_effect = requests.exceptions.Timeout("Connection timed out")
+        mock_adapter_session(adapter, method="post", side_effect=requests.exceptions.Timeout("Connection timed out"))
 
         result = adapter.lookup(ioc)
 
@@ -188,12 +187,11 @@ class TestEdgeCases:
 
     def test_lookup_http_error(self) -> None:
         """HTTP error from server -> EnrichmentError."""
-        ioc = IOC(type=IOCType.IPV4, value="1.2.3.4", raw_match="1.2.3.4")
+        ioc = make_ipv4_ioc()
         mock_resp = make_mock_response(500)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.post.return_value = mock_resp
+        mock_adapter_session(adapter, method="post", response=mock_resp)
         # Make raise_for_status raise on call
         mock_resp.raise_for_status.side_effect = requests.exceptions.HTTPError(
             response=mock_resp
@@ -205,11 +203,10 @@ class TestEdgeCases:
 
     def test_ssrf_validation(self) -> None:
         """allowed_hosts missing threatfox-api.abuse.ch -> EnrichmentError with SSRF message."""
-        ioc = IOC(type=IOCType.IPV4, value="1.2.3.4", raw_match="1.2.3.4")
+        ioc = make_ipv4_ioc()
         adapter = TFAdapter(api_key="test-key", allowed_hosts=[])
 
-        adapter._session = MagicMock()
-        adapter._session.post.side_effect = AssertionError("Should not reach network")
+        mock_adapter_session(adapter, method="post", side_effect=AssertionError("Should not reach network"))
 
         result = adapter.lookup(ioc)
 
@@ -237,13 +234,12 @@ class TestEdgeCases:
 class TestConfidenceThreshold:
     def test_confidence_threshold_boundary_75(self) -> None:
         """confidence_level=75 exactly -> verdict=malicious (>=75 threshold)."""
-        ioc = IOC(type=IOCType.SHA256, value="c" * 64, raw_match="c" * 64)
+        ioc = make_sha256_ioc("c" * 64)
         body = _tf_hit_response(confidence_level=75)
         mock_resp = make_mock_response(200, body)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.post.return_value = mock_resp
+        mock_adapter_session(adapter, method="post", response=mock_resp)
 
         result = adapter.lookup(ioc)
 
@@ -254,13 +250,12 @@ class TestConfidenceThreshold:
 
     def test_confidence_threshold_boundary_74(self) -> None:
         """confidence_level=74 -> verdict=suspicious (<75 threshold)."""
-        ioc = IOC(type=IOCType.SHA256, value="c" * 64, raw_match="c" * 64)
+        ioc = make_sha256_ioc("c" * 64)
         body = _tf_hit_response(confidence_level=74)
         mock_resp = make_mock_response(200, body)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.post.return_value = mock_resp
+        mock_adapter_session(adapter, method="post", response=mock_resp)
 
         result = adapter.lookup(ioc)
 
@@ -275,7 +270,7 @@ class TestConfidenceThreshold:
 class TestHTTPSafetyControls:
     def test_response_size_limit(self) -> None:
         """SEC-05: Response exceeding 1 MB -> EnrichmentError."""
-        ioc = IOC(type=IOCType.IPV4, value="1.2.3.4", raw_match="1.2.3.4")
+        ioc = make_ipv4_ioc()
         oversized_chunk = b"x" * (MAX_RESPONSE_BYTES + 1)
         mock_resp = MagicMock()
         mock_resp.status_code = 200
@@ -283,8 +278,7 @@ class TestHTTPSafetyControls:
         mock_resp.iter_content = MagicMock(return_value=iter([oversized_chunk]))
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.post.return_value = mock_resp
+        mock_adapter_session(adapter, method="post", response=mock_resp)
 
         result = adapter.lookup(ioc)
 
@@ -298,7 +292,7 @@ class TestHTTPSafetyControls:
 class TestMultipleResults:
     def test_multiple_results_uses_highest_confidence(self) -> None:
         """ThreatFox may return multiple IOC records; adapter should use the highest-confidence one."""
-        ioc = IOC(type=IOCType.SHA256, value="a" * 64, raw_match="a" * 64)
+        ioc = make_sha256_ioc("a" * 64)
 
         body = {
             "query_status": "ok",
@@ -345,8 +339,7 @@ class TestMultipleResults:
         mock_resp = make_mock_response(200, body)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.post.return_value = mock_resp
+        mock_adapter_session(adapter, method="post", response=mock_resp)
 
         result = adapter.lookup(ioc)
 

@@ -35,7 +35,7 @@ See `.gsd/REQUIREMENTS.md` for the explicit capability contract, requirement sta
 - [x] M004: Refactor & Optimize — Concurrency fixes, polling cursor, persistent Sessions, ipinfo.io HTTPS, CacheStore WAL, frontend O(N²) fixes, shared test helpers, CSP expansion
 - [x] M005: Codebase Hygiene — safe_request() consolidation across 12 adapters, registry caching at startup, analyze() decomposition into 3 helpers. Net -134 LOC, 960 tests, 0 failures.
 - [x] M006: Analyst Workflow & Coverage — Analysis history persistence, WHOIS domain enrichment (15th provider), URL IOC end-to-end polish, input page redesign. 1043 tests, 0 failures.
-- [ ] M007: Dead Code & Boilerplate Reduction — safe_request() consolidation (M005 reattempt), adapter docstring trimming, dead CSS removal, test DRY-up.
+- [ ] M007: Dead Code & Boilerplate Reduction — safe_request() consolidation (S01 ✅), adapter docstring trimming & dead CSS (S02 ✅), test DRY-up (S03 pending).
 
 ---
-*Last updated: 2026-03-27 — M007 planning.*
+*Last updated: 2026-03-28 — M007 S02 complete. 1057 tests, 0 failures.*

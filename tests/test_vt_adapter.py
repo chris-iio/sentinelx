@@ -12,11 +12,21 @@ from unittest.mock import MagicMock
 
 import requests
 
-from app.pipeline.models import IOC, IOCType
+from app.pipeline.models import IOCType
 from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.enrichment.adapters.virustotal import VTAdapter
 from app.enrichment.http_safety import MAX_RESPONSE_BYTES
-from tests.helpers import make_mock_response
+from tests.helpers import (
+    make_mock_response,
+    make_cve_ioc,
+    make_domain_ioc,
+    make_ipv4_ioc,
+    make_md5_ioc,
+    make_sha1_ioc,
+    make_sha256_ioc,
+    make_url_ioc,
+    mock_adapter_session,
+)
 
 
 ALLOWED_HOSTS = ["www.virustotal.com"]
@@ -82,12 +92,11 @@ def _make_adapter() -> VTAdapter:
 
 class TestLookupSuccess:
     def test_lookup_ipv4_success(self) -> None:
-        ioc = IOC(type=IOCType.IPV4, value="1.2.3.4", raw_match="1.2.3.4")
+        ioc = make_ipv4_ioc("1.2.3.4")
         mock_resp = make_mock_response(200, VT_IP_RESPONSE)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
 
         result = adapter.lookup(ioc)
 
@@ -100,12 +109,11 @@ class TestLookupSuccess:
         assert "T" in result.scan_date
 
     def test_lookup_ipv4_uses_correct_endpoint(self) -> None:
-        ioc = IOC(type=IOCType.IPV4, value="1.2.3.4", raw_match="1.2.3.4")
+        ioc = make_ipv4_ioc("1.2.3.4")
         mock_resp = make_mock_response(200, VT_IP_RESPONSE)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
 
         adapter.lookup(ioc)
 
@@ -113,12 +121,11 @@ class TestLookupSuccess:
         assert "/ip_addresses/1.2.3.4" in call_url
 
     def test_lookup_domain_success(self) -> None:
-        ioc = IOC(type=IOCType.DOMAIN, value="example.com", raw_match="example.com")
+        ioc = make_domain_ioc("example.com")
         mock_resp = make_mock_response(200, VT_CLEAN_RESPONSE)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
 
         result = adapter.lookup(ioc)
 
@@ -130,12 +137,11 @@ class TestLookupSuccess:
     def test_lookup_url_uses_base64_id(self) -> None:
         url_value = "https://evil.com/malware"
         expected_id = base64.urlsafe_b64encode(url_value.encode()).decode().strip("=")
-        ioc = IOC(type=IOCType.URL, value=url_value, raw_match=url_value)
+        ioc = make_url_ioc(url_value)
         mock_resp = make_mock_response(200, VT_IP_RESPONSE)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
 
         adapter.lookup(ioc)
 
@@ -146,12 +152,11 @@ class TestLookupSuccess:
 
     def test_lookup_hash_sha256(self) -> None:
         sha256 = "a" * 64
-        ioc = IOC(type=IOCType.SHA256, value=sha256, raw_match=sha256)
+        ioc = make_sha256_ioc(sha256)
         mock_resp = make_mock_response(200, VT_HASH_RESPONSE)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
 
         result = adapter.lookup(ioc)
 
@@ -161,12 +166,11 @@ class TestLookupSuccess:
 
     def test_lookup_md5_uses_files_endpoint(self) -> None:
         md5 = "d" * 32
-        ioc = IOC(type=IOCType.MD5, value=md5, raw_match=md5)
+        ioc = make_md5_ioc(md5)
         mock_resp = make_mock_response(200, VT_HASH_RESPONSE)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
 
         adapter.lookup(ioc)
 
@@ -175,12 +179,11 @@ class TestLookupSuccess:
 
     def test_lookup_sha1_uses_files_endpoint(self) -> None:
         sha1 = "e" * 40
-        ioc = IOC(type=IOCType.SHA1, value=sha1, raw_match=sha1)
+        ioc = make_sha1_ioc(sha1)
         mock_resp = make_mock_response(200, VT_HASH_RESPONSE)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
 
         adapter.lookup(ioc)
 
@@ -190,7 +193,7 @@ class TestLookupSuccess:
 
 class TestLookupErrors:
     def test_lookup_cve_returns_error(self) -> None:
-        ioc = IOC(type=IOCType.CVE, value="CVE-2024-1234", raw_match="CVE-2024-1234")
+        ioc = make_cve_ioc("CVE-2024-1234")
         result = _make_adapter().lookup(ioc)
 
         assert isinstance(result, EnrichmentError)
@@ -198,12 +201,11 @@ class TestLookupErrors:
         assert "Unsupported" in result.error or "unsupported" in result.error.lower()
 
     def test_lookup_404_returns_no_data(self) -> None:
-        ioc = IOC(type=IOCType.IPV4, value="10.0.0.1", raw_match="10.0.0.1")
+        ioc = make_ipv4_ioc("10.0.0.1")
         mock_resp = make_mock_response(404)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
 
         result = adapter.lookup(ioc)
 
@@ -215,12 +217,11 @@ class TestLookupErrors:
         assert result.verdict == "no_data"
 
     def test_lookup_429_returns_rate_limit_error(self) -> None:
-        ioc = IOC(type=IOCType.IPV4, value="1.2.3.4", raw_match="1.2.3.4")
+        ioc = make_ipv4_ioc()
         mock_resp = make_mock_response(429)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
 
         result = adapter.lookup(ioc)
 
@@ -228,12 +229,11 @@ class TestLookupErrors:
         assert "Rate limit" in result.error or "429" in result.error
 
     def test_lookup_401_returns_auth_error(self) -> None:
-        ioc = IOC(type=IOCType.IPV4, value="1.2.3.4", raw_match="1.2.3.4")
+        ioc = make_ipv4_ioc()
         mock_resp = make_mock_response(401)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
 
         result = adapter.lookup(ioc)
 
@@ -241,11 +241,10 @@ class TestLookupErrors:
         assert "Authentication" in result.error or "auth" in result.error.lower() or "401" in result.error
 
     def test_timeout_returns_error(self) -> None:
-        ioc = IOC(type=IOCType.IPV4, value="1.2.3.4", raw_match="1.2.3.4")
+        ioc = make_ipv4_ioc()
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.side_effect = requests.exceptions.Timeout("Connection timed out")
+        mock_adapter_session(adapter, side_effect=requests.exceptions.Timeout("Connection timed out"))
 
         result = adapter.lookup(ioc)
 
@@ -258,12 +257,11 @@ class TestHTTPSafetyControls:
 
     def test_no_redirects_enforced(self) -> None:
         """SEC-06: allow_redirects=False must be passed."""
-        ioc = IOC(type=IOCType.IPV4, value="1.2.3.4", raw_match="1.2.3.4")
+        ioc = make_ipv4_ioc()
         mock_resp = make_mock_response(200, VT_IP_RESPONSE)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
 
         adapter.lookup(ioc)
 
@@ -274,12 +272,11 @@ class TestHTTPSafetyControls:
 
     def test_timeout_params_enforced(self) -> None:
         """SEC-04: timeout=(5, 30) must be passed."""
-        ioc = IOC(type=IOCType.IPV4, value="1.2.3.4", raw_match="1.2.3.4")
+        ioc = make_ipv4_ioc()
         mock_resp = make_mock_response(200, VT_IP_RESPONSE)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
 
         adapter.lookup(ioc)
 
@@ -290,12 +287,11 @@ class TestHTTPSafetyControls:
 
     def test_stream_enabled(self) -> None:
         """SEC-05 setup: stream=True must be passed."""
-        ioc = IOC(type=IOCType.IPV4, value="1.2.3.4", raw_match="1.2.3.4")
+        ioc = make_ipv4_ioc()
         mock_resp = make_mock_response(200, VT_IP_RESPONSE)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
 
         adapter.lookup(ioc)
 
@@ -306,7 +302,7 @@ class TestHTTPSafetyControls:
 
     def test_response_size_limit(self) -> None:
         """SEC-05: Responses exceeding 1 MB must be rejected."""
-        ioc = IOC(type=IOCType.IPV4, value="1.2.3.4", raw_match="1.2.3.4")
+        ioc = make_ipv4_ioc()
 
         # Build a mock that yields >1 MB of data
         oversized_chunk = b"x" * (MAX_RESPONSE_BYTES + 1)
@@ -316,8 +312,7 @@ class TestHTTPSafetyControls:
         mock_resp.iter_content = MagicMock(return_value=iter([oversized_chunk]))
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
 
         result = adapter.lookup(ioc)
 
@@ -328,14 +323,12 @@ class TestHTTPSafetyControls:
 
     def test_allowed_hosts_enforced(self) -> None:
         """SEC-07/SEC-16: Requests to non-allowlisted hosts must be rejected."""
-        ioc = IOC(type=IOCType.IPV4, value="1.2.3.4", raw_match="1.2.3.4")
+        ioc = make_ipv4_ioc()
 
         # Adapter with empty allowlist — should reject ALL outbound requests
         adapter = VTAdapter(api_key=FAKE_API_KEY, allowed_hosts=[])
 
-        adapter._session = MagicMock()
-        # Session.get should NOT be called — allowlist blocks before network call
-        adapter._session.get.side_effect = AssertionError("Should not reach network")
+        mock_adapter_session(adapter, side_effect=AssertionError("Should not reach network"))
 
         result = adapter.lookup(ioc)
 

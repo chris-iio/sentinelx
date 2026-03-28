@@ -65,3 +65,33 @@ def make_md5_ioc(value: str = "d41d8cd98f00b204e9800998ecf8427e") -> IOC:
 
 def make_url_ioc(value: str = "http://evil.com/path") -> IOC:
     return make_ioc(IOCType.URL, value)
+
+
+def make_sha1_ioc(value: str = "b" * 40) -> IOC:
+    return make_ioc(IOCType.SHA1, value)
+
+
+def make_cve_ioc(value: str = "CVE-2021-44228") -> IOC:
+    return make_ioc(IOCType.CVE, value)
+
+
+def make_email_ioc(value: str = "user@evil.com") -> IOC:
+    return make_ioc(IOCType.EMAIL, value)
+
+
+# ---------------------------------------------------------------------------
+# Mock adapter session helper
+# ---------------------------------------------------------------------------
+
+def mock_adapter_session(adapter, *, method="get", response=None, side_effect=None):
+    """Replace adapter._session with a MagicMock and configure the given HTTP method.
+
+    Returns the adapter for chaining.
+    """
+    adapter._session = MagicMock()
+    target = getattr(adapter._session, method)
+    if side_effect is not None:
+        target.side_effect = side_effect
+    elif response is not None:
+        target.return_value = response
+    return adapter

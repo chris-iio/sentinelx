@@ -18,12 +18,19 @@ from unittest.mock import MagicMock
 import requests
 import requests.exceptions
 
-from app.pipeline.models import IOC, IOCType
+from app.pipeline.models import IOCType
 from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.enrichment.adapters.shodan import ShodanAdapter
 from app.enrichment.http_safety import MAX_RESPONSE_BYTES
 from app.enrichment.provider import Provider
-from tests.helpers import make_mock_response
+from tests.helpers import (
+    make_mock_response,
+    make_domain_ioc,
+    make_ipv4_ioc,
+    make_ipv6_ioc,
+    make_md5_ioc,
+    mock_adapter_session,
+)
 
 
 ALLOWED_HOSTS = ["internetdb.shodan.io"]
@@ -88,12 +95,11 @@ class TestLookupFound:
 
     def test_vulns_present_returns_suspicious(self) -> None:
         """IPv4 IOC with vulns list -> verdict=suspicious, detection_count=len(vulns)."""
-        ioc = IOC(type=IOCType.IPV4, value="8.8.8.8", raw_match="8.8.8.8")
+        ioc = make_ipv4_ioc("8.8.8.8")
         mock_resp = make_mock_response(200, SHODAN_FOUND_VULNS_RESPONSE)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult), (
@@ -105,12 +111,11 @@ class TestLookupFound:
 
     def test_malware_tag_returns_malicious(self) -> None:
         """IPv4 IOC with tags=['malware'] -> verdict=malicious, detection_count=1."""
-        ioc = IOC(type=IOCType.IPV4, value="1.2.3.4", raw_match="1.2.3.4")
+        ioc = make_ipv4_ioc()
         mock_resp = make_mock_response(200, SHODAN_FOUND_MALWARE_TAG_RESPONSE)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
@@ -120,12 +125,11 @@ class TestLookupFound:
 
     def test_compromised_tag_returns_malicious(self) -> None:
         """IPv4 IOC with tags=['compromised'] -> verdict=malicious."""
-        ioc = IOC(type=IOCType.IPV4, value="1.2.3.4", raw_match="1.2.3.4")
+        ioc = make_ipv4_ioc()
         mock_resp = make_mock_response(200, SHODAN_FOUND_COMPROMISED_TAG_RESPONSE)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
@@ -133,12 +137,11 @@ class TestLookupFound:
 
     def test_doublepulsar_tag_returns_malicious(self) -> None:
         """IPv4 IOC with tags=['doublepulsar'] -> verdict=malicious."""
-        ioc = IOC(type=IOCType.IPV4, value="1.2.3.4", raw_match="1.2.3.4")
+        ioc = make_ipv4_ioc()
         mock_resp = make_mock_response(200, SHODAN_FOUND_DOUBLEPULSAR_TAG_RESPONSE)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
@@ -146,12 +149,11 @@ class TestLookupFound:
 
     def test_ports_only_no_vulns_returns_no_data(self) -> None:
         """IPv4 IOC with ports but empty vulns and tags -> verdict=no_data, detection_count=0."""
-        ioc = IOC(type=IOCType.IPV4, value="10.0.0.1", raw_match="10.0.0.1")
+        ioc = make_ipv4_ioc("10.0.0.1")
         mock_resp = make_mock_response(200, SHODAN_FOUND_PORTS_ONLY_RESPONSE)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
@@ -160,12 +162,11 @@ class TestLookupFound:
 
     def test_raw_stats_contains_ports_vulns_tags(self) -> None:
         """200 response -> raw_stats dict contains keys: ports, vulns, tags, hostnames, cpes."""
-        ioc = IOC(type=IOCType.IPV4, value="8.8.8.8", raw_match="8.8.8.8")
+        ioc = make_ipv4_ioc("8.8.8.8")
         mock_resp = make_mock_response(200, SHODAN_FOUND_VULNS_RESPONSE)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
@@ -174,10 +175,9 @@ class TestLookupFound:
 
     def test_ipv6_supported(self) -> None:
         """IPv6 IOC with vulns -> verdict=suspicious (IPv6 is in supported_types)."""
-        ipv6 = "2001:db8::1"
-        ioc = IOC(type=IOCType.IPV6, value=ipv6, raw_match=ipv6)
+        ioc = make_ipv6_ioc("2001:db8::1")
         response_body = {
-            "ip": ipv6,
+            "ip": "2001:db8::1",
             "ports": [80],
             "hostnames": [],
             "cpes": [],
@@ -187,8 +187,7 @@ class TestLookupFound:
         mock_resp = make_mock_response(200, response_body)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
@@ -199,12 +198,11 @@ class TestLookupNotFound:
 
     def test_404_returns_no_data_result(self) -> None:
         """404 response -> EnrichmentResult(verdict='no_data'), detection_count=0, total_engines=0."""
-        ioc = IOC(type=IOCType.IPV4, value="192.0.2.1", raw_match="192.0.2.1")
+        ioc = make_ipv4_ioc("192.0.2.1")
         mock_resp = make_mock_response(404, SHODAN_404_RESPONSE)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult), (
@@ -216,12 +214,11 @@ class TestLookupNotFound:
 
     def test_404_returns_result_not_error(self) -> None:
         """404 response -> isinstance(result, EnrichmentResult) is True, NOT EnrichmentError."""
-        ioc = IOC(type=IOCType.IPV4, value="192.0.2.1", raw_match="192.0.2.1")
+        ioc = make_ipv4_ioc("192.0.2.1")
         mock_resp = make_mock_response(404, SHODAN_404_RESPONSE)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult), (
@@ -234,7 +231,7 @@ class TestLookupErrors:
 
     def test_unsupported_type_domain(self) -> None:
         """DOMAIN IOC -> EnrichmentError, provider='Shodan InternetDB', error contains 'Unsupported'."""
-        ioc = IOC(type=IOCType.DOMAIN, value="evil.com", raw_match="evil.com")
+        ioc = make_domain_ioc()
 
         result = _make_adapter().lookup(ioc)
 
@@ -244,8 +241,7 @@ class TestLookupErrors:
 
     def test_unsupported_type_md5(self) -> None:
         """MD5 IOC -> EnrichmentError (hashes not supported by InternetDB)."""
-        md5 = "a" * 32
-        ioc = IOC(type=IOCType.MD5, value=md5, raw_match=md5)
+        ioc = make_md5_ioc("a" * 32)
 
         result = _make_adapter().lookup(ioc)
 
@@ -254,11 +250,10 @@ class TestLookupErrors:
 
     def test_timeout(self) -> None:
         """Network timeout -> EnrichmentError with 'Timeout' in error."""
-        ioc = IOC(type=IOCType.IPV4, value="8.8.8.8", raw_match="8.8.8.8")
+        ioc = make_ipv4_ioc("8.8.8.8")
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.side_effect = requests.exceptions.Timeout("timed out")
+        mock_adapter_session(adapter, side_effect=requests.exceptions.Timeout("timed out"))
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentError)
@@ -267,12 +262,11 @@ class TestLookupErrors:
 
     def test_http_500(self) -> None:
         """HTTP 500 response -> EnrichmentError with 'HTTP 500' in error."""
-        ioc = IOC(type=IOCType.IPV4, value="8.8.8.8", raw_match="8.8.8.8")
+        ioc = make_ipv4_ioc("8.8.8.8")
         mock_resp = make_mock_response(500)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentError)
@@ -281,12 +275,11 @@ class TestLookupErrors:
 
     def test_http_422(self) -> None:
         """HTTP 422 response (validation error) -> EnrichmentError with 'HTTP 422' in error."""
-        ioc = IOC(type=IOCType.IPV4, value="8.8.8.8", raw_match="8.8.8.8")
+        ioc = make_ipv4_ioc("8.8.8.8")
         mock_resp = make_mock_response(422)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentError)
@@ -295,11 +288,10 @@ class TestLookupErrors:
 
     def test_ssrf_validation_blocks_disallowed_host(self) -> None:
         """Adapter with allowed_hosts=[] -> EnrichmentError before network call, error mentions SSRF/allowed."""
-        ioc = IOC(type=IOCType.IPV4, value="8.8.8.8", raw_match="8.8.8.8")
+        ioc = make_ipv4_ioc("8.8.8.8")
         adapter = ShodanAdapter(allowed_hosts=[])
 
-        adapter._session = MagicMock()
-        adapter._session.get.side_effect = AssertionError("Should not reach network")
+        mock_adapter_session(adapter, side_effect=AssertionError("Should not reach network"))
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentError), (
@@ -316,7 +308,7 @@ class TestHTTPSafetyControls:
 
     def test_response_size_limit(self) -> None:
         """SEC-05: Responses exceeding 1 MB must be rejected with EnrichmentError."""
-        ioc = IOC(type=IOCType.IPV4, value="8.8.8.8", raw_match="8.8.8.8")
+        ioc = make_ipv4_ioc("8.8.8.8")
 
         oversized_chunk = b"x" * (MAX_RESPONSE_BYTES + 1)
         mock_resp = MagicMock()
@@ -325,8 +317,7 @@ class TestHTTPSafetyControls:
         mock_resp.iter_content = MagicMock(return_value=iter([oversized_chunk]))
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentError), (
