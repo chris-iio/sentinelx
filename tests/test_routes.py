@@ -201,54 +201,48 @@ def test_analyze_deduplicates(client):
 
 def test_analyze_online_without_api_key_redirects_to_settings(client):
     """POST /analyze online mode with no configured providers redirects to /settings."""
-    with patch("app.routes.build_registry") as mock_build_registry:
-        mock_registry = MagicMock()
-        mock_registry.configured.return_value = []
-        mock_build_registry.return_value = mock_registry
+    mock_registry = MagicMock()
+    mock_registry.configured.return_value = []
+    client.application.registry = mock_registry
 
-        response = client.post(
-            "/analyze",
-            data={"text": "192[.]168[.]1[.]1", "mode": "online"},
-        )
-        assert response.status_code == 302
-        assert "/settings" in response.headers["Location"]
+    response = client.post(
+        "/analyze",
+        data={"text": "192[.]168[.]1[.]1", "mode": "online"},
+    )
+    assert response.status_code == 302
+    assert "/settings" in response.headers["Location"]
 
 
 def test_analyze_online_without_api_key_redirects_follows(client):
     """POST /analyze online mode with no configured providers, following redirect, shows flash message."""
-    with patch("app.routes.build_registry") as mock_build_registry:
-        mock_registry = MagicMock()
-        mock_registry.configured.return_value = []
-        mock_build_registry.return_value = mock_registry
+    mock_registry = MagicMock()
+    mock_registry.configured.return_value = []
+    client.application.registry = mock_registry
 
-        response = client.post(
-            "/analyze",
-            data={"text": "192[.]168[.]1[.]1", "mode": "online"},
-            follow_redirects=True,
-        )
-        assert response.status_code == 200
-        assert b"provider" in response.data.lower() or b"configure" in response.data.lower()
+    response = client.post(
+        "/analyze",
+        data={"text": "192[.]168[.]1[.]1", "mode": "online"},
+        follow_redirects=True,
+    )
+    assert response.status_code == 200
+    assert b"provider" in response.data.lower() or b"configure" in response.data.lower()
 
 
 def test_analyze_online_with_api_key_returns_job_id(client):
     """POST /analyze online mode with configured registry returns results page with job_id."""
     with (
-        patch("app.routes.build_registry") as mock_build_registry,
         patch("app.routes.EnrichmentOrchestrator") as MockOrchestrator,
-        patch("app.routes.Thread") as MockThread,
+        patch("app.routes._enrichment_pool") as mock_pool,
     ):
         mock_registry = MagicMock()
         mock_registry.configured.return_value = [MagicMock()]
         mock_registry.all.return_value = [MagicMock()]
         mock_registry.providers_for_type.return_value = [MagicMock()]
         mock_registry.provider_count_for_type.return_value = 2
-        mock_build_registry.return_value = mock_registry
+        client.application.registry = mock_registry
 
         mock_orchestrator = MagicMock()
         MockOrchestrator.return_value = mock_orchestrator
-
-        mock_thread = MagicMock()
-        MockThread.return_value = mock_thread
 
         response = client.post(
             "/analyze",
@@ -256,18 +250,15 @@ def test_analyze_online_with_api_key_returns_job_id(client):
         )
 
         assert response.status_code == 200
-        # Thread must be started for background enrichment
-        mock_thread.start.assert_called_once()
-        # build_registry must be called
-        mock_build_registry.assert_called_once()
+        # Pool submit must be called for background enrichment
+        mock_pool.submit.assert_called_once()
 
 
 def test_analyze_online_creates_all_three_adapters(client):
-    """Online mode calls build_registry and passes registry.all() to the orchestrator."""
+    """Online mode uses current_app.registry and passes registry.configured() to the orchestrator."""
     with (
-        patch("app.routes.build_registry") as mock_build_registry,
         patch("app.routes.EnrichmentOrchestrator") as MockOrchestrator,
-        patch("app.routes.Thread") as MockThread,
+        patch("app.routes._enrichment_pool") as mock_pool,
     ):
         mock_provider_vt = MagicMock(name="VTProvider")
         mock_provider_mb = MagicMock(name="MBProvider")
@@ -279,18 +270,11 @@ def test_analyze_online_creates_all_three_adapters(client):
         mock_registry.all.return_value = all_providers
         mock_registry.providers_for_type.return_value = [MagicMock()]
         mock_registry.provider_count_for_type.return_value = 2
-        mock_build_registry.return_value = mock_registry
+        client.application.registry = mock_registry
 
         MockOrchestrator.return_value = MagicMock()
-        MockThread.return_value = MagicMock()
 
         client.post("/analyze", data={"text": "192[.]168[.]1[.]1", "mode": "online"})
-
-        # build_registry must be called with allowed_hosts and a ConfigStore
-        mock_build_registry.assert_called_once()
-        call_kwargs = mock_build_registry.call_args[1]
-        assert "allowed_hosts" in call_kwargs
-        assert "www.virustotal.com" in call_kwargs["allowed_hosts"]
 
         # Orchestrator receives registry.configured() — only configured provider mocks
         orch_call_kwargs = MockOrchestrator.call_args[1]
@@ -304,9 +288,8 @@ def test_enrichable_count_multi_provider(client):
     """SHA256 hash IOC yields enrichable_count=3 (VT + MB + TF all support hashes)."""
 
     with (
-        patch("app.routes.build_registry") as mock_build_registry,
         patch("app.routes.EnrichmentOrchestrator") as MockOrchestrator,
-        patch("app.routes.Thread") as MockThread,
+        patch("app.routes._enrichment_pool") as mock_pool,
     ):
         mock_registry = MagicMock()
         mock_registry.configured.return_value = [MagicMock(), MagicMock(), MagicMock()]
@@ -314,10 +297,9 @@ def test_enrichable_count_multi_provider(client):
         # SHA256 type — 3 providers support it
         mock_registry.providers_for_type.return_value = [MagicMock(), MagicMock(), MagicMock()]
         mock_registry.provider_count_for_type.return_value = 3
-        mock_build_registry.return_value = mock_registry
+        client.application.registry = mock_registry
 
         MockOrchestrator.return_value = MagicMock()
-        MockThread.return_value = MagicMock()
 
         # SHA256 hash — all three adapters support it
         sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
@@ -330,9 +312,8 @@ def test_enrichable_count_multi_provider(client):
 def test_enrichable_count_domain_two_providers(client):
     """Domain IOC yields enrichable_count=2 (VT + TF support domains, MB does not)."""
     with (
-        patch("app.routes.build_registry") as mock_build_registry,
         patch("app.routes.EnrichmentOrchestrator") as MockOrchestrator,
-        patch("app.routes.Thread") as MockThread,
+        patch("app.routes._enrichment_pool") as mock_pool,
     ):
         mock_registry = MagicMock()
         mock_registry.configured.return_value = [MagicMock(), MagicMock()]
@@ -340,10 +321,9 @@ def test_enrichable_count_domain_two_providers(client):
         # Domain/URL types — 2 providers (VT + TF, not MB)
         mock_registry.providers_for_type.return_value = [MagicMock(), MagicMock()]
         mock_registry.provider_count_for_type.return_value = 2
-        mock_build_registry.return_value = mock_registry
+        client.application.registry = mock_registry
 
         MockOrchestrator.return_value = MagicMock()
-        MockThread.return_value = MagicMock()
 
         # Domain — VT and TF support it, MB does not
         response = client.post("/analyze", data={"text": "hxxps://evil[.]example[.]com", "mode": "online"})
@@ -355,15 +335,15 @@ def test_enrichable_count_domain_two_providers(client):
 
 def test_analyze_offline_unchanged(client):
     """POST /analyze offline mode behaves identically to Phase 1 (no job_id, no enrichment)."""
-    with patch("app.routes.Thread") as MockThread:
+    with patch("app.routes._enrichment_pool") as mock_pool:
         response = client.post(
             "/analyze",
             data={"text": "10[.]0[.]0[.]1", "mode": "offline"},
         )
         assert response.status_code == 200
         assert b"10.0.0.1" in response.data
-        # Thread should NOT have been started for offline mode
-        MockThread.assert_not_called()
+        # Pool should NOT have been called for offline mode
+        mock_pool.submit.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

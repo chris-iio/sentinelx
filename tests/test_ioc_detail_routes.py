@@ -56,26 +56,19 @@ class TestIocDetailRoute:
         response = client.get("/ioc/invalid/1.2.3.4")
         assert response.status_code == 404
 
-    def test_detail_page_empty_cache(self, client, tmp_path, monkeypatch) -> None:
+    def test_detail_page_empty_cache(self, client, tmp_path) -> None:
         """Detail page with no cached data shows 'No enrichment data' message."""
-        import app.routes  # noqa: F401 — side-effect: registers routes
-        import app.cache.store as cache_store_module
-
-        # Patch DEFAULT_DB_PATH so the route instantiates an isolated DB
-        monkeypatch.setattr(cache_store_module, "DEFAULT_DB_PATH", tmp_path / "cache.db")
+        client.application.cache_store = CacheStore(db_path=tmp_path / "cache.db")
 
         response = client.get("/ioc/ipv4/10.20.30.40")
         assert response.status_code == 200
         html = response.data.decode()
         assert "No enrichment data" in html
 
-    def test_detail_page_with_results(self, client, tmp_path, monkeypatch) -> None:
+    def test_detail_page_with_results(self, client, tmp_path) -> None:
         """Detail page with cached results shows provider tab labels."""
-        import app.cache.store as cache_store_module
-
-        monkeypatch.setattr(cache_store_module, "DEFAULT_DB_PATH", tmp_path / "cache.db")
-
-        _seed_cache(tmp_path, "1.2.3.4", "ipv4")
+        cache = _seed_cache(tmp_path, "1.2.3.4", "ipv4")
+        client.application.cache_store = cache
 
         response = client.get("/ioc/ipv4/1.2.3.4")
         assert response.status_code == 200
@@ -88,22 +81,17 @@ class TestIocDetailRoute:
         assert "verdict-badge--malicious" in html
         assert "<style>" not in html
 
-    def test_detail_url_ioc(self, client, tmp_path, monkeypatch) -> None:
+    def test_detail_url_ioc(self, client, tmp_path) -> None:
         """GET /ioc/url/https://evil.com/beacon routes correctly via path converter."""
-        import app.cache.store as cache_store_module
-
-        monkeypatch.setattr(cache_store_module, "DEFAULT_DB_PATH", tmp_path / "cache.db")
+        client.application.cache_store = CacheStore(db_path=tmp_path / "cache.db")
 
         response = client.get("/ioc/url/https://evil.com/beacon")
         assert response.status_code == 200
 
-    def test_graph_data_in_context(self, client, tmp_path, monkeypatch) -> None:
+    def test_graph_data_in_context(self, client, tmp_path) -> None:
         """Detail page with cached results includes data-graph-nodes and data-graph-edges attributes."""
-        import app.cache.store as cache_store_module
-
-        monkeypatch.setattr(cache_store_module, "DEFAULT_DB_PATH", tmp_path / "cache.db")
-
-        _seed_cache(tmp_path, "1.2.3.4", "ipv4")
+        cache = _seed_cache(tmp_path, "1.2.3.4", "ipv4")
+        client.application.cache_store = cache
 
         response = client.get("/ioc/ipv4/1.2.3.4")
         assert response.status_code == 200
@@ -111,17 +99,14 @@ class TestIocDetailRoute:
         assert "data-graph-nodes" in html
         assert "data-graph-edges" in html
 
-    def test_detail_graph_labels_untruncated(self, client, tmp_path, monkeypatch) -> None:
+    def test_detail_graph_labels_untruncated(self, client, tmp_path) -> None:
         """Graph node labels are not truncated — full provider name appears in data-graph-nodes."""
-        import app.cache.store as cache_store_module
-
-        monkeypatch.setattr(cache_store_module, "DEFAULT_DB_PATH", tmp_path / "cache.db")
-
         cache = CacheStore(db_path=tmp_path / "cache.db")
         cache.put("1.2.3.4", "ipv4", "Shodan InternetDB", {
             "verdict": "clean",
             "detection_count": 0,
         })
+        client.application.cache_store = cache
 
         response = client.get("/ioc/ipv4/1.2.3.4")
         assert response.status_code == 200

@@ -17,9 +17,6 @@ Verdict priority (high to low):
   4. 404 -> no_data
 
 No API key required — InternetDB is a public zero-auth endpoint.
-
-Thread safety: a persistent requests.Session is created in __init__ and reused across
-lookup() calls (TCP connection pooling).
 """
 from __future__ import annotations
 
@@ -73,9 +70,7 @@ class ShodanAdapter:
         """Enrich a single IP IOC using the Shodan InternetDB API.
 
         Returns EnrichmentError immediately for non-IP types.
-        Validates the InternetDB endpoint against the SSRF allowlist before any
-        network call. Makes a GET request with full safety controls and
-        parses the response.
+        Calls safe_request() and parses the response.
 
         Response semantics:
           - 200 + malicious tags -> verdict=malicious

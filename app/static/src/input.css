@@ -1297,8 +1297,6 @@
 
     /* ---- Phase 4 Results UX — Chevron icon (injected into .ioc-summary-row by row-factory.ts) ---- */
 
-    /* .chevron-toggle rules removed — standalone button replaced by .chevron-icon-wrapper inside summary row */
-
     .chevron-icon-wrapper {
         color: var(--text-secondary);
         display: flex;

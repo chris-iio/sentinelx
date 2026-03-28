@@ -28,9 +28,6 @@ Verdict semantics:
 Results caps:
   - _MAX_HOSTS=25: passive_dns list (both IP and domain lookups)
   - _MAX_SAMPLES=20: samples list (both domain and hash lookups)
-
-Thread safety: a persistent requests.Session is created in __init__ and reused across
-_call() invocations (TCP connection pooling).
 """
 from __future__ import annotations
 
@@ -134,8 +131,8 @@ class ThreatMinerAdapter:
     def _call(self, ioc: IOC, base_url: str, rt: str) -> dict | EnrichmentError:
         """Make one ThreatMiner API call via safe_request().
 
-        Validates the endpoint against the SSRF allowlist, then makes a GET request
-        with the IOC value as the 'q' parameter and the resource type as 'rt'.
+        Calls safe_request() with the IOC value as the 'q' parameter and
+        the resource type as 'rt'.
 
         Args:
             ioc:      The IOC being queried (used for SSRF check and error construction).

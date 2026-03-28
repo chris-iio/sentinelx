@@ -15,9 +15,6 @@ crt.sh API behavior:
 Verdict semantics:
   - All responses: verdict=no_data — CT history is informational (not a threat signal)
   - detection_count=0, total_engines=0, scan_date=None always
-
-Thread safety: a persistent requests.Session is created in __init__ and reused across
-lookup() calls (TCP connection pooling).
 """
 from __future__ import annotations
 
@@ -73,9 +70,7 @@ class CrtShAdapter:
         """Enrich a single domain IOC via the crt.sh CT search API.
 
         Returns EnrichmentError immediately for non-domain types.
-        Validates the crt.sh endpoint against the SSRF allowlist before any
-        network call. Makes a GET request with full safety controls and
-        parses the certificate records.
+        Calls safe_request() and parses the certificate records.
 
         Response semantics:
           - Non-empty list: cert_count, date range, subdomains extracted

@@ -9,7 +9,7 @@ Tests cover:
 - History results are embedded as data-history-results attribute
 """
 import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -91,21 +91,18 @@ class TestEnrichmentSaveWrapper:
         }
 
         iocs = [IOC(type=IOCType.IPV4, value="10.0.0.1", raw_match="10[.]0[.]0[.]1")]
+        mock_store = MagicMock()
 
-        with patch("app.routes.HistoryStore") as MockStore:
-            mock_instance = MagicMock()
-            MockStore.return_value = mock_instance
+        _run_enrichment_and_save(
+            mock_orch, "test_job_id", iocs, "test input", "online", mock_store
+        )
 
-            _run_enrichment_and_save(
-                mock_orch, "test_job_id", iocs, "test input", "online"
-            )
-
-            mock_orch.enrich_all.assert_called_once_with("test_job_id", iocs)
-            mock_instance.save_analysis.assert_called_once()
-            call_kwargs = mock_instance.save_analysis.call_args
-            assert call_kwargs[1]["input_text"] == "test input"
-            assert call_kwargs[1]["mode"] == "online"
-            assert call_kwargs[1]["analysis_id"] == "test_job_id"
+        mock_orch.enrich_all.assert_called_once_with("test_job_id", iocs)
+        mock_store.save_analysis.assert_called_once()
+        call_kwargs = mock_store.save_analysis.call_args
+        assert call_kwargs[1]["input_text"] == "test input"
+        assert call_kwargs[1]["mode"] == "online"
+        assert call_kwargs[1]["analysis_id"] == "test_job_id"
 
     def test_save_failure_does_not_break_enrichment(self):
         """If HistoryStore.save_analysis raises, enrichment still completes."""
@@ -121,19 +118,16 @@ class TestEnrichmentSaveWrapper:
         }
 
         iocs = [IOC(type=IOCType.IPV4, value="10.0.0.1", raw_match="10[.]0[.]0[.]1")]
+        mock_store = MagicMock()
+        mock_store.save_analysis.side_effect = Exception("DB error")
 
-        with patch("app.routes.HistoryStore") as MockStore:
-            mock_instance = MagicMock()
-            mock_instance.save_analysis.side_effect = Exception("DB error")
-            MockStore.return_value = mock_instance
+        # Should not raise
+        _run_enrichment_and_save(
+            mock_orch, "test_job_id", iocs, "test input", "online", mock_store
+        )
 
-            # Should not raise
-            _run_enrichment_and_save(
-                mock_orch, "test_job_id", iocs, "test input", "online"
-            )
-
-            # enrich_all was still called
-            mock_orch.enrich_all.assert_called_once()
+        # enrich_all was still called
+        mock_orch.enrich_all.assert_called_once()
 
     def test_save_skipped_when_status_none(self):
         """If orchestrator.get_status returns None, save is skipped."""
@@ -144,16 +138,13 @@ class TestEnrichmentSaveWrapper:
         mock_orch.get_status.return_value = None
 
         iocs = [IOC(type=IOCType.IPV4, value="10.0.0.1", raw_match="10[.]0[.]0[.]1")]
+        mock_store = MagicMock()
 
-        with patch("app.routes.HistoryStore") as MockStore:
-            mock_instance = MagicMock()
-            MockStore.return_value = mock_instance
+        _run_enrichment_and_save(
+            mock_orch, "test_job_id", iocs, "test input", "online", mock_store
+        )
 
-            _run_enrichment_and_save(
-                mock_orch, "test_job_id", iocs, "test input", "online"
-            )
-
-            mock_instance.save_analysis.assert_not_called()
+        mock_store.save_analysis.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -167,8 +158,8 @@ class TestHistoryDetailRoute:
     def test_history_returns_200_with_seeded_data(self, client, seeded_store):
         """GET /history/<id> returns 200 and renders results page."""
         store, analysis_id, _, _ = seeded_store
-        with patch("app.routes.HistoryStore", return_value=store):
-            response = client.get(f"/history/{analysis_id}")
+        client.application.history_store = store
+        response = client.get(f"/history/{analysis_id}")
         assert response.status_code == 200
         # Should contain IOC values from the seeded data
         assert b"10.0.0.1" in response.data
@@ -176,27 +167,25 @@ class TestHistoryDetailRoute:
 
     def test_history_returns_404_for_unknown_id(self, client):
         """GET /history/<unknown_id> returns 404."""
-        with patch("app.routes.HistoryStore") as MockStore:
-            mock_instance = MagicMock()
-            mock_instance.load_analysis.return_value = None
-            MockStore.return_value = mock_instance
-
-            response = client.get("/history/nonexistent_id_12345")
+        mock_store = MagicMock()
+        mock_store.load_analysis.return_value = None
+        client.application.history_store = mock_store
+        response = client.get("/history/nonexistent_id_12345")
         assert response.status_code == 404
 
     def test_history_contains_history_results_attribute(self, client, seeded_store):
         """Response HTML includes data-history-results attribute for JS replay."""
         store, analysis_id, _, _ = seeded_store
-        with patch("app.routes.HistoryStore", return_value=store):
-            response = client.get(f"/history/{analysis_id}")
+        client.application.history_store = store
+        response = client.get(f"/history/{analysis_id}")
         assert response.status_code == 200
         assert b"data-history-results" in response.data
 
     def test_history_renders_online_mode(self, client, seeded_store):
         """History page renders in online mode with job_id='history'."""
         store, analysis_id, _, _ = seeded_store
-        with patch("app.routes.HistoryStore", return_value=store):
-            response = client.get(f"/history/{analysis_id}")
+        client.application.history_store = store
+        response = client.get(f"/history/{analysis_id}")
         assert response.status_code == 200
         assert b'data-job-id="history"' in response.data
         assert b'data-mode="online"' in response.data
@@ -204,8 +193,8 @@ class TestHistoryDetailRoute:
     def test_history_shows_correct_ioc_count(self, client, seeded_store):
         """History page shows the correct total IOC count."""
         store, analysis_id, _, _ = seeded_store
-        with patch("app.routes.HistoryStore", return_value=store):
-            response = client.get(f"/history/{analysis_id}")
+        client.application.history_store = store
+        response = client.get(f"/history/{analysis_id}")
         assert response.status_code == 200
         assert b"2 unique IOCs" in response.data
 
@@ -221,35 +210,35 @@ class TestIndexWithHistory:
     def test_index_shows_recent_analyses(self, client, seeded_store):
         """GET / includes recent analyses section when history exists."""
         store, _, _, _ = seeded_store
-        with patch("app.routes.HistoryStore", return_value=store):
-            response = client.get("/")
+        client.application.history_store = store
+        response = client.get("/")
         assert response.status_code == 200
         assert b"Recent Analyses" in response.data
         assert b"abc123deadbeef" in response.data  # link contains analysis id
 
     def test_index_no_history(self, client):
         """GET / works fine with no history — no recent analyses section."""
-        with patch("app.routes.HistoryStore") as MockStore:
-            mock_instance = MagicMock()
-            mock_instance.list_recent.return_value = []
-            MockStore.return_value = mock_instance
-
-            response = client.get("/")
+        mock_store = MagicMock()
+        mock_store.list_recent.return_value = []
+        client.application.history_store = mock_store
+        response = client.get("/")
         assert response.status_code == 200
         assert b"Recent Analyses" not in response.data
 
     def test_index_history_error_graceful(self, client):
         """GET / handles HistoryStore exceptions gracefully."""
-        with patch("app.routes.HistoryStore", side_effect=Exception("DB error")):
-            response = client.get("/")
+        mock_store = MagicMock()
+        mock_store.list_recent.side_effect = Exception("DB error")
+        client.application.history_store = mock_store
+        response = client.get("/")
         assert response.status_code == 200
         assert b"Recent Analyses" not in response.data
 
     def test_index_shows_verdict_badge(self, client, seeded_store):
         """GET / shows verdict badge for each recent analysis."""
         store, _, _, _ = seeded_store
-        with patch("app.routes.HistoryStore", return_value=store):
-            response = client.get("/")
+        client.application.history_store = store
+        response = client.get("/")
         assert response.status_code == 200
         assert b"malicious" in response.data
 

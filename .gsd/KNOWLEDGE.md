@@ -418,3 +418,27 @@ When adding a new enrichment provider, the frontend `PROVIDER_CONTEXT_FIELDS` ma
 5. `make typecheck && make js` — verify frontend compiles
 
 Discovered: M006/S02 slice closure
+
+---
+
+## Routes refactoring: tests must mock current_app attributes, not module-level imports
+
+When `routes.py` is refactored to use `current_app.registry`, `current_app.cache_store`, or `current_app.history_store` (set in `create_app()`) instead of calling constructors inline (e.g., `build_registry()`, `HistoryStore()`, `CacheStore()`), tests that patch `app.routes.ClassName` will fail with `AttributeError` because the name is no longer imported into the module.
+
+**Fix:** Set `client.application.registry = mock_registry` (or `cache_store`, `history_store`) directly instead of patching the class on the routes module.
+
+Similarly, when `Thread(target=fn).start()` is replaced by `_enrichment_pool.submit(fn, ...)`, tests must patch `app.routes._enrichment_pool` instead of `app.routes.Thread`.
+
+**Pattern:**
+```python
+# Old (broken after refactor):
+with patch("app.routes.HistoryStore") as MockStore: ...
+with patch("app.routes.Thread") as MockThread: ...
+
+# New (correct):
+client.application.history_store = mock_store
+with patch("app.routes._enrichment_pool") as mock_pool: ...
+    mock_pool.submit.assert_called_once()
+```
+
+Discovered: M007/S01 closer (18 stale test patches fixed across test_routes.py, test_history_routes.py, test_ioc_detail_routes.py)

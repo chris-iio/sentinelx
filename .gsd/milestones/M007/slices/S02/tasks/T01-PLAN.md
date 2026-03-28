@@ -1,10 +1,12 @@
-# S02: Docstring trimming & dead CSS
+---
+estimated_steps: 31
+estimated_files: 13
+skills_used: []
+---
 
-**Goal:** Adapter files are ~40% shorter. SEC control docs live once in http_safety.py. Dead CSS comment removed.
-**Demo:** After this: Adapter files are ~40% shorter. SEC control docs live once in http_safety.py. consensus-badge CSS gone.
+# T01: Trim HTTP adapter docstrings and remove stale CSS comment
 
-## Tasks
-- [x] **T01: Removed 77 lines of duplicated SEC-control docstrings, SSRF boilerplate, and redundant Thread-safety paragraphs from all 12 HTTP adapters, plus one stale CSS comment** — Trim duplicated SEC-control docstring text from 12 HTTP adapter files and remove a stale CSS comment. This is the entire slice — no code logic changes.
+Trim duplicated SEC-control docstring text from 12 HTTP adapter files and remove a stale CSS comment. This is the entire slice — no code logic changes.
 
 ## Steps
 
@@ -50,6 +52,39 @@
 - [ ] Stale CSS comment removed
 - [ ] All 1057 tests pass
 - [ ] All 12 adapters import cleanly
-  - Estimate: 45m
-  - Files: app/enrichment/adapters/abuseipdb.py, app/enrichment/adapters/crtsh.py, app/enrichment/adapters/greynoise.py, app/enrichment/adapters/hashlookup.py, app/enrichment/adapters/ip_api.py, app/enrichment/adapters/malwarebazaar.py, app/enrichment/adapters/otx.py, app/enrichment/adapters/shodan.py, app/enrichment/adapters/threatfox.py, app/enrichment/adapters/threatminer.py, app/enrichment/adapters/urlhaus.py, app/enrichment/adapters/virustotal.py, app/static/src/input.css
-  - Verify: python3 -m pytest && grep -c 'SEC-04\|SEC-05\|SEC-06\|SEC-07\|SEC-16' app/enrichment/adapters/*.py | grep -v ':0$' | wc -l | grep -q '^0$' && echo 'PASS: No SEC references remain'
+
+## Inputs
+
+- `app/enrichment/adapters/abuseipdb.py`
+- `app/enrichment/adapters/crtsh.py`
+- `app/enrichment/adapters/greynoise.py`
+- `app/enrichment/adapters/hashlookup.py`
+- `app/enrichment/adapters/ip_api.py`
+- `app/enrichment/adapters/malwarebazaar.py`
+- `app/enrichment/adapters/otx.py`
+- `app/enrichment/adapters/shodan.py`
+- `app/enrichment/adapters/threatfox.py`
+- `app/enrichment/adapters/threatminer.py`
+- `app/enrichment/adapters/urlhaus.py`
+- `app/enrichment/adapters/virustotal.py`
+- `app/static/src/input.css`
+
+## Expected Output
+
+- `app/enrichment/adapters/abuseipdb.py`
+- `app/enrichment/adapters/crtsh.py`
+- `app/enrichment/adapters/greynoise.py`
+- `app/enrichment/adapters/hashlookup.py`
+- `app/enrichment/adapters/ip_api.py`
+- `app/enrichment/adapters/malwarebazaar.py`
+- `app/enrichment/adapters/otx.py`
+- `app/enrichment/adapters/shodan.py`
+- `app/enrichment/adapters/threatfox.py`
+- `app/enrichment/adapters/threatminer.py`
+- `app/enrichment/adapters/urlhaus.py`
+- `app/enrichment/adapters/virustotal.py`
+- `app/static/src/input.css`
+
+## Verification
+
+python3 -m pytest && grep -c 'SEC-04\|SEC-05\|SEC-06\|SEC-07\|SEC-16' app/enrichment/adapters/*.py | grep -v ':0$' | wc -l | grep -q '^0$' && echo 'PASS: No SEC references remain'

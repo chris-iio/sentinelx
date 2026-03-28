@@ -21,8 +21,6 @@ CRITICAL DESIGN NOTES:
 
 No API key required — ipinfo.io free tier is a public zero-auth endpoint.
 Rate limit: 50,000 requests/month on free tier (HTTP 429 on violation).
-
-Thread safety: uses self._session (persistent requests.Session, created in __init__).
 """
 from __future__ import annotations
 
@@ -87,9 +85,7 @@ class IPApiAdapter:
         """Enrich a single IP IOC using the ipinfo.io API.
 
         Returns EnrichmentError immediately for non-IP types.
-        Validates the ipinfo.io endpoint against the SSRF allowlist before any
-        network call. Makes a GET request with full safety controls and parses
-        the response.
+        Calls safe_request() and parses the response.
 
         Response semantics:
           - HTTP 200 + "country" in body -> EnrichmentResult(verdict=no_data)

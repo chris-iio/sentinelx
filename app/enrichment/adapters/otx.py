@@ -23,9 +23,6 @@ Verdict from pulse_info.count:
 404 response -> no_data (not an error) — handled via pre_raise_hook.
 
 Supports 8 IOCType values (all except EMAIL) including CVE (the first CVE-capable provider).
-
-Thread safety: uses a persistent requests.Session created in __init__; concurrent
-lookup() calls are safe as session state is read-only after initialization.
 """
 from __future__ import annotations
 
@@ -104,9 +101,7 @@ class OTXAdapter:
 
         Supports 8 IOC types (IPV4, IPV6, DOMAIN, URL, MD5, SHA1, SHA256, CVE).
         EMAIL is not supported — callers should check supported_types before calling.
-        Validates the OTX endpoint against the SSRF allowlist before any network call.
-        Makes a GET request with full safety controls and derives verdict from
-        pulse_info.count.
+        Calls safe_request() and derives verdict from pulse_info.count.
 
         Response semantics:
           - pulse_info.count >= 5 -> verdict=malicious

@@ -1,11 +1,7 @@
 """URLhaus API adapter.
 
 Implements URL, IP, domain, and hash enrichment against the URLhaus API
-(abuse.ch) with full HTTP safety controls matching the ShodanAdapter pattern:
-  - SEC-04: timeout=(5, 30) on all requests
-  - SEC-05: stream=True + byte counting, 1 MB response cap
-  - SEC-06: allow_redirects=False on all requests
-  - SEC-07/SEC-16: ALLOWED_API_HOSTS allowlist enforced before every network call
+(abuse.ch). Delegates all HTTP safety controls to safe_request() in http_safety.py.
 
 URLhaus API behavior (all endpoints are POST with form-encoded bodies):
   - POST /v1/url/      {"url": value}        Auth-Key header required
@@ -24,9 +20,6 @@ Verdict logic:
 
 Supported IOC types: URL, IPv4, IPv6, DOMAIN, MD5, SHA256
 NOT supported: SHA1, CVE
-
-Thread safety: a persistent requests.Session is created in __init__ and reused across
-lookup() calls (TCP connection pooling).
 """
 from __future__ import annotations
 
@@ -99,9 +92,7 @@ class URLhausAdapter:
         """Enrich a single IOC using the URLhaus API.
 
         Returns EnrichmentError immediately for unsupported types (SHA1, CVE).
-        Validates the URLhaus endpoint against the SSRF allowlist before any
-        network call. Makes a POST request with full safety controls and
-        parses the query_status field for verdict.
+        Calls safe_request() and parses the query_status field for verdict.
 
         Response semantics:
           - query_status="is_listed"              -> verdict=malicious (URL endpoint)

@@ -15,9 +15,6 @@ Verdict behavior:
   - 404 (hash not in NSRL): verdict=no_data, detection_count=0, total_engines=0
 
 No API key required — CIRCL Hashlookup is a public zero-auth endpoint.
-
-Thread safety: a persistent requests.Session is created in __init__ and reused across
-lookup() calls (TCP connection pooling).
 """
 from __future__ import annotations
 
@@ -79,9 +76,7 @@ class HashlookupAdapter:
         """Enrich a single hash IOC using the CIRCL Hashlookup API.
 
         Returns EnrichmentError immediately for non-hash types.
-        Validates the Hashlookup endpoint against the SSRF allowlist before any
-        network call. Makes a GET request with full safety controls and
-        parses the response.
+        Calls safe_request() and parses the response.
 
         Response semantics:
           - 200 (hash in NSRL) -> verdict=known_good

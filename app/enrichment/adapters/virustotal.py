@@ -1,14 +1,7 @@
 """VirusTotal API v3 adapter.
 
-Implements IOC enrichment against the VT API v3 with full HTTP safety controls:
-  - SEC-04: timeout=(5, 30) on all requests
-  - SEC-05: stream=True + byte counting, 1 MB response cap
-  - SEC-06: allow_redirects=False on all requests
-  - SEC-07/SEC-16: ALLOWED_API_HOSTS allowlist enforced before every network call
-
-Thread safety: each VTAdapter.__init__() stores state only; a fresh requests.Session
-is created inside each lookup() call to avoid shared session race conditions under
-ThreadPoolExecutor (Pitfall 3 from research).
+Implements IOC enrichment against the VT API v3. Delegates all HTTP safety
+controls to safe_request() in http_safety.py.
 """
 from __future__ import annotations
 
@@ -160,9 +153,8 @@ class VTAdapter:
         """Enrich a single IOC using the VirusTotal API v3.
 
         Returns EnrichmentError immediately for CVE (not supported by VT).
-        For all other supported types: builds the VT endpoint URL, validates
-        against the SSRF allowlist, makes a request with full safety controls,
-        and parses the response.
+        For all other supported types: builds the VT endpoint URL,
+        calls safe_request(), and parses the response.
 
         Args:
             ioc: The IOC to look up.

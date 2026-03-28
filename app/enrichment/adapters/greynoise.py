@@ -1,11 +1,7 @@
 """GreyNoise Community API adapter.
 
-Implements IP enrichment against the GreyNoise Community API with full HTTP
-safety controls matching the established adapter pattern:
-  - SEC-04: timeout=(5, 30) on all requests
-  - SEC-05: stream=True + byte counting, 1 MB response cap
-  - SEC-06: allow_redirects=False on all requests
-  - SEC-07/SEC-16: ALLOWED_API_HOSTS allowlist enforced before every network call
+Implements IP enrichment against the GreyNoise Community API. Delegates all HTTP
+safety controls to safe_request() in http_safety.py.
 
 GreyNoise Community API behavior:
   - GET https://api.greynoise.io/v3/community/{ip}
@@ -22,9 +18,6 @@ Verdict priority (high to low):
   4. Else -> "no_data"
 
 API key required — GreyNoise Community API requires registration.
-
-Thread safety: a persistent requests.Session is created in __init__ and reused across
-lookup() calls (TCP connection pooling).
 """
 from __future__ import annotations
 
@@ -86,9 +79,7 @@ class GreyNoiseAdapter:
         """Enrich a single IP IOC using the GreyNoise Community API.
 
         Returns EnrichmentError immediately for non-IP types.
-        Validates the GreyNoise endpoint against the SSRF allowlist before any
-        network call. Makes a GET request with full safety controls and
-        parses the response.
+        Calls safe_request() and parses the response.
 
         Response semantics:
           - 200 + riot=True           -> verdict=clean

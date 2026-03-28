@@ -1,11 +1,7 @@
 """AbuseIPDB API adapter.
 
-Implements IP enrichment against the AbuseIPDB API with full HTTP safety controls
-matching the established adapter pattern:
-  - SEC-04: timeout=(5, 30) on all requests
-  - SEC-05: stream=True + byte counting, 1 MB response cap
-  - SEC-06: allow_redirects=False on all requests
-  - SEC-07/SEC-16: ALLOWED_API_HOSTS allowlist enforced before every network call
+Implements IP enrichment against the AbuseIPDB API. Delegates all HTTP safety
+controls to safe_request() in http_safety.py.
 
 AbuseIPDB API behavior:
   - GET https://api.abuseipdb.com/api/v2/check?ipAddress={ip}&maxAgeInDays=90
@@ -25,9 +21,6 @@ detection_count = totalReports (number of abuse reports)
 total_engines  = numDistinctUsers (number of distinct reporters)
 
 API key required — register at https://www.abuseipdb.com/
-
-Thread safety: a persistent requests.Session is created in __init__ and reused across
-lookup() calls (TCP connection pooling).
 """
 from __future__ import annotations
 
@@ -94,9 +87,7 @@ class AbuseIPDBAdapter:
         """Enrich a single IP IOC using the AbuseIPDB check API.
 
         Returns EnrichmentError immediately for non-IP types.
-        Validates the AbuseIPDB endpoint against the SSRF allowlist before any
-        network call. Makes a GET request with full safety controls and
-        parses the response.
+        Calls safe_request() and parses the response.
 
         Response semantics:
           - 200 + score >= 75               -> verdict=malicious
