@@ -6,57 +6,57 @@ This file is the explicit capability and coverage contract for the project.
 
 ### R036 — Shared `safe_request()` consolidates HTTP boilerplate across all 12 HTTP adapters
 - Class: quality-attribute
-- Status: active
+- Status: validated
 - Description: A shared `safe_request()` function in `http_safety.py` handles SSRF validation, HTTP GET/POST with safety controls (timeout, no redirects, streaming byte cap), pre-raise_for_status hooks (429, 404), and the full exception handler chain (Timeout → HTTPError → SSLError → ConnectionError → Exception) with correct ordering (D035). All 12 HTTP adapters call it instead of inlining the boilerplate.
 - Why it matters: 12 adapters duplicate identical ~25-line HTTP + exception blocks. Consolidation eliminates the class of bugs where one adapter's handler chain drifts from the canonical order.
 - Source: execution
 - Primary owning slice: M007/S01
 - Supporting slices: none
-- Validation: unmapped
+- Validation: validated — safe_request() consolidates all HTTP boilerplate; all 12 adapters migrated; 1057 tests pass
 - Notes: M005 planned this work (R026/R027) but the code never landed — safe_request() does not exist in http_safety.py and adapters still inline the full boilerplate. This is a reattempt.
 
 ### R037 — Adapter docstrings trimmed — SEC control descriptions centralized, not repeated per-adapter
 - Class: quality-attribute
-- Status: active
+- Status: validated
 - Description: Adapter module and class docstrings no longer repeat SEC-04/05/06/16 safety control descriptions. Security control docs live once in http_safety.py. Each adapter docstring documents only adapter-specific behavior (API endpoint, verdict logic, response format).
 - Why it matters: ~1,354 lines of docstrings across 15 adapters, 40-46% of each file. The SEC control text is identical in every adapter — pure copy-paste bloat.
 - Source: execution
 - Primary owning slice: M007/S02
 - Supporting slices: none
-- Validation: unmapped
+- Validation: validated — zero SEC-04/05/06/07/16 references in adapter files; 77 lines of duplicated docstrings removed
 - Notes: Adapter-specific docs (endpoint behavior, verdict thresholds, API key requirements) are preserved. Only the duplicated SEC boilerplate is removed.
 
 ### R038 — Dead CSS removed (consensus-badge and any other confirmed dead selectors)
 - Class: quality-attribute
-- Status: active
+- Status: validated
 - Description: Dead CSS classes are removed from input.css. consensus-badge CSS (kept since M001/D003 for rollback) is removed. Any test-only references updated.
 - Why it matters: consensus-badge has been dead for 5 milestones. Dead CSS is noise in the stylesheet.
 - Source: execution
 - Primary owning slice: M007/S02
 - Supporting slices: none
-- Validation: unmapped
+- Validation: validated — consensus-badge CSS absent from input.css; stale chevron-toggle comment removed
 - Notes: The row-factory.test.ts assertion that consensus-badge doesn't exist should be removed too — testing for the absence of deleted code is pointless.
 
 ### R039 — Test files use shared `tests/helpers.py` factories instead of inlining mock setup
 - Class: quality-attribute
-- Status: active
+- Status: validated
 - Description: Adapter test files use `make_mock_response`, `make_ipv4_ioc`, and other shared factories from `tests/helpers.py` instead of inlining their own MagicMock setup. New helper factories added as needed.
 - Why it matters: 23 of 33 test files inline their own mock setup. Standardizing on shared helpers reduces test maintenance burden.
 - Source: execution
 - Primary owning slice: M007/S03
 - Supporting slices: none
-- Validation: unmapped
+- Validation: validated — all 12 adapter test files use shared make_*_ioc() and mock_adapter_session(); zero inline IOC or MagicMock patterns remain
 - Notes: Only mechanical DRY-up — no test behavior changes. Tests that already use helpers are left alone.
 
 ### R040 — All 1043 existing tests pass with zero behavior changes
 - Class: continuity
-- Status: active
+- Status: validated
 - Description: Every existing test passes after all refactoring. No functional behavior changes — same HTTP calls, same verdicts, same error handling, same DOM output.
 - Why it matters: This is a pure cleanup milestone. The test suite is the safety net proving nothing broke.
 - Source: inferred
 - Primary owning slice: M007/all
 - Supporting slices: none
-- Validation: unmapped
+- Validation: validated — 1057 tests pass; count increased from 1043 (14 new safe_request tests); zero behavior changes
 - Notes: Test count may decrease slightly if redundant absence-tests (e.g., consensus-badge) are removed.
 
 ## Validated
@@ -338,24 +338,24 @@ This file is the explicit capability and coverage contract for the project.
 
 ### R026 — safe_request() function in http_safety.py
 - Class: quality-attribute
-- Status: active
+- Status: validated
 - Description: A shared `safe_request()` function in `http_safety.py` handles SSRF validation, HTTP GET/POST with safety controls, pre-raise_for_status hooks, and the full exception handler chain with correct ordering (D035).
 - Why it matters: 12 adapters duplicate identical ~25-line HTTP + exception blocks.
 - Source: execution
 - Primary owning slice: M007/S01
 - Supporting slices: none
-- Validation: unmapped — safe_request() does not exist in http_safety.py; M005 worktree merge did not land this work
+- Validation: validated — safe_request() exists in http_safety.py with 14 unit tests covering GET/POST, SSRF, all exception types, and hooks
 - Notes: M005 claimed completion but the code never materialized. Reattempted in M007.
 
 ### R027 — All 12 HTTP adapters use safe_request()
 - Class: quality-attribute
-- Status: active
+- Status: validated
 - Description: All 12 HTTP-based adapters call `safe_request()` instead of inlining validate_endpoint + session.get/post + safety controls + exception handling.
 - Why it matters: Achieves the LOC reduction and consistency target.
 - Source: execution
 - Primary owning slice: M007/S01
 - Supporting slices: none
-- Validation: unmapped — adapters still inline full HTTP boilerplate
+- Validation: validated — all 12 HTTP adapters call safe_request(), zero import requests.exceptions, zero call validate_endpoint directly
 - Notes: M005 claimed completion but adapters still inline the full boilerplate. Reattempted in M007.
 
 ### R028 — Registry cached at startup.
@@ -466,8 +466,8 @@ This file is the explicit capability and coverage contract for the project.
 | R023 | quality-attribute | validated | M004/S03 | none | validated |
 | R024 | quality-attribute | validated | M004/S04 | none | validated |
 | R025 | compliance/security | validated | M004/S04 | none | validated |
-| R026 | quality-attribute | active | M007/S01 | none | unmapped |
-| R027 | quality-attribute | active | M007/S01 | none | unmapped |
+| R026 | quality-attribute | validated | M007/S01 | none | validated |
+| R027 | quality-attribute | validated | M007/S01 | none | validated |
 | R028 | quality-attribute | validated | M005/S03 | none | validated |
 | R029 | quality-attribute | validated | M005/S03 | none | validated |
 | R030 | core-capability | validated | M006/S01 | none | validated |
@@ -475,15 +475,15 @@ This file is the explicit capability and coverage contract for the project.
 | R032 | core-capability | validated | M006/S02 | none | validated |
 | R033 | core-capability | validated | M006/S03 | none | validated |
 | R035 | integration | deferred | none | none | unmapped |
-| R036 | quality-attribute | active | M007/S01 | none | unmapped |
-| R037 | quality-attribute | active | M007/S02 | none | unmapped |
-| R038 | quality-attribute | active | M007/S02 | none | unmapped |
-| R039 | quality-attribute | active | M007/S03 | none | unmapped |
-| R040 | continuity | active | M007/all | none | unmapped |
+| R036 | quality-attribute | validated | M007/S01 | none | validated |
+| R037 | quality-attribute | validated | M007/S02 | none | validated |
+| R038 | quality-attribute | validated | M007/S02 | none | validated |
+| R039 | quality-attribute | validated | M007/S03 | none | validated |
+| R040 | continuity | validated | M007/all | none | validated |
 
 ## Coverage Summary
 
-- Active requirements: 7 (R026, R027, R036, R037, R038, R039, R040)
+- Active requirements: 0
 - Mapped to slices: 7
-- Validated: 33
+- Validated: 40
 - Unmapped active requirements: 0

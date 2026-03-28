@@ -442,3 +442,39 @@ with patch("app.routes._enrichment_pool") as mock_pool: ...
 ```
 
 Discovered: M007/S01 closer (18 stale test patches fixed across test_routes.py, test_history_routes.py, test_ioc_detail_routes.py)
+
+---
+
+## Pre-raise hook pattern for per-adapter HTTP status code handling
+
+When consolidating HTTP boilerplate into a shared function like safe_request(), per-adapter status code handling (e.g., VT's 404/429/401/403, AbuseIPDB's 429) can be cleanly expressed as pre-raise hook closures:
+
+```python
+def _vt_hook(resp):
+    if resp.status_code == 404:
+        return EnrichmentResult(verdict="no_data", raw_stats={})
+    if resp.status_code == 429:
+        return EnrichmentError(provider="virustotal", error="Rate limited")
+    return None  # proceed to raise_for_status
+
+result = safe_request(session, url, allowed_hosts, ioc, "virustotal",
+                      pre_raise_hook=_vt_hook)
+```
+
+This composes well without needing per-adapter subclass overrides or if/elif chains in the shared function. Each adapter owns its own hook logic.
+
+Discovered: M007/S01
+
+---
+
+## Automated regex replacement for large-scale test migrations
+
+For mechanical test refactoring across many files (e.g., replacing 181 `adapter._session = MagicMock()` blocks and 99 inline `IOC(type=IOCType...)` constructions), automated regex-based batch replacement is significantly faster than manual edits. However, plan for 2-3 fix passes covering edge cases:
+
+1. Multiline constructors (IOC spanning multiple lines)
+2. Function-call response values (MagicMock(return_value=some_fn()))
+3. Multiline side_effect lists
+
+The pattern: do the bulk replacement via regex, then grep for remaining patterns, then fix edge cases manually.
+
+Discovered: M007/S03

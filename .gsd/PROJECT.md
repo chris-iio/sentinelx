@@ -10,7 +10,7 @@ Safe, correct, and transparent IOC extraction and enrichment — never invent sc
 
 ## Current State
 
-**M006 complete (2026-03-25).** 1043 tests passing. Analysis history persisted to SQLite via HistoryStore — recent analyses list on home page, full results reloadable from /history/<id> via JS replay. WhoisAdapter added as 15th provider (python-whois, port 43, no API key). URL IOC detail links fixed (/detail/ → /ioc/), 8 E2E Playwright tests added. Input page fully tokenized — flex layout fixed, all hardcoded colors/timings replaced with design tokens.
+**M007 complete (2026-03-28).** 1057 tests passing. safe_request() consolidated all 12 HTTP adapters from ~25-line inline boilerplate to single function calls. 77 lines of duplicated SEC-control docstrings trimmed. Dead CSS removed. All 12 adapter test files migrated to shared make_*_ioc() factories and mock_adapter_session() helper. Net -418 LOC.
 
 ## Architecture / Key Patterns
 
@@ -21,7 +21,7 @@ Safe, correct, and transparent IOC extraction and enrichment — never invent sc
 - **Persistence:** SQLite WAL-mode stores (CacheStore for enrichment cache, HistoryStore for analysis history) at ~/.sentinelx/
 - **Security:** CSP (7 directives), CSRF, SSRF allowlist, host validation, textContent-only DOM (SEC-08)
 - **Build:** Makefile targets — `css`, `js`, `js-dev`, `js-watch`, `typecheck`, `build`
-- **Tests:** 1043 total (unit + E2E via Playwright with route-mocking)
+- **Tests:** 1057 total (unit + E2E via Playwright with route-mocking)
 
 ## Capability Contract
 
@@ -35,7 +35,7 @@ See `.gsd/REQUIREMENTS.md` for the explicit capability contract, requirement sta
 - [x] M004: Refactor & Optimize — Concurrency fixes, polling cursor, persistent Sessions, ipinfo.io HTTPS, CacheStore WAL, frontend O(N²) fixes, shared test helpers, CSP expansion
 - [x] M005: Codebase Hygiene — safe_request() consolidation across 12 adapters, registry caching at startup, analyze() decomposition into 3 helpers. Net -134 LOC, 960 tests, 0 failures.
 - [x] M006: Analyst Workflow & Coverage — Analysis history persistence, WHOIS domain enrichment (15th provider), URL IOC end-to-end polish, input page redesign. 1043 tests, 0 failures.
-- [ ] M007: Dead Code & Boilerplate Reduction — safe_request() consolidation (S01 ✅), adapter docstring trimming & dead CSS (S02 ✅), test DRY-up (S03 pending).
+- [x] M007: Dead Code & Boilerplate Reduction — safe_request() consolidation across 12 adapters, adapter docstring trimming & dead CSS, test DRY-up with shared helpers. Net -418 LOC, 1057 tests, 0 failures.
 
 ---
-*Last updated: 2026-03-28 — M007 S02 complete. 1057 tests, 0 failures.*
+*Last updated: 2026-03-28 — M007 complete. 1057 tests, 0 failures.*
