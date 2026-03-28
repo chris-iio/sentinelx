@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-03-28T02:48:45.327Z",
+  "exported_at": "2026-03-28T02:58:35.376Z",
   "milestones": [
     {
       "id": "M001",
@@ -877,19 +877,28 @@
       "milestone_id": "M007",
       "slice_id": "S03",
       "id": "T02",
-      "title": "Migrate 6 larger adapter test files and remove local factory duplicates",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Migrated all 6 larger adapter test files to shared helpers; removed 6 local factories from test_threatminer and test_crtsh; all 1057 tests pass",
+      "status": "complete",
+      "one_liner": "Migrated all 6 larger adapter test files to shared helpers; removed 6 local factories from test_threatminer and test_crtsh; all 1057 tests pass",
+      "narrative": "Migrated test_urlhaus, test_abuseipdb, test_crtsh, test_otx, test_ip_api, and test_threatminer to use mock_adapter_session() and make_*_ioc() factories from tests/helpers.py. Used automated regex replacement for 181 session mocks and 99 inline IOC constructions, then fixed edge cases (multiline IOC constructors, function-call response values, multiline side_effect lists). Removed 5 local factory functions from test_threatminer.py and 1 from test_crtsh.py. Updated imports in all 6 files.",
+      "verification_result": "All 1057 tests pass. Zero adapter._session = MagicMock() occurrences across all 12 adapter test files. Zero IOC(type=IOCType inline constructions. Zero local _make_*_ioc factory functions in test_threatminer.py and test_crtsh.py.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-03-28T02:58:35.362Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "Used automated regex migration instead of manual per-file editing due to volume; required three fix passes for edge cases.",
+      "known_issues": "None.",
+      "key_files": [
+        "tests/test_urlhaus.py",
+        "tests/test_abuseipdb.py",
+        "tests/test_crtsh.py",
+        "tests/test_otx.py",
+        "tests/test_ip_api.py",
+        "tests/test_threatminer.py"
+      ],
+      "key_decisions": [
+        "Used explicit domain/hash values where local factory defaults differed from shared helper defaults to preserve test semantics"
+      ],
+      "full_summary_md": "---\nid: T02\nparent: S03\nmilestone: M007\nkey_files:\n  - tests/test_urlhaus.py\n  - tests/test_abuseipdb.py\n  - tests/test_crtsh.py\n  - tests/test_otx.py\n  - tests/test_ip_api.py\n  - tests/test_threatminer.py\nkey_decisions:\n  - Used explicit domain/hash values where local factory defaults differed from shared helper defaults to preserve test semantics\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-28T02:58:35.362Z\nblocker_discovered: false\n---\n\n# T02: Migrated all 6 larger adapter test files to shared helpers; removed 6 local factories from test_threatminer and test_crtsh; all 1057 tests pass\n\n**Migrated all 6 larger adapter test files to shared helpers; removed 6 local factories from test_threatminer and test_crtsh; all 1057 tests pass**\n\n## What Happened\n\nMigrated test_urlhaus, test_abuseipdb, test_crtsh, test_otx, test_ip_api, and test_threatminer to use mock_adapter_session() and make_*_ioc() factories from tests/helpers.py. Used automated regex replacement for 181 session mocks and 99 inline IOC constructions, then fixed edge cases (multiline IOC constructors, function-call response values, multiline side_effect lists). Removed 5 local factory functions from test_threatminer.py and 1 from test_crtsh.py. Updated imports in all 6 files.\n\n## Verification\n\nAll 1057 tests pass. Zero adapter._session = MagicMock() occurrences across all 12 adapter test files. Zero IOC(type=IOCType inline constructions. Zero local _make_*_ioc factory functions in test_threatminer.py and test_crtsh.py.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `python3 -m pytest -x -q` | 0 | ✅ pass | 52440ms |\n| 2 | `grep -c 'adapter._session = MagicMock()' tests/test_urlhaus.py tests/test_abuseipdb.py tests/test_crtsh.py tests/test_otx.py tests/test_ip_api.py tests/test_threatminer.py` | 1 | ✅ pass (all 0) | 100ms |\n| 3 | `grep -c 'IOC(type=IOCType' tests/test_urlhaus.py tests/test_abuseipdb.py tests/test_crtsh.py tests/test_otx.py tests/test_ip_api.py tests/test_threatminer.py` | 1 | ✅ pass (all 0) | 100ms |\n| 4 | `grep -c 'def _make_.*ioc' tests/test_threatminer.py tests/test_crtsh.py` | 1 | ✅ pass (both 0) | 100ms |\n\n\n## Deviations\n\nUsed automated regex migration instead of manual per-file editing due to volume; required three fix passes for edge cases.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `tests/test_urlhaus.py`\n- `tests/test_abuseipdb.py`\n- `tests/test_crtsh.py`\n- `tests/test_otx.py`\n- `tests/test_ip_api.py`\n- `tests/test_threatminer.py`\n",
       "description": "Migrate 6 larger adapter test files (test_urlhaus, test_abuseipdb, test_crtsh, test_otx, test_ip_api, test_threatminer) to use shared helpers from tests/helpers.py. Remove local _make_*_ioc factory functions from test_threatminer.py (5 functions) and test_crtsh.py (1 function).\n\n## Steps\n\n1. For each of the 6 files (test_urlhaus.py, test_abuseipdb.py, test_crtsh.py, test_otx.py, test_ip_api.py, test_threatminer.py):\n   a. Update the `from tests.helpers import` line to include `mock_adapter_session` and all `make_*_ioc` factories used in that file.\n   b. Remove the `from app.pipeline.models import IOC, IOCType` import if no longer needed (keep `IOCType` if used for unsupported-type assertions or supported_types checks).\n   c. Replace every `IOC(type=IOCType.XXX, value=val, raw_match=val)` with the appropriate `make_xxx_ioc(val)` call.\n   d. Replace every `adapter._session = MagicMock(); adapter._session.get.return_value = resp` (or `.post` for urlhaus) block with `mock_adapter_session(adapter, response=resp)` or `mock_adapter_session(adapter, method=\"post\", response=resp)`. For side_effect patterns: `mock_adapter_session(adapter, side_effect=exc)` or `mock_adapter_session(adapter, method=\"post\", side_effect=exc)`.\n   e. Run `python3 -m pytest tests/test_<file>.py -x -q` after each file to verify.\n\n2. **test_threatminer.py specific:** Remove the 5 local factory functions (`_make_ioc`, `_make_ip_ioc`, `_make_domain_ioc`, `_make_sha256_ioc`, `_make_md5_ioc` around lines 96-115). Replace all calls to `_make_ip_ioc()` with `make_ipv4_ioc()`, `_make_domain_ioc()` with `make_domain_ioc()`, etc. Note: the local `_make_ip_ioc` default value is \"1.2.3.4\" which matches `make_ipv4_ioc`'s default. The local `_make_sha256_ioc` default is a full 64-char hex string — pass it explicitly when called without args.\n\n3. **test_crtsh.py specific:** Remove the local `_make_domain_ioc` function (line ~69). Replace calls to `_make_domain_ioc()` with `make_domain_ioc()`. Note: local default is \"example.com\" but shared helper default is \"evil.com\" — tests that call `_make_domain_ioc()` without args need `make_domain_ioc(\"example.com\")` instead, OR verify the tests pass with any domain value (most crtsh tests pass the value explicitly).\n\n4. **test_urlhaus.py specific:** This is a POST adapter — use `method=\"post\"` in mock_adapter_session().\n\n5. Run full test suite: `python3 -m pytest -x -q`\n\n**Large file strategy:** test_ip_api.py (731 lines, 37 session mocks, 39 inline IOCs) and test_threatminer.py (1002 lines, 55 session mocks) are the biggest. Work through them methodically — the pattern is identical to batch 1 but there are more occurrences.\n\n## Must-Haves\n\n- [ ] All 6 files have zero `adapter._session = MagicMock()` occurrences\n- [ ] All 6 files have zero (or near-zero) `IOC(type=IOCType` occurrences\n- [ ] test_threatminer.py has zero local `_make_*_ioc` factory functions\n- [ ] test_crtsh.py has zero local `_make_domain_ioc` factory functions\n- [ ] All tests pass: `python3 -m pytest -x -q`\n\n## Verification\n\n- `python3 -m pytest -x -q` — 1057 tests pass\n- `grep -c 'adapter._session = MagicMock()' tests/test_urlhaus.py tests/test_abuseipdb.py tests/test_crtsh.py tests/test_otx.py tests/test_ip_api.py tests/test_threatminer.py` — all 0\n- `grep -c 'IOC(type=IOCType' tests/test_urlhaus.py tests/test_abuseipdb.py tests/test_crtsh.py tests/test_otx.py tests/test_ip_api.py tests/test_threatminer.py` — all 0 or near-zero\n- `grep -c 'def _make_.*ioc' tests/test_threatminer.py tests/test_crtsh.py` — both 0",
       "estimate": "60m",
       "files": [
@@ -1731,6 +1740,50 @@
       "verdict": "✅ pass (3)",
       "duration_ms": 50,
       "created_at": "2026-03-28T02:48:45.309Z"
+    },
+    {
+      "id": 23,
+      "task_id": "T02",
+      "slice_id": "S03",
+      "milestone_id": "M007",
+      "command": "python3 -m pytest -x -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 52440,
+      "created_at": "2026-03-28T02:58:35.362Z"
+    },
+    {
+      "id": 24,
+      "task_id": "T02",
+      "slice_id": "S03",
+      "milestone_id": "M007",
+      "command": "grep -c 'adapter._session = MagicMock()' tests/test_urlhaus.py tests/test_abuseipdb.py tests/test_crtsh.py tests/test_otx.py tests/test_ip_api.py tests/test_threatminer.py",
+      "exit_code": 1,
+      "verdict": "✅ pass (all 0)",
+      "duration_ms": 100,
+      "created_at": "2026-03-28T02:58:35.362Z"
+    },
+    {
+      "id": 25,
+      "task_id": "T02",
+      "slice_id": "S03",
+      "milestone_id": "M007",
+      "command": "grep -c 'IOC(type=IOCType' tests/test_urlhaus.py tests/test_abuseipdb.py tests/test_crtsh.py tests/test_otx.py tests/test_ip_api.py tests/test_threatminer.py",
+      "exit_code": 1,
+      "verdict": "✅ pass (all 0)",
+      "duration_ms": 100,
+      "created_at": "2026-03-28T02:58:35.362Z"
+    },
+    {
+      "id": 26,
+      "task_id": "T02",
+      "slice_id": "S03",
+      "milestone_id": "M007",
+      "command": "grep -c 'def _make_.*ioc' tests/test_threatminer.py tests/test_crtsh.py",
+      "exit_code": 1,
+      "verdict": "✅ pass (both 0)",
+      "duration_ms": 100,
+      "created_at": "2026-03-28T02:58:35.362Z"
     }
   ]
 }

@@ -58,7 +58,7 @@
   - Estimate: 45m
   - Files: tests/helpers.py, tests/test_malwarebazaar.py, tests/test_vt_adapter.py, tests/test_threatfox.py, tests/test_shodan.py, tests/test_greynoise.py, tests/test_hashlookup.py
   - Verify: python3 -m pytest -x -q && grep -c 'adapter._session = MagicMock()' tests/test_malwarebazaar.py tests/test_vt_adapter.py tests/test_threatfox.py tests/test_shodan.py tests/test_greynoise.py tests/test_hashlookup.py && grep -c 'def mock_adapter_session' tests/helpers.py
-- [ ] **T02: Migrate 6 larger adapter test files and remove local factory duplicates** — Migrate 6 larger adapter test files (test_urlhaus, test_abuseipdb, test_crtsh, test_otx, test_ip_api, test_threatminer) to use shared helpers from tests/helpers.py. Remove local _make_*_ioc factory functions from test_threatminer.py (5 functions) and test_crtsh.py (1 function).
+- [x] **T02: Migrated all 6 larger adapter test files to shared helpers; removed 6 local factories from test_threatminer and test_crtsh; all 1057 tests pass** — Migrate 6 larger adapter test files (test_urlhaus, test_abuseipdb, test_crtsh, test_otx, test_ip_api, test_threatminer) to use shared helpers from tests/helpers.py. Remove local _make_*_ioc factory functions from test_threatminer.py (5 functions) and test_crtsh.py (1 function).
 
 ## Steps
 

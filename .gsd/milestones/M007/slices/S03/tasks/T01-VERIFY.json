@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T01",
+  "unitId": "M007/S03/T01",
+  "timestamp": 1774666137370,
+  "passed": false,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "python3 -m pytest -x -q",
+      "exitCode": 0,
+      "durationMs": 68277,
+      "verdict": "pass"
+    },
+    {
+      "command": "grep -c 'adapter._session = MagicMock()' tests/test_malwarebazaar.py tests/test_vt_adapter.py tests/test_threatfox.py tests/test_shodan.py tests/test_greynoise.py tests/test_hashlookup.py",
+      "exitCode": 1,
+      "durationMs": 3,
+      "verdict": "fail"
+    },
+    {
+      "command": "grep -c 'def mock_adapter_session' tests/helpers.py",
+      "exitCode": 0,
+      "durationMs": 2,
+      "verdict": "pass"
+    }
+  ],
+  "retryAttempt": 1,
+  "maxRetries": 2
+}

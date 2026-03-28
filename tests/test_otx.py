@@ -26,16 +26,25 @@ All HTTP calls are mocked using unittest.mock.patch -- no real API calls.
 """
 from __future__ import annotations
 
-from unittest.mock import MagicMock
-
 import requests
 import requests.exceptions
 
-from app.pipeline.models import IOC, IOCType
+from app.pipeline.models import IOCType
 from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.enrichment.adapters.otx import OTXAdapter
 from app.enrichment.provider import Provider
-from tests.helpers import make_mock_response
+from tests.helpers import (
+    make_mock_response,
+    mock_adapter_session,
+    make_cve_ioc,
+    make_domain_ioc,
+    make_ipv4_ioc,
+    make_ipv6_ioc,
+    make_md5_ioc,
+    make_sha1_ioc,
+    make_sha256_ioc,
+    make_url_ioc,
+)
 
 
 ALLOWED_HOSTS = ["otx.alienvault.com"]
@@ -207,12 +216,11 @@ class TestOTXLookup:
 
     def test_ipv4_high_pulse_count_returns_malicious(self) -> None:
         """IPv4 with pulse_info.count >= 5 -> verdict=malicious."""
-        ioc = IOC(type=IOCType.IPV4, value="8.8.8.8", raw_match="8.8.8.8")
+        ioc = make_ipv4_ioc("8.8.8.8")
         mock_resp = make_mock_response(200, OTX_MALICIOUS_RESPONSE)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult), (
@@ -224,12 +232,11 @@ class TestOTXLookup:
 
     def test_ipv4_low_pulse_count_returns_suspicious(self) -> None:
         """IPv4 with pulse_info.count 1-4 -> verdict=suspicious."""
-        ioc = IOC(type=IOCType.IPV4, value="1.2.3.4", raw_match="1.2.3.4")
+        ioc = make_ipv4_ioc("1.2.3.4")
         mock_resp = make_mock_response(200, OTX_SUSPICIOUS_RESPONSE)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
@@ -238,12 +245,11 @@ class TestOTXLookup:
 
     def test_ipv4_zero_pulse_count_returns_no_data(self) -> None:
         """IPv4 with pulse_info.count == 0 -> verdict=no_data."""
-        ioc = IOC(type=IOCType.IPV4, value="192.0.2.1", raw_match="192.0.2.1")
+        ioc = make_ipv4_ioc("192.0.2.1")
         mock_resp = make_mock_response(200, OTX_NO_DATA_RESPONSE)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
@@ -252,12 +258,11 @@ class TestOTXLookup:
 
     def test_domain_lookup_returns_result(self) -> None:
         """DOMAIN IOC -> GET /api/v1/indicators/domain/{value}/general."""
-        ioc = IOC(type=IOCType.DOMAIN, value="evil.com", raw_match="evil.com")
+        ioc = make_domain_ioc("evil.com")
         mock_resp = make_mock_response(200, OTX_DOMAIN_RESPONSE)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
@@ -266,16 +271,11 @@ class TestOTXLookup:
 
     def test_url_lookup_returns_result(self) -> None:
         """URL IOC -> GET /api/v1/indicators/url/{value}/general."""
-        ioc = IOC(
-            type=IOCType.URL,
-            value="http://evil.com/payload.exe",
-            raw_match="http://evil.com/payload.exe",
-        )
+        ioc = make_url_ioc("http://evil.com/payload.exe")
         mock_resp = make_mock_response(200, OTX_URL_RESPONSE)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
@@ -285,12 +285,11 @@ class TestOTXLookup:
     def test_md5_hash_maps_to_file_endpoint(self) -> None:
         """MD5 IOC -> GET /api/v1/indicators/file/{value}/general (NOT /md5/)."""
         md5 = "a" * 32
-        ioc = IOC(type=IOCType.MD5, value=md5, raw_match=md5)
+        ioc = make_md5_ioc(md5)
         mock_resp = make_mock_response(200, OTX_FILE_RESPONSE)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
@@ -302,12 +301,11 @@ class TestOTXLookup:
     def test_sha1_hash_maps_to_file_endpoint(self) -> None:
         """SHA1 IOC -> GET /api/v1/indicators/file/{value}/general (NOT /sha1/)."""
         sha1 = "a" * 40
-        ioc = IOC(type=IOCType.SHA1, value=sha1, raw_match=sha1)
+        ioc = make_sha1_ioc(sha1)
         mock_resp = make_mock_response(200, OTX_FILE_RESPONSE)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
@@ -319,12 +317,11 @@ class TestOTXLookup:
     def test_sha256_hash_maps_to_file_endpoint(self) -> None:
         """SHA256 IOC -> GET /api/v1/indicators/file/{value}/general (NOT /sha256/)."""
         sha256 = "b" * 64
-        ioc = IOC(type=IOCType.SHA256, value=sha256, raw_match=sha256)
+        ioc = make_sha256_ioc(sha256)
         mock_resp = make_mock_response(200, OTX_FILE_RESPONSE)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
@@ -335,12 +332,11 @@ class TestOTXLookup:
 
     def test_cve_lookup_returns_malicious(self) -> None:
         """CVE IOC with high pulse count -> GET /api/v1/indicators/cve/{value}/general, verdict=malicious."""
-        ioc = IOC(type=IOCType.CVE, value="CVE-2021-44228", raw_match="CVE-2021-44228")
+        ioc = make_cve_ioc("CVE-2021-44228")
         mock_resp = make_mock_response(200, OTX_CVE_RESPONSE)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
@@ -352,12 +348,11 @@ class TestOTXLookup:
 
     def test_404_returns_no_data_result_not_error(self) -> None:
         """404 response -> EnrichmentResult(verdict='no_data'), NOT EnrichmentError."""
-        ioc = IOC(type=IOCType.IPV4, value="192.0.2.1", raw_match="192.0.2.1")
+        ioc = make_ipv4_ioc("192.0.2.1")
         mock_resp = make_mock_response(404, OTX_404_RESPONSE)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult), (
@@ -368,12 +363,11 @@ class TestOTXLookup:
 
     def test_raw_stats_contains_expected_keys(self) -> None:
         """200 response -> raw_stats dict contains keys: pulse_count, reputation, type_title."""
-        ioc = IOC(type=IOCType.IPV4, value="8.8.8.8", raw_match="8.8.8.8")
+        ioc = make_ipv4_ioc("8.8.8.8")
         mock_resp = make_mock_response(200, OTX_MALICIOUS_RESPONSE)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
@@ -391,12 +385,11 @@ class TestOTXLookup:
     def test_ipv6_maps_to_ipv6_endpoint(self) -> None:
         """IPv6 IOC -> GET /api/v1/indicators/IPv6/{value}/general."""
         ipv6 = "2001:db8::1"
-        ioc = IOC(type=IOCType.IPV6, value=ipv6, raw_match=ipv6)
+        ioc = make_ipv6_ioc(ipv6)
         mock_resp = make_mock_response(200, OTX_MALICIOUS_RESPONSE)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
@@ -405,13 +398,12 @@ class TestOTXLookup:
 
     def test_pulse_count_boundary_exactly_5_is_malicious(self) -> None:
         """Exactly 5 pulses -> malicious (boundary condition)."""
-        ioc = IOC(type=IOCType.IPV4, value="10.0.0.1", raw_match="10.0.0.1")
+        ioc = make_ipv4_ioc("10.0.0.1")
         body = {**OTX_NO_DATA_RESPONSE, "pulse_info": {"count": 5}}
         mock_resp = make_mock_response(200, body)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
@@ -419,13 +411,12 @@ class TestOTXLookup:
 
     def test_pulse_count_boundary_exactly_4_is_suspicious(self) -> None:
         """Exactly 4 pulses -> suspicious (boundary condition, just below malicious threshold)."""
-        ioc = IOC(type=IOCType.IPV4, value="10.0.0.1", raw_match="10.0.0.1")
+        ioc = make_ipv4_ioc("10.0.0.1")
         body = {**OTX_NO_DATA_RESPONSE, "pulse_info": {"count": 4}}
         mock_resp = make_mock_response(200, body)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
@@ -433,13 +424,12 @@ class TestOTXLookup:
 
     def test_pulse_count_boundary_exactly_1_is_suspicious(self) -> None:
         """Exactly 1 pulse -> suspicious (just above no_data threshold)."""
-        ioc = IOC(type=IOCType.IPV4, value="10.0.0.1", raw_match="10.0.0.1")
+        ioc = make_ipv4_ioc("10.0.0.1")
         body = {**OTX_NO_DATA_RESPONSE, "pulse_info": {"count": 1}}
         mock_resp = make_mock_response(200, body)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
@@ -450,11 +440,10 @@ class TestOTXErrors:
 
     def test_timeout_returns_error(self) -> None:
         """Network timeout -> EnrichmentError with 'Timeout' in error."""
-        ioc = IOC(type=IOCType.IPV4, value="8.8.8.8", raw_match="8.8.8.8")
+        ioc = make_ipv4_ioc("8.8.8.8")
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.side_effect = requests.exceptions.Timeout("timed out")
+        mock_adapter_session(adapter, side_effect=requests.exceptions.Timeout("timed out"))
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentError)
@@ -463,12 +452,11 @@ class TestOTXErrors:
 
     def test_http_500_returns_error(self) -> None:
         """HTTP 500 response -> EnrichmentError with 'HTTP 500' in error."""
-        ioc = IOC(type=IOCType.IPV4, value="8.8.8.8", raw_match="8.8.8.8")
+        ioc = make_ipv4_ioc("8.8.8.8")
         mock_resp = make_mock_response(500)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentError)
@@ -477,11 +465,10 @@ class TestOTXErrors:
 
     def test_ssrf_validation_blocks_disallowed_host(self) -> None:
         """Adapter with allowed_hosts=[] -> EnrichmentError before network call."""
-        ioc = IOC(type=IOCType.IPV4, value="8.8.8.8", raw_match="8.8.8.8")
+        ioc = make_ipv4_ioc("8.8.8.8")
         adapter = OTXAdapter(api_key="test-key", allowed_hosts=[])
 
-        adapter._session = MagicMock()
-        adapter._session.get.side_effect = AssertionError("Should not reach network")
+        mock_adapter_session(adapter, side_effect=AssertionError("Should not reach network"))
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentError), (
@@ -498,12 +485,11 @@ class TestOTXTypeMapping:
 
     def test_ipv4_maps_to_ipv4_string(self) -> None:
         """IOCType.IPV4 -> 'IPv4' in URL path."""
-        ioc = IOC(type=IOCType.IPV4, value="8.8.8.8", raw_match="8.8.8.8")
+        ioc = make_ipv4_ioc("8.8.8.8")
         mock_resp = make_mock_response(200, OTX_MALICIOUS_RESPONSE)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
         adapter.lookup(ioc)
 
         call_url = adapter._session.get.call_args[0][0]
@@ -512,12 +498,11 @@ class TestOTXTypeMapping:
     def test_ipv6_maps_to_ipv6_string(self) -> None:
         """IOCType.IPV6 -> 'IPv6' in URL path."""
         ipv6 = "2001:db8::1"
-        ioc = IOC(type=IOCType.IPV6, value=ipv6, raw_match=ipv6)
+        ioc = make_ipv6_ioc(ipv6)
         mock_resp = make_mock_response(200, OTX_MALICIOUS_RESPONSE)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
         adapter.lookup(ioc)
 
         call_url = adapter._session.get.call_args[0][0]
@@ -525,12 +510,11 @@ class TestOTXTypeMapping:
 
     def test_domain_maps_to_domain_string(self) -> None:
         """IOCType.DOMAIN -> 'domain' in URL path."""
-        ioc = IOC(type=IOCType.DOMAIN, value="evil.com", raw_match="evil.com")
+        ioc = make_domain_ioc("evil.com")
         mock_resp = make_mock_response(200, OTX_DOMAIN_RESPONSE)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
         adapter.lookup(ioc)
 
         call_url = adapter._session.get.call_args[0][0]
@@ -538,16 +522,11 @@ class TestOTXTypeMapping:
 
     def test_url_maps_to_url_string(self) -> None:
         """IOCType.URL -> 'url' in URL path."""
-        ioc = IOC(
-            type=IOCType.URL,
-            value="http://evil.com/payload.exe",
-            raw_match="http://evil.com/payload.exe",
-        )
+        ioc = make_url_ioc("http://evil.com/payload.exe")
         mock_resp = make_mock_response(200, OTX_URL_RESPONSE)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
         adapter.lookup(ioc)
 
         call_url = adapter._session.get.call_args[0][0]
@@ -556,12 +535,11 @@ class TestOTXTypeMapping:
     def test_md5_maps_to_file_not_md5(self) -> None:
         """IOCType.MD5 -> 'file' in URL path (NOT 'md5')."""
         md5 = "a" * 32
-        ioc = IOC(type=IOCType.MD5, value=md5, raw_match=md5)
+        ioc = make_md5_ioc(md5)
         mock_resp = make_mock_response(200, OTX_FILE_RESPONSE)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
         adapter.lookup(ioc)
 
         call_url = adapter._session.get.call_args[0][0]
@@ -571,12 +549,11 @@ class TestOTXTypeMapping:
     def test_sha1_maps_to_file_not_sha1(self) -> None:
         """IOCType.SHA1 -> 'file' in URL path (NOT 'sha1')."""
         sha1 = "a" * 40
-        ioc = IOC(type=IOCType.SHA1, value=sha1, raw_match=sha1)
+        ioc = make_sha1_ioc(sha1)
         mock_resp = make_mock_response(200, OTX_FILE_RESPONSE)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
         adapter.lookup(ioc)
 
         call_url = adapter._session.get.call_args[0][0]
@@ -586,12 +563,11 @@ class TestOTXTypeMapping:
     def test_sha256_maps_to_file_not_sha256(self) -> None:
         """IOCType.SHA256 -> 'file' in URL path (NOT 'sha256')."""
         sha256 = "b" * 64
-        ioc = IOC(type=IOCType.SHA256, value=sha256, raw_match=sha256)
+        ioc = make_sha256_ioc(sha256)
         mock_resp = make_mock_response(200, OTX_FILE_RESPONSE)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
         adapter.lookup(ioc)
 
         call_url = adapter._session.get.call_args[0][0]
@@ -600,12 +576,11 @@ class TestOTXTypeMapping:
 
     def test_cve_maps_to_cve_string(self) -> None:
         """IOCType.CVE -> 'cve' in URL path."""
-        ioc = IOC(type=IOCType.CVE, value="CVE-2021-44228", raw_match="CVE-2021-44228")
+        ioc = make_cve_ioc("CVE-2021-44228")
         mock_resp = make_mock_response(200, OTX_CVE_RESPONSE)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
         adapter.lookup(ioc)
 
         call_url = adapter._session.get.call_args[0][0]

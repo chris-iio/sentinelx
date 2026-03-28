@@ -21,10 +21,15 @@ import requests
 import requests.exceptions
 
 from app.enrichment.adapters.crtsh import CrtShAdapter
-from tests.helpers import make_mock_response
+from tests.helpers import (
+    make_mock_response,
+    mock_adapter_session,
+    make_domain_ioc,
+    make_ipv4_ioc,
+)
 from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.enrichment.provider import Provider
-from app.pipeline.models import IOC, IOCType
+from app.pipeline.models import IOCType
 
 
 ALLOWED_HOSTS = ["crt.sh"]
@@ -66,19 +71,14 @@ def _make_adapter(allowed_hosts: list[str] | None = None) -> CrtShAdapter:
     return CrtShAdapter(allowed_hosts=allowed_hosts)
 
 
-def _make_domain_ioc(value: str = "example.com") -> IOC:
-    return IOC(type=IOCType.DOMAIN, value=value, raw_match=value)
-
-
 class TestCertDataExtraction:
 
     def test_cert_count_matches_response_length(self) -> None:
         """3 cert records -> cert_count=3 in raw_stats."""
-        ioc = _make_domain_ioc()
+        ioc = make_domain_ioc("example.com")
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = make_mock_response(200, SAMPLE_CERTS)
+        mock_adapter_session(adapter, response=make_mock_response(200, SAMPLE_CERTS))
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
@@ -86,11 +86,10 @@ class TestCertDataExtraction:
 
     def test_earliest_date_is_min_not_before(self) -> None:
         """earliest date is the minimum not_before (first 10 chars) across all certs."""
-        ioc = _make_domain_ioc()
+        ioc = make_domain_ioc("example.com")
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = make_mock_response(200, SAMPLE_CERTS)
+        mock_adapter_session(adapter, response=make_mock_response(200, SAMPLE_CERTS))
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
@@ -98,11 +97,10 @@ class TestCertDataExtraction:
 
     def test_latest_date_is_max_not_before(self) -> None:
         """latest date is the maximum not_before (first 10 chars) across all certs."""
-        ioc = _make_domain_ioc()
+        ioc = make_domain_ioc("example.com")
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = make_mock_response(200, SAMPLE_CERTS)
+        mock_adapter_session(adapter, response=make_mock_response(200, SAMPLE_CERTS))
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
@@ -110,11 +108,10 @@ class TestCertDataExtraction:
 
     def test_subdomains_extracted_from_name_value(self) -> None:
         """Subdomains from all name_value fields are collected."""
-        ioc = _make_domain_ioc()
+        ioc = make_domain_ioc("example.com")
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = make_mock_response(200, SAMPLE_CERTS)
+        mock_adapter_session(adapter, response=make_mock_response(200, SAMPLE_CERTS))
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
@@ -126,11 +123,10 @@ class TestCertDataExtraction:
 
     def test_wildcard_prefix_stripped(self) -> None:
         """*.example.com in name_value is stripped to example.com."""
-        ioc = _make_domain_ioc()
+        ioc = make_domain_ioc("example.com")
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = make_mock_response(200, SAMPLE_CERTS)
+        mock_adapter_session(adapter, response=make_mock_response(200, SAMPLE_CERTS))
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
@@ -140,11 +136,10 @@ class TestCertDataExtraction:
 
     def test_subdomains_deduplicated(self) -> None:
         """Duplicate subdomains across multiple cert records are deduplicated."""
-        ioc = _make_domain_ioc()
+        ioc = make_domain_ioc("example.com")
         # All 3 certs contain "example.com" — should appear only once
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = make_mock_response(200, SAMPLE_CERTS)
+        mock_adapter_session(adapter, response=make_mock_response(200, SAMPLE_CERTS))
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
@@ -153,7 +148,7 @@ class TestCertDataExtraction:
 
     def test_subdomains_lowercased(self) -> None:
         """Subdomains are always lowercased."""
-        ioc = _make_domain_ioc()
+        ioc = make_domain_ioc("example.com")
         certs_with_uppercase = [
         {
                 "id": 1,
@@ -164,8 +159,7 @@ class TestCertDataExtraction:
         ]
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = make_mock_response(200, certs_with_uppercase)
+        mock_adapter_session(adapter, response=make_mock_response(200, certs_with_uppercase))
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
@@ -177,11 +171,10 @@ class TestCertDataExtraction:
 
     def test_subdomains_sorted_alphabetically(self) -> None:
         """Subdomain list is in alphabetical order."""
-        ioc = _make_domain_ioc()
+        ioc = make_domain_ioc("example.com")
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = make_mock_response(200, SAMPLE_CERTS)
+        mock_adapter_session(adapter, response=make_mock_response(200, SAMPLE_CERTS))
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
@@ -192,7 +185,7 @@ class TestCertDataExtraction:
 
     def test_subdomains_capped_at_50(self) -> None:
         """More than 50 unique subdomains -> capped at 50 in raw_stats."""
-        ioc = _make_domain_ioc()
+        ioc = make_domain_ioc("example.com")
         # Create cert with 60 unique subdomains in name_value
         name_values = "\n".join(f"sub{i:03d}.example.com" for i in range(60))
         many_subs_cert = [
@@ -205,8 +198,7 @@ class TestCertDataExtraction:
         ]
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = make_mock_response(200, many_subs_cert)
+        mock_adapter_session(adapter, response=make_mock_response(200, many_subs_cert))
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
@@ -216,7 +208,7 @@ class TestCertDataExtraction:
 
     def test_null_not_before_skipped_in_date_range(self) -> None:
         """Cert entries with null/missing not_before are skipped when computing date range."""
-        ioc = _make_domain_ioc()
+        ioc = make_domain_ioc("example.com")
         certs_with_null = [
         {
                 "id": 1,
@@ -233,8 +225,7 @@ class TestCertDataExtraction:
         ]
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = make_mock_response(200, certs_with_null)
+        mock_adapter_session(adapter, response=make_mock_response(200, certs_with_null))
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
@@ -244,7 +235,7 @@ class TestCertDataExtraction:
 
     def test_null_name_value_cert_skipped(self) -> None:
         """Cert entries with null/missing name_value are skipped without error."""
-        ioc = _make_domain_ioc()
+        ioc = make_domain_ioc("example.com")
         certs_with_null_name = [
         {
                 "id": 1,
@@ -261,8 +252,7 @@ class TestCertDataExtraction:
         ]
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = make_mock_response(200, certs_with_null_name)
+        mock_adapter_session(adapter, response=make_mock_response(200, certs_with_null_name))
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
@@ -270,7 +260,7 @@ class TestCertDataExtraction:
 
     def test_dates_formatted_yyyy_mm_dd(self) -> None:
         """Dates in raw_stats use YYYY-MM-DD format (first 10 chars of ISO 8601)."""
-        ioc = _make_domain_ioc()
+        ioc = make_domain_ioc("example.com")
         certs = [
         {
                 "id": 1,
@@ -281,8 +271,7 @@ class TestCertDataExtraction:
         ]
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = make_mock_response(200, certs)
+        mock_adapter_session(adapter, response=make_mock_response(200, certs))
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
@@ -291,11 +280,10 @@ class TestCertDataExtraction:
 
     def test_verdict_is_no_data(self) -> None:
         """verdict is always 'no_data' for crt.sh (CT history, not a threat verdict)."""
-        ioc = _make_domain_ioc()
+        ioc = make_domain_ioc("example.com")
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = make_mock_response(200, SAMPLE_CERTS)
+        mock_adapter_session(adapter, response=make_mock_response(200, SAMPLE_CERTS))
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
@@ -303,11 +291,10 @@ class TestCertDataExtraction:
 
     def test_detection_count_always_zero(self) -> None:
         """detection_count is always 0 (crt.sh doesn't provide threat detection)."""
-        ioc = _make_domain_ioc()
+        ioc = make_domain_ioc("example.com")
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = make_mock_response(200, SAMPLE_CERTS)
+        mock_adapter_session(adapter, response=make_mock_response(200, SAMPLE_CERTS))
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
@@ -315,11 +302,10 @@ class TestCertDataExtraction:
 
     def test_total_engines_always_zero(self) -> None:
         """total_engines is always 0 (crt.sh is a certificate registry, not a scanner)."""
-        ioc = _make_domain_ioc()
+        ioc = make_domain_ioc("example.com")
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = make_mock_response(200, SAMPLE_CERTS)
+        mock_adapter_session(adapter, response=make_mock_response(200, SAMPLE_CERTS))
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
@@ -327,11 +313,10 @@ class TestCertDataExtraction:
 
     def test_scan_date_always_none(self) -> None:
         """scan_date is always None (crt.sh doesn't have a scan date concept)."""
-        ioc = _make_domain_ioc()
+        ioc = make_domain_ioc("example.com")
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = make_mock_response(200, SAMPLE_CERTS)
+        mock_adapter_session(adapter, response=make_mock_response(200, SAMPLE_CERTS))
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
@@ -342,11 +327,10 @@ class TestEmptyResponse:
 
     def test_empty_array_returns_no_data(self) -> None:
         """Empty [] response -> EnrichmentResult(verdict='no_data')."""
-        ioc = _make_domain_ioc()
+        ioc = make_domain_ioc("example.com")
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = make_mock_response(200, [])
+        mock_adapter_session(adapter, response=make_mock_response(200, []))
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult), (
@@ -356,11 +340,10 @@ class TestEmptyResponse:
 
     def test_empty_array_returns_empty_raw_stats(self) -> None:
         """Empty [] response -> raw_stats is {} (empty dict)."""
-        ioc = _make_domain_ioc()
+        ioc = make_domain_ioc("example.com")
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = make_mock_response(200, [])
+        mock_adapter_session(adapter, response=make_mock_response(200, []))
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
@@ -368,11 +351,10 @@ class TestEmptyResponse:
 
     def test_empty_array_detection_count_zero(self) -> None:
         """Empty [] response -> detection_count=0."""
-        ioc = _make_domain_ioc()
+        ioc = make_domain_ioc("example.com")
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = make_mock_response(200, [])
+        mock_adapter_session(adapter, response=make_mock_response(200, []))
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentResult)
@@ -383,15 +365,14 @@ class TestHTTPErrors:
 
     def test_http_502_returns_enrichment_error(self) -> None:
         """HTTP 502 (common crt.sh transient error) -> EnrichmentError('HTTP 502')."""
-        ioc = _make_domain_ioc()
+        ioc = make_domain_ioc("example.com")
         mock_resp = MagicMock()
         mock_resp.status_code = 502
         http_err = requests.exceptions.HTTPError(response=mock_resp)
         mock_resp.raise_for_status = MagicMock(side_effect=http_err)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentError), (
@@ -402,15 +383,14 @@ class TestHTTPErrors:
 
     def test_http_500_returns_enrichment_error(self) -> None:
         """HTTP 500 -> EnrichmentError with 'HTTP 500' in error."""
-        ioc = _make_domain_ioc()
+        ioc = make_domain_ioc("example.com")
         mock_resp = MagicMock()
         mock_resp.status_code = 500
         http_err = requests.exceptions.HTTPError(response=mock_resp)
         mock_resp.raise_for_status = MagicMock(side_effect=http_err)
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = mock_resp
+        mock_adapter_session(adapter, response=mock_resp)
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentError)
@@ -418,11 +398,10 @@ class TestHTTPErrors:
 
     def test_timeout_returns_enrichment_error(self) -> None:
         """Network timeout -> EnrichmentError with 'Timeout' in error."""
-        ioc = _make_domain_ioc()
+        ioc = make_domain_ioc("example.com")
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.side_effect = requests.exceptions.Timeout("timed out")
+        mock_adapter_session(adapter, side_effect=requests.exceptions.Timeout("timed out"))
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentError)
@@ -431,11 +410,10 @@ class TestHTTPErrors:
 
     def test_ssrf_validation_blocks_disallowed_host(self) -> None:
         """allowed_hosts=[] -> EnrichmentError from SSRF check before network call."""
-        ioc = _make_domain_ioc()
+        ioc = make_domain_ioc("example.com")
         adapter = CrtShAdapter(allowed_hosts=[])
 
-        adapter._session = MagicMock()
-        adapter._session.get.side_effect = AssertionError("Should not reach network")
+        mock_adapter_session(adapter, side_effect=AssertionError("Should not reach network"))
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentError), (
@@ -449,11 +427,10 @@ class TestHTTPErrors:
 
     def test_unsupported_type_ipv4(self) -> None:
         """IPV4 IOC -> EnrichmentError('Unsupported type') without any network call."""
-        ioc = IOC(type=IOCType.IPV4, value="8.8.8.8", raw_match="8.8.8.8")
+        ioc = make_ipv4_ioc("8.8.8.8")
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.side_effect = AssertionError("Should not reach network")
+        mock_adapter_session(adapter, side_effect=AssertionError("Should not reach network"))
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentError)
@@ -466,11 +443,10 @@ class TestHTTPSafetyControls:
     def test_uses_timeout(self) -> None:
         """requests.get must be called with timeout=TIMEOUT (SEC-04)."""
         from app.enrichment.http_safety import TIMEOUT
-        ioc = _make_domain_ioc()
+        ioc = make_domain_ioc("example.com")
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = make_mock_response(200, SAMPLE_CERTS)
+        mock_adapter_session(adapter, response=make_mock_response(200, SAMPLE_CERTS))
         adapter.lookup(ioc)
 
         call_kwargs = adapter._session.get.call_args.kwargs
@@ -480,11 +456,10 @@ class TestHTTPSafetyControls:
 
     def test_uses_allow_redirects_false(self) -> None:
         """requests.get must be called with allow_redirects=False (SEC-06)."""
-        ioc = _make_domain_ioc()
+        ioc = make_domain_ioc("example.com")
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = make_mock_response(200, SAMPLE_CERTS)
+        mock_adapter_session(adapter, response=make_mock_response(200, SAMPLE_CERTS))
         adapter.lookup(ioc)
 
         call_kwargs = adapter._session.get.call_args.kwargs
@@ -494,11 +469,10 @@ class TestHTTPSafetyControls:
 
     def test_uses_stream_true(self) -> None:
         """requests.get must be called with stream=True (SEC-05)."""
-        ioc = _make_domain_ioc()
+        ioc = make_domain_ioc("example.com")
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = make_mock_response(200, SAMPLE_CERTS)
+        mock_adapter_session(adapter, response=make_mock_response(200, SAMPLE_CERTS))
         adapter.lookup(ioc)
 
         call_kwargs = adapter._session.get.call_args.kwargs
@@ -506,12 +480,11 @@ class TestHTTPSafetyControls:
 
     def test_validate_endpoint_called(self) -> None:
         """validate_endpoint must be called before making the HTTP request (SEC-16)."""
-        ioc = _make_domain_ioc()
+        ioc = make_domain_ioc("example.com")
 
         with patch("app.enrichment.http_safety.validate_endpoint") as mock_validate:
             adapter = _make_adapter()
-            adapter._session = MagicMock()
-            adapter._session.get.return_value = make_mock_response(200, SAMPLE_CERTS)
+            mock_adapter_session(adapter, response=make_mock_response(200, SAMPLE_CERTS))
             adapter.lookup(ioc)
 
         mock_validate.assert_called_once()
@@ -520,11 +493,10 @@ class TestHTTPSafetyControls:
 
     def test_url_contains_domain_and_output_json(self) -> None:
         """URL must contain the domain value and &output=json query params."""
-        ioc = _make_domain_ioc("evil.com")
+        ioc = make_domain_ioc("evil.com")
 
         adapter = _make_adapter()
-        adapter._session = MagicMock()
-        adapter._session.get.return_value = make_mock_response(200, [])
+        mock_adapter_session(adapter, response=make_mock_response(200, []))
         adapter.lookup(ioc)
 
         called_url = adapter._session.get.call_args.args[0]
