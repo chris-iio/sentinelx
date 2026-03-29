@@ -18,7 +18,6 @@ import dns.exception
 import dns.resolver
 
 from app.enrichment.models import EnrichmentError, EnrichmentResult
-from app.enrichment.provider import Provider
 from app.pipeline.models import IOC, IOCType
 
 
@@ -100,87 +99,11 @@ def _full_mock_resolver(
 
 
 # ---------------------------------------------------------------------------
-# Class metadata tests
-# ---------------------------------------------------------------------------
-
-
-class TestClassMetadata:
-
-    def test_name_is_dns_records(self) -> None:
-        """DnsAdapter.name must be 'DNS Records'."""
-        from app.enrichment.adapters.dns_lookup import DnsAdapter
-        assert DnsAdapter.name == "DNS Records"
-
-    def test_supported_types_is_frozenset(self) -> None:
-        """supported_types must be a frozenset."""
-        from app.enrichment.adapters.dns_lookup import DnsAdapter
-        assert isinstance(DnsAdapter.supported_types, frozenset)
-
-    def test_supported_types_contains_domain(self) -> None:
-        """IOCType.DOMAIN must be in DnsAdapter.supported_types."""
-        from app.enrichment.adapters.dns_lookup import DnsAdapter
-        assert IOCType.DOMAIN in DnsAdapter.supported_types
-
-    def test_supported_types_excludes_ipv4(self) -> None:
-        """IPV4 must NOT be in DnsAdapter.supported_types."""
-        from app.enrichment.adapters.dns_lookup import DnsAdapter
-        assert IOCType.IPV4 not in DnsAdapter.supported_types
-
-    def test_supported_types_excludes_ipv6(self) -> None:
-        """IPV6 must NOT be in DnsAdapter.supported_types."""
-        from app.enrichment.adapters.dns_lookup import DnsAdapter
-        assert IOCType.IPV6 not in DnsAdapter.supported_types
-
-    def test_supported_types_excludes_url(self) -> None:
-        """URL must NOT be in DnsAdapter.supported_types."""
-        from app.enrichment.adapters.dns_lookup import DnsAdapter
-        assert IOCType.URL not in DnsAdapter.supported_types
-
-    def test_requires_api_key_false(self) -> None:
-        """DnsAdapter.requires_api_key must be False."""
-        from app.enrichment.adapters.dns_lookup import DnsAdapter
-        assert DnsAdapter.requires_api_key is False
-
-    def test_is_configured_returns_true(self) -> None:
-        """is_configured() must always return True — no API key needed."""
-        adapter = _make_adapter()
-        assert adapter.is_configured() is True
-
-    def test_is_configured_returns_true_with_empty_hosts(self) -> None:
-        """is_configured() returns True even when allowed_hosts is empty."""
-        adapter = _make_adapter(allowed_hosts=[])
-        assert adapter.is_configured() is True
-
-
-# ---------------------------------------------------------------------------
-# Protocol conformance
-# ---------------------------------------------------------------------------
-
-
-class TestProtocolConformance:
-
-    def test_dns_adapter_satisfies_provider_protocol(self) -> None:
-        """DnsAdapter instance must satisfy the Provider @runtime_checkable protocol."""
-        adapter = _make_adapter()
-        assert isinstance(adapter, Provider), (
-            "DnsAdapter must satisfy Provider protocol via @runtime_checkable"
-        )
-
-
-# ---------------------------------------------------------------------------
-# Unsupported IOC type
+# Unsupported IOC type — DNS-specific behavior
 # ---------------------------------------------------------------------------
 
 
 class TestUnsupportedType:
-
-    def test_ipv4_returns_enrichment_error(self) -> None:
-        """IPV4 IOC -> EnrichmentError (DnsAdapter only supports DOMAIN)."""
-        result = _make_adapter().lookup(IPV4_IOC)
-
-        assert isinstance(result, EnrichmentError)
-        assert result.provider == "DNS Records"
-        assert "Unsupported" in result.error or "unsupported" in result.error.lower()
 
     def test_ipv4_does_not_call_dns(self) -> None:
         """IPV4 IOC -> no DNS resolution attempted."""

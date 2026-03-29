@@ -9,8 +9,7 @@
  */
 
 import type { EnrichmentItem, EnrichmentStatus } from "../types/api";
-import type { VerdictKey } from "../types/ioc";
-import { verdictSeverityIndex, getProviderCounts } from "../types/ioc";
+import { getProviderCounts } from "../types/ioc";
 import { attr } from "../utils/dom";
 import {
   findCardForIoc,
@@ -18,13 +17,13 @@ import {
   updateDashboardCounts,
   sortCardsBySeverity,
 } from "./cards";
-import { exportJSON, exportCSV, copyAllIOCs } from "./export";
 import type { VerdictEntry } from "./verdict-compute";
 import { computeWorstVerdict, findWorstEntry } from "./verdict-compute";
 import { CONTEXT_PROVIDERS, createContextRow, createDetailRow,
-         updateSummaryRow, formatDate,
+         updateSummaryRow,
          injectSectionHeadersAndNoDataSummary,
          updateContextLine } from "./row-factory";
+import { computeResultDisplay, injectDetailLink, sortDetailRows as sharedSortDetailRows, initExportButton as sharedInitExportButton } from "./shared-rendering";
 
 // ---- Module-private state ----
 
@@ -43,6 +42,7 @@ const allResults: EnrichmentItem[] = [];
  * Sort all .provider-detail-row elements in a container by severity descending.
  * malicious (index 4) first, error (index 0) last.
  * Debounced at 100ms per IOC to avoid thrashing during batch result delivery.
+ * Delegates to sharedSortDetailRows for the synchronous core sort logic.
  */
 function sortDetailRows(detailsContainer: HTMLElement, iocValue: string): void {
   const existing = sortTimers.get(iocValue);
@@ -51,19 +51,7 @@ function sortDetailRows(detailsContainer: HTMLElement, iocValue: string): void {
   }
   const timer = setTimeout(() => {
     sortTimers.delete(iocValue);
-    const rows = Array.from(
-      detailsContainer.querySelectorAll<HTMLElement>(".provider-detail-row")
-    );
-    rows.sort((a, b) => {
-      const aVerdict = a.getAttribute("data-verdict") as VerdictKey | null;
-      const bVerdict = b.getAttribute("data-verdict") as VerdictKey | null;
-      const aIdx = aVerdict ? verdictSeverityIndex(aVerdict) : -1;
-      const bIdx = bVerdict ? verdictSeverityIndex(bVerdict) : -1;
-      return bIdx - aIdx; // descending: malicious first
-    });
-    for (const row of rows) {
-      detailsContainer.appendChild(row);
-    }
+    sharedSortDetailRows(detailsContainer);
   }, 100);
   sortTimers.set(iocValue, timer);
 }
@@ -180,46 +168,6 @@ function showEnrichWarning(message: string): void {
 }
 
 /**
- * Inject a "View full detail →" link footer into the .enrichment-details panel
- * for a given enrichment slot. Reads data-ioc-type and data-ioc-value from the
- * ancestor .ioc-card and constructs href as /detail/<type>/<encoded-value>.
- *
- * Idempotent: no-op if .detail-link-footer already exists in the panel.
- * All DOM construction uses createElement + textContent + setAttribute (SEC-08).
- *
- * Observability:
- *   document.querySelectorAll('.detail-link').length — count of injected links
- *   document.querySelectorAll('.detail-link-footer').length — same count
- *   Failure: link absent after enrichment → injectDetailLink() not called, or
- *     .ioc-card ancestor missing data-ioc-type / data-ioc-value attributes.
- */
-function injectDetailLink(slot: HTMLElement): void {
-  const details = slot.querySelector<HTMLElement>(".enrichment-details");
-  if (!details) return;
-
-  // Idempotency guard — only inject once per panel
-  if (details.querySelector(".detail-link-footer")) return;
-
-  const card = slot.closest<HTMLElement>(".ioc-card");
-  if (!card) return;
-
-  const iocType = card.getAttribute("data-ioc-type") ?? "";
-  const iocValue = card.getAttribute("data-ioc-value") ?? "";
-  if (!iocType || !iocValue) return;
-
-  const footer = document.createElement("div");
-  footer.className = "detail-link-footer";
-
-  const anchor = document.createElement("a");
-  anchor.className = "detail-link";
-  anchor.textContent = "View full detail \u2192";
-  anchor.setAttribute("href", "/ioc/" + iocType + "/" + encodeURIComponent(iocValue));
-
-  footer.appendChild(anchor);
-  details.appendChild(footer);
-}
-
-/**
  * Mark enrichment complete: add .complete class to progress container,
  * update text, and enable the export button.
  * Source: main.js markEnrichmentComplete() (lines 590-603).
@@ -314,48 +262,7 @@ function renderEnrichmentResult(
   const receivedCount = iocResultCounts[result.ioc_value] ?? 1;
 
   // Determine verdict and statText
-  let verdict: VerdictKey;
-  let statText: string;
-  let summaryText: string;
-  let detectionCount = 0;
-  let totalEngines = 0;
-
-  if (result.type === "result") {
-    verdict = result.verdict;
-    detectionCount = result.detection_count;
-    totalEngines = result.total_engines;
-
-    if (verdict === "malicious") {
-      statText = result.detection_count + "/" + result.total_engines + " engines";
-    } else if (verdict === "suspicious") {
-      statText =
-        result.total_engines > 1
-          ? result.detection_count + "/" + result.total_engines + " engines"
-          : "Suspicious";
-    } else if (verdict === "clean") {
-      statText = "Clean, " + result.total_engines + " engines";
-    } else if (verdict === "known_good") {
-      statText = "NSRL match";
-    } else {
-      // no_data
-      statText = "Not in database";
-    }
-
-    const scanDateStr = formatDate(result.scan_date);
-    summaryText =
-      result.provider +
-      ": " +
-      verdict +
-      " (" +
-      statText +
-      (scanDateStr ? ", scanned " + scanDateStr : "") +
-      ")";
-  } else {
-    // Error result
-    verdict = "error";
-    statText = result.error;
-    summaryText = result.provider + ": error, " + result.error;
-  }
+  const { verdict, statText, summaryText, detectionCount, totalEngines } = computeResultDisplay(result);
 
   // Push to iocVerdicts with extended fields
   const entries = iocVerdicts[result.ioc_value] ?? [];
@@ -435,45 +342,6 @@ export function wireExpandToggles(): void {
         handleToggle(target);
       }
     }
-  });
-}
-
-// ---- Private init helpers ----
-
-/**
- * Wire the export dropdown with JSON, CSV, and copy-all-IOCs options.
- */
-function initExportButton(): void {
-  const exportBtn = document.getElementById("export-btn");
-  const dropdown = document.getElementById("export-dropdown");
-  if (!exportBtn || !dropdown) return;
-
-  exportBtn.addEventListener("click", function () {
-    const isVisible = dropdown.style.display !== "none";
-    dropdown.style.display = isVisible ? "none" : "";
-  });
-
-  // Close dropdown when clicking outside
-  document.addEventListener("click", function (e) {
-    const target = e.target as HTMLElement;
-    if (!target.closest(".export-group")) {
-      dropdown.style.display = "none";
-    }
-  });
-
-  const buttons = dropdown.querySelectorAll<HTMLElement>("[data-export]");
-  buttons.forEach(function (btn) {
-    btn.addEventListener("click", function () {
-      const action = btn.getAttribute("data-export");
-      if (action === "json") {
-        exportJSON(allResults);
-      } else if (action === "csv") {
-        exportCSV(allResults);
-      } else if (action === "iocs") {
-        copyAllIOCs(btn);
-      }
-      dropdown.style.display = "none";
-    });
   });
 }
 
@@ -578,5 +446,5 @@ export function init(): void {
   }, 750);
 
   // Wire the export button
-  initExportButton();
+  sharedInitExportButton(allResults);
 }

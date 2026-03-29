@@ -1,7 +1,7 @@
 """Shodan InternetDB API adapter.
 
-Implements IP enrichment against the Shodan InternetDB API. Delegates all HTTP
-safety controls to safe_request() in http_safety.py.
+Subclasses BaseHTTPAdapter for IP enrichment against the Shodan InternetDB API.
+All HTTP safety controls (SSRF allowlist, size cap, timeouts) are inherited.
 
 InternetDB API behavior:
   - GET https://internetdb.shodan.io/{ip}  (path param, not query string)
@@ -22,10 +22,8 @@ from __future__ import annotations
 
 import logging
 
-import requests
-
-from app.enrichment.http_safety import safe_request
-from app.enrichment.models import EnrichmentError, EnrichmentResult
+from app.enrichment.adapters.base import BaseHTTPAdapter
+from app.enrichment.models import EnrichmentResult
 from app.pipeline.models import IOC, IOCType
 
 logger = logging.getLogger(__name__)
@@ -34,7 +32,7 @@ SHODAN_INTERNETDB_BASE = "https://internetdb.shodan.io"
 _MALICIOUS_TAGS = frozenset({"malware", "compromised", "doublepulsar"})
 
 
-class ShodanAdapter:
+class ShodanAdapter(BaseHTTPAdapter):
     """Adapter for the Shodan InternetDB API.
 
     Supports IP IOC lookups (IPv4 and IPv6) using the zero-auth Shodan
@@ -47,8 +45,8 @@ class ShodanAdapter:
 
     No API key required — InternetDB is fully public.
 
-    Thread safety: uses a persistent requests.Session (self._session) created in __init__.
-    The session is reused across lookup() calls for TCP connection pooling.
+    Thread safety: a persistent requests.Session is created by BaseHTTPAdapter.__init__
+    and reused across lookup() calls for TCP connection pooling.
 
     Args:
         allowed_hosts: SSRF allowlist -- only these hostnames may be contacted.
@@ -58,44 +56,10 @@ class ShodanAdapter:
     name = "Shodan InternetDB"
     requires_api_key = False
 
-    def __init__(self, allowed_hosts: list[str]) -> None:
-        self._allowed_hosts = allowed_hosts
-        self._session = requests.Session()
+    def _build_url(self, ioc: IOC) -> str:
+        return f"{SHODAN_INTERNETDB_BASE}/{ioc.value}"
 
-    def is_configured(self) -> bool:
-        """Always returns True -- Shodan InternetDB requires no API key."""
-        return True
-
-    def lookup(self, ioc: IOC) -> EnrichmentResult | EnrichmentError:
-        """Enrich a single IP IOC using the Shodan InternetDB API.
-
-        Returns EnrichmentError immediately for non-IP types.
-        Calls safe_request() and parses the response.
-
-        Response semantics:
-          - 200 + malicious tags -> verdict=malicious
-          - 200 + vulns list     -> verdict=suspicious
-          - 200 + ports only     -> verdict=no_data
-          - 404                  -> verdict=no_data (not an error)
-          - HTTP error / timeout  -> EnrichmentError
-
-        IMPORTANT: 404 is checked BEFORE resp.raise_for_status() to prevent
-        treating "no data" responses as HTTP errors.
-
-        Args:
-            ioc: The IOC to look up. Must be IPv4 or IPv6.
-
-        Returns:
-            EnrichmentResult on success (including 404 no_data).
-            EnrichmentError on unsupported type, SSRF block, or network failure.
-        """
-        if ioc.type not in self.supported_types:
-            return EnrichmentError(
-                ioc=ioc, provider=self.name, error="Unsupported type"
-            )
-
-        url = f"{SHODAN_INTERNETDB_BASE}/{ioc.value}"
-
+    def _make_pre_raise_hook(self, ioc: IOC):
         def _404_hook(resp):
             if resp.status_code == 404:
                 return EnrichmentResult(
@@ -108,14 +72,10 @@ class ShodanAdapter:
                     raw_stats={},
                 )
             return None
+        return _404_hook
 
-        result = safe_request(
-            self._session, url, self._allowed_hosts, ioc, self.name,
-            pre_raise_hook=_404_hook,
-        )
-        if not isinstance(result, dict):
-            return result
-        return _parse_response(ioc, result, self.name)
+    def _parse_response(self, ioc: IOC, body: dict) -> EnrichmentResult:
+        return _parse_response(ioc, body, self.name)
 
 
 def _parse_response(ioc: IOC, body: dict, provider_name: str) -> EnrichmentResult:

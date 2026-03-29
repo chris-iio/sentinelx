@@ -1,20 +1,8 @@
-"""Tests for ThreatMinerAdapter — passive DNS history and related samples via ThreatMiner API v2.
+"""Tests for ThreatMinerAdapter — verdict logic, multi-call routing, and response parsing.
 
-Tests all IOC type routing (IP, domain, hash), passive DNS extraction, related samples extraction,
-no_data handling (body status_code "404"), HTTP error handling, and all HTTP safety controls.
+Contract tests (protocol, error handling, safety controls) are in test_adapter_contract.py.
 
 All HTTP calls are mocked using unittest.mock.patch -- no real API calls.
-
-ThreatMiner API behavior:
-  - GET https://api.threatminer.org/v2/host.php?q={ip}&rt=2 -> IP passive DNS (domains that resolved to IP)
-  - GET https://api.threatminer.org/v2/domain.php?q={domain}&rt=2 -> Domain passive DNS (IPs domain resolved to)
-  - GET https://api.threatminer.org/v2/domain.php?q={domain}&rt=4 -> Domain related samples
-  - GET https://api.threatminer.org/v2/sample.php?q={hash}&rt=4 -> Hash related samples
-  - HTTP 200 + body status_code "200": Results found
-  - HTTP 200 + body status_code "404": No results -> verdict=no_data (NOT an HTTP error)
-  - HTTP 429: Rate limited -> EnrichmentError("HTTP 429")
-  - HTTP 403: Blocked -> EnrichmentError("HTTP 403")
-  - Timeout: -> EnrichmentError("Timeout")
 """
 from __future__ import annotations
 
@@ -27,18 +15,14 @@ from app.enrichment.adapters.threatminer import ThreatMinerAdapter
 from tests.helpers import (
     make_mock_response,
     mock_adapter_session,
-    make_cve_ioc,
     make_domain_ioc,
     make_ipv4_ioc,
     make_ipv6_ioc,
     make_md5_ioc,
     make_sha1_ioc,
     make_sha256_ioc,
-    make_url_ioc,
 )
 from app.enrichment.models import EnrichmentError, EnrichmentResult
-from app.enrichment.provider import Provider
-from app.pipeline.models import IOCType
 
 
 ALLOWED_HOSTS = ["api.threatminer.org"]
@@ -107,96 +91,6 @@ def _make_adapter(allowed_hosts: list[str] | None = None) -> ThreatMinerAdapter:
 def _mock_get_returning(response_body: dict) -> MagicMock:
     """Return a requests.get mock that returns the given response body via iter_content."""
     return make_mock_response(200, response_body)
-
-
-# ===================================================================
-# TestProviderProtocol
-# ===================================================================
-
-class TestProviderProtocol:
-
-    def test_is_provider(self) -> None:
-        """ThreatMinerAdapter instance must satisfy the Provider protocol (@runtime_checkable)."""
-        adapter = ThreatMinerAdapter(allowed_hosts=[])
-        assert isinstance(adapter, Provider), (
-            "ThreatMinerAdapter must satisfy the Provider protocol via @runtime_checkable"
-        )
-
-    def test_name_is_threatminer(self) -> None:
-        """ThreatMinerAdapter.name must equal 'ThreatMiner'."""
-        assert ThreatMinerAdapter.name == "ThreatMiner"
-
-    def test_requires_api_key_false(self) -> None:
-        """ThreatMinerAdapter.requires_api_key must be False (zero-auth provider)."""
-        assert ThreatMinerAdapter.requires_api_key is False
-
-    def test_is_configured_always_true(self) -> None:
-        """ThreatMinerAdapter.is_configured() must always return True (no key required)."""
-        adapter = ThreatMinerAdapter(allowed_hosts=[])
-        assert adapter.is_configured() is True
-
-    def test_supported_types_is_frozenset(self) -> None:
-        """supported_types must be a frozenset."""
-        assert isinstance(ThreatMinerAdapter.supported_types, frozenset)
-
-    def test_supported_types_contains_ipv4(self) -> None:
-        """IOCType.IPV4 must be in supported_types."""
-        assert IOCType.IPV4 in ThreatMinerAdapter.supported_types
-
-    def test_supported_types_contains_ipv6(self) -> None:
-        """IOCType.IPV6 must be in supported_types."""
-        assert IOCType.IPV6 in ThreatMinerAdapter.supported_types
-
-    def test_supported_types_contains_domain(self) -> None:
-        """IOCType.DOMAIN must be in supported_types."""
-        assert IOCType.DOMAIN in ThreatMinerAdapter.supported_types
-
-    def test_supported_types_contains_md5(self) -> None:
-        """IOCType.MD5 must be in supported_types."""
-        assert IOCType.MD5 in ThreatMinerAdapter.supported_types
-
-    def test_supported_types_contains_sha1(self) -> None:
-        """IOCType.SHA1 must be in supported_types."""
-        assert IOCType.SHA1 in ThreatMinerAdapter.supported_types
-
-    def test_supported_types_contains_sha256(self) -> None:
-        """IOCType.SHA256 must be in supported_types."""
-        assert IOCType.SHA256 in ThreatMinerAdapter.supported_types
-
-    def test_supported_types_excludes_url(self) -> None:
-        """IOCType.URL must NOT be in supported_types."""
-        assert IOCType.URL not in ThreatMinerAdapter.supported_types
-
-    def test_supported_types_excludes_cve(self) -> None:
-        """IOCType.CVE must NOT be in supported_types."""
-        assert IOCType.CVE not in ThreatMinerAdapter.supported_types
-
-    def test_supported_types_has_six_types(self) -> None:
-        """supported_types has exactly 6 entries: IPV4, IPV6, DOMAIN, MD5, SHA1, SHA256."""
-        assert len(ThreatMinerAdapter.supported_types) == 6
-
-    def test_unsupported_type_returns_error(self) -> None:
-        """URL IOC -> EnrichmentError('Unsupported type') without any network call."""
-        ioc = make_url_ioc("http://example.com")
-
-        adapter = _make_adapter()
-        mock_adapter_session(adapter, side_effect=AssertionError("Should not reach network"))
-        result = adapter.lookup(ioc)
-
-        assert isinstance(result, EnrichmentError)
-        assert result.provider == "ThreatMiner"
-        assert "Unsupported" in result.error or "unsupported" in result.error.lower()
-
-    def test_unsupported_type_cve_returns_error(self) -> None:
-        """CVE IOC -> EnrichmentError without any network call."""
-        ioc = make_cve_ioc("CVE-2021-44228")
-
-        adapter = _make_adapter()
-        mock_adapter_session(adapter, side_effect=AssertionError("Should not reach network"))
-        result = adapter.lookup(ioc)
-
-        assert isinstance(result, EnrichmentError)
-        assert "Unsupported" in result.error or "unsupported" in result.error.lower()
 
 
 # ===================================================================
@@ -776,18 +670,6 @@ class TestHTTPErrors:
         assert isinstance(result, EnrichmentError)
         assert "403" in result.error
 
-    def test_timeout_ip_returns_enrichment_error(self) -> None:
-        """Network timeout for IP lookup -> EnrichmentError('Timeout')."""
-        ioc = make_ipv4_ioc()
-
-        adapter = _make_adapter()
-        mock_adapter_session(adapter, side_effect=requests.exceptions.Timeout("timed out"))
-        result = adapter.lookup(ioc)
-
-        assert isinstance(result, EnrichmentError)
-        assert result.provider == "ThreatMiner"
-        assert "Timeout" in result.error or "timed out" in result.error.lower()
-
     def test_unexpected_exception_ip_returns_enrichment_error(self) -> None:
         """Unexpected exception for IP lookup -> EnrichmentError('Unexpected error')."""
         ioc = make_ipv4_ioc()
@@ -819,120 +701,3 @@ class TestHTTPErrors:
             f"After 429 on first domain call, must NOT make second call. Got {adapter._session.get.call_count} calls."
         )
 
-    def test_ssrf_validation_blocks_disallowed_host(self) -> None:
-        """allowed_hosts=[] -> EnrichmentError from SSRF check before network call."""
-        ioc = make_ipv4_ioc()
-        adapter = ThreatMinerAdapter(allowed_hosts=[])
-
-        mock_adapter_session(adapter, side_effect=AssertionError("Should not reach network"))
-        result = adapter.lookup(ioc)
-
-        assert isinstance(result, EnrichmentError), (
-            "Expected EnrichmentError when host not in allowed_hosts (SSRF check)"
-        )
-        assert (
-            "SSRF" in result.error
-            or "allowed" in result.error.lower()
-            or "allowlist" in result.error.lower()
-        )
-
-    def test_http_500_returns_enrichment_error(self) -> None:
-        """HTTP 500 for IP lookup -> EnrichmentError with 'HTTP 500' in error."""
-        ioc = make_ipv4_ioc()
-        mock_resp = MagicMock()
-        mock_resp.status_code = 500
-        http_err = requests.exceptions.HTTPError(response=mock_resp)
-        mock_resp.raise_for_status = MagicMock(side_effect=http_err)
-
-        adapter = _make_adapter()
-        mock_adapter_session(adapter, response=mock_resp)
-        result = adapter.lookup(ioc)
-
-        assert isinstance(result, EnrichmentError)
-        assert "500" in result.error
-
-
-# ===================================================================
-# TestHTTPSafetyControls
-# ===================================================================
-
-class TestHTTPSafetyControls:
-
-    def test_uses_timeout(self) -> None:
-        """requests.get must be called with timeout=TIMEOUT (SEC-04)."""
-        from app.enrichment.http_safety import TIMEOUT
-        ioc = make_ipv4_ioc()
-
-        adapter = _make_adapter()
-        mock_adapter_session(adapter, response=_mock_get_returning(IP_PASSIVE_DNS_RESPONSE))
-        adapter.lookup(ioc)
-
-        call_kwargs = adapter._session.get.call_args.kwargs
-        assert call_kwargs.get("timeout") == TIMEOUT, (
-            f"Expected timeout={TIMEOUT!r} (SEC-04), got {call_kwargs.get('timeout')!r}"
-        )
-
-    def test_uses_allow_redirects_false(self) -> None:
-        """requests.get must be called with allow_redirects=False (SEC-06)."""
-        ioc = make_ipv4_ioc()
-
-        adapter = _make_adapter()
-        mock_adapter_session(adapter, response=_mock_get_returning(IP_PASSIVE_DNS_RESPONSE))
-        adapter.lookup(ioc)
-
-        call_kwargs = adapter._session.get.call_args.kwargs
-        assert call_kwargs.get("allow_redirects") is False, (
-            "allow_redirects must be False (SEC-06)"
-        )
-
-    def test_uses_stream_true(self) -> None:
-        """requests.get must be called with stream=True (SEC-05)."""
-        ioc = make_ipv4_ioc()
-
-        adapter = _make_adapter()
-        mock_adapter_session(adapter, response=_mock_get_returning(IP_PASSIVE_DNS_RESPONSE))
-        adapter.lookup(ioc)
-
-        call_kwargs = adapter._session.get.call_args.kwargs
-        assert call_kwargs.get("stream") is True, "stream must be True (SEC-05)"
-
-    def test_validate_endpoint_called_for_ip(self) -> None:
-        """validate_endpoint must be called before making the HTTP request for IP lookup (SEC-16)."""
-        ioc = make_ipv4_ioc()
-
-        with patch("app.enrichment.http_safety.validate_endpoint") as mock_validate:
-            adapter = _make_adapter()
-            mock_adapter_session(adapter, response=_mock_get_returning(IP_PASSIVE_DNS_RESPONSE))
-            adapter.lookup(ioc)
-
-        mock_validate.assert_called_once()
-        called_url = mock_validate.call_args.args[0]
-        assert "threatminer" in called_url
-
-    def test_validate_endpoint_called_for_domain_both_calls(self) -> None:
-        """validate_endpoint must be called for BOTH domain API calls (SEC-16)."""
-        ioc = make_domain_ioc()
-
-        with patch("app.enrichment.http_safety.validate_endpoint") as mock_validate:
-            adapter = _make_adapter()
-            mock_adapter_session(adapter, side_effect=[
-                make_mock_response(200, DOMAIN_PASSIVE_DNS_RESPONSE),
-                make_mock_response(200, DOMAIN_SAMPLES_RESPONSE),
-            ])
-            adapter.lookup(ioc)
-
-        assert mock_validate.call_count == 2, (
-            f"validate_endpoint must be called twice for domain lookup (once per API call). Got {mock_validate.call_count}"
-        )
-
-    def test_url_contains_query_params(self) -> None:
-        """requests.get URL must contain q= and rt= query parameters."""
-        ioc = make_ipv4_ioc()
-
-        adapter = _make_adapter()
-        mock_adapter_session(adapter, response=_mock_get_returning(IP_PASSIVE_DNS_RESPONSE))
-        adapter.lookup(ioc)
-
-        called_url = adapter._session.get.call_args.args[0]
-        assert "q=1.2.3.4" in called_url, "URL must contain q= with the IOC value"
-        assert "rt=2" in called_url, "URL must contain rt= parameter"

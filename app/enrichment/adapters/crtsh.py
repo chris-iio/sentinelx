@@ -20,8 +20,7 @@ from __future__ import annotations
 
 import logging
 
-import requests
-
+from app.enrichment.adapters.base import BaseHTTPAdapter
 from app.enrichment.http_safety import safe_request
 from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.pipeline.models import IOC, IOCType
@@ -34,49 +33,39 @@ CRTSH_BASE = "https://crt.sh"
 _SUBDOMAIN_CAP = 50
 
 
-class CrtShAdapter:
+class CrtShAdapter(BaseHTTPAdapter):
     """Adapter for the crt.sh Certificate Transparency search API.
 
-    Supports domain IOC lookups using the zero-auth crt.sh public endpoint.
-    Returns CT history data: certificate count, first/last issuance dates, and
-    a deduplicated list of subdomains observed in Subject Alternative Names.
+    Extends BaseHTTPAdapter for domain IOC lookups using the zero-auth crt.sh
+    public endpoint. Returns CT history data: certificate count, first/last
+    issuance dates, and a deduplicated list of subdomains observed in Subject
+    Alternative Names.
 
     All responses produce verdict=no_data — CT history is informational context
     for analysts, not a threat detection signal.
 
     No API key required — crt.sh is fully public.
 
-    Thread safety: uses a persistent requests.Session (self._session) created in __init__.
-    The session is reused across lookup() calls for TCP connection pooling.
+    Overrides lookup() because safe_request() returns a JSON list (not dict)
+    for crt.sh, and the base class template checks ``isinstance(result, dict)``.
+
+    Thread safety: a persistent requests.Session is created by BaseHTTPAdapter.__init__
+    and reused across lookup() calls for TCP connection pooling.
 
     Args:
         allowed_hosts: SSRF allowlist -- only these hostnames may be contacted.
-                       Must include "crt.sh" for production use.
     """
 
     supported_types: frozenset[IOCType] = frozenset({IOCType.DOMAIN})
     name = "Cert History"
     requires_api_key = False
 
-    def __init__(self, allowed_hosts: list[str]) -> None:
-        self._allowed_hosts = allowed_hosts
-        self._session = requests.Session()
-
-    def is_configured(self) -> bool:
-        """Always returns True -- crt.sh requires no API key."""
-        return True
-
     def lookup(self, ioc: IOC) -> EnrichmentResult | EnrichmentError:
         """Enrich a single domain IOC via the crt.sh CT search API.
 
-        Returns EnrichmentError immediately for non-domain types.
-        Calls safe_request() and parses the certificate records.
-
-        Response semantics:
-          - Non-empty list: cert_count, date range, subdomains extracted
-          - Empty list []:  verdict=no_data, raw_stats={}
-          - HTTP error:     EnrichmentError("HTTP {code}")
-          - Timeout:        EnrichmentError("Timeout")
+        Overrides the base class template because safe_request() returns a
+        JSON list for crt.sh, not a dict. Uses isinstance(result, EnrichmentError)
+        instead of isinstance(result, dict) to detect errors.
 
         Args:
             ioc: The IOC to look up. Must be DOMAIN type.
@@ -87,15 +76,23 @@ class CrtShAdapter:
         """
         if ioc.type not in self.supported_types:
             return EnrichmentError(
-                ioc=ioc, provider=self.name, error="Unsupported type"
+                ioc=ioc, provider=self.name, error="Unsupported type",
             )
 
-        url = f"{CRTSH_BASE}/?q={ioc.value}&output=json"
-
-        result = safe_request(self._session, url, self._allowed_hosts, ioc, self.name)
+        url = self._build_url(ioc)
+        result = safe_request(
+            self._session, url, self._allowed_hosts, ioc, self.name,
+        )
         if isinstance(result, EnrichmentError):
             return result
         return _parse_response(ioc, result, self.name)
+
+    def _build_url(self, ioc: IOC) -> str:
+        return f"{CRTSH_BASE}/?q={ioc.value}&output=json"
+
+    def _parse_response(self, ioc: IOC, body: dict) -> EnrichmentResult:
+        # Not called by our lookup() override, but required by the abstract interface.
+        return _parse_response(ioc, body, self.name)  # type: ignore[arg-type]
 
 
 def _parse_response(ioc: IOC, body: list, provider_name: str) -> EnrichmentResult:

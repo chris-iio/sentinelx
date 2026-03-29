@@ -20,7 +20,6 @@ import dns.exception
 import dns.resolver
 
 from app.enrichment.models import EnrichmentError, EnrichmentResult
-from app.enrichment.provider import Provider
 from app.pipeline.models import IOC, IOCType
 
 
@@ -57,71 +56,17 @@ def _make_txt_answer(txt_string: str) -> MagicMock:
 
 
 # ---------------------------------------------------------------------------
-# Class metadata tests
+# Unsupported IOC type — DNS-specific behavior
 # ---------------------------------------------------------------------------
 
 
-class TestClassMetadata:
+class TestUnsupportedType:
 
-    def test_name_is_asn_intel(self) -> None:
-        """CymruASNAdapter.name must be 'ASN Intel'."""
-        from app.enrichment.adapters.asn_cymru import CymruASNAdapter
-        assert CymruASNAdapter.name == "ASN Intel"
-
-    def test_supported_types_is_frozenset(self) -> None:
-        """supported_types must be a frozenset."""
-        from app.enrichment.adapters.asn_cymru import CymruASNAdapter
-        assert isinstance(CymruASNAdapter.supported_types, frozenset)
-
-    def test_supported_types_contains_ipv4(self) -> None:
-        """IOCType.IPV4 must be in CymruASNAdapter.supported_types."""
-        from app.enrichment.adapters.asn_cymru import CymruASNAdapter
-        assert IOCType.IPV4 in CymruASNAdapter.supported_types
-
-    def test_supported_types_contains_ipv6(self) -> None:
-        """IOCType.IPV6 must be in CymruASNAdapter.supported_types."""
-        from app.enrichment.adapters.asn_cymru import CymruASNAdapter
-        assert IOCType.IPV6 in CymruASNAdapter.supported_types
-
-    def test_supported_types_is_ipv4_and_ipv6_only(self) -> None:
-        """supported_types must be exactly {IPV4, IPV6}."""
-        from app.enrichment.adapters.asn_cymru import CymruASNAdapter
-        assert CymruASNAdapter.supported_types == frozenset({IOCType.IPV4, IOCType.IPV6})
-
-    def test_requires_api_key_false(self) -> None:
-        """CymruASNAdapter.requires_api_key must be False."""
-        from app.enrichment.adapters.asn_cymru import CymruASNAdapter
-        assert CymruASNAdapter.requires_api_key is False
-
-    def test_is_configured_returns_true(self) -> None:
-        """is_configured() must always return True — no API key needed."""
-        adapter = _make_adapter()
-        assert adapter.is_configured() is True
-
-    def test_is_configured_returns_true_with_empty_hosts(self) -> None:
-        """is_configured() returns True even when allowed_hosts is empty."""
-        adapter = _make_adapter(allowed_hosts=[])
-        assert adapter.is_configured() is True
-
-    def test_is_configured_returns_true_with_populated_hosts(self) -> None:
-        """is_configured() returns True regardless of allowed_hosts content."""
-        adapter = _make_adapter(allowed_hosts=["www.virustotal.com"])
-        assert adapter.is_configured() is True
-
-
-# ---------------------------------------------------------------------------
-# Protocol conformance
-# ---------------------------------------------------------------------------
-
-
-class TestProtocolConformance:
-
-    def test_cymru_adapter_satisfies_provider_protocol(self) -> None:
-        """CymruASNAdapter instance must satisfy the Provider @runtime_checkable protocol."""
-        adapter = _make_adapter()
-        assert isinstance(adapter, Provider), (
-            "CymruASNAdapter must satisfy Provider protocol via @runtime_checkable"
-        )
+    def test_domain_ioc_does_not_call_dns(self) -> None:
+        """DOMAIN IOC -> no DNS resolution attempted."""
+        with patch("dns.resolver.Resolver") as mock_cls:
+            _make_adapter().lookup(DOMAIN_IOC)
+        mock_cls.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -581,34 +526,6 @@ class TestUnexpectedError:
         assert isinstance(result, EnrichmentError)
         assert result.provider == "ASN Intel"
 
-
-# ---------------------------------------------------------------------------
-# Unsupported IOC type
-# ---------------------------------------------------------------------------
-
-
-class TestUnsupportedType:
-
-    def test_domain_ioc_returns_enrichment_error(self) -> None:
-        """DOMAIN IOC -> EnrichmentError (CymruASNAdapter only supports IPV4/IPV6)."""
-        result = _make_adapter().lookup(DOMAIN_IOC)
-
-        assert isinstance(result, EnrichmentError), (
-            f"DOMAIN IOC must return EnrichmentError, got {type(result).__name__}"
-        )
-
-    def test_domain_ioc_error_provider_name(self) -> None:
-        """EnrichmentError from unsupported type must have provider='ASN Intel'."""
-        result = _make_adapter().lookup(DOMAIN_IOC)
-
-        assert isinstance(result, EnrichmentError)
-        assert result.provider == "ASN Intel"
-
-    def test_domain_ioc_does_not_call_dns(self) -> None:
-        """DOMAIN IOC -> no DNS resolution attempted."""
-        with patch("dns.resolver.Resolver") as mock_cls:
-            _make_adapter().lookup(DOMAIN_IOC)
-        mock_cls.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

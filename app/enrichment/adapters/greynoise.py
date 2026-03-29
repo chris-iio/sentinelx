@@ -23,9 +23,7 @@ from __future__ import annotations
 
 import logging
 
-import requests
-
-from app.enrichment.http_safety import safe_request
+from app.enrichment.adapters.base import BaseHTTPAdapter
 from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.pipeline.models import IOC, IOCType
 
@@ -34,11 +32,14 @@ logger = logging.getLogger(__name__)
 GREYNOISE_BASE = "https://api.greynoise.io/v3/community"
 
 
-class GreyNoiseAdapter:
+class GreyNoiseAdapter(BaseHTTPAdapter):
     """Adapter for the GreyNoise Community API.
 
-    Supports IP IOC lookups (IPv4 and IPv6) using the GreyNoise Community
-    endpoint. Verdict is derived from the riot/noise/classification fields:
+    Extends BaseHTTPAdapter for IP enrichment against the GreyNoise Community
+    endpoint. All HTTP safety controls (SSRF allowlist, size cap, timeouts) are
+    inherited.
+
+    Verdict is derived from the riot/noise/classification fields:
 
     - riot=True (known benign service) -> verdict=clean
     - classification="malicious" -> verdict=malicious
@@ -51,61 +52,27 @@ class GreyNoiseAdapter:
     CRITICAL: Auth header is lowercase 'key' (not 'Key', 'Authorization',
     or 'X-Api-Key').
 
-    Thread safety: uses a persistent requests.Session (self._session) created in __init__.
-    The session is reused across lookup() calls for TCP connection pooling.
+    Thread safety: a persistent requests.Session is created by BaseHTTPAdapter.__init__
+    and reused across lookup() calls for TCP connection pooling.
 
     Args:
-        api_key:       GreyNoise Community API key.
         allowed_hosts: SSRF allowlist -- only these hostnames may be contacted.
+        api_key:       GreyNoise Community API key (keyword-only).
     """
 
     supported_types: frozenset[IOCType] = frozenset({IOCType.IPV4, IOCType.IPV6})
     name = "GreyNoise"
     requires_api_key = True
 
-    def __init__(self, api_key: str, allowed_hosts: list[str]) -> None:
-        self._api_key = api_key
-        self._allowed_hosts = allowed_hosts
-        self._session = requests.Session()
-        self._session.headers.update({
+    def _build_url(self, ioc: IOC) -> str:
+        return f"{GREYNOISE_BASE}/{ioc.value}"
+
+    def _auth_headers(self) -> dict:
+        return {
             "key": self._api_key,  # CRITICAL: lowercase 'key' (GreyNoise convention)
-        })
+        }
 
-    def is_configured(self) -> bool:
-        """Return True when a non-empty API key is set."""
-        return bool(self._api_key)
-
-    def lookup(self, ioc: IOC) -> EnrichmentResult | EnrichmentError:
-        """Enrich a single IP IOC using the GreyNoise Community API.
-
-        Returns EnrichmentError immediately for non-IP types.
-        Calls safe_request() and parses the response.
-
-        Response semantics:
-          - 200 + riot=True           -> verdict=clean
-          - 200 + classification=malicious -> verdict=malicious
-          - 200 + noise=True          -> verdict=suspicious
-          - 200 (no signals)          -> verdict=no_data
-          - 404                       -> verdict=no_data (not in database, not an error)
-          - HTTP error / timeout       -> EnrichmentError
-
-        IMPORTANT: 404 is checked BEFORE resp.raise_for_status() to prevent
-        treating "not in database" responses as HTTP errors.
-
-        Args:
-            ioc: The IOC to look up. Must be IPv4 or IPv6.
-
-        Returns:
-            EnrichmentResult on success (including 404 no_data).
-            EnrichmentError on unsupported type, SSRF block, or network failure.
-        """
-        if ioc.type not in self.supported_types:
-            return EnrichmentError(
-                ioc=ioc, provider=self.name, error="Unsupported type"
-            )
-
-        url = f"{GREYNOISE_BASE}/{ioc.value}"
-
+    def _make_pre_raise_hook(self, ioc: IOC):
         def _404_hook(resp):
             if resp.status_code == 404:
                 return EnrichmentResult(
@@ -118,14 +85,10 @@ class GreyNoiseAdapter:
                     raw_stats={},
                 )
             return None
+        return _404_hook
 
-        result = safe_request(
-            self._session, url, self._allowed_hosts, ioc, self.name,
-            pre_raise_hook=_404_hook,
-        )
-        if not isinstance(result, dict):
-            return result
-        return _parse_response(ioc, result, self.name)
+    def _parse_response(self, ioc: IOC, body: dict) -> EnrichmentResult:
+        return _parse_response(ioc, body, self.name)
 
 
 def _parse_response(ioc: IOC, body: dict, provider_name: str) -> EnrichmentResult:

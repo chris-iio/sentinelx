@@ -1,9 +1,9 @@
 """ThreatMiner passive DNS and related samples adapter.
 
-Implements multi-IOC-type enrichment via the ThreatMiner API v2 (api.threatminer.org).
-Provides passive DNS history (IP/domain lookups) and related malware sample hashes
-(domain/hash lookups) without requiring an API key. Delegates all HTTP safety controls
-to safe_request() in http_safety.py.
+Extends BaseHTTPAdapter for multi-IOC-type enrichment via the ThreatMiner API v2
+(api.threatminer.org). Provides passive DNS history (IP/domain lookups) and related
+malware sample hashes (domain/hash lookups) without requiring an API key. Delegates
+all HTTP safety controls to safe_request() in http_safety.py.
 
 ThreatMiner API v2 behavior:
   - GET https://api.threatminer.org/v2/host.php?q={ip}&rt=2
@@ -28,13 +28,16 @@ Verdict semantics:
 Results caps:
   - _MAX_HOSTS=25: passive_dns list (both IP and domain lookups)
   - _MAX_SAMPLES=20: samples list (both domain and hash lookups)
+
+Overrides lookup() entirely — ThreatMiner's multi-call dispatch (3 sub-methods,
+domain lookups making 2 sequential API calls with merged results) doesn't fit the
+base class single-request template pipeline.
 """
 from __future__ import annotations
 
 import logging
 
-import requests
-
+from app.enrichment.adapters.base import BaseHTTPAdapter
 from app.enrichment.http_safety import safe_request
 from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.pipeline.models import IOC, IOCType
@@ -50,12 +53,12 @@ _MAX_HOSTS = 25
 _MAX_SAMPLES = 20
 
 
-class ThreatMinerAdapter:
+class ThreatMinerAdapter(BaseHTTPAdapter):
     """Adapter for the ThreatMiner API v2.
 
-    Supports IP, domain, and hash IOC lookups via the zero-auth ThreatMiner public API.
-    Returns passive DNS history (domains for IPs, IPs for domains) and related malware
-    sample hashes without requiring an API key.
+    Extends BaseHTTPAdapter for IP, domain, and hash IOC lookups via the zero-auth
+    ThreatMiner public API. Returns passive DNS history (domains for IPs, IPs for
+    domains) and related malware sample hashes without requiring an API key.
 
     IOC type routing:
       - IPV4/IPV6 -> host.php rt=2 (passive DNS: what domains resolved to this IP)
@@ -72,8 +75,11 @@ class ThreatMinerAdapter:
 
     No API key required — ThreatMiner is fully public.
 
-    Thread safety: uses a persistent requests.Session (self._session) created in __init__.
-    The session is reused across lookup() calls for TCP connection pooling.
+    Overrides lookup() entirely — multi-call dispatch with 3 sub-methods and domain
+    lookups making 2 sequential API calls doesn't fit the base class template pipeline.
+
+    Thread safety: a persistent requests.Session is created by BaseHTTPAdapter.__init__
+    and reused across lookup() calls for TCP connection pooling.
 
     Args:
         allowed_hosts: SSRF allowlist -- only these hostnames may be contacted.
@@ -90,14 +96,6 @@ class ThreatMinerAdapter:
     })
     name = "ThreatMiner"
     requires_api_key = False
-
-    def __init__(self, allowed_hosts: list[str]) -> None:
-        self._allowed_hosts = allowed_hosts
-        self._session = requests.Session()
-
-    def is_configured(self) -> bool:
-        """Always returns True -- ThreatMiner requires no API key."""
-        return True
 
     def lookup(self, ioc: IOC) -> EnrichmentResult | EnrichmentError:
         """Enrich a single IOC via the ThreatMiner API v2.
@@ -127,6 +125,24 @@ class ThreatMinerAdapter:
             return self._lookup_domain(ioc)
         else:
             return self._lookup_hash(ioc)
+
+    def _build_url(self, ioc: IOC) -> str:
+        """Not used — lookup() dispatches to sub-methods with their own URLs.
+
+        Implemented to satisfy the BaseHTTPAdapter abstract interface.
+        """
+        raise NotImplementedError(
+            "ThreatMinerAdapter.lookup() uses sub-method dispatch, not _build_url"
+        )
+
+    def _parse_response(self, ioc: IOC, body: dict) -> EnrichmentResult:
+        """Not used — sub-methods parse their own responses.
+
+        Implemented to satisfy the BaseHTTPAdapter abstract interface.
+        """
+        raise NotImplementedError(
+            "ThreatMinerAdapter.lookup() uses sub-method dispatch, not _parse_response"
+        )
 
     def _call(self, ioc: IOC, base_url: str, rt: str) -> dict | EnrichmentError:
         """Make one ThreatMiner API call via safe_request().

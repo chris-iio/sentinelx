@@ -1,39 +1,23 @@
-"""Tests for GreyNoise Community API adapter.
+"""Tests for GreyNoise Community API adapter — verdict logic and response parsing.
 
-Tests IP lookups, verdict logic (clean/malicious/suspicious/no_data), error handling,
-and all HTTP safety controls (timeout, size cap, no redirects, SSRF allowlist).
+Contract tests (protocol, error handling, safety controls) are in test_adapter_contract.py.
 
 Verdict priority (GreyNoise Community endpoint):
-  1. riot == True  -> "clean" (known benign service: Google, Cloudflare, etc.)
+  1. riot == True  -> "clean" (known benign service)
   2. classification == "malicious" -> "malicious"
   3. noise == True AND classification != "malicious" -> "suspicious"
   4. Everything else -> "no_data"
-
-Auth header: lowercase 'key' (NOT 'Key', 'Authorization', or 'X-Api-Key').
-
-404 response: EnrichmentResult(verdict='no_data') — NOT EnrichmentError.
-IP is simply not in GreyNoise's database.
 
 All HTTP calls are mocked using unittest.mock.patch -- no real API calls.
 """
 from __future__ import annotations
 
-from unittest.mock import MagicMock
-
-import requests
-import requests.exceptions
-
-from app.pipeline.models import IOCType
 from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.enrichment.adapters.greynoise import GreyNoiseAdapter
-from app.enrichment.http_safety import MAX_RESPONSE_BYTES
-from app.enrichment.provider import Provider
 from tests.helpers import (
     make_mock_response,
-    make_domain_ioc,
     make_ipv4_ioc,
     make_ipv6_ioc,
-    make_url_ioc,
     mock_adapter_session,
 )
 
@@ -105,55 +89,6 @@ def _make_adapter(
     if allowed_hosts is None:
         allowed_hosts = ALLOWED_HOSTS
     return GreyNoiseAdapter(api_key=api_key, allowed_hosts=allowed_hosts)
-
-
-class TestGreyNoiseProtocol:
-    """Tests that GreyNoiseAdapter satisfies the Provider protocol contract."""
-
-    def test_name(self) -> None:
-        """GreyNoiseAdapter.name must equal 'GreyNoise'."""
-        assert GreyNoiseAdapter.name == "GreyNoise"
-
-    def test_requires_api_key_true(self) -> None:
-        """GreyNoiseAdapter.requires_api_key must be True (paid/free-key provider)."""
-        assert GreyNoiseAdapter.requires_api_key is True
-
-    def test_supported_types_contains_ipv4(self) -> None:
-        """IOCType.IPV4 must be in GreyNoiseAdapter.supported_types."""
-        assert IOCType.IPV4 in GreyNoiseAdapter.supported_types
-
-    def test_supported_types_contains_ipv6(self) -> None:
-        """IOCType.IPV6 must be in GreyNoiseAdapter.supported_types."""
-        assert IOCType.IPV6 in GreyNoiseAdapter.supported_types
-
-    def test_supported_types_excludes_domain(self) -> None:
-        """IOCType.DOMAIN must NOT be in GreyNoiseAdapter.supported_types."""
-        assert IOCType.DOMAIN not in GreyNoiseAdapter.supported_types
-
-    def test_supported_types_excludes_md5(self) -> None:
-        """IOCType.MD5 must NOT be in GreyNoiseAdapter.supported_types."""
-        assert IOCType.MD5 not in GreyNoiseAdapter.supported_types
-
-    def test_supported_types_excludes_url(self) -> None:
-        """IOCType.URL must NOT be in GreyNoiseAdapter.supported_types."""
-        assert IOCType.URL not in GreyNoiseAdapter.supported_types
-
-    def test_is_configured_true_with_key(self) -> None:
-        """is_configured() must return True when api_key is non-empty."""
-        adapter = _make_adapter(api_key="somekey")
-        assert adapter.is_configured() is True
-
-    def test_is_configured_false_with_empty_key(self) -> None:
-        """is_configured() must return False when api_key is empty string."""
-        adapter = _make_adapter(api_key="")
-        assert adapter.is_configured() is False
-
-    def test_isinstance_provider(self) -> None:
-        """GreyNoiseAdapter instance must satisfy the Provider protocol (isinstance check)."""
-        adapter = _make_adapter()
-        assert isinstance(adapter, Provider), (
-            "GreyNoiseAdapter must satisfy the Provider protocol via @runtime_checkable"
-        )
 
 
 class TestGreyNoiseLookup:
@@ -331,96 +266,3 @@ class TestGreyNoiseLookup:
         assert "Authorization" not in headers, "Header must be 'key', not 'Authorization'"
 
 
-class TestGreyNoiseErrors:
-    """Tests for error handling in GreyNoiseAdapter.lookup()."""
-
-    def test_unsupported_type_domain(self) -> None:
-        """DOMAIN IOC -> EnrichmentError, provider='GreyNoise', error contains 'Unsupported'."""
-        ioc = make_domain_ioc("evil.com")
-
-        result = _make_adapter().lookup(ioc)
-
-        assert isinstance(result, EnrichmentError)
-        assert result.provider == "GreyNoise"
-        assert "unsupported" in result.error.lower() or "Unsupported" in result.error
-
-    def test_unsupported_type_url(self) -> None:
-        """URL IOC -> EnrichmentError (URLs not supported by GreyNoise IP endpoint)."""
-        ioc = make_url_ioc("http://evil.com/path")
-
-        result = _make_adapter().lookup(ioc)
-
-        assert isinstance(result, EnrichmentError)
-        assert result.provider == "GreyNoise"
-
-    def test_timeout(self) -> None:
-        """Network timeout -> EnrichmentError with 'Timeout' in error."""
-        ioc = make_ipv4_ioc("8.8.8.8")
-
-        adapter = _make_adapter()
-        mock_adapter_session(adapter, side_effect=requests.exceptions.Timeout("timed out"))
-        result = adapter.lookup(ioc)
-
-        assert isinstance(result, EnrichmentError)
-        assert result.provider == "GreyNoise"
-        assert "timed out" in result.error.lower() or "Timeout" in result.error
-
-    def test_http_500(self) -> None:
-        """HTTP 500 -> EnrichmentError with 'HTTP 500' in error."""
-        ioc = make_ipv4_ioc("8.8.8.8")
-        mock_resp = make_mock_response(500)
-
-        adapter = _make_adapter()
-        mock_adapter_session(adapter, response=mock_resp)
-        result = adapter.lookup(ioc)
-
-        assert isinstance(result, EnrichmentError)
-        assert result.provider == "GreyNoise"
-        assert "HTTP 500" in result.error
-
-    def test_ssrf_validation_blocks_disallowed_host(self) -> None:
-        """Adapter with allowed_hosts=[] -> EnrichmentError before network call."""
-        ioc = make_ipv4_ioc("8.8.8.8")
-        adapter = GreyNoiseAdapter(api_key=TEST_API_KEY, allowed_hosts=[])
-
-        mock_adapter_session(adapter, side_effect=AssertionError("Should not reach network"))
-        result = adapter.lookup(ioc)
-
-        assert isinstance(result, EnrichmentError), (
-            "Expected EnrichmentError when host not in allowed_hosts (SSRF check)"
-        )
-        assert (
-            "SSRF" in result.error
-            or "allowed" in result.error.lower()
-            or "allowlist" in result.error.lower()
-        )
-
-    def test_response_size_limit(self) -> None:
-        """SEC-05: Responses exceeding 1 MB must be rejected with EnrichmentError."""
-        ioc = make_ipv4_ioc("8.8.8.8")
-
-        oversized_chunk = b"x" * (MAX_RESPONSE_BYTES + 1)
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.raise_for_status = MagicMock()
-        mock_resp.iter_content = MagicMock(return_value=iter([oversized_chunk]))
-
-        adapter = _make_adapter()
-        mock_adapter_session(adapter, response=mock_resp)
-        result = adapter.lookup(ioc)
-
-        assert isinstance(result, EnrichmentError), (
-            f"Expected EnrichmentError for oversized response, got {type(result).__name__}"
-        )
-
-
-class TestAllowedHosts:
-    """Integration test: SSRF allowlist must include GreyNoise hostname."""
-
-    def test_config_allows_greynoise(self) -> None:
-        """'api.greynoise.io' must be in Config.ALLOWED_API_HOSTS (SSRF allowlist)."""
-        from app.config import Config
-        assert "api.greynoise.io" in Config.ALLOWED_API_HOSTS, (
-            "api.greynoise.io missing from ALLOWED_API_HOSTS — "
-            "GreyNoiseAdapter will always fail SSRF validation in production"
-        )

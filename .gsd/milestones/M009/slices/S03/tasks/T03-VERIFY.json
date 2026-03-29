@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T03",
+  "unitId": "M009/S03/T03",
+  "timestamp": 1774814406088,
+  "passed": true,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "python3 -m pytest tests/ -x -q --ignore=tests/e2e",
+      "exitCode": 0,
+      "durationMs": 9531,
+      "verdict": "pass"
+    },
+    {
+      "command": "python3 -m pytest tests/test_adapter_contract.py -v --tb=short",
+      "exitCode": 0,
+      "durationMs": 460,
+      "verdict": "pass"
+    }
+  ]
+}

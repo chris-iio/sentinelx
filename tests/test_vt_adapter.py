@@ -1,24 +1,19 @@
-"""Tests for VirusTotal API v3 adapter.
+"""Tests for VirusTotal API v3 adapter — verdict logic, endpoint mapping, and parsing.
 
-Tests endpoint mapping, response parsing, error handling, and all four
-HTTP safety controls (SEC-04, SEC-05, SEC-06, SEC-07/SEC-16).
+Contract tests (protocol, error handling, safety controls) are in test_adapter_contract.py.
 
 All HTTP calls are mocked using unittest.mock.patch — no real API calls.
 """
 from __future__ import annotations
 
 import base64
-from unittest.mock import MagicMock
 
 import requests
 
-from app.pipeline.models import IOCType
 from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.enrichment.adapters.virustotal import VTAdapter
-from app.enrichment.http_safety import MAX_RESPONSE_BYTES
 from tests.helpers import (
     make_mock_response,
-    make_cve_ioc,
     make_domain_ioc,
     make_ipv4_ioc,
     make_md5_ioc,
@@ -192,14 +187,6 @@ class TestLookupSuccess:
 
 
 class TestLookupErrors:
-    def test_lookup_cve_returns_error(self) -> None:
-        ioc = make_cve_ioc("CVE-2024-1234")
-        result = _make_adapter().lookup(ioc)
-
-        assert isinstance(result, EnrichmentError)
-        assert result.provider == "VirusTotal"
-        assert "Unsupported" in result.error or "unsupported" in result.error.lower()
-
     def test_lookup_404_returns_no_data(self) -> None:
         ioc = make_ipv4_ioc("10.0.0.1")
         mock_resp = make_mock_response(404)
@@ -239,19 +226,6 @@ class TestLookupErrors:
 
         assert isinstance(result, EnrichmentError)
         assert "Authentication" in result.error or "auth" in result.error.lower() or "401" in result.error
-
-    def test_timeout_returns_error(self) -> None:
-        ioc = make_ipv4_ioc()
-
-        adapter = _make_adapter()
-        mock_adapter_session(adapter, side_effect=requests.exceptions.Timeout("Connection timed out"))
-
-        result = adapter.lookup(ioc)
-
-        assert isinstance(result, EnrichmentError)
-        assert "Timeout" in result.error or "timed out" in result.error.lower()
-
-
 class TestHTTPSafetyControls:
     """Verify SEC-04 through SEC-07 HTTP safety controls."""
 
@@ -298,40 +272,4 @@ class TestHTTPSafetyControls:
         kwargs = adapter._session.get.call_args[1]
         assert kwargs.get("stream") is True, (
             f"Expected stream=True (SEC-05), got {kwargs.get('stream')!r}"
-        )
-
-    def test_response_size_limit(self) -> None:
-        """SEC-05: Responses exceeding 1 MB must be rejected."""
-        ioc = make_ipv4_ioc()
-
-        # Build a mock that yields >1 MB of data
-        oversized_chunk = b"x" * (MAX_RESPONSE_BYTES + 1)
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.raise_for_status = MagicMock()
-        mock_resp.iter_content = MagicMock(return_value=iter([oversized_chunk]))
-
-        adapter = _make_adapter()
-        mock_adapter_session(adapter, response=mock_resp)
-
-        result = adapter.lookup(ioc)
-
-        # Oversized response must return an EnrichmentError, not crash or return data
-        assert isinstance(result, EnrichmentError), (
-            f"Expected EnrichmentError for oversized response, got {type(result).__name__}"
-        )
-
-    def test_allowed_hosts_enforced(self) -> None:
-        """SEC-07/SEC-16: Requests to non-allowlisted hosts must be rejected."""
-        ioc = make_ipv4_ioc()
-
-        # Adapter with empty allowlist — should reject ALL outbound requests
-        adapter = VTAdapter(api_key=FAKE_API_KEY, allowed_hosts=[])
-
-        mock_adapter_session(adapter, side_effect=AssertionError("Should not reach network"))
-
-        result = adapter.lookup(ioc)
-
-        assert isinstance(result, EnrichmentError), (
-            "Expected EnrichmentError when host not in allowed_hosts (SEC-07/SEC-16)"
         )

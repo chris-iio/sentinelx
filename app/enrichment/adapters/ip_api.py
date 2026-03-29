@@ -26,10 +26,8 @@ from __future__ import annotations
 
 import logging
 
-import requests
-
-from app.enrichment.http_safety import safe_request
-from app.enrichment.models import EnrichmentError, EnrichmentResult
+from app.enrichment.adapters.base import BaseHTTPAdapter
+from app.enrichment.models import EnrichmentResult
 from app.pipeline.models import IOC, IOCType
 
 logger = logging.getLogger(__name__)
@@ -37,8 +35,12 @@ logger = logging.getLogger(__name__)
 IPINFO_BASE = "https://ipinfo.io"
 
 
-class IPApiAdapter:
+class IPApiAdapter(BaseHTTPAdapter):
     """Adapter for the ipinfo.io GeoIP/rDNS API.
+
+    Extends BaseHTTPAdapter for IP context enrichment against the ipinfo.io
+    free API. All HTTP safety controls (SSRF allowlist, size cap, timeouts) are
+    inherited.
 
     Supports IP IOC lookups (IPv4 and IPv6) using the zero-auth ipinfo.io
     public HTTPS endpoint. Provides geographic location, reverse DNS, and ASN
@@ -56,14 +58,11 @@ class IPApiAdapter:
     Success is determined by HTTP 200 + presence of the "country" key.
     Private/reserved IPs return HTTP 404 (not HTTP 200 with a failure status).
 
-    Note on scope: ipinfo.io free tier does NOT provide proxy/hosting/mobile
-    classification. The 'flags', 'proxy', 'hosting', and 'mobile' fields in
-    raw_stats are always [] / False respectively.
-
     No API key required — ipinfo.io free tier is fully public.
     Rate limit: 50,000 requests/month (429 response when exceeded).
 
-    Thread safety: uses a persistent self._session (created in __init__).
+    Thread safety: a persistent requests.Session is created by BaseHTTPAdapter.__init__
+    and reused across lookup() calls for TCP connection pooling.
 
     Args:
         allowed_hosts: SSRF allowlist -- only these hostnames may be contacted.
@@ -73,43 +72,10 @@ class IPApiAdapter:
     name = "IP Context"
     requires_api_key = False
 
-    def __init__(self, allowed_hosts: list[str]) -> None:
-        self._allowed_hosts = allowed_hosts
-        self._session = requests.Session()
+    def _build_url(self, ioc: IOC) -> str:
+        return f"{IPINFO_BASE}/{ioc.value}/json"
 
-    def is_configured(self) -> bool:
-        """Always returns True -- ipinfo.io requires no API key."""
-        return True
-
-    def lookup(self, ioc: IOC) -> EnrichmentResult | EnrichmentError:
-        """Enrich a single IP IOC using the ipinfo.io API.
-
-        Returns EnrichmentError immediately for non-IP types.
-        Calls safe_request() and parses the response.
-
-        Response semantics:
-          - HTTP 200 + "country" in body -> EnrichmentResult(verdict=no_data)
-            with geo/rDNS/ASN populated in raw_stats
-          - HTTP 404 (private/reserved IP) -> EnrichmentResult(verdict=no_data)
-            with empty raw_stats (private IPs are not a lookup failure)
-          - HTTP 429 (rate limit)          -> EnrichmentError("HTTP 429")
-          - Network timeout               -> EnrichmentError("Timeout")
-          - Other HTTP errors             -> EnrichmentError("HTTP {code}")
-
-        Args:
-            ioc: The IOC to look up. Must be IPv4 or IPv6.
-
-        Returns:
-            EnrichmentResult on success (including private IP no_data).
-            EnrichmentError on unsupported type, SSRF block, or network failure.
-        """
-        if ioc.type not in self.supported_types:
-            return EnrichmentError(
-                ioc=ioc, provider=self.name, error="Unsupported type"
-            )
-
-        url = f"{IPINFO_BASE}/{ioc.value}/json"
-
+    def _make_pre_raise_hook(self, ioc: IOC):
         def _404_hook(resp):
             if resp.status_code == 404:
                 return EnrichmentResult(
@@ -122,14 +88,10 @@ class IPApiAdapter:
                     raw_stats={},
                 )
             return None
+        return _404_hook
 
-        result = safe_request(
-            self._session, url, self._allowed_hosts, ioc, self.name,
-            pre_raise_hook=_404_hook,
-        )
-        if not isinstance(result, dict):
-            return result
-        return _parse_response(ioc, result, self.name)
+    def _parse_response(self, ioc: IOC, body: dict) -> EnrichmentResult:
+        return _parse_response(ioc, body, self.name)
 
 
 def _parse_response(ioc: IOC, body: dict, provider_name: str) -> EnrichmentResult:

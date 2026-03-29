@@ -25,10 +25,8 @@ from __future__ import annotations
 
 import logging
 
-import requests
-
-from app.enrichment.http_safety import safe_request
-from app.enrichment.models import EnrichmentError, EnrichmentResult
+from app.enrichment.adapters.base import BaseHTTPAdapter
+from app.enrichment.models import EnrichmentResult
 from app.pipeline.models import IOC, IOCType
 
 logger = logging.getLogger(__name__)
@@ -46,11 +44,12 @@ _ENDPOINT_MAP: dict[IOCType, tuple[str, str]] = {
 }
 
 
-class URLhausAdapter:
+class URLhausAdapter(BaseHTTPAdapter):
     """Adapter for the URLhaus API (abuse.ch).
 
-    Supports URL, IP (v4/v6), domain, MD5, and SHA256 IOC lookups via POST
-    requests with form-encoded bodies. An Auth-Key header is required.
+    Extends BaseHTTPAdapter for URL, IP (v4/v6), domain, MD5, and SHA256 IOC
+    lookups via POST requests with form-encoded bodies. An Auth-Key header is
+    required.
 
     Verdict is derived from the query_status field in the response:
     - "is_listed"                   -> malicious (URL endpoint)
@@ -59,9 +58,12 @@ class URLhausAdapter:
 
     SHA1 and CVE are not supported by URLhaus.
 
+    Thread safety: a persistent requests.Session is created by BaseHTTPAdapter.__init__
+    and reused across lookup() calls for TCP connection pooling.
+
     Args:
-        api_key:       URLhaus API key for the Auth-Key header.
         allowed_hosts: SSRF allowlist -- only these hostnames may be contacted.
+        api_key:       URLhaus API key for the Auth-Key header (keyword-only).
     """
 
     supported_types: frozenset[IOCType] = frozenset({
@@ -74,58 +76,25 @@ class URLhausAdapter:
     })
     name = "URLhaus"
     requires_api_key = True
+    _http_method = "POST"
 
-    def __init__(self, api_key: str, allowed_hosts: list[str]) -> None:
-        self._api_key = api_key
-        self._allowed_hosts = allowed_hosts
-        self._session = requests.Session()
-        self._session.headers.update({
+    def _build_url(self, ioc: IOC) -> str:
+        url_path, _ = _ENDPOINT_MAP[ioc.type]
+        return f"{URLHAUS_BASE}{url_path}"
+
+    def _auth_headers(self) -> dict:
+        return {
             "Auth-Key": self._api_key,
             "Accept": "application/json",
-        })
+        }
 
-    def is_configured(self) -> bool:
-        """Return True if a non-empty API key is set."""
-        return bool(self._api_key)
+    def _build_request_body(self, ioc: IOC) -> tuple[dict | None, dict | None]:
+        # Form-encoded POST: data dict, no JSON payload
+        _, body_key = _ENDPOINT_MAP[ioc.type]
+        return ({body_key: ioc.value}, None)
 
-    def lookup(self, ioc: IOC) -> EnrichmentResult | EnrichmentError:
-        """Enrich a single IOC using the URLhaus API.
-
-        Returns EnrichmentError immediately for unsupported types (SHA1, CVE).
-        Calls safe_request() and parses the query_status field for verdict.
-
-        Response semantics:
-          - query_status="is_listed"              -> verdict=malicious (URL endpoint)
-          - query_status="ok" + urls_count > 0    -> verdict=malicious (host/payload)
-          - query_status="no_results"/"no_result" -> verdict=no_data
-          - HTTP 400+ error                       -> EnrichmentError
-
-        IMPORTANT: URLhaus always returns HTTP 200 for both found and not-found
-        results. The query_status field distinguishes the two cases.
-
-        Args:
-            ioc: The IOC to look up.
-
-        Returns:
-            EnrichmentResult on success (including no_data cases).
-            EnrichmentError on unsupported type, SSRF block, or network failure.
-        """
-        if ioc.type not in self.supported_types:
-            return EnrichmentError(
-                ioc=ioc, provider=self.name, error="Unsupported type"
-            )
-
-        url_path, body_key = _ENDPOINT_MAP[ioc.type]
-        url = f"{URLHAUS_BASE}{url_path}"
-
-        result = safe_request(
-            self._session, url, self._allowed_hosts, ioc, self.name,
-            method="POST",
-            data={body_key: ioc.value},
-        )
-        if not isinstance(result, dict):
-            return result
-        return _parse_response(ioc, result, self.name)
+    def _parse_response(self, ioc: IOC, body: dict) -> EnrichmentResult:
+        return _parse_response(ioc, body, self.name)
 
 
 def _parse_response(ioc: IOC, body: dict, provider_name: str) -> EnrichmentResult:

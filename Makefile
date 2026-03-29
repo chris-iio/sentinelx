@@ -73,7 +73,7 @@ js-watch:
 
 ## Type-check TypeScript without emitting output
 typecheck:
-	tsc --noEmit
+	npx tsc --noEmit
 
 ## Full build (CSS + JS)
 build: css js

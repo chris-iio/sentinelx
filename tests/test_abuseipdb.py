@@ -1,7 +1,6 @@
-"""Tests for AbuseIPDB API adapter.
+"""Tests for AbuseIPDB API adapter — verdict logic and response parsing.
 
-Tests IP lookups, verdict logic (malicious/suspicious/clean/no_data), error handling,
-and all HTTP safety controls (timeout, size cap, no redirects, SSRF allowlist).
+Contract tests (protocol, error handling, safety controls) are in test_adapter_contract.py.
 
 Verdict thresholds (abuseConfidenceScore):
   - score >= 75                         -> "malicious"
@@ -9,34 +8,17 @@ Verdict thresholds (abuseConfidenceScore):
   - score < 25 AND totalReports > 0     -> "clean"
   - totalReports == 0                   -> "no_data"
 
-Auth header: capital 'Key' with 'Accept: application/json' (required to avoid HTML response).
-
-AbuseIPDB does NOT use 404 for unknown IPs — always 200 with score=0.
-detection_count = totalReports, total_engines = numDistinctUsers.
-
-HTTP 429 rate limit -> specific EnrichmentError("Rate limit exceeded (429)").
-
 All HTTP calls are mocked using unittest.mock.patch -- no real API calls.
 """
 from __future__ import annotations
 
-from unittest.mock import MagicMock
-
-import requests
-import requests.exceptions
-
-from app.pipeline.models import IOCType
 from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.enrichment.adapters.abuseipdb import AbuseIPDBAdapter
-from app.enrichment.http_safety import MAX_RESPONSE_BYTES
-from app.enrichment.provider import Provider
 from tests.helpers import (
     make_mock_response,
     mock_adapter_session,
-    make_domain_ioc,
     make_ipv4_ioc,
     make_ipv6_ioc,
-    make_url_ioc,
 )
 
 
@@ -120,55 +102,6 @@ def _make_adapter(
     if allowed_hosts is None:
         allowed_hosts = ALLOWED_HOSTS
     return AbuseIPDBAdapter(api_key=api_key, allowed_hosts=allowed_hosts)
-
-
-class TestAbuseIPDBProtocol:
-    """Tests that AbuseIPDBAdapter satisfies the Provider protocol contract."""
-
-    def test_name(self) -> None:
-        """AbuseIPDBAdapter.name must equal 'AbuseIPDB'."""
-        assert AbuseIPDBAdapter.name == "AbuseIPDB"
-
-    def test_requires_api_key_true(self) -> None:
-        """AbuseIPDBAdapter.requires_api_key must be True (free-key provider)."""
-        assert AbuseIPDBAdapter.requires_api_key is True
-
-    def test_supported_types_contains_ipv4(self) -> None:
-        """IOCType.IPV4 must be in AbuseIPDBAdapter.supported_types."""
-        assert IOCType.IPV4 in AbuseIPDBAdapter.supported_types
-
-    def test_supported_types_contains_ipv6(self) -> None:
-        """IOCType.IPV6 must be in AbuseIPDBAdapter.supported_types."""
-        assert IOCType.IPV6 in AbuseIPDBAdapter.supported_types
-
-    def test_supported_types_excludes_domain(self) -> None:
-        """IOCType.DOMAIN must NOT be in AbuseIPDBAdapter.supported_types."""
-        assert IOCType.DOMAIN not in AbuseIPDBAdapter.supported_types
-
-    def test_supported_types_excludes_md5(self) -> None:
-        """IOCType.MD5 must NOT be in AbuseIPDBAdapter.supported_types."""
-        assert IOCType.MD5 not in AbuseIPDBAdapter.supported_types
-
-    def test_supported_types_excludes_url(self) -> None:
-        """IOCType.URL must NOT be in AbuseIPDBAdapter.supported_types."""
-        assert IOCType.URL not in AbuseIPDBAdapter.supported_types
-
-    def test_is_configured_true_with_key(self) -> None:
-        """is_configured() must return True when api_key is non-empty."""
-        adapter = _make_adapter(api_key="somekey")
-        assert adapter.is_configured() is True
-
-    def test_is_configured_false_with_empty_key(self) -> None:
-        """is_configured() must return False when api_key is empty string."""
-        adapter = _make_adapter(api_key="")
-        assert adapter.is_configured() is False
-
-    def test_isinstance_provider(self) -> None:
-        """AbuseIPDBAdapter instance must satisfy the Provider protocol (isinstance check)."""
-        adapter = _make_adapter()
-        assert isinstance(adapter, Provider), (
-            "AbuseIPDBAdapter must satisfy the Provider protocol via @runtime_checkable"
-        )
 
 
 class TestAbuseIPDBLookup:
@@ -383,51 +316,7 @@ class TestAbuseIPDBLookup:
 
 
 class TestAbuseIPDBErrors:
-    """Tests for error handling in AbuseIPDBAdapter.lookup()."""
-
-    def test_unsupported_type_domain(self) -> None:
-        """DOMAIN IOC -> EnrichmentError, provider='AbuseIPDB', error contains 'Unsupported'."""
-        ioc = make_domain_ioc("evil.com")
-
-        result = _make_adapter().lookup(ioc)
-
-        assert isinstance(result, EnrichmentError)
-        assert result.provider == "AbuseIPDB"
-        assert "unsupported" in result.error.lower() or "Unsupported" in result.error
-
-    def test_unsupported_type_url(self) -> None:
-        """URL IOC -> EnrichmentError (URLs not supported by AbuseIPDB IP endpoint)."""
-        ioc = make_url_ioc("http://evil.com/path")
-
-        result = _make_adapter().lookup(ioc)
-
-        assert isinstance(result, EnrichmentError)
-        assert result.provider == "AbuseIPDB"
-
-    def test_timeout(self) -> None:
-        """Network timeout -> EnrichmentError with 'Timeout' in error."""
-        ioc = make_ipv4_ioc("1.2.3.4")
-
-        adapter = _make_adapter()
-        mock_adapter_session(adapter, side_effect=requests.exceptions.Timeout("timed out"))
-        result = adapter.lookup(ioc)
-
-        assert isinstance(result, EnrichmentError)
-        assert result.provider == "AbuseIPDB"
-        assert "timed out" in result.error.lower() or "Timeout" in result.error
-
-    def test_http_500(self) -> None:
-        """HTTP 500 -> EnrichmentError with 'HTTP 500' in error."""
-        ioc = make_ipv4_ioc("1.2.3.4")
-        mock_resp = make_mock_response(500)
-
-        adapter = _make_adapter()
-        mock_adapter_session(adapter, response=mock_resp)
-        result = adapter.lookup(ioc)
-
-        assert isinstance(result, EnrichmentError)
-        assert result.provider == "AbuseIPDB"
-        assert "HTTP 500" in result.error
+    """Tests for adapter-specific error handling in AbuseIPDBAdapter.lookup()."""
 
     def test_rate_limit_429_returns_specific_message(self) -> None:
         """HTTP 429 -> EnrichmentError with 'Rate limit exceeded (429)' message."""
@@ -443,49 +332,3 @@ class TestAbuseIPDBErrors:
         assert "429" in result.error
         assert "rate limit" in result.error.lower() or "Rate limit" in result.error
 
-    def test_ssrf_validation_blocks_disallowed_host(self) -> None:
-        """Adapter with allowed_hosts=[] -> EnrichmentError before network call."""
-        ioc = make_ipv4_ioc("1.2.3.4")
-        adapter = AbuseIPDBAdapter(api_key=TEST_API_KEY, allowed_hosts=[])
-
-        mock_adapter_session(adapter, side_effect=AssertionError("Should not reach network"))
-        result = adapter.lookup(ioc)
-
-        assert isinstance(result, EnrichmentError), (
-            "Expected EnrichmentError when host not in allowed_hosts (SSRF check)"
-        )
-        assert (
-            "SSRF" in result.error
-            or "allowed" in result.error.lower()
-            or "allowlist" in result.error.lower()
-        )
-
-    def test_response_size_limit(self) -> None:
-        """SEC-05: Responses exceeding 1 MB must be rejected with EnrichmentError."""
-        ioc = make_ipv4_ioc("1.2.3.4")
-
-        oversized_chunk = b"x" * (MAX_RESPONSE_BYTES + 1)
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.raise_for_status = MagicMock()
-        mock_resp.iter_content = MagicMock(return_value=iter([oversized_chunk]))
-
-        adapter = _make_adapter()
-        mock_adapter_session(adapter, response=mock_resp)
-        result = adapter.lookup(ioc)
-
-        assert isinstance(result, EnrichmentError), (
-            f"Expected EnrichmentError for oversized response, got {type(result).__name__}"
-        )
-
-
-class TestAllowedHosts:
-    """Integration test: SSRF allowlist must include AbuseIPDB hostname."""
-
-    def test_config_allows_abuseipdb(self) -> None:
-        """'api.abuseipdb.com' must be in Config.ALLOWED_API_HOSTS (SSRF allowlist)."""
-        from app.config import Config
-        assert "api.abuseipdb.com" in Config.ALLOWED_API_HOSTS, (
-            "api.abuseipdb.com missing from ALLOWED_API_HOSTS — "
-            "AbuseIPDBAdapter will always fail SSRF validation in production"
-        )

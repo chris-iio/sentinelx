@@ -1,7 +1,6 @@
-"""Tests for Shodan InternetDB adapter.
+"""Tests for Shodan InternetDB adapter — verdict logic and response parsing.
 
-Tests IP lookups, verdict logic (malicious/suspicious/no_data), error handling,
-and all HTTP safety controls (timeout, size cap, no redirects, SSRF allowlist).
+Contract tests (protocol, error handling, safety controls) are in test_adapter_contract.py.
 
 Verdict priority:
   1. tags contains "malware", "compromised", or "doublepulsar" -> malicious
@@ -13,22 +12,12 @@ All HTTP calls are mocked using unittest.mock.patch -- no real API calls.
 """
 from __future__ import annotations
 
-from unittest.mock import MagicMock
-
-import requests
-import requests.exceptions
-
-from app.pipeline.models import IOCType
 from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.enrichment.adapters.shodan import ShodanAdapter
-from app.enrichment.http_safety import MAX_RESPONSE_BYTES
-from app.enrichment.provider import Provider
 from tests.helpers import (
     make_mock_response,
-    make_domain_ioc,
     make_ipv4_ioc,
     make_ipv6_ioc,
-    make_md5_ioc,
     mock_adapter_session,
 )
 
@@ -227,152 +216,4 @@ class TestLookupNotFound:
         assert not isinstance(result, EnrichmentError)
 
 
-class TestLookupErrors:
 
-    def test_unsupported_type_domain(self) -> None:
-        """DOMAIN IOC -> EnrichmentError, provider='Shodan InternetDB', error contains 'Unsupported'."""
-        ioc = make_domain_ioc()
-
-        result = _make_adapter().lookup(ioc)
-
-        assert isinstance(result, EnrichmentError)
-        assert result.provider == "Shodan InternetDB"
-        assert "Unsupported" in result.error or "unsupported" in result.error.lower()
-
-    def test_unsupported_type_md5(self) -> None:
-        """MD5 IOC -> EnrichmentError (hashes not supported by InternetDB)."""
-        ioc = make_md5_ioc("a" * 32)
-
-        result = _make_adapter().lookup(ioc)
-
-        assert isinstance(result, EnrichmentError)
-        assert result.provider == "Shodan InternetDB"
-
-    def test_timeout(self) -> None:
-        """Network timeout -> EnrichmentError with 'Timeout' in error."""
-        ioc = make_ipv4_ioc("8.8.8.8")
-
-        adapter = _make_adapter()
-        mock_adapter_session(adapter, side_effect=requests.exceptions.Timeout("timed out"))
-        result = adapter.lookup(ioc)
-
-        assert isinstance(result, EnrichmentError)
-        assert result.provider == "Shodan InternetDB"
-        assert "Timeout" in result.error or "timed out" in result.error.lower()
-
-    def test_http_500(self) -> None:
-        """HTTP 500 response -> EnrichmentError with 'HTTP 500' in error."""
-        ioc = make_ipv4_ioc("8.8.8.8")
-        mock_resp = make_mock_response(500)
-
-        adapter = _make_adapter()
-        mock_adapter_session(adapter, response=mock_resp)
-        result = adapter.lookup(ioc)
-
-        assert isinstance(result, EnrichmentError)
-        assert result.provider == "Shodan InternetDB"
-        assert "HTTP 500" in result.error
-
-    def test_http_422(self) -> None:
-        """HTTP 422 response (validation error) -> EnrichmentError with 'HTTP 422' in error."""
-        ioc = make_ipv4_ioc("8.8.8.8")
-        mock_resp = make_mock_response(422)
-
-        adapter = _make_adapter()
-        mock_adapter_session(adapter, response=mock_resp)
-        result = adapter.lookup(ioc)
-
-        assert isinstance(result, EnrichmentError)
-        assert result.provider == "Shodan InternetDB"
-        assert "HTTP 422" in result.error
-
-    def test_ssrf_validation_blocks_disallowed_host(self) -> None:
-        """Adapter with allowed_hosts=[] -> EnrichmentError before network call, error mentions SSRF/allowed."""
-        ioc = make_ipv4_ioc("8.8.8.8")
-        adapter = ShodanAdapter(allowed_hosts=[])
-
-        mock_adapter_session(adapter, side_effect=AssertionError("Should not reach network"))
-        result = adapter.lookup(ioc)
-
-        assert isinstance(result, EnrichmentError), (
-            "Expected EnrichmentError when host not in allowed_hosts (SSRF check)"
-        )
-        assert (
-            "SSRF" in result.error
-            or "allowed" in result.error.lower()
-            or "allowlist" in result.error.lower()
-        )
-
-
-class TestHTTPSafetyControls:
-
-    def test_response_size_limit(self) -> None:
-        """SEC-05: Responses exceeding 1 MB must be rejected with EnrichmentError."""
-        ioc = make_ipv4_ioc("8.8.8.8")
-
-        oversized_chunk = b"x" * (MAX_RESPONSE_BYTES + 1)
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.raise_for_status = MagicMock()
-        mock_resp.iter_content = MagicMock(return_value=iter([oversized_chunk]))
-
-        adapter = _make_adapter()
-        mock_adapter_session(adapter, response=mock_resp)
-        result = adapter.lookup(ioc)
-
-        assert isinstance(result, EnrichmentError), (
-            f"Expected EnrichmentError for oversized response, got {type(result).__name__}"
-        )
-
-
-class TestSupportedTypes:
-
-    def test_supported_types_contains_ipv4(self) -> None:
-        """IOCType.IPV4 must be in ShodanAdapter.supported_types."""
-        assert IOCType.IPV4 in ShodanAdapter.supported_types
-
-    def test_supported_types_contains_ipv6(self) -> None:
-        """IOCType.IPV6 must be in ShodanAdapter.supported_types."""
-        assert IOCType.IPV6 in ShodanAdapter.supported_types
-
-    def test_supported_types_excludes_domain(self) -> None:
-        """IOCType.DOMAIN must NOT be in ShodanAdapter.supported_types."""
-        assert IOCType.DOMAIN not in ShodanAdapter.supported_types
-
-    def test_supported_types_excludes_md5(self) -> None:
-        """IOCType.MD5 must NOT be in ShodanAdapter.supported_types."""
-        assert IOCType.MD5 not in ShodanAdapter.supported_types
-
-
-class TestProtocolConformance:
-
-    def test_shodan_adapter_is_provider(self) -> None:
-        """ShodanAdapter instance must satisfy the Provider protocol (isinstance check)."""
-        adapter = ShodanAdapter(allowed_hosts=[])
-        assert isinstance(adapter, Provider), (
-            "ShodanAdapter must satisfy the Provider protocol via @runtime_checkable"
-        )
-
-    def test_shodan_adapter_name(self) -> None:
-        """ShodanAdapter.name must equal 'Shodan InternetDB'."""
-        assert ShodanAdapter.name == "Shodan InternetDB"
-
-    def test_shodan_requires_api_key_false(self) -> None:
-        """ShodanAdapter.requires_api_key must be False (zero-auth provider)."""
-        assert ShodanAdapter.requires_api_key is False
-
-    def test_shodan_is_configured_always_true(self) -> None:
-        """ShodanAdapter.is_configured() must always return True regardless of config."""
-        adapter = ShodanAdapter(allowed_hosts=[])
-        assert adapter.is_configured() is True
-
-
-class TestAllowedHostsIntegration:
-
-    def test_config_allows_shodan(self) -> None:
-        """'internetdb.shodan.io' must be in Config.ALLOWED_API_HOSTS (SSRF allowlist)."""
-        from app.config import Config
-        assert "internetdb.shodan.io" in Config.ALLOWED_API_HOSTS, (
-            "internetdb.shodan.io missing from ALLOWED_API_HOSTS — "
-            "ShodanAdapter will always fail SSRF validation in production"
-        )

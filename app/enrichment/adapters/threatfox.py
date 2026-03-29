@@ -17,10 +17,8 @@ from __future__ import annotations
 
 import logging
 
-import requests
-
-from app.enrichment.http_safety import safe_request
-from app.enrichment.models import EnrichmentError, EnrichmentResult
+from app.enrichment.adapters.base import BaseHTTPAdapter
+from app.enrichment.models import EnrichmentResult
 from app.pipeline.models import IOC, IOCType
 
 logger = logging.getLogger(__name__)
@@ -101,10 +99,11 @@ def _parse_response(ioc: IOC, body: dict) -> EnrichmentResult:
     )
 
 
-class TFAdapter:
+class TFAdapter(BaseHTTPAdapter):
     """Adapter for the ThreatFox (abuse.ch) API v1.
 
-    Maps IOC types to appropriate ThreatFox query endpoints:
+    Extends BaseHTTPAdapter for IOC enrichment. Maps IOC types to appropriate
+    ThreatFox query endpoints:
       - Hash types (MD5, SHA1, SHA256): POST {"query": "search_hash", "hash": value}
       - Other types (IP, domain, URL): POST {"query": "search_ioc", "search_term": value}
 
@@ -113,11 +112,12 @@ class TFAdapter:
 
     Auth-Key header required (abuse.ch policy change — previously public).
 
-    Thread safety: creates a fresh requests.Session per lookup() call.
+    Thread safety: a persistent requests.Session is created by BaseHTTPAdapter.__init__
+    and reused across lookup() calls for TCP connection pooling.
 
     Args:
-        api_key:       abuse.ch API key for the Auth-Key header.
         allowed_hosts: SSRF allowlist — only these hostnames may be contacted.
+        api_key:       abuse.ch API key for the Auth-Key header (keyword-only).
     """
 
     supported_types: frozenset[IOCType] = frozenset({
@@ -127,50 +127,24 @@ class TFAdapter:
 
     name = "ThreatFox"
     requires_api_key = True
+    _http_method = "POST"
 
-    def __init__(self, api_key: str, allowed_hosts: list[str]) -> None:
-        self._api_key = api_key
-        self._allowed_hosts = allowed_hosts
-        self._session = requests.Session()
-        self._session.headers.update({
+    def _build_url(self, ioc: IOC) -> str:
+        return TF_BASE
+
+    def _auth_headers(self) -> dict:
+        return {
             "Content-Type": "application/json",
             "Auth-Key": self._api_key,
-        })
+        }
 
-    def is_configured(self) -> bool:
-        """Return True if a non-empty API key is set."""
-        return bool(self._api_key)
-
-    def lookup(self, ioc: IOC) -> EnrichmentResult | EnrichmentError:
-        """Enrich a single IOC using the ThreatFox API v1.
-
-        Returns EnrichmentError immediately for CVE (not supported by ThreatFox).
-        For all other supported types: constructs the appropriate POST payload,
-        calls safe_request(), and parses the response.
-
-        Args:
-            ioc: The IOC to look up.
-
-        Returns:
-            EnrichmentResult on success or no_result (no_data).
-            EnrichmentError on unsupported type, network failure, or HTTP error.
-        """
-        if ioc.type not in self.supported_types:
-            return EnrichmentError(
-                ioc=ioc, provider="ThreatFox", error="Unsupported type"
-            )
-
-        # Determine payload: hash types use search_hash; others use search_ioc
+    def _build_request_body(self, ioc: IOC) -> tuple[dict | None, dict | None]:
+        # JSON payload (not form-encoded): (None, json_dict)
         if ioc.type in _HASH_TYPES:
             payload = {"query": "search_hash", "hash": ioc.value}
         else:
             payload = {"query": "search_ioc", "search_term": ioc.value}
+        return (None, payload)
 
-        result = safe_request(
-            self._session, TF_BASE, self._allowed_hosts, ioc, "ThreatFox",
-            method="POST",
-            json_payload=payload,
-        )
-        if not isinstance(result, dict):
-            return result
-        return _parse_response(ioc, result)
+    def _parse_response(self, ioc: IOC, body: dict) -> EnrichmentResult:
+        return _parse_response(ioc, body)

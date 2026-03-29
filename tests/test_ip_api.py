@@ -1,18 +1,6 @@
-"""Tests for ipinfo.io IP Context adapter.
+"""Tests for ipinfo.io IP Context adapter — geo/rDNS/ASN data extraction and parsing.
 
-Tests IP lookups (IPv4/IPv6), geo/rDNS/ASN data extraction, error handling,
-and all HTTP safety controls (timeout, size cap, no redirects, SSRF allowlist).
-
-ipinfo.io API behavior:
-  - GET https://ipinfo.io/{ip}/json
-  - 200 + "country" in body: IP data returned -> verdict=no_data with geo/rDNS/ASN
-  - 404: Private/reserved IP -> verdict=no_data with empty raw_stats
-  - 429: Rate limited -> EnrichmentError("HTTP 429")
-  - Timeout -> EnrichmentError("Timeout")
-
-IMPORTANT: ipinfo.io uses HTTP status codes (not a JSON "status" field) to
-distinguish public IPs from private/reserved ones. HTTP 404 means no data
-(private range) — not a network failure.
+Contract tests (protocol, error handling, safety controls) are in test_adapter_contract.py.
 
 All HTTP calls are mocked using unittest.mock — no real API calls.
 """
@@ -20,21 +8,13 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-import requests
-import requests.exceptions
-
-from app.pipeline.models import IOCType
 from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.enrichment.adapters.ip_api import IPApiAdapter
-from app.enrichment.http_safety import MAX_RESPONSE_BYTES
-from app.enrichment.provider import Provider
 from tests.helpers import (
     make_mock_response,
     mock_adapter_session,
-    make_domain_ioc,
     make_ipv4_ioc,
     make_ipv6_ioc,
-    make_md5_ioc,
 )
 
 
@@ -458,26 +438,6 @@ class TestPrivateIP:
 
 class TestLookupErrors:
 
-    def test_unsupported_type_domain(self) -> None:
-        """DOMAIN IOC -> EnrichmentError with 'Unsupported' in error."""
-        ioc = make_domain_ioc("evil.com")
-
-        result = _make_adapter().lookup(ioc)
-
-        assert isinstance(result, EnrichmentError)
-        assert result.provider == "IP Context"
-        assert "Unsupported" in result.error or "unsupported" in result.error.lower()
-
-    def test_unsupported_type_md5(self) -> None:
-        """MD5 IOC -> EnrichmentError (hashes not supported by IPApiAdapter)."""
-        md5 = "a" * 32
-        ioc = make_md5_ioc(md5)
-
-        result = _make_adapter().lookup(ioc)
-
-        assert isinstance(result, EnrichmentError)
-        assert result.provider == "IP Context"
-
     def test_http_429_rate_limit(self) -> None:
         """HTTP 429 -> EnrichmentError with 'HTTP 429' in error."""
         ioc = make_ipv4_ioc("8.8.8.8")
@@ -490,35 +450,6 @@ class TestLookupErrors:
         assert isinstance(result, EnrichmentError)
         assert result.provider == "IP Context"
         assert "HTTP 429" in result.error
-
-    def test_timeout(self) -> None:
-        """Network timeout -> EnrichmentError with 'Timeout' in error."""
-        ioc = make_ipv4_ioc("8.8.8.8")
-
-        adapter = _make_adapter()
-        mock_adapter_session(adapter, side_effect=requests.exceptions.Timeout("timed out"))
-        result = adapter.lookup(ioc)
-
-        assert isinstance(result, EnrichmentError)
-        assert result.provider == "IP Context"
-        assert "Timeout" in result.error or "timed out" in result.error.lower()
-
-    def test_ssrf_validation_blocks_disallowed_host(self) -> None:
-        """Adapter with allowed_hosts=[] -> EnrichmentError before network call."""
-        ioc = make_ipv4_ioc("8.8.8.8")
-        adapter = IPApiAdapter(allowed_hosts=[])
-
-        mock_adapter_session(adapter, side_effect=AssertionError("Should not reach network"))
-        result = adapter.lookup(ioc)
-
-        assert isinstance(result, EnrichmentError), (
-            "Expected EnrichmentError when host not in allowed_hosts (SSRF check)"
-        )
-        assert (
-            "SSRF" in result.error
-            or "allowed" in result.error.lower()
-            or "allowlist" in result.error.lower()
-        )
 
 
 class TestRequestURL:
@@ -576,51 +507,6 @@ class TestRequestURL:
         )
 
 
-class TestHTTPSafetyControls:
-
-    def test_response_size_limit(self) -> None:
-        """SEC-05: Responses exceeding 1 MB must be rejected with EnrichmentError."""
-        ioc = make_ipv4_ioc("8.8.8.8")
-
-        oversized_chunk = b"x" * (MAX_RESPONSE_BYTES + 1)
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.raise_for_status = MagicMock()
-        mock_resp.iter_content = MagicMock(return_value=iter([oversized_chunk]))
-
-        adapter = _make_adapter()
-        mock_adapter_session(adapter, response=mock_resp)
-        result = adapter.lookup(ioc)
-
-        assert isinstance(result, EnrichmentError), (
-            f"Expected EnrichmentError for oversized response, got {type(result).__name__}"
-        )
-
-    def test_uses_allow_redirects_false(self) -> None:
-        """SEC-06: requests.get must be called with allow_redirects=False."""
-        ioc = make_ipv4_ioc("8.8.8.8")
-        mock_resp = make_mock_response(200, IPINFO_PUBLIC_IP_RESPONSE)
-
-        adapter = _make_adapter()
-        mock_adapter_session(adapter, response=mock_resp)
-        adapter.lookup(ioc)
-
-        call_kwargs = adapter._session.get.call_args.kwargs
-        assert call_kwargs.get("allow_redirects") is False
-
-    def test_uses_stream_true(self) -> None:
-        """SEC-05: requests.get must be called with stream=True."""
-        ioc = make_ipv4_ioc("8.8.8.8")
-        mock_resp = make_mock_response(200, IPINFO_PUBLIC_IP_RESPONSE)
-
-        adapter = _make_adapter()
-        mock_adapter_session(adapter, response=mock_resp)
-        adapter.lookup(ioc)
-
-        call_kwargs = adapter._session.get.call_args.kwargs
-        assert call_kwargs.get("stream") is True
-
-
 class TestIPv6Support:
 
     def test_ipv6_public_returns_enrichment_result(self) -> None:
@@ -635,67 +521,3 @@ class TestIPv6Support:
 
         assert isinstance(result, EnrichmentResult)
         assert result.verdict == "no_data"
-
-
-class TestSupportedTypes:
-
-    def test_supported_types_contains_ipv4(self) -> None:
-        """IOCType.IPV4 must be in IPApiAdapter.supported_types."""
-        assert IOCType.IPV4 in IPApiAdapter.supported_types
-
-    def test_supported_types_contains_ipv6(self) -> None:
-        """IOCType.IPV6 must be in IPApiAdapter.supported_types."""
-        assert IOCType.IPV6 in IPApiAdapter.supported_types
-
-    def test_supported_types_excludes_domain(self) -> None:
-        """IOCType.DOMAIN must NOT be in IPApiAdapter.supported_types."""
-        assert IOCType.DOMAIN not in IPApiAdapter.supported_types
-
-    def test_supported_types_excludes_md5(self) -> None:
-        """IOCType.MD5 must NOT be in IPApiAdapter.supported_types."""
-        assert IOCType.MD5 not in IPApiAdapter.supported_types
-
-    def test_supported_types_is_frozenset(self) -> None:
-        """supported_types must be a frozenset."""
-        assert isinstance(IPApiAdapter.supported_types, frozenset)
-
-
-class TestProtocolConformance:
-
-    def test_ip_api_adapter_is_provider(self) -> None:
-        """IPApiAdapter instance must satisfy the Provider protocol."""
-        adapter = IPApiAdapter(allowed_hosts=[])
-        assert isinstance(adapter, Provider), (
-            "IPApiAdapter must satisfy the Provider protocol via @runtime_checkable"
-        )
-
-    def test_ip_api_adapter_name(self) -> None:
-        """IPApiAdapter.name must equal 'IP Context'."""
-        assert IPApiAdapter.name == "IP Context"
-
-    def test_ip_api_requires_api_key_false(self) -> None:
-        """IPApiAdapter.requires_api_key must be False (zero-auth provider)."""
-        assert IPApiAdapter.requires_api_key is False
-
-    def test_ip_api_is_configured_always_true(self) -> None:
-        """IPApiAdapter.is_configured() must always return True regardless of config."""
-        adapter = IPApiAdapter(allowed_hosts=[])
-        assert adapter.is_configured() is True
-
-
-class TestAllowedHostsIntegration:
-
-    def test_config_allows_ipinfo(self) -> None:
-        """'ipinfo.io' must be in Config.ALLOWED_API_HOSTS (SSRF allowlist)."""
-        from app.config import Config
-        assert "ipinfo.io" in Config.ALLOWED_API_HOSTS, (
-            "ipinfo.io missing from ALLOWED_API_HOSTS — "
-            "IPApiAdapter will always fail SSRF validation in production"
-        )
-
-    def test_config_does_not_allow_ip_api_com(self) -> None:
-        """'ip-api.com' must NOT be in Config.ALLOWED_API_HOSTS (removed in D032 migration)."""
-        from app.config import Config
-        assert "ip-api.com" not in Config.ALLOWED_API_HOSTS, (
-            "ip-api.com must be removed from ALLOWED_API_HOSTS — adapter now uses ipinfo.io"
-        )

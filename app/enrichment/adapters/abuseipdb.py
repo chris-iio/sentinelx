@@ -26,9 +26,7 @@ from __future__ import annotations
 
 import logging
 
-import requests
-
-from app.enrichment.http_safety import safe_request
+from app.enrichment.adapters.base import BaseHTTPAdapter
 from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.pipeline.models import IOC, IOCType
 
@@ -37,10 +35,13 @@ logger = logging.getLogger(__name__)
 ABUSEIPDB_BASE = "https://api.abuseipdb.com/api/v2/check"
 
 
-class AbuseIPDBAdapter:
+class AbuseIPDBAdapter(BaseHTTPAdapter):
     """Adapter for the AbuseIPDB IP reputation API.
 
-    Supports IP IOC lookups (IPv4 and IPv6) using the AbuseIPDB check endpoint.
+    Extends BaseHTTPAdapter for IP enrichment against the AbuseIPDB check
+    endpoint. All HTTP safety controls (SSRF allowlist, size cap, timeouts) are
+    inherited.
+
     Verdict is derived from the abuseConfidenceScore and totalReports fields:
 
     - score >= 75                     -> verdict=malicious
@@ -58,76 +59,38 @@ class AbuseIPDBAdapter:
     CRITICAL: Auth header is capital 'Key' (not lowercase 'key').
               Include 'Accept: application/json' or API may return HTML.
 
-    Thread safety: uses a persistent requests.Session (self._session) created in __init__.
-    The session is reused across lookup() calls for TCP connection pooling.
+    Thread safety: a persistent requests.Session is created by BaseHTTPAdapter.__init__
+    and reused across lookup() calls for TCP connection pooling.
 
     Args:
-        api_key:       AbuseIPDB API key.
         allowed_hosts: SSRF allowlist -- only these hostnames may be contacted.
+        api_key:       AbuseIPDB API key (keyword-only).
     """
 
     supported_types: frozenset[IOCType] = frozenset({IOCType.IPV4, IOCType.IPV6})
     name = "AbuseIPDB"
     requires_api_key = True
 
-    def __init__(self, api_key: str, allowed_hosts: list[str]) -> None:
-        self._api_key = api_key
-        self._allowed_hosts = allowed_hosts
-        self._session = requests.Session()
-        self._session.headers.update({
+    def _build_url(self, ioc: IOC) -> str:
+        return f"{ABUSEIPDB_BASE}?ipAddress={ioc.value}&maxAgeInDays=90"
+
+    def _auth_headers(self) -> dict:
+        return {
             "Key": self._api_key,          # CRITICAL: capital 'Key' (AbuseIPDB convention)
             "Accept": "application/json",  # Required: avoid HTML response
-        })
+        }
 
-    def is_configured(self) -> bool:
-        """Return True when a non-empty API key is set."""
-        return bool(self._api_key)
-
-    def lookup(self, ioc: IOC) -> EnrichmentResult | EnrichmentError:
-        """Enrich a single IP IOC using the AbuseIPDB check API.
-
-        Returns EnrichmentError immediately for non-IP types.
-        Calls safe_request() and parses the response.
-
-        Response semantics:
-          - 200 + score >= 75               -> verdict=malicious
-          - 200 + 25 <= score < 75          -> verdict=suspicious
-          - 200 + score < 25 + reports > 0  -> verdict=clean
-          - 200 + totalReports == 0         -> verdict=no_data
-          - 429                             -> EnrichmentError("Rate limit exceeded (429)")
-          - HTTP error / timeout             -> EnrichmentError
-
-        NOTE: AbuseIPDB does NOT use 404 for unknown IPs. Always 200.
-        The 404-before-raise_for_status pattern from Shodan/GreyNoise is NOT used here.
-
-        Args:
-            ioc: The IOC to look up. Must be IPv4 or IPv6.
-
-        Returns:
-            EnrichmentResult on success.
-            EnrichmentError on unsupported type, SSRF block, or network failure.
-        """
-        if ioc.type not in self.supported_types:
-            return EnrichmentError(
-                ioc=ioc, provider=self.name, error="Unsupported type"
-            )
-
-        url = f"{ABUSEIPDB_BASE}?ipAddress={ioc.value}&maxAgeInDays=90"
-
+    def _make_pre_raise_hook(self, ioc: IOC):
         def _429_hook(resp):
             if resp.status_code == 429:
                 return EnrichmentError(
                     ioc=ioc, provider=self.name, error="Rate limit exceeded (429)"
                 )
             return None
+        return _429_hook
 
-        result = safe_request(
-            self._session, url, self._allowed_hosts, ioc, self.name,
-            pre_raise_hook=_429_hook,
-        )
-        if not isinstance(result, dict):
-            return result
-        return _parse_response(ioc, result, self.name)
+    def _parse_response(self, ioc: IOC, body: dict) -> EnrichmentResult:
+        return _parse_response(ioc, body, self.name)
 
 
 def _parse_response(ioc: IOC, body: dict, provider_name: str) -> EnrichmentResult:

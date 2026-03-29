@@ -26,7 +26,6 @@ from whois.exceptions import (
 )
 
 from app.enrichment.models import EnrichmentError, EnrichmentResult
-from app.enrichment.provider import Provider
 from app.pipeline.models import IOC, IOCType
 
 
@@ -64,82 +63,11 @@ def _make_whois_response(
 
 
 # ---------------------------------------------------------------------------
-# Class metadata tests
-# ---------------------------------------------------------------------------
-
-
-class TestClassMetadata:
-
-    def test_name_is_whois(self) -> None:
-        """WhoisAdapter.name must be 'WHOIS'."""
-        from app.enrichment.adapters.whois_lookup import WhoisAdapter
-        assert WhoisAdapter.name == "WHOIS"
-
-    def test_supported_types_is_frozenset(self) -> None:
-        """supported_types must be a frozenset."""
-        from app.enrichment.adapters.whois_lookup import WhoisAdapter
-        assert isinstance(WhoisAdapter.supported_types, frozenset)
-
-    def test_supported_types_contains_domain(self) -> None:
-        """IOCType.DOMAIN must be in WhoisAdapter.supported_types."""
-        from app.enrichment.adapters.whois_lookup import WhoisAdapter
-        assert IOCType.DOMAIN in WhoisAdapter.supported_types
-
-    def test_supported_types_excludes_ipv4(self) -> None:
-        """IPV4 must NOT be in WhoisAdapter.supported_types."""
-        from app.enrichment.adapters.whois_lookup import WhoisAdapter
-        assert IOCType.IPV4 not in WhoisAdapter.supported_types
-
-    def test_supported_types_excludes_url(self) -> None:
-        """URL must NOT be in WhoisAdapter.supported_types."""
-        from app.enrichment.adapters.whois_lookup import WhoisAdapter
-        assert IOCType.URL not in WhoisAdapter.supported_types
-
-    def test_requires_api_key_false(self) -> None:
-        """WhoisAdapter.requires_api_key must be False."""
-        from app.enrichment.adapters.whois_lookup import WhoisAdapter
-        assert WhoisAdapter.requires_api_key is False
-
-    def test_is_configured_returns_true(self) -> None:
-        """is_configured() must always return True — no API key needed."""
-        adapter = _make_adapter()
-        assert adapter.is_configured() is True
-
-    def test_is_configured_returns_true_with_empty_hosts(self) -> None:
-        """is_configured() returns True even when allowed_hosts is empty."""
-        adapter = _make_adapter(allowed_hosts=[])
-        assert adapter.is_configured() is True
-
-
-# ---------------------------------------------------------------------------
-# Protocol conformance
-# ---------------------------------------------------------------------------
-
-
-class TestProtocolConformance:
-
-    def test_whois_adapter_satisfies_provider_protocol(self) -> None:
-        """WhoisAdapter instance must satisfy the Provider @runtime_checkable protocol."""
-        adapter = _make_adapter()
-        assert isinstance(adapter, Provider), (
-            "WhoisAdapter must satisfy Provider protocol via @runtime_checkable"
-        )
-
-
-# ---------------------------------------------------------------------------
-# Unsupported IOC type
+# Unsupported IOC type — WHOIS-specific behavior
 # ---------------------------------------------------------------------------
 
 
 class TestUnsupportedType:
-
-    def test_ipv4_returns_enrichment_error(self) -> None:
-        """IPV4 IOC -> EnrichmentError (WhoisAdapter only supports DOMAIN)."""
-        result = _make_adapter().lookup(IPV4_IOC)
-
-        assert isinstance(result, EnrichmentError)
-        assert result.provider == "WHOIS"
-        assert "Unsupported" in result.error or "unsupported" in result.error.lower()
 
     def test_ipv4_does_not_call_whois(self) -> None:
         """IPV4 IOC -> no WHOIS query attempted."""

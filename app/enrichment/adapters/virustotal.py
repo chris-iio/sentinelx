@@ -1,7 +1,11 @@
 """VirusTotal API v3 adapter.
 
-Implements IOC enrichment against the VT API v3. Delegates all HTTP safety
-controls to safe_request() in http_safety.py.
+Extends BaseHTTPAdapter for IOC enrichment against the VT API v3. Delegates all
+HTTP safety controls to safe_request() in http_safety.py.
+
+Overrides lookup() entirely because VT uses an ENDPOINT_MAP dispatch (including
+base64url encoding for URL IOCs) and a multi-status pre-raise hook that doesn't
+fit the base class template pipeline.
 """
 from __future__ import annotations
 
@@ -9,8 +13,7 @@ import base64
 import datetime
 import logging
 
-import requests
-
+from app.enrichment.adapters.base import BaseHTTPAdapter
 from app.enrichment.http_safety import safe_request
 from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.pipeline.models import IOC, IOCType
@@ -111,43 +114,40 @@ def _parse_response(ioc: IOC, body: dict) -> EnrichmentResult:
     )
 
 
-class VTAdapter:
+class VTAdapter(BaseHTTPAdapter):
     """Adapter for the VirusTotal API v3.
 
+    Extends BaseHTTPAdapter for multi-IOC-type enrichment against VT API v3.
     Maps IOC types to VT API v3 endpoints, enforces all HTTP safety controls,
     and returns typed EnrichmentResult or EnrichmentError objects.
 
-    Thread safety: creates a fresh requests.Session per lookup() call.
-    Do NOT share one VTAdapter instance across threads with a shared Session.
-    The recommended pattern is one adapter per enrichment job.
+    Overrides lookup() entirely — VT's ENDPOINT_MAP dispatch and multi-status
+    pre-raise hook don't fit the base class template pipeline.
+
+    Thread safety: a persistent requests.Session is created by BaseHTTPAdapter.__init__
+    and reused across lookup() calls for TCP connection pooling.
 
     Args:
-        api_key:       VirusTotal API key for x-apikey header.
         allowed_hosts: SSRF allowlist — only these hostnames may be contacted.
+        api_key:       VirusTotal API key for x-apikey header.
     """
 
     # Types supported by VT API v3 (derived from ENDPOINT_MAP keys)
     # CVE is excluded — VT has no CVE endpoint (Pitfall 5)
-    supported_types = {
+    supported_types: frozenset[IOCType] = frozenset({
         IOCType.IPV4, IOCType.IPV6, IOCType.DOMAIN, IOCType.URL,
         IOCType.MD5, IOCType.SHA1, IOCType.SHA256,
-    }
+    })
 
     name = "VirusTotal"
     requires_api_key = True
 
-    def __init__(self, api_key: str, allowed_hosts: list[str]) -> None:
-        self._api_key = api_key
-        self._allowed_hosts = allowed_hosts
-        self._session = requests.Session()
-        self._session.headers.update({
+    def _auth_headers(self) -> dict:
+        """Return VT API v3 auth headers (x-apikey + Accept)."""
+        return {
             "x-apikey": self._api_key,
             "Accept": "application/json",
-        })
-
-    def is_configured(self) -> bool:
-        """Return True when a non-empty API key has been provided."""
-        return bool(self._api_key)
+        }
 
     def lookup(self, ioc: IOC) -> EnrichmentResult | EnrichmentError:
         """Enrich a single IOC using the VirusTotal API v3.
@@ -201,3 +201,16 @@ class VTAdapter:
         if not isinstance(result, dict):
             return result
         return _parse_response(ioc, result)
+
+    def _build_url(self, ioc: IOC) -> str:
+        """Build the VT API v3 endpoint URL via ENDPOINT_MAP.
+
+        Uses the module-level ENDPOINT_MAP lambdas for type-specific URL
+        construction (including base64url encoding for URL IOCs).
+        """
+        endpoint_fn = ENDPOINT_MAP[ioc.type]
+        return endpoint_fn(ioc.value)  # type: ignore[call-arg]
+
+    def _parse_response(self, ioc: IOC, body: dict) -> EnrichmentResult:
+        """Delegate to the module-level _parse_response function."""
+        return _parse_response(ioc, body)

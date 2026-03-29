@@ -12,6 +12,10 @@ import threading
 import time
 
 import pytest
+
+# Guard: skip all e2e tests if Playwright is not fully installed
+pytest.importorskip("playwright.sync_api", reason="Playwright not installed")
+
 from werkzeug.serving import make_server
 
 import app.enrichment.config_store as _config_store_mod

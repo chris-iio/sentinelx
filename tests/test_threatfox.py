@@ -1,23 +1,17 @@
-"""Tests for ThreatFox (abuse.ch) API adapter.
+"""Tests for ThreatFox (abuse.ch) API adapter — verdict logic and response parsing.
 
-Tests IOC type coverage, confidence-based verdict mapping, error handling,
-and all HTTP safety controls (SEC-04, SEC-05, SEC-06, SEC-07/SEC-16).
+Contract tests (protocol, error handling, safety controls) are in test_adapter_contract.py.
 
 All HTTP calls are mocked using unittest.mock.patch — no real API calls.
 """
 from __future__ import annotations
 
-from unittest.mock import MagicMock
-
 import requests
 
-from app.pipeline.models import IOCType
 from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.enrichment.adapters.threatfox import TFAdapter
-from app.enrichment.http_safety import MAX_RESPONSE_BYTES
 from tests.helpers import (
     make_mock_response,
-    make_cve_ioc,
     make_domain_ioc,
     make_ipv4_ioc,
     make_md5_ioc,
@@ -165,26 +159,6 @@ class TestEdgeCases:
         assert result.verdict == "no_data"
         assert result.detection_count == 0
 
-    def test_lookup_unsupported_type_cve(self) -> None:
-        """CVE IOC type -> EnrichmentError with 'Unsupported type'."""
-        ioc = make_cve_ioc("CVE-2024-1234")
-        result = _make_adapter().lookup(ioc)
-
-        assert isinstance(result, EnrichmentError)
-        assert "Unsupported" in result.error or "unsupported" in result.error.lower()
-
-    def test_lookup_timeout(self) -> None:
-        """requests.Timeout -> EnrichmentError with 'Timeout'."""
-        ioc = make_ipv4_ioc()
-
-        adapter = _make_adapter()
-        mock_adapter_session(adapter, method="post", side_effect=requests.exceptions.Timeout("Connection timed out"))
-
-        result = adapter.lookup(ioc)
-
-        assert isinstance(result, EnrichmentError)
-        assert "Timeout" in result.error or "timed out" in result.error.lower()
-
     def test_lookup_http_error(self) -> None:
         """HTTP error from server -> EnrichmentError."""
         ioc = make_ipv4_ioc()
@@ -200,33 +174,6 @@ class TestEdgeCases:
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentError)
-
-    def test_ssrf_validation(self) -> None:
-        """allowed_hosts missing threatfox-api.abuse.ch -> EnrichmentError with SSRF message."""
-        ioc = make_ipv4_ioc()
-        adapter = TFAdapter(api_key="test-key", allowed_hosts=[])
-
-        mock_adapter_session(adapter, method="post", side_effect=AssertionError("Should not reach network"))
-
-        result = adapter.lookup(ioc)
-
-        assert isinstance(result, EnrichmentError)
-        # Error message must mention SSRF or allowlist
-        assert (
-            "SSRF" in result.error
-            or "allowed" in result.error.lower()
-            or "allowlist" in result.error.lower()
-        )
-
-    def test_supported_types(self) -> None:
-        """TFAdapter.supported_types includes all 7 enrichable IOC types (not CVE)."""
-        supported = TFAdapter.supported_types
-        expected = {
-            IOCType.MD5, IOCType.SHA1, IOCType.SHA256,
-            IOCType.DOMAIN, IOCType.IPV4, IOCType.IPV6, IOCType.URL,
-        }
-        assert expected == supported
-        assert IOCType.CVE not in supported
 
 
 # -- Task 1 Tests: Confidence threshold boundary tests -------------------------
@@ -263,30 +210,6 @@ class TestConfidenceThreshold:
         assert result.verdict == "suspicious", (
             f"Expected 'suspicious' for confidence=74, got {result.verdict!r}"
         )
-
-
-# -- Task 1 Tests: HTTP safety controls ----------------------------------------
-
-class TestHTTPSafetyControls:
-    def test_response_size_limit(self) -> None:
-        """SEC-05: Response exceeding 1 MB -> EnrichmentError."""
-        ioc = make_ipv4_ioc()
-        oversized_chunk = b"x" * (MAX_RESPONSE_BYTES + 1)
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.raise_for_status = MagicMock()
-        mock_resp.iter_content = MagicMock(return_value=iter([oversized_chunk]))
-
-        adapter = _make_adapter()
-        mock_adapter_session(adapter, method="post", response=mock_resp)
-
-        result = adapter.lookup(ioc)
-
-        assert isinstance(result, EnrichmentError), (
-            f"Expected EnrichmentError for oversized response, got {type(result).__name__}"
-        )
-
-
 # -- Task 1 Tests: Multiple results — use highest confidence -------------------
 
 class TestMultipleResults:

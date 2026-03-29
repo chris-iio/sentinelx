@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T01",
+  "unitId": "M009/S02/T01",
+  "timestamp": 1774806106767,
+  "passed": true,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "python3 -m pytest tests/test_abuseipdb.py tests/test_greynoise.py tests/test_hashlookup.py tests/test_ip_api.py tests/test_otx.py -v",
+      "exitCode": 0,
+      "durationMs": 530,
+      "verdict": "pass"
+    }
+  ]
+}

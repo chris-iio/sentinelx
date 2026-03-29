@@ -1,42 +1,20 @@
-"""Tests for URLhaus adapter.
+"""Tests for URLhaus adapter — verdict logic, type routing, and response parsing.
 
-Tests URL, IP, domain, and hash lookups, verdict logic (malicious/no_data),
-error handling, and all HTTP safety controls (timeout, size cap, no redirects,
-SSRF allowlist).
-
-URLhaus uses POST with form-encoded bodies (data=, not json=).
-Each IOC type maps to a different endpoint and body key:
-  - URL  -> POST /v1/url/      {"url": value}
-  - IP   -> POST /v1/host/     {"host": value}
-  - DOMAIN -> POST /v1/host/   {"host": value}
-  - MD5  -> POST /v1/payload/  {"md5_hash": value}
-  - SHA256 -> POST /v1/payload/ {"sha256_hash": value}
-
-Verdict from query_status field:
-  - "is_listed" (URL endpoint)   -> malicious
-  - "ok" + urls_count > 0 (host) -> malicious
-  - "no_results"/"no_result"     -> no_data
+Contract tests (protocol, error handling, safety controls) are in test_adapter_contract.py.
 
 All HTTP calls are mocked using unittest.mock.patch -- no real API calls.
 """
 from __future__ import annotations
 
-import requests
-import requests.exceptions
-
-from app.pipeline.models import IOCType
 from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.enrichment.adapters.urlhaus import URLhausAdapter
-from app.enrichment.provider import Provider
 from tests.helpers import (
     make_mock_response,
     mock_adapter_session,
-    make_cve_ioc,
     make_domain_ioc,
     make_ipv4_ioc,
     make_ipv6_ioc,
     make_md5_ioc,
-    make_sha1_ioc,
     make_sha256_ioc,
     make_url_ioc,
 )
@@ -119,66 +97,6 @@ def _make_adapter(api_key: str = "test-api-key", allowed_hosts: list[str] | None
     if allowed_hosts is None:
         allowed_hosts = ALLOWED_HOSTS
     return URLhausAdapter(api_key=api_key, allowed_hosts=allowed_hosts)
-
-
-class TestURLhausProtocol:
-
-    def test_name(self) -> None:
-        """URLhausAdapter.name must equal 'URLhaus'."""
-        assert URLhausAdapter.name == "URLhaus"
-
-    def test_requires_api_key_true(self) -> None:
-        """URLhausAdapter.requires_api_key must be True."""
-        assert URLhausAdapter.requires_api_key is True
-
-    def test_supported_types_contains_url(self) -> None:
-        """IOCType.URL must be in URLhausAdapter.supported_types."""
-        assert IOCType.URL in URLhausAdapter.supported_types
-
-    def test_supported_types_contains_ipv4(self) -> None:
-        """IOCType.IPV4 must be in URLhausAdapter.supported_types."""
-        assert IOCType.IPV4 in URLhausAdapter.supported_types
-
-    def test_supported_types_contains_ipv6(self) -> None:
-        """IOCType.IPV6 must be in URLhausAdapter.supported_types."""
-        assert IOCType.IPV6 in URLhausAdapter.supported_types
-
-    def test_supported_types_contains_domain(self) -> None:
-        """IOCType.DOMAIN must be in URLhausAdapter.supported_types."""
-        assert IOCType.DOMAIN in URLhausAdapter.supported_types
-
-    def test_supported_types_contains_md5(self) -> None:
-        """IOCType.MD5 must be in URLhausAdapter.supported_types."""
-        assert IOCType.MD5 in URLhausAdapter.supported_types
-
-    def test_supported_types_contains_sha256(self) -> None:
-        """IOCType.SHA256 must be in URLhausAdapter.supported_types."""
-        assert IOCType.SHA256 in URLhausAdapter.supported_types
-
-    def test_supported_types_excludes_sha1(self) -> None:
-        """IOCType.SHA1 must NOT be in URLhausAdapter.supported_types (URLhaus doesn't support SHA1)."""
-        assert IOCType.SHA1 not in URLhausAdapter.supported_types
-
-    def test_supported_types_excludes_cve(self) -> None:
-        """IOCType.CVE must NOT be in URLhausAdapter.supported_types."""
-        assert IOCType.CVE not in URLhausAdapter.supported_types
-
-    def test_is_configured_with_key(self) -> None:
-        """is_configured() returns True when api_key is non-empty."""
-        adapter = _make_adapter(api_key="some-real-key")
-        assert adapter.is_configured() is True
-
-    def test_is_configured_without_key(self) -> None:
-        """is_configured() returns False when api_key is empty string."""
-        adapter = _make_adapter(api_key="")
-        assert adapter.is_configured() is False
-
-    def test_provider_isinstance(self) -> None:
-        """URLhausAdapter instance must satisfy the Provider protocol (isinstance check)."""
-        adapter = _make_adapter()
-        assert isinstance(adapter, Provider), (
-            "URLhausAdapter must satisfy the Provider protocol via @runtime_checkable"
-        )
 
 
 class TestURLhausLookup:
@@ -348,37 +266,6 @@ class TestURLhausLookup:
 
 class TestURLhausErrors:
 
-    def test_unsupported_type_sha1_returns_error(self) -> None:
-        """SHA1 IOC -> EnrichmentError (not supported by URLhaus)."""
-        sha1 = "a" * 40
-        ioc = make_sha1_ioc(sha1)
-
-        result = _make_adapter().lookup(ioc)
-
-        assert isinstance(result, EnrichmentError)
-        assert result.provider == "URLhaus"
-
-    def test_unsupported_type_cve_returns_error(self) -> None:
-        """CVE IOC -> EnrichmentError (not supported by URLhaus)."""
-        ioc = make_cve_ioc("CVE-2021-44228")
-
-        result = _make_adapter().lookup(ioc)
-
-        assert isinstance(result, EnrichmentError)
-        assert result.provider == "URLhaus"
-
-    def test_timeout_returns_error(self) -> None:
-        """Network timeout -> EnrichmentError with 'Timeout' in error."""
-        ioc = make_url_ioc("http://malicious.example.com/payload.exe")
-
-        adapter = _make_adapter()
-        mock_adapter_session(adapter, method="post", side_effect=requests.exceptions.Timeout("timed out"))
-        result = adapter.lookup(ioc)
-
-        assert isinstance(result, EnrichmentError)
-        assert result.provider == "URLhaus"
-        assert "Timeout" in result.error or "timed out" in result.error.lower()
-
     def test_http_500_returns_error(self) -> None:
         """HTTP 500 response -> EnrichmentError with 'HTTP 500' in error."""
         ioc = make_url_ioc("http://malicious.example.com/payload.exe")
@@ -405,30 +292,3 @@ class TestURLhausErrors:
         assert result.provider == "URLhaus"
         assert "403" in result.error
 
-    def test_ssrf_validation_blocks_disallowed_host(self) -> None:
-        """Adapter with allowed_hosts=[] -> EnrichmentError before network call."""
-        ioc = make_url_ioc("http://malicious.example.com/payload.exe")
-        adapter = URLhausAdapter(api_key="test-key", allowed_hosts=[])
-
-        mock_adapter_session(adapter, method="post", side_effect=AssertionError("Should not reach network"))
-        result = adapter.lookup(ioc)
-
-        assert isinstance(result, EnrichmentError), (
-            "Expected EnrichmentError when host not in allowed_hosts (SSRF check)"
-        )
-        assert (
-            "SSRF" in result.error
-            or "allowed" in result.error.lower()
-            or "allowlist" in result.error.lower()
-        )
-
-
-class TestAllowedHosts:
-
-    def test_urlhaus_api_in_allowed_hosts(self) -> None:
-        """'urlhaus-api.abuse.ch' must be in Config.ALLOWED_API_HOSTS (SSRF allowlist)."""
-        from app.config import Config
-        assert "urlhaus-api.abuse.ch" in Config.ALLOWED_API_HOSTS, (
-            "urlhaus-api.abuse.ch missing from ALLOWED_API_HOSTS — "
-            "URLhausAdapter will always fail SSRF validation in production"
-        )

@@ -12,8 +12,6 @@
  */
 
 import type { EnrichmentItem } from "../types/api";
-import type { VerdictKey } from "../types/ioc";
-import { verdictSeverityIndex } from "../types/ioc";
 import {
   findCardForIoc,
   updateCardVerdict,
@@ -27,12 +25,11 @@ import {
   createContextRow,
   createDetailRow,
   updateSummaryRow,
-  formatDate,
   injectSectionHeadersAndNoDataSummary,
   updateContextLine,
 } from "./row-factory";
 import { wireExpandToggles } from "./enrichment";
-import { exportJSON, exportCSV, copyAllIOCs } from "./export";
+import { computeResultDisplay, injectDetailLink, sortDetailRows, initExportButton } from "./shared-rendering";
 
 // ---- Module state ----
 
@@ -40,77 +37,6 @@ import { exportJSON, exportCSV, copyAllIOCs } from "./export";
 const allResults: EnrichmentItem[] = [];
 
 // ---- Private helpers ----
-
-/**
- * Inject a "View full detail →" link footer into the .enrichment-details panel
- * for a given enrichment slot. Identical to the private injectDetailLink in
- * enrichment.ts — duplicated here because that function uses closures and is
- * not exported.
- */
-function injectDetailLink(slot: HTMLElement): void {
-  const details = slot.querySelector<HTMLElement>(".enrichment-details");
-  if (!details) return;
-
-  if (details.querySelector(".detail-link-footer")) return;
-
-  const card = slot.closest<HTMLElement>(".ioc-card");
-  if (!card) return;
-
-  const iocType = card.getAttribute("data-ioc-type") ?? "";
-  const iocValue = card.getAttribute("data-ioc-value") ?? "";
-  if (!iocType || !iocValue) return;
-
-  const footer = document.createElement("div");
-  footer.className = "detail-link-footer";
-
-  const anchor = document.createElement("a");
-  anchor.className = "detail-link";
-  anchor.textContent = "View full detail \u2192";
-  anchor.setAttribute(
-    "href",
-    "/ioc/" + iocType + "/" + encodeURIComponent(iocValue)
-  );
-
-  footer.appendChild(anchor);
-  details.appendChild(footer);
-}
-
-/**
- * Wire the export dropdown for history pages.
- * Uses the module-level allResults array populated during replay.
- */
-function initExportButton(): void {
-  const exportBtn = document.getElementById("export-btn");
-  const dropdown = document.getElementById("export-dropdown");
-  if (!exportBtn || !dropdown) return;
-
-  exportBtn.addEventListener("click", function () {
-    const isVisible = dropdown.style.display !== "none";
-    dropdown.style.display = isVisible ? "none" : "";
-  });
-
-  document.addEventListener("click", function (e) {
-    const target = e.target as HTMLElement;
-    if (!target.closest(".export-group")) {
-      dropdown.style.display = "none";
-    }
-  });
-
-  const buttons = dropdown.querySelectorAll<HTMLElement>("[data-export]");
-  buttons.forEach(function (btn) {
-    btn.addEventListener("click", function () {
-      const action = btn.getAttribute("data-export");
-      if (action === "json") {
-        exportJSON(allResults);
-      } else if (action === "csv") {
-        exportCSV(allResults);
-      } else if (action === "iocs") {
-        copyAllIOCs(btn);
-      }
-      dropdown.style.display = "none";
-    });
-  });
-}
 
 /**
  * Replay a single enrichment result into the DOM, updating all display state.
@@ -159,46 +85,7 @@ function replayResult(
     (iocResultCounts[result.ioc_value] ?? 0) + 1;
 
   // Compute verdict and stat text
-  let verdict: VerdictKey;
-  let statText: string;
-  let summaryText: string;
-  let detectionCount = 0;
-  let totalEngines = 0;
-
-  if (result.type === "result") {
-    verdict = result.verdict;
-    detectionCount = result.detection_count;
-    totalEngines = result.total_engines;
-
-    if (verdict === "malicious") {
-      statText = result.detection_count + "/" + result.total_engines + " engines";
-    } else if (verdict === "suspicious") {
-      statText =
-        result.total_engines > 1
-          ? result.detection_count + "/" + result.total_engines + " engines"
-          : "Suspicious";
-    } else if (verdict === "clean") {
-      statText = "Clean, " + result.total_engines + " engines";
-    } else if (verdict === "known_good") {
-      statText = "NSRL match";
-    } else {
-      statText = "Not in database";
-    }
-
-    const scanDateStr = formatDate(result.scan_date);
-    summaryText =
-      result.provider +
-      ": " +
-      verdict +
-      " (" +
-      statText +
-      (scanDateStr ? ", scanned " + scanDateStr : "") +
-      ")";
-  } else {
-    verdict = "error";
-    statText = result.error;
-    summaryText = result.provider + ": error, " + result.error;
-  }
+  const { verdict, statText, summaryText, detectionCount, totalEngines } = computeResultDisplay(result);
 
   // Track verdict entries
   const entries = iocVerdicts[result.ioc_value] ?? [];
@@ -223,26 +110,6 @@ function replayResult(
   if (sectionContainer) {
     const detailRow = createDetailRow(result.provider, verdict, statText, result);
     sectionContainer.appendChild(detailRow);
-  }
-}
-
-/**
- * Sort detail rows within a reputation section by verdict severity (descending).
- * Called once after all results are replayed — no debouncing needed.
- */
-function sortDetailRows(container: HTMLElement): void {
-  const rows = Array.from(
-    container.querySelectorAll<HTMLElement>(".provider-detail-row")
-  );
-  rows.sort((a, b) => {
-    const aVerdict = a.getAttribute("data-verdict") as VerdictKey | null;
-    const bVerdict = b.getAttribute("data-verdict") as VerdictKey | null;
-    const aIdx = aVerdict ? verdictSeverityIndex(aVerdict) : -1;
-    const bIdx = bVerdict ? verdictSeverityIndex(bVerdict) : -1;
-    return bIdx - aIdx;
-  });
-  for (const row of rows) {
-    container.appendChild(row);
   }
 }
 
@@ -351,5 +218,5 @@ export function init(): void {
 
   // Wire expand/collapse toggles and export button
   wireExpandToggles();
-  initExportButton();
+  initExportButton(allResults);
 }

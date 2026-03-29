@@ -1,17 +1,8 @@
 """Tests for CrtShAdapter — certificate transparency history via crt.sh.
 
-Tests certificate data extraction (cert_count, earliest, latest, subdomains),
-empty response handling, HTTP error handling, subdomain normalization (dedupe,
-wildcard strip, lowercase, sort, cap), and all HTTP safety controls.
+Contract tests (protocol, error handling, safety controls) are in test_adapter_contract.py.
 
 All HTTP calls are mocked using unittest.mock.patch -- no real API calls.
-
-crt.sh API behavior:
-  - GET https://crt.sh/?q={domain}&output=json
-  - 200 + array: Returns list of certificate records
-  - 200 + empty array []: No certs found -> verdict=no_data
-  - 502: Common crt.sh transient error -> EnrichmentError("HTTP 502")
-  - Timeout: -> EnrichmentError("Timeout")
 """
 from __future__ import annotations
 
@@ -25,11 +16,8 @@ from tests.helpers import (
     make_mock_response,
     mock_adapter_session,
     make_domain_ioc,
-    make_ipv4_ioc,
 )
 from app.enrichment.models import EnrichmentError, EnrichmentResult
-from app.enrichment.provider import Provider
-from app.pipeline.models import IOCType
 
 
 ALLOWED_HOSTS = ["crt.sh"]
@@ -396,47 +384,6 @@ class TestHTTPErrors:
         assert isinstance(result, EnrichmentError)
         assert "HTTP 500" in result.error
 
-    def test_timeout_returns_enrichment_error(self) -> None:
-        """Network timeout -> EnrichmentError with 'Timeout' in error."""
-        ioc = make_domain_ioc("example.com")
-
-        adapter = _make_adapter()
-        mock_adapter_session(adapter, side_effect=requests.exceptions.Timeout("timed out"))
-        result = adapter.lookup(ioc)
-
-        assert isinstance(result, EnrichmentError)
-        assert result.provider == "Cert History"
-        assert "Timeout" in result.error or "timed out" in result.error.lower()
-
-    def test_ssrf_validation_blocks_disallowed_host(self) -> None:
-        """allowed_hosts=[] -> EnrichmentError from SSRF check before network call."""
-        ioc = make_domain_ioc("example.com")
-        adapter = CrtShAdapter(allowed_hosts=[])
-
-        mock_adapter_session(adapter, side_effect=AssertionError("Should not reach network"))
-        result = adapter.lookup(ioc)
-
-        assert isinstance(result, EnrichmentError), (
-        "Expected EnrichmentError when host not in allowed_hosts (SSRF check)"
-        )
-        assert (
-        "SSRF" in result.error
-        or "allowed" in result.error.lower()
-        or "allowlist" in result.error.lower()
-        )
-
-    def test_unsupported_type_ipv4(self) -> None:
-        """IPV4 IOC -> EnrichmentError('Unsupported type') without any network call."""
-        ioc = make_ipv4_ioc("8.8.8.8")
-
-        adapter = _make_adapter()
-        mock_adapter_session(adapter, side_effect=AssertionError("Should not reach network"))
-        result = adapter.lookup(ioc)
-
-        assert isinstance(result, EnrichmentError)
-        assert result.provider == "Cert History"
-        assert "Unsupported" in result.error or "unsupported" in result.error.lower()
-
 
 class TestHTTPSafetyControls:
 
@@ -504,43 +451,3 @@ class TestHTTPSafetyControls:
         assert "output=json" in called_url
         assert "crt.sh" in called_url
 
-
-class TestProviderProtocol:
-
-    def test_is_provider(self) -> None:
-        """CrtShAdapter instance must satisfy the Provider protocol (@runtime_checkable)."""
-        adapter = CrtShAdapter(allowed_hosts=[])
-        assert isinstance(adapter, Provider), (
-        "CrtShAdapter must satisfy the Provider protocol via @runtime_checkable"
-        )
-
-    def test_name_is_cert_history(self) -> None:
-        """CrtShAdapter.name must equal 'Cert History'."""
-        assert CrtShAdapter.name == "Cert History"
-
-    def test_requires_api_key_false(self) -> None:
-        """CrtShAdapter.requires_api_key must be False (zero-auth provider)."""
-        assert CrtShAdapter.requires_api_key is False
-
-    def test_is_configured_always_true(self) -> None:
-        """CrtShAdapter.is_configured() must always return True (no key required)."""
-        adapter = CrtShAdapter(allowed_hosts=[])
-        assert adapter.is_configured() is True
-
-    def test_supported_types_is_frozenset(self) -> None:
-        """supported_types must be a frozenset."""
-        assert isinstance(CrtShAdapter.supported_types, frozenset)
-
-    def test_supported_types_contains_domain(self) -> None:
-        """IOCType.DOMAIN must be in CrtShAdapter.supported_types."""
-        assert IOCType.DOMAIN in CrtShAdapter.supported_types
-
-    def test_supported_types_excludes_ipv4(self) -> None:
-        """IOCType.IPV4 must NOT be in CrtShAdapter.supported_types."""
-        assert IOCType.IPV4 not in CrtShAdapter.supported_types
-
-    def test_supported_types_excludes_hash(self) -> None:
-        """Hash types must NOT be in CrtShAdapter.supported_types."""
-        assert IOCType.MD5 not in CrtShAdapter.supported_types
-        assert IOCType.SHA1 not in CrtShAdapter.supported_types
-        assert IOCType.SHA256 not in CrtShAdapter.supported_types

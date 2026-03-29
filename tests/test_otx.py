@@ -1,38 +1,13 @@
-"""Tests for OTX AlienVault adapter.
+"""Tests for OTX AlienVault adapter — verdict logic, type routing, and response parsing.
 
-Tests IP, domain, URL, hash, and CVE lookups, verdict logic (malicious/suspicious/no_data),
-error handling, and all HTTP safety controls (timeout, size cap, no redirects, SSRF allowlist).
-
-OTX AlienVault uses GET requests with X-OTX-API-KEY header:
-  - IPv4:    GET /api/v1/indicators/IPv4/{value}/general
-  - IPv6:    GET /api/v1/indicators/IPv6/{value}/general
-  - DOMAIN:  GET /api/v1/indicators/domain/{value}/general
-  - URL:     GET /api/v1/indicators/url/{value}/general
-  - MD5:     GET /api/v1/indicators/file/{value}/general
-  - SHA1:    GET /api/v1/indicators/file/{value}/general
-  - SHA256:  GET /api/v1/indicators/file/{value}/general
-  - CVE:     GET /api/v1/indicators/cve/{value}/general
-
-CRITICAL: All three hash types (MD5, SHA1, SHA256) map to "file" in the URL path.
-
-Verdict from pulse_info.count:
-  - count >= 5  -> malicious
-  - count 1-4   -> suspicious
-  - count == 0  -> no_data
-
-404 response -> no_data (not an error) — checked BEFORE raise_for_status.
+Contract tests (protocol, error handling, safety controls) are in test_adapter_contract.py.
 
 All HTTP calls are mocked using unittest.mock.patch -- no real API calls.
 """
 from __future__ import annotations
 
-import requests
-import requests.exceptions
-
-from app.pipeline.models import IOCType
-from app.enrichment.models import EnrichmentError, EnrichmentResult
+from app.enrichment.models import EnrichmentResult
 from app.enrichment.adapters.otx import OTXAdapter
-from app.enrichment.provider import Provider
 from tests.helpers import (
     make_mock_response,
     mock_adapter_session,
@@ -141,75 +116,6 @@ def _make_adapter(api_key: str = "test-api-key", allowed_hosts: list[str] | None
     if allowed_hosts is None:
         allowed_hosts = ALLOWED_HOSTS
     return OTXAdapter(api_key=api_key, allowed_hosts=allowed_hosts)
-
-
-class TestOTXProtocol:
-
-    def test_name(self) -> None:
-        """OTXAdapter.name must equal 'OTX AlienVault'."""
-        assert OTXAdapter.name == "OTX AlienVault"
-
-    def test_requires_api_key_true(self) -> None:
-        """OTXAdapter.requires_api_key must be True."""
-        assert OTXAdapter.requires_api_key is True
-
-    def test_supported_types_contains_ipv4(self) -> None:
-        """IOCType.IPV4 must be in OTXAdapter.supported_types."""
-        assert IOCType.IPV4 in OTXAdapter.supported_types
-
-    def test_supported_types_contains_ipv6(self) -> None:
-        """IOCType.IPV6 must be in OTXAdapter.supported_types."""
-        assert IOCType.IPV6 in OTXAdapter.supported_types
-
-    def test_supported_types_contains_domain(self) -> None:
-        """IOCType.DOMAIN must be in OTXAdapter.supported_types."""
-        assert IOCType.DOMAIN in OTXAdapter.supported_types
-
-    def test_supported_types_contains_url(self) -> None:
-        """IOCType.URL must be in OTXAdapter.supported_types."""
-        assert IOCType.URL in OTXAdapter.supported_types
-
-    def test_supported_types_contains_md5(self) -> None:
-        """IOCType.MD5 must be in OTXAdapter.supported_types."""
-        assert IOCType.MD5 in OTXAdapter.supported_types
-
-    def test_supported_types_contains_sha1(self) -> None:
-        """IOCType.SHA1 must be in OTXAdapter.supported_types."""
-        assert IOCType.SHA1 in OTXAdapter.supported_types
-
-    def test_supported_types_contains_sha256(self) -> None:
-        """IOCType.SHA256 must be in OTXAdapter.supported_types."""
-        assert IOCType.SHA256 in OTXAdapter.supported_types
-
-    def test_supported_types_contains_cve(self) -> None:
-        """IOCType.CVE must be in OTXAdapter.supported_types (first CVE-capable provider)."""
-        assert IOCType.CVE in OTXAdapter.supported_types, (
-            "OTX AlienVault is the first provider to support CVE lookups — "
-            "IOCType.CVE must be in supported_types"
-        )
-
-    def test_all_eight_ioc_types_supported(self) -> None:
-        """OTX supports all 8 IOC types (EMAIL excluded — no OTX endpoint) — len(supported_types) == 8."""
-        assert len(OTXAdapter.supported_types) == 8, (
-            f"Expected 8 supported types, got {len(OTXAdapter.supported_types)}: {OTXAdapter.supported_types}"
-        )
-
-    def test_is_configured_with_key(self) -> None:
-        """is_configured() returns True when api_key is non-empty."""
-        adapter = _make_adapter(api_key="real-api-key")
-        assert adapter.is_configured() is True
-
-    def test_is_configured_without_key(self) -> None:
-        """is_configured() returns False when api_key is empty string."""
-        adapter = _make_adapter(api_key="")
-        assert adapter.is_configured() is False
-
-    def test_provider_isinstance(self) -> None:
-        """OTXAdapter instance must satisfy the Provider protocol (isinstance check)."""
-        adapter = _make_adapter()
-        assert isinstance(adapter, Provider), (
-            "OTXAdapter must satisfy the Provider protocol via @runtime_checkable"
-        )
 
 
 class TestOTXLookup:
@@ -436,51 +342,6 @@ class TestOTXLookup:
         assert result.verdict == "suspicious"
 
 
-class TestOTXErrors:
-
-    def test_timeout_returns_error(self) -> None:
-        """Network timeout -> EnrichmentError with 'Timeout' in error."""
-        ioc = make_ipv4_ioc("8.8.8.8")
-
-        adapter = _make_adapter()
-        mock_adapter_session(adapter, side_effect=requests.exceptions.Timeout("timed out"))
-        result = adapter.lookup(ioc)
-
-        assert isinstance(result, EnrichmentError)
-        assert result.provider == "OTX AlienVault"
-        assert "Timeout" in result.error or "timed out" in result.error.lower()
-
-    def test_http_500_returns_error(self) -> None:
-        """HTTP 500 response -> EnrichmentError with 'HTTP 500' in error."""
-        ioc = make_ipv4_ioc("8.8.8.8")
-        mock_resp = make_mock_response(500)
-
-        adapter = _make_adapter()
-        mock_adapter_session(adapter, response=mock_resp)
-        result = adapter.lookup(ioc)
-
-        assert isinstance(result, EnrichmentError)
-        assert result.provider == "OTX AlienVault"
-        assert "HTTP 500" in result.error
-
-    def test_ssrf_validation_blocks_disallowed_host(self) -> None:
-        """Adapter with allowed_hosts=[] -> EnrichmentError before network call."""
-        ioc = make_ipv4_ioc("8.8.8.8")
-        adapter = OTXAdapter(api_key="test-key", allowed_hosts=[])
-
-        mock_adapter_session(adapter, side_effect=AssertionError("Should not reach network"))
-        result = adapter.lookup(ioc)
-
-        assert isinstance(result, EnrichmentError), (
-            "Expected EnrichmentError when host not in allowed_hosts (SSRF check)"
-        )
-        assert (
-            "SSRF" in result.error
-            or "allowed" in result.error.lower()
-            or "allowlist" in result.error.lower()
-        )
-
-
 class TestOTXTypeMapping:
 
     def test_ipv4_maps_to_ipv4_string(self) -> None:
@@ -586,13 +447,3 @@ class TestOTXTypeMapping:
         call_url = adapter._session.get.call_args[0][0]
         assert "/indicators/cve/CVE-2021-44228/general" in call_url
 
-
-class TestAllowedHosts:
-
-    def test_otx_alienvault_in_allowed_hosts(self) -> None:
-        """'otx.alienvault.com' must be in Config.ALLOWED_API_HOSTS (SSRF allowlist)."""
-        from app.config import Config
-        assert "otx.alienvault.com" in Config.ALLOWED_API_HOSTS, (
-            "otx.alienvault.com missing from ALLOWED_API_HOSTS — "
-            "OTXAdapter will always fail SSRF validation in production"
-        )

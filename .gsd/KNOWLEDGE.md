@@ -505,3 +505,31 @@ Discovered: M008/S01
 `csrf.exempt(bp_api)` in `create_app()` exempts only the API blueprint from CSRF validation. Browser routes on the shared `bp` (main) blueprint remain CSRF-protected. Always verify with a paired test: API POST succeeds without CSRF token AND browser POST fails without CSRF token.
 
 Discovered: M008/S02
+
+---
+
+## BaseHTTPAdapter migration: three patterns for varying adapter complexity
+
+When migrating HTTP adapters to a shared base class with a template-method `lookup()`:
+
+1. **Simple GET** (abuseipdb, greynoise, hashlookup, ip_api, otx, shodan): Implement `_build_url()` + `_parse_response()`, optionally `_auth_headers()` and `_make_pre_raise_hook()`. Inherit `__init__`, `is_configured`, `lookup` unchanged.
+
+2. **POST** (malwarebazaar, threatfox, urlhaus): Add `_http_method = "POST"` class attribute + `_build_request_body()` returning `(data, None)` for form-encoded or `(None, json_payload)` for JSON bodies.
+
+3. **Complex/multi-call** (virustotal, threatminer, crtsh): Override `lookup()` entirely. Still get `__init__`, `is_configured`, and session management for free. Implement abstract methods as stubs (raise NotImplementedError) or meaningful implementations as appropriate.
+
+**Key insight:** Design all three patterns during the proof migration (S01), not during bulk migration (S02). The proof adapter should be the simplest (Shodan), but the base class must anticipate POST and complex patterns.
+
+Discovered: M009/S01-S02
+
+---
+
+## ADAPTER_REGISTRY dataclass pattern for parametrized adapter contract tests
+
+A flat registry of `AdapterEntry` dataclass instances (one per adapter) enables `@pytest.mark.parametrize` to generate one test per adapter per contract behavior. This is simpler than inheritance-based test class hierarchies and scales trivially — adding a new adapter requires one registry entry to get 12+ contract tests for free.
+
+The registry captures per-adapter variation (constructor kwargs, api_key requirement, supported/excluded types, HTTP method, config entry) so test bodies remain generic. HTTP-only tests filter on `is_http=True`.
+
+**Pattern location:** `tests/test_adapter_contract.py`
+
+Discovered: M009/S03
