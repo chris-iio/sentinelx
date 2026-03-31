@@ -1,13 +1,12 @@
 """Tests for the REST API blueprint (/api/analyze, /api/status/<job_id>)."""
 
-import json
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from app import create_app
 from app.enrichment.models import EnrichmentResult
-from app.pipeline.models import IOC, IOCType
+from app.pipeline.models import IOCType
 
 from tests.helpers import make_ipv4_ioc
 
@@ -17,11 +16,11 @@ def client():
     """Test client with CSRF disabled (as in other test files)."""
     app = create_app({"TESTING": True, "WTF_CSRF_ENABLED": False})
     # Provide required app attributes
-    app.history_store = MagicMock()
-    app.cache_store = MagicMock()
-    app.registry = MagicMock()
-    app.registry.configured.return_value = []
-    app.registry.all.return_value = []
+    app.history_store = MagicMock()  # type: ignore[attr-defined]
+    app.cache_store = MagicMock()  # type: ignore[attr-defined]
+    app.registry = MagicMock()  # type: ignore[attr-defined]
+    app.registry.configured.return_value = []  # type: ignore[attr-defined]
+    app.registry.all.return_value = []  # type: ignore[attr-defined]
     with app.test_client() as c:
         yield c
 
@@ -30,10 +29,10 @@ def client():
 def client_with_csrf():
     """Test client with CSRF enabled — verifies API is exempt."""
     app = create_app({"TESTING": True, "WTF_CSRF_ENABLED": True})
-    app.history_store = MagicMock()
-    app.cache_store = MagicMock()
-    app.registry = MagicMock()
-    app.registry.configured.return_value = []
+    app.history_store = MagicMock()  # type: ignore[attr-defined]
+    app.cache_store = MagicMock()  # type: ignore[attr-defined]
+    app.registry = MagicMock()  # type: ignore[attr-defined]
+    app.registry.configured.return_value = []  # type: ignore[attr-defined]
     with app.test_client() as c:
         yield c
 
