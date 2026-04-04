@@ -587,7 +587,60 @@ This file is the explicit capability and coverage contract for the project.
 
 ## Active
 
-None.
+### R056 — Adapter docstrings trimmed to one-liner + edge cases only — no API status code walkthroughs
+- Class: quality-attribute
+- Status: active
+- Description: Each adapter's module and class docstrings are reduced to a one-liner purpose sentence plus genuinely non-obvious gotchas. API endpoint URLs, HTTP status code tables, verdict priority lists, and parameter walkthroughs are removed — the code and tests prove those.
+- Why it matters: Adapter docstrings are 42% of adapter code (1,176 of 2,816 lines). Trimming to essentials makes files navigable and removes maintenance burden of keeping prose in sync with code.
+- Source: user
+- Primary owning slice: M011/S01
+- Supporting slices: none
+- Validation: unmapped
+- Notes: Target ~55-60% reduction in docstring lines. Keep any edge case that would surprise a reader (e.g. ThreatMiner always returns HTTP 200).
+
+### R057 — Per-adapter granular field tests consolidated — one test per response scenario instead of one per field
+- Class: quality-attribute
+- Status: active
+- Description: Per-adapter test files that assert individual fields (test_raw_stats_has_asn_key, test_raw_stats_asn_value, test_detection_count_always_zero, etc.) are consolidated into single response-shape tests that assert the full result object in one test.
+- Why it matters: ~72 granular one-assertion tests across 7 adapter test files produce ~400-600 lines of boilerplate. Consolidation reduces test count without losing coverage — the same assertions exist, just grouped.
+- Source: user
+- Primary owning slice: M011/S02
+- Supporting slices: none
+- Validation: unmapped
+- Notes: Focus on asn_cymru (26 granular), whois_lookup (14), dns_lookup (12), threatminer (9), ip_api (6), crtsh (5). OTX already clean.
+
+### R058 — Dead CSS removed from input.css — every remaining class referenced by at least one template or TS file
+- Class: quality-attribute
+- Status: active
+- Description: Cross-reference every CSS class in input.css against all templates (.html) and TypeScript files (.ts). Remove classes with zero references. Rebuild dist/style.css and verify visually.
+- Why it matters: 2,006 lines of CSS accumulated over 10 milestones. Dead rules bloat the stylesheet and confuse future editors.
+- Source: user
+- Primary owning slice: M011/S03
+- Supporting slices: none
+- Validation: unmapped
+- Notes: settings-provider-card classes are prime candidates — appear in CSS but not in templates.
+
+### R059 — Orchestrator concurrency tests run in <1s total instead of ~6s — sleep mocks replaced with synchronization primitives
+- Class: quality-attribute
+- Status: active
+- Description: The 7 orchestrator tests that use time.sleep-based timing (accounting for ~6.2s of 9s unit suite) are rewritten to use threading Events/barriers or tighter mocks so they complete in <1s total.
+- Why it matters: 6s of 9s unit test time comes from 7 tests. Faster tests mean faster feedback loops during development.
+- Source: user
+- Primary owning slice: M011/S03
+- Supporting slices: none
+- Validation: unmapped
+- Notes: Tests: test_adapter_failure_isolated, test_retry_on_failure, test_retry_still_fails, test_error_isolation, test_enrich_all_parallel, test_zero_auth_completes, test_vt_peak_concurrency.
+
+### R060 — All existing tests pass after refactoring with zero behavior changes
+- Class: continuity
+- Status: active
+- Description: All tests pass after all refactoring. Test count may decrease from consolidation but zero coverage regression. No behavior changes.
+- Why it matters: Refactoring must not break anything.
+- Source: inferred
+- Primary owning slice: M011/all
+- Supporting slices: none
+- Validation: unmapped
+- Notes: Test count expected to decrease (granular tests consolidated). Coverage same or better.
 
 ## Validated (M010)
 
@@ -704,10 +757,15 @@ None.
 | R053 | core-capability | validated | M010/S02 | none | S02: No Recent Analyses in index.html; no list_recent in analysis.py; no toggle JS. |
 | R054 | core-capability | validated | M010/S02 | none | S02: history_list() route; history.html template; clock nav icon; links to detail pages. |
 | R055 | continuity | validated | M010/all | none | 1061 tests passed (up from 1060). Zero behavior changes. |
+| R056 | quality-attribute | active | M011/S01 | none | unmapped |
+| R057 | quality-attribute | active | M011/S02 | none | unmapped |
+| R058 | quality-attribute | active | M011/S03 | none | unmapped |
+| R059 | quality-attribute | active | M011/S03 | none | unmapped |
+| R060 | continuity | active | M011/all | none | unmapped |
 
 ## Coverage Summary
 
-- Active requirements: 0
-- Mapped to slices: 0
+- Active requirements: 5 (R056, R057, R058, R059, R060)
+- Mapped to slices: 5
 - Validated: 54 (R001–R055)
 - Unmapped active requirements: 0

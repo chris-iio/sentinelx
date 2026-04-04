@@ -10,7 +10,7 @@ Safe, correct, and transparent IOC extraction and enrichment — never invent sc
 
 ## Current State
 
-**M010 complete (2026-04-04).** 1061 tests passing. Route duplication eliminated — _setup_orchestrator() and _get_enrichment_status() shared helpers in _helpers.py. Recent Analyses relocated from home page to dedicated /history page with clock nav icon. Codebase clean and ready for next feature milestone.
+**M011 planned (2026-04-04).** 1061 tests passing. Preparing focused reduction milestone: adapter docstring trim, per-adapter test consolidation, dead CSS removal, orchestrator test speedup.
 
 ## Architecture / Key Patterns
 
@@ -40,6 +40,7 @@ See `.gsd/REQUIREMENTS.md` for the explicit capability contract, requirement sta
 - [x] M008: Routes Decomposition & REST API — routes.py decomposed into app/routes/ package, REST API blueprint added (POST /api/analyze, GET /api/status). 1075 tests, 0 failures.
 - [x] M009: Codebase Reduction — BaseHTTPAdapter consolidation (12 adapters), parametrized contract tests (172 replacing 208), CSS audit (clean), frontend TS dedup (4 functions shared). Net -1,143 LOC, 947 tests, 0 failures.
 - [x] M010: Cleanup & History Page — Route duplication cleanup (_setup_orchestrator, _get_enrichment_status shared helpers), dead import/export removal, Recent Analyses relocated from home page to dedicated /history page. 1061 tests, 0 failures.
+- [ ] M011: Lean & Fast — Adapter docstring trim, per-adapter test consolidation, dead CSS removal, orchestrator test speedup.
 
 ---
 *Last updated: 2026-04-04 — M010 planning.*

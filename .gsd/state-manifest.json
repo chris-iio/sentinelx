@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-04T05:33:22.096Z",
+  "exported_at": "2026-04-04T11:30:44.078Z",
   "milestones": [
     {
       "id": "M001",
@@ -287,6 +287,67 @@
       ],
       "requirement_coverage": "Covers: R050, R051, R052, R053, R054, R055. All 6 active requirements mapped to slices.",
       "boundary_map_markdown": "### S01 → S02\n\nProduces:\n- `app/routes/_helpers.py` → `_create_and_submit_enrichment()` shared helper\n- `app/routes/enrichment.py` → consolidated status implementation (both /enrichment/status/ and /api/status/ URLs work)\n- Clean import state across all app/ and TS modules\n\nConsumes:\n- nothing (first slice)\n\n### S02 (consumes from S01)\n\nProduces:\n- `app/routes/history.py` → GET /history list route\n- `app/templates/history.html` → history list template\n- `app/templates/base.html` → nav link to /history\n- Clean home page (index.html without Recent Analyses)\n\nConsumes from S01:\n- Clean _helpers.py (no conflicts with S01 refactoring)"
+    },
+    {
+      "id": "M011",
+      "title": "",
+      "status": "queued",
+      "depends_on": [],
+      "created_at": "2026-04-04T11:16:32.904Z",
+      "completed_at": null,
+      "vision": "Trim adapter docstrings to essentials, consolidate granular per-field tests, remove dead CSS, and speed up orchestrator tests. Leave the codebase measurably leaner and the test suite measurably faster with zero behavior changes.",
+      "success_criteria": [
+        "Net LOC reduction ≥ 1,000 across app/ and tests/",
+        "All tests pass (count may decrease from consolidation, zero coverage regression)",
+        "make typecheck and make js clean",
+        "Unit test suite runs in < 5s (down from ~9s)",
+        "Zero behavior changes — same verdicts, same UI, same enrichment flow"
+      ],
+      "key_risks": [
+        {
+          "risk": "Docstring trim removes genuinely useful edge case documentation",
+          "whyItMatters": "A future developer hits a ThreatMiner HTTP-200-means-404 gotcha with no docstring warning"
+        },
+        {
+          "risk": "Test consolidation hides coverage gaps",
+          "whyItMatters": "Collapsing 8 single-field asserts into 1 multi-assert test makes failure messages less specific"
+        },
+        {
+          "risk": "Dead CSS audit false positives from dynamic class construction",
+          "whyItMatters": "Classes like verdict-badge--malicious are built via template literals, not literal strings greppable in TS"
+        }
+      ],
+      "proof_strategy": [
+        {
+          "riskOrUnknown": "Docstring trim loses useful info",
+          "retireIn": "S01",
+          "whatWillBeProven": "Every KNOWLEDGE.md gotcha preserved; all tests pass unchanged"
+        },
+        {
+          "riskOrUnknown": "Test consolidation coverage gap",
+          "retireIn": "S02",
+          "whatWillBeProven": "Same assertion count per adapter (grouped, not removed); all tests pass"
+        },
+        {
+          "riskOrUnknown": "CSS false positives",
+          "retireIn": "S03",
+          "whatWillBeProven": "Dynamic class patterns accounted for; make css clean; E2E tests pass"
+        }
+      ],
+      "verification_contract": "pytest --tb=short -q passes. make typecheck exits 0. make js exits 0.",
+      "verification_integration": "make css rebuilds clean. E2E tests pass (visual regression check for CSS removal).",
+      "verification_operational": "None — no service lifecycle changes.",
+      "verification_uat": "None — no user-visible changes.",
+      "definition_of_done": [
+        "All slice deliverables complete",
+        "Net LOC reduction ≥ 1,000 measured via git diff --stat",
+        "Unit tests run in < 5s",
+        "All tests pass",
+        "make typecheck, make js, make css all clean",
+        "Zero behavior changes confirmed"
+      ],
+      "requirement_coverage": "Covers: R056, R057, R058, R059, R060. Leaves for later: none. Orphan risks: none.",
+      "boundary_map_markdown": "### S01 → S02\n\nProduces:\n- Trimmed adapter files with one-liner + edge-case-only docstrings\n- Pattern for what to keep vs remove (established by first few adapters)\n\nConsumes:\n- nothing (independent slice)\n\n### S02 (independent)\n\nProduces:\n- Consolidated per-adapter test files with response-shape tests\n- Reduced test count with same assertion coverage\n\nConsumes:\n- nothing (independent of S01 — tests don't depend on docstrings)\n\n### S03 (independent)\n\nProduces:\n- Clean input.css with only referenced classes\n- Fast orchestrator tests using synchronization primitives\n\nConsumes:\n- nothing (independent of S01 and S02)"
     }
   ],
   "slices": [
@@ -473,6 +534,66 @@
       "proof_level": "integration — real Flask test client exercises both routes",
       "integration_closure": "- Upstream: S01 extracted _setup_orchestrator() into _helpers.py; history.py already exists with history_detail(). This slice adds history_list() alongside it.\n- New wiring: /history route, nav link in base.html, clock icon in icons.html\n- After this slice: M010 is complete — no further slices.",
       "observability_impact": "None — simple template/route change with no async, background, or stateful behavior.",
+      "sequence": 0,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M011",
+      "id": "S01",
+      "title": "Adapter Docstring Trim",
+      "status": "pending",
+      "risk": "medium",
+      "depends": [],
+      "demo": "After this: all 16 adapter files have one-liner + edge-case-only docstrings; ~650 lines removed; all tests pass unchanged.",
+      "created_at": "2026-04-04T11:19:03.453Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "All 16 adapter files (15 non-base + base untouched) have one-liner + edge-case-only docstrings; ~1,000 lines removed; all 1,061 tests pass unchanged.",
+      "success_criteria": "- All 15 non-base adapter files have ≤2-line module docstrings and ≤1-line class docstrings\n- Method-level docstrings removed except for documented edge cases (datetime polymorphism, pipe-delimited format, HTTP 200/body-404 pattern, HTTP 404 for private IPs)\n- `python3 -m pytest tests/ -x -q` passes with 0 failures\n- All 15 adapter modules importable without errors\n- Total non-base adapter line count drops by ≥800 lines from baseline of ~2,659\n- `base.py` unchanged (161 lines)\n- No behavioral changes — only docstring/comment modifications",
+      "proof_level": "contract — tests pass unchanged, modules importable, line count reduced",
+      "integration_closure": "None — pure internal cleanup with no integration boundaries.",
+      "observability_impact": "None — docstring-only changes, no runtime behavior affected.",
+      "sequence": 0,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M011",
+      "id": "S02",
+      "title": "Per-Adapter Test Consolidation",
+      "status": "pending",
+      "risk": "medium",
+      "depends": [],
+      "demo": "After this: granular one-field-per-test patterns collapsed into single response-shape tests; ~400-600 test lines removed; all tests still pass.",
+      "created_at": "2026-04-04T11:19:03.453Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "Consolidate per-adapter granular field tests (test_raw_stats_has_asn_key, test_detection_count_always_zero, etc.) into single response-shape tests that assert the full result object.",
+      "success_criteria": "- Granular field tests in asn_cymru, whois_lookup, dns_lookup, threatminer, ip_api, crtsh consolidated\n- Test line count reduced by ≥ 400 lines\n- Same assertion coverage (every field still asserted, just grouped)\n- All tests pass",
+      "proof_level": "contract",
+      "integration_closure": "All tests pass. Contract tests still cover protocol conformance.",
+      "observability_impact": "None.",
+      "sequence": 0,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M011",
+      "id": "S03",
+      "title": "Dead CSS Removal & Orchestrator Test Speed",
+      "status": "pending",
+      "risk": "low",
+      "depends": [],
+      "demo": "After this: input.css contains only referenced classes; orchestrator concurrency tests complete in <1s; all tests pass.",
+      "created_at": "2026-04-04T11:19:03.453Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "Remove dead CSS classes from input.css and rewrite orchestrator sleep-based tests with synchronization primitives.",
+      "success_criteria": "- Every CSS class in input.css referenced by ≥1 template or TS file (accounting for dynamic patterns)\n- Orchestrator concurrency tests complete in <1s total\n- make css rebuilds clean\n- All tests pass including E2E",
+      "proof_level": "contract + integration",
+      "integration_closure": "make css clean. E2E tests pass (no visual regression from CSS removal).",
+      "observability_impact": "None.",
       "sequence": 0,
       "replan_triggered_at": null
     }
@@ -1259,6 +1380,149 @@
       "observability_impact": "",
       "full_plan_md": "",
       "sequence": 0
+    },
+    {
+      "milestone_id": "M011",
+      "slice_id": "S01",
+      "id": "T01",
+      "title": "Trimmed 416 lines of verbose docstrings from 4 high-gotcha adapter files, preserving edge-case info as inline comments",
+      "status": "complete",
+      "one_liner": "Trimmed 416 lines of verbose docstrings from 4 high-gotcha adapter files, preserving edge-case info as inline comments",
+      "narrative": "Replaced multi-paragraph module, class, and method docstrings with one-liners in threatminer.py, whois_lookup.py, ip_api.py, and asn_cymru.py. Deleted all method-level docstrings except _normalise_datetime in whois_lookup.py (kept short form documenting the 4-way type union). Edge cases preserved as inline comments — ThreatMiner's body status_code \"404\" behavior, WHOIS port 43 no-SSRF note, ipinfo.io 404-for-private-IPs, and Cymru pipe-delimited format. Net 416 lines removed across 4 files.",
+      "verification_result": "All 4 modules import cleanly. 166 adapter-specific tests pass. Full 1,061-test suite passes unchanged.",
+      "duration": "",
+      "completed_at": "2026-04-04T11:30:44.061Z",
+      "blocker_discovered": false,
+      "deviations": "None.",
+      "known_issues": "None.",
+      "key_files": [
+        "app/enrichment/adapters/threatminer.py",
+        "app/enrichment/adapters/whois_lookup.py",
+        "app/enrichment/adapters/ip_api.py",
+        "app/enrichment/adapters/asn_cymru.py"
+      ],
+      "key_decisions": [
+        "Kept existing inline edge-case comments rather than adding duplicates",
+        "Preserved _normalise_datetime short docstring as the sole method-level docstring exception"
+      ],
+      "full_summary_md": "---\nid: T01\nparent: S01\nmilestone: M011\nkey_files:\n  - app/enrichment/adapters/threatminer.py\n  - app/enrichment/adapters/whois_lookup.py\n  - app/enrichment/adapters/ip_api.py\n  - app/enrichment/adapters/asn_cymru.py\nkey_decisions:\n  - Kept existing inline edge-case comments rather than adding duplicates\n  - Preserved _normalise_datetime short docstring as the sole method-level docstring exception\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-04-04T11:30:44.062Z\nblocker_discovered: false\n---\n\n# T01: Trimmed 416 lines of verbose docstrings from 4 high-gotcha adapter files, preserving edge-case info as inline comments\n\n**Trimmed 416 lines of verbose docstrings from 4 high-gotcha adapter files, preserving edge-case info as inline comments**\n\n## What Happened\n\nReplaced multi-paragraph module, class, and method docstrings with one-liners in threatminer.py, whois_lookup.py, ip_api.py, and asn_cymru.py. Deleted all method-level docstrings except _normalise_datetime in whois_lookup.py (kept short form documenting the 4-way type union). Edge cases preserved as inline comments — ThreatMiner's body status_code \"404\" behavior, WHOIS port 43 no-SSRF note, ipinfo.io 404-for-private-IPs, and Cymru pipe-delimited format. Net 416 lines removed across 4 files.\n\n## Verification\n\nAll 4 modules import cleanly. 166 adapter-specific tests pass. Full 1,061-test suite passes unchanged.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `python3 -c \"import app.enrichment.adapters.threatminer; import app.enrichment.adapters.whois_lookup; import app.enrichment.adapters.ip_api; import app.enrichment.adapters.asn_cymru; print('All 4 OK')\"` | 0 | ✅ pass | 4100ms |\n| 2 | `python3 -m pytest tests/test_threatminer.py tests/test_whois_lookup.py tests/test_ip_api.py tests/test_asn_cymru.py -x -q` | 0 | ✅ pass | 2900ms |\n| 3 | `python3 -m pytest tests/ -x -q` | 0 | ✅ pass | 51700ms |\n\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `app/enrichment/adapters/threatminer.py`\n- `app/enrichment/adapters/whois_lookup.py`\n- `app/enrichment/adapters/ip_api.py`\n- `app/enrichment/adapters/asn_cymru.py`\n",
+      "description": "Trim docstrings in the 4 adapter files that have genuinely non-obvious edge cases requiring careful preservation. These files need judgment about which docstring content to convert to inline comments vs delete entirely.\n\n## Steps\n\n1. Read each of the 4 files fully to identify current docstring content.\n2. For each file, apply the trim pattern:\n   - **Module-level docstring**: Replace multi-paragraph description with one-liner (e.g., `\"\"\"ThreatMiner passive DNS and related samples adapter.\"\"\"`).\n   - **Class-level docstring**: Replace with one-liner referencing BaseHTTPAdapter (e.g., `\"\"\"ThreatMiner multi-call lookup — see BaseHTTPAdapter for the template pattern.\"\"\"`).\n   - **Method-level docstrings**: Delete entirely for standard BaseHTTPAdapter overrides (`_build_url`, `_parse_response`, `_auth_headers`, `_make_pre_raise_hook`, `_build_request_body`).\n   - **Exception — keep or convert to inline comment** the following edge cases:\n     - `threatminer.py`: \"ThreatMiner always returns HTTP 200; body status_code '404' = no data\" — keep as inline comment near the status_code check in lookup().\n     - `whois_lookup.py`: `_normalise_datetime` docstring (documents 4-way type union: datetime/list/None/str) — keep short docstring. Also keep \"Port 43, not HTTP — no SSRF surface\" as inline comment.\n     - `ip_api.py`: \"HTTP 404 for private/reserved IPs → no_data (not an error)\" — keep as inline comment in `_make_pre_raise_hook`. Also \"org: 'AS15169 Google LLC' — split on first space\" as inline comment.\n     - `asn_cymru.py`: Pipe-delimited TXT response format note — keep short comment in `_parse_response`. Also \"verdict always no_data\" as inline comment.\n3. Verify each file imports cleanly: `python3 -c \"import app.enrichment.adapters.{module}\"`\n4. Run tests for these 4 adapters: `python3 -m pytest tests/test_threatminer.py tests/test_whois_lookup.py tests/test_ip_api.py tests/test_asn_cymru.py -x -q`\n\n## Must-Haves\n\n- [ ] All 4 files have one-liner module + class docstrings\n- [ ] Method-level docstrings deleted except for `_normalise_datetime` in whois_lookup.py\n- [ ] Edge cases preserved as inline comments (not deleted)\n- [ ] All 4 modules importable\n- [ ] All adapter-specific tests pass",
+      "estimate": "20m",
+      "files": [
+        "app/enrichment/adapters/threatminer.py",
+        "app/enrichment/adapters/whois_lookup.py",
+        "app/enrichment/adapters/ip_api.py",
+        "app/enrichment/adapters/asn_cymru.py"
+      ],
+      "verify": "python3 -c \"import app.enrichment.adapters.threatminer; import app.enrichment.adapters.whois_lookup; import app.enrichment.adapters.ip_api; import app.enrichment.adapters.asn_cymru; print('All 4 OK')\" && python3 -m pytest tests/test_threatminer.py tests/test_whois_lookup.py tests/test_ip_api.py tests/test_asn_cymru.py -x -q",
+      "inputs": [
+        "`app/enrichment/adapters/threatminer.py` — current file with verbose docstrings",
+        "`app/enrichment/adapters/whois_lookup.py` — current file with verbose docstrings",
+        "`app/enrichment/adapters/ip_api.py` — current file with verbose docstrings",
+        "`app/enrichment/adapters/asn_cymru.py` — current file with verbose docstrings"
+      ],
+      "expected_output": [
+        "`app/enrichment/adapters/threatminer.py` — trimmed to one-liner docstrings + edge-case comments",
+        "`app/enrichment/adapters/whois_lookup.py` — trimmed to one-liner docstrings + _normalise_datetime docstring + edge-case comments",
+        "`app/enrichment/adapters/ip_api.py` — trimmed to one-liner docstrings + edge-case comments",
+        "`app/enrichment/adapters/asn_cymru.py` — trimmed to one-liner docstrings + edge-case comments"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M011",
+      "slice_id": "S01",
+      "id": "T02",
+      "title": "Trim standard HTTP adapter docstrings (abuseipdb, crtsh, greynoise, hashlookup, otx, shodan, threatfox, virustotal)",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "Mechanical docstring trim on the 8 standard HTTP adapters that follow the BaseHTTPAdapter template pattern with no special edge cases beyond minor inline comments.\n\n## Steps\n\n1. For each of the 8 files, apply the identical trim pattern:\n   - **Module-level docstring**: Replace with one-liner (e.g., `\"\"\"AbuseIPDB IP reputation adapter.\"\"\"`).\n   - **Class-level docstring**: Replace with one-liner referencing BaseHTTPAdapter (e.g., `\"\"\"AbuseIPDB check endpoint — see BaseHTTPAdapter for the template pattern.\"\"\"`).\n   - **Method-level docstrings**: Delete entirely for all `_build_url`, `_parse_response`, `_auth_headers`, `_make_pre_raise_hook`, `_build_request_body`, and `lookup` override docstrings.\n   - **Minor edge cases to keep as inline comments** (already present in code, just ensure not deleted):\n     - `abuseipdb.py`: Verdict threshold comments on if/elif branches (score >= 75 → malicious, etc.) — these are already inline comments, just verify they survive.\n     - `hashlookup.py`: \"200 always means known_good\" — keep as one-line comment.\n2. Verify all 8 files import cleanly: `python3 -c \"import app.enrichment.adapters.{module}\"` for each.\n3. Run tests for these 8 adapters: `python3 -m pytest tests/test_abuseipdb.py tests/test_crtsh.py tests/test_greynoise.py tests/test_hashlookup.py tests/test_otx.py tests/test_shodan.py tests/test_threatfox.py tests/test_virustotal.py -x -q`\n\n## Must-Haves\n\n- [ ] All 8 files have one-liner module + class docstrings\n- [ ] All method-level docstrings deleted\n- [ ] All 8 modules importable\n- [ ] All adapter-specific tests pass",
+      "estimate": "20m",
+      "files": [
+        "app/enrichment/adapters/abuseipdb.py",
+        "app/enrichment/adapters/crtsh.py",
+        "app/enrichment/adapters/greynoise.py",
+        "app/enrichment/adapters/hashlookup.py",
+        "app/enrichment/adapters/otx.py",
+        "app/enrichment/adapters/shodan.py",
+        "app/enrichment/adapters/threatfox.py",
+        "app/enrichment/adapters/virustotal.py"
+      ],
+      "verify": "python3 -c \"import app.enrichment.adapters.abuseipdb; import app.enrichment.adapters.crtsh; import app.enrichment.adapters.greynoise; import app.enrichment.adapters.hashlookup; import app.enrichment.adapters.otx; import app.enrichment.adapters.shodan; import app.enrichment.adapters.threatfox; import app.enrichment.adapters.virustotal; print('All 8 OK')\" && python3 -m pytest tests/test_abuseipdb.py tests/test_crtsh.py tests/test_greynoise.py tests/test_hashlookup.py tests/test_otx.py tests/test_shodan.py tests/test_threatfox.py tests/test_virustotal.py -x -q",
+      "inputs": [
+        "`app/enrichment/adapters/abuseipdb.py` — current file with verbose docstrings",
+        "`app/enrichment/adapters/crtsh.py` — current file with verbose docstrings",
+        "`app/enrichment/adapters/greynoise.py` — current file with verbose docstrings",
+        "`app/enrichment/adapters/hashlookup.py` — current file with verbose docstrings",
+        "`app/enrichment/adapters/otx.py` — current file with verbose docstrings",
+        "`app/enrichment/adapters/shodan.py` — current file with verbose docstrings",
+        "`app/enrichment/adapters/threatfox.py` — current file with verbose docstrings",
+        "`app/enrichment/adapters/virustotal.py` — current file with verbose docstrings"
+      ],
+      "expected_output": [
+        "`app/enrichment/adapters/abuseipdb.py` — trimmed to one-liner docstrings",
+        "`app/enrichment/adapters/crtsh.py` — trimmed to one-liner docstrings",
+        "`app/enrichment/adapters/greynoise.py` — trimmed to one-liner docstrings",
+        "`app/enrichment/adapters/hashlookup.py` — trimmed to one-liner docstrings",
+        "`app/enrichment/adapters/otx.py` — trimmed to one-liner docstrings",
+        "`app/enrichment/adapters/shodan.py` — trimmed to one-liner docstrings",
+        "`app/enrichment/adapters/threatfox.py` — trimmed to one-liner docstrings",
+        "`app/enrichment/adapters/virustotal.py` — trimmed to one-liner docstrings"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M011",
+      "slice_id": "S01",
+      "id": "T03",
+      "title": "Trim remaining adapters (dns_lookup, malwarebazaar, urlhaus) and run full verification",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "Apply the same mechanical trim to the final 3 adapter files, then run the full test suite and line-count verification to confirm the slice goal.\n\n## Steps\n\n1. For each of the 3 files, apply the standard trim pattern:\n   - **Module-level docstring**: Replace with one-liner.\n   - **Class-level docstring**: Replace with one-liner referencing BaseHTTPAdapter.\n   - **Method-level docstrings**: Delete entirely.\n2. Verify all 3 files import cleanly.\n3. Run the **full** test suite: `python3 -m pytest tests/ -x -q` — all 1,061 tests must pass.\n4. Verify all 15 non-base adapter modules are importable in one shot.\n5. Measure total line count: `find app/enrichment/adapters -name '*.py' ! -name '__init__.py' ! -name 'base.py' -exec cat {} + | wc -l` — must be ≤1,900 (down from ~2,659 baseline).\n6. Confirm `base.py` is unchanged: `wc -l app/enrichment/adapters/base.py` should be 161.\n\n## Must-Haves\n\n- [ ] All 3 files have one-liner module + class docstrings\n- [ ] All method-level docstrings deleted\n- [ ] Full test suite passes (1,061 tests, 0 failures)\n- [ ] Total non-base adapter line count ≤ 1,900\n- [ ] base.py unchanged at 161 lines",
+      "estimate": "15m",
+      "files": [
+        "app/enrichment/adapters/dns_lookup.py",
+        "app/enrichment/adapters/malwarebazaar.py",
+        "app/enrichment/adapters/urlhaus.py"
+      ],
+      "verify": "python3 -m pytest tests/ -x -q && python3 -c \"\nimport importlib, pathlib\nfor f in sorted(pathlib.Path('app/enrichment/adapters').glob('*.py')):\n    if f.name == '__init__.py': continue\n    mod = f'app.enrichment.adapters.{f.stem}'\n    importlib.import_module(mod)\n    print(f'  OK {mod}')\n\" && echo \"Non-base line count:\" && find app/enrichment/adapters -name '*.py' ! -name '__init__.py' ! -name 'base.py' -exec cat {} + | wc -l && echo \"base.py:\" && wc -l app/enrichment/adapters/base.py",
+      "inputs": [
+        "`app/enrichment/adapters/dns_lookup.py` — current file with verbose docstrings",
+        "`app/enrichment/adapters/malwarebazaar.py` — current file with verbose docstrings",
+        "`app/enrichment/adapters/urlhaus.py` — current file with verbose docstrings"
+      ],
+      "expected_output": [
+        "`app/enrichment/adapters/dns_lookup.py` — trimmed to one-liner docstrings",
+        "`app/enrichment/adapters/malwarebazaar.py` — trimmed to one-liner docstrings",
+        "`app/enrichment/adapters/urlhaus.py` — trimmed to one-liner docstrings"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
     }
   ],
   "decisions": [
@@ -1837,6 +2101,18 @@
       "revisable": "Yes",
       "made_by": "human",
       "superseded_by": null
+    },
+    {
+      "seq": 602,
+      "id": "D049",
+      "when_context": "M011/S02",
+      "scope": "pattern",
+      "decision": "Per-adapter test dedup vs contract tests",
+      "choice": "Remove duplicates entirely and trust the contract suite. Per-adapter files keep only verdict logic and response parsing tests.",
+      "rationale": "Contract tests (test_adapter_contract.py) parametrically cover protocol conformance for all 15 adapters. Granular per-field tests that re-assert detection_count=0 / total_engines=0 / scan_date=None are pure duplication.",
+      "revisable": "No",
+      "made_by": "human",
+      "superseded_by": null
     }
   ],
   "verification_evidence": [
@@ -2257,6 +2533,39 @@
       "verdict": "✅ pass",
       "duration_ms": 50860,
       "created_at": "2026-04-04T05:20:42.158Z"
+    },
+    {
+      "id": 39,
+      "task_id": "T01",
+      "slice_id": "S01",
+      "milestone_id": "M011",
+      "command": "python3 -c \"import app.enrichment.adapters.threatminer; import app.enrichment.adapters.whois_lookup; import app.enrichment.adapters.ip_api; import app.enrichment.adapters.asn_cymru; print('All 4 OK')\"",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 4100,
+      "created_at": "2026-04-04T11:30:44.061Z"
+    },
+    {
+      "id": 40,
+      "task_id": "T01",
+      "slice_id": "S01",
+      "milestone_id": "M011",
+      "command": "python3 -m pytest tests/test_threatminer.py tests/test_whois_lookup.py tests/test_ip_api.py tests/test_asn_cymru.py -x -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 2900,
+      "created_at": "2026-04-04T11:30:44.061Z"
+    },
+    {
+      "id": 41,
+      "task_id": "T01",
+      "slice_id": "S01",
+      "milestone_id": "M011",
+      "command": "python3 -m pytest tests/ -x -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 51700,
+      "created_at": "2026-04-04T11:30:44.061Z"
     }
   ]
 }
