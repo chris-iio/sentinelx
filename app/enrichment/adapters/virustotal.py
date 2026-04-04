@@ -1,12 +1,4 @@
-"""VirusTotal API v3 adapter.
-
-Extends BaseHTTPAdapter for IOC enrichment against the VT API v3. Delegates all
-HTTP safety controls to safe_request() in http_safety.py.
-
-Overrides lookup() entirely because VT uses an ENDPOINT_MAP dispatch (including
-base64url encoding for URL IOCs) and a multi-status pre-raise hook that doesn't
-fit the base class template pipeline.
-"""
+"""VirusTotal API v3 adapter."""
 from __future__ import annotations
 
 import base64
@@ -35,32 +27,11 @@ ENDPOINT_MAP: dict[IOCType, object] = {
 
 
 def _url_id(url: str) -> str:
-    """Base64url-encode URL without padding — VT URL identifier format.
-
-    VT URL lookup requires the URL encoded as base64url without trailing '='
-    padding. Raw URLs cannot be used as path segments (contain slashes).
-
-    Source: https://docs.virustotal.com/reference/url
-    """
+    # Base64url-encode URL without padding — VT URL identifier format
     return base64.urlsafe_b64encode(url.encode()).decode().strip("=")
 
 
 def _parse_response(ioc: IOC, body: dict) -> EnrichmentResult:
-    """Parse a VT API v3 success response into an EnrichmentResult.
-
-    Extracts last_analysis_stats and last_analysis_date from response body.
-    Converts Unix epoch timestamp to ISO8601. Computes verdict:
-      - malicious > 0  -> "malicious"
-      - total == 0     -> "no_data"
-      - else           -> "clean"
-
-    Args:
-        ioc:  The IOC that was queried.
-        body: Parsed JSON from VT API response.
-
-    Returns:
-        EnrichmentResult with verdict, counts, timestamp, and raw stats.
-    """
     attrs = body["data"]["attributes"]
     stats: dict = attrs.get("last_analysis_stats", {})
     last_analysis_date = attrs.get("last_analysis_date")
@@ -115,22 +86,7 @@ def _parse_response(ioc: IOC, body: dict) -> EnrichmentResult:
 
 
 class VTAdapter(BaseHTTPAdapter):
-    """Adapter for the VirusTotal API v3.
-
-    Extends BaseHTTPAdapter for multi-IOC-type enrichment against VT API v3.
-    Maps IOC types to VT API v3 endpoints, enforces all HTTP safety controls,
-    and returns typed EnrichmentResult or EnrichmentError objects.
-
-    Overrides lookup() entirely — VT's ENDPOINT_MAP dispatch and multi-status
-    pre-raise hook don't fit the base class template pipeline.
-
-    Thread safety: a persistent requests.Session is created by BaseHTTPAdapter.__init__
-    and reused across lookup() calls for TCP connection pooling.
-
-    Args:
-        allowed_hosts: SSRF allowlist — only these hostnames may be contacted.
-        api_key:       VirusTotal API key for x-apikey header.
-    """
+    """VirusTotal API v3 endpoint — overrides lookup() for ENDPOINT_MAP dispatch."""
 
     # Types supported by VT API v3 (derived from ENDPOINT_MAP keys)
     # CVE is excluded — VT has no CVE endpoint (Pitfall 5)
@@ -143,26 +99,12 @@ class VTAdapter(BaseHTTPAdapter):
     requires_api_key = True
 
     def _auth_headers(self) -> dict:
-        """Return VT API v3 auth headers (x-apikey + Accept)."""
         return {
             "x-apikey": self._api_key,
             "Accept": "application/json",
         }
 
     def lookup(self, ioc: IOC) -> EnrichmentResult | EnrichmentError:
-        """Enrich a single IOC using the VirusTotal API v3.
-
-        Returns EnrichmentError immediately for CVE (not supported by VT).
-        For all other supported types: builds the VT endpoint URL,
-        calls safe_request(), and parses the response.
-
-        Args:
-            ioc: The IOC to look up.
-
-        Returns:
-            EnrichmentResult on success or 404 (no_data).
-            EnrichmentError on unsupported type, network failure, or HTTP error.
-        """
         if ioc.type not in ENDPOINT_MAP:
             return EnrichmentError(
                 ioc=ioc, provider="VirusTotal", error="Unsupported type"
@@ -203,14 +145,8 @@ class VTAdapter(BaseHTTPAdapter):
         return _parse_response(ioc, result)
 
     def _build_url(self, ioc: IOC) -> str:
-        """Build the VT API v3 endpoint URL via ENDPOINT_MAP.
-
-        Uses the module-level ENDPOINT_MAP lambdas for type-specific URL
-        construction (including base64url encoding for URL IOCs).
-        """
         endpoint_fn = ENDPOINT_MAP[ioc.type]
         return endpoint_fn(ioc.value)  # type: ignore[call-arg]
 
     def _parse_response(self, ioc: IOC, body: dict) -> EnrichmentResult:
-        """Delegate to the module-level _parse_response function."""
         return _parse_response(ioc, body)

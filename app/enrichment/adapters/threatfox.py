@@ -1,18 +1,4 @@
-"""ThreatFox (abuse.ch) API adapter.
-
-Implements IOC enrichment against the ThreatFox API v1. Delegates all HTTP safety
-controls to safe_request() in http_safety.py.
-
-ThreatFox uses a POST-based JSON API. Hash lookups use "search_hash" query type;
-domain/IP/URL lookups use "search_ioc" query type (per ThreatFox API v1 docs).
-
-Confidence-based verdict mapping (per user decision):
-  - confidence_level >= 75  ->  verdict="malicious"
-  - confidence_level < 75   ->  verdict="suspicious"
-  - query_status="no_result" -> verdict="no_data"
-
-Auth-Key header required (abuse.ch policy change — previously public search).
-"""
+"""ThreatFox (abuse.ch) API adapter."""
 from __future__ import annotations
 
 import logging
@@ -31,36 +17,10 @@ _HASH_TYPES = {IOCType.MD5, IOCType.SHA1, IOCType.SHA256}
 
 
 def _select_best_record(data: list[dict]) -> dict:
-    """Return the record with the highest confidence_level.
-
-    ThreatFox may return multiple records for one IOC query. Uses the
-    highest-confidence entry for verdict determination.
-
-    Args:
-        data: Non-empty list of ThreatFox IOC records.
-
-    Returns:
-        The record dict with the maximum confidence_level value.
-    """
     return max(data, key=lambda r: r.get("confidence_level", 0))
 
 
 def _parse_response(ioc: IOC, body: dict) -> EnrichmentResult:
-    """Parse a ThreatFox API success response into an EnrichmentResult.
-
-    Maps query_status to verdicts:
-      - "no_result"  -> verdict="no_data"
-      - "ok"         -> confidence-based verdict (>=75 malicious, <75 suspicious)
-
-    For "ok" responses with multiple records, uses the highest-confidence entry.
-
-    Args:
-        ioc:  The IOC that was queried.
-        body: Parsed JSON from ThreatFox API response.
-
-    Returns:
-        EnrichmentResult with verdict, counts, timestamp, and raw stats.
-    """
     query_status = body.get("query_status", "")
 
     if query_status == "no_result":
@@ -100,25 +60,7 @@ def _parse_response(ioc: IOC, body: dict) -> EnrichmentResult:
 
 
 class TFAdapter(BaseHTTPAdapter):
-    """Adapter for the ThreatFox (abuse.ch) API v1.
-
-    Extends BaseHTTPAdapter for IOC enrichment. Maps IOC types to appropriate
-    ThreatFox query endpoints:
-      - Hash types (MD5, SHA1, SHA256): POST {"query": "search_hash", "hash": value}
-      - Other types (IP, domain, URL): POST {"query": "search_ioc", "search_term": value}
-
-    Verdict mapping: confidence_level >= 75 -> malicious, < 75 -> suspicious.
-    Handles all 7 enrichable IOC types; CVE is not supported by ThreatFox.
-
-    Auth-Key header required (abuse.ch policy change — previously public).
-
-    Thread safety: a persistent requests.Session is created by BaseHTTPAdapter.__init__
-    and reused across lookup() calls for TCP connection pooling.
-
-    Args:
-        allowed_hosts: SSRF allowlist — only these hostnames may be contacted.
-        api_key:       abuse.ch API key for the Auth-Key header (keyword-only).
-    """
+    """ThreatFox (abuse.ch) POST endpoint — see BaseHTTPAdapter for the template pattern."""
 
     supported_types: frozenset[IOCType] = frozenset({
         IOCType.MD5, IOCType.SHA1, IOCType.SHA256,

@@ -1,27 +1,4 @@
-"""AbuseIPDB API adapter.
-
-Implements IP enrichment against the AbuseIPDB API. Delegates all HTTP safety
-controls to safe_request() in http_safety.py.
-
-AbuseIPDB API behavior:
-  - GET https://api.abuseipdb.com/api/v2/check?ipAddress={ip}&maxAgeInDays=90
-  - Auth header: 'Key' (capital K) with the API key value
-  - Accept: application/json header required to avoid HTML response
-  - Always 200 for valid IPs (no 404 for unknown IPs)
-  - 429: rate limited -> EnrichmentError("Rate limit exceeded (429)")
-  - 401: unauthorized -> EnrichmentError("HTTP 401")
-
-Verdict thresholds (abuseConfidenceScore):
-  - score >= 75                     -> "malicious"
-  - 25 <= score < 75                -> "suspicious"
-  - score < 25 AND totalReports > 0 -> "clean"
-  - totalReports == 0               -> "no_data"
-
-detection_count = totalReports (number of abuse reports)
-total_engines  = numDistinctUsers (number of distinct reporters)
-
-API key required — register at https://www.abuseipdb.com/
-"""
+"""AbuseIPDB IP reputation adapter."""
 from __future__ import annotations
 
 import logging
@@ -36,36 +13,7 @@ ABUSEIPDB_BASE = "https://api.abuseipdb.com/api/v2/check"
 
 
 class AbuseIPDBAdapter(BaseHTTPAdapter):
-    """Adapter for the AbuseIPDB IP reputation API.
-
-    Extends BaseHTTPAdapter for IP enrichment against the AbuseIPDB check
-    endpoint. All HTTP safety controls (SSRF allowlist, size cap, timeouts) are
-    inherited.
-
-    Verdict is derived from the abuseConfidenceScore and totalReports fields:
-
-    - score >= 75                     -> verdict=malicious
-    - 25 <= score < 75                -> verdict=suspicious
-    - score < 25 AND totalReports > 0 -> verdict=clean
-    - totalReports == 0               -> verdict=no_data
-
-    AbuseIPDB always returns 200 for valid IP addresses — there is no 404 for
-    unknown IPs. An unknown IP simply has score=0 and totalReports=0.
-
-    HTTP 429 rate limit is handled specially with a descriptive error message.
-
-    API key required — register at https://www.abuseipdb.com/
-
-    CRITICAL: Auth header is capital 'Key' (not lowercase 'key').
-              Include 'Accept: application/json' or API may return HTML.
-
-    Thread safety: a persistent requests.Session is created by BaseHTTPAdapter.__init__
-    and reused across lookup() calls for TCP connection pooling.
-
-    Args:
-        allowed_hosts: SSRF allowlist -- only these hostnames may be contacted.
-        api_key:       AbuseIPDB API key (keyword-only).
-    """
+    """AbuseIPDB check endpoint — see BaseHTTPAdapter for the template pattern."""
 
     supported_types: frozenset[IOCType] = frozenset({IOCType.IPV4, IOCType.IPV6})
     name = "AbuseIPDB"
@@ -94,25 +42,6 @@ class AbuseIPDBAdapter(BaseHTTPAdapter):
 
 
 def _parse_response(ioc: IOC, body: dict, provider_name: str) -> EnrichmentResult:
-    """Parse an AbuseIPDB API response into an EnrichmentResult.
-
-    Extracts abuseConfidenceScore and totalReports from response.data and
-    applies verdict thresholds.
-
-    Verdict rules:
-      - score >= 75                     -> "malicious"
-      - 25 <= score < 75                -> "suspicious"
-      - score < 25 AND total_reports > 0 -> "clean"
-      - else (total_reports == 0)        -> "no_data"
-
-    Args:
-        ioc:           The IOC that was queried.
-        body:          Parsed JSON from AbuseIPDB API response.
-        provider_name: Provider name string for result construction.
-
-    Returns:
-        EnrichmentResult with verdict "malicious", "suspicious", "clean", or "no_data".
-    """
     data: dict = body.get("data", {})
     score: int = data.get("abuseConfidenceScore", 0)
     total_reports: int = data.get("totalReports", 0)

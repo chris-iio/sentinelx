@@ -1,21 +1,4 @@
-"""CrtSh certificate transparency adapter.
-
-Implements domain enrichment via the crt.sh Certificate Transparency search API.
-Returns CT history (cert count, date range, subdomains from SANs) without requiring
-an API key. Delegates all HTTP safety controls to safe_request() in http_safety.py.
-
-crt.sh API behavior:
-  - GET https://crt.sh/?q={domain}&output=json
-  - 200 + list: Returns certificate records with name_value (SANs), not_before dates
-  - 200 + empty list: No certs found -> verdict=no_data, raw_stats={}
-  - 502: Common transient error -> EnrichmentError("HTTP 502")
-  - Other HTTP errors: -> EnrichmentError("HTTP {code}")
-  - Timeout: -> EnrichmentError("Request timed out")
-
-Verdict semantics:
-  - All responses: verdict=no_data — CT history is informational (not a threat signal)
-  - detection_count=0, total_engines=0, scan_date=None always
-"""
+"""crt.sh certificate transparency adapter."""
 from __future__ import annotations
 
 import logging
@@ -34,46 +17,13 @@ _SUBDOMAIN_CAP = 50
 
 
 class CrtShAdapter(BaseHTTPAdapter):
-    """Adapter for the crt.sh Certificate Transparency search API.
-
-    Extends BaseHTTPAdapter for domain IOC lookups using the zero-auth crt.sh
-    public endpoint. Returns CT history data: certificate count, first/last
-    issuance dates, and a deduplicated list of subdomains observed in Subject
-    Alternative Names.
-
-    All responses produce verdict=no_data — CT history is informational context
-    for analysts, not a threat detection signal.
-
-    No API key required — crt.sh is fully public.
-
-    Overrides lookup() because safe_request() returns a JSON list (not dict)
-    for crt.sh, and the base class template checks ``isinstance(result, dict)``.
-
-    Thread safety: a persistent requests.Session is created by BaseHTTPAdapter.__init__
-    and reused across lookup() calls for TCP connection pooling.
-
-    Args:
-        allowed_hosts: SSRF allowlist -- only these hostnames may be contacted.
-    """
+    """crt.sh CT search endpoint — overrides lookup() for JSON-list responses."""
 
     supported_types: frozenset[IOCType] = frozenset({IOCType.DOMAIN})
     name = "Cert History"
     requires_api_key = False
 
     def lookup(self, ioc: IOC) -> EnrichmentResult | EnrichmentError:
-        """Enrich a single domain IOC via the crt.sh CT search API.
-
-        Overrides the base class template because safe_request() returns a
-        JSON list for crt.sh, not a dict. Uses isinstance(result, EnrichmentError)
-        instead of isinstance(result, dict) to detect errors.
-
-        Args:
-            ioc: The IOC to look up. Must be DOMAIN type.
-
-        Returns:
-            EnrichmentResult on success (always verdict=no_data).
-            EnrichmentError on unsupported type, SSRF block, or network failure.
-        """
         if ioc.type not in self.supported_types:
             return EnrichmentError(
                 ioc=ioc, provider=self.name, error="Unsupported type",
@@ -96,27 +46,6 @@ class CrtShAdapter(BaseHTTPAdapter):
 
 
 def _parse_response(ioc: IOC, body: list, provider_name: str) -> EnrichmentResult:
-    """Parse a crt.sh API response into an EnrichmentResult.
-
-    Extracts certificate count, issuance date range, and a normalized
-    subdomain list from all Subject Alternative Name (name_value) fields.
-
-    Subdomain normalization:
-      - Wildcards (*.example.com) are stripped to bare domain (example.com)
-      - All entries are lowercased
-      - Duplicates are removed
-      - Results are sorted alphabetically
-      - Capped at _SUBDOMAIN_CAP (50) entries
-
-    Args:
-        ioc:           The IOC that was queried.
-        body:          Parsed JSON list from crt.sh API response.
-        provider_name: Provider name string for result construction.
-
-    Returns:
-        EnrichmentResult with verdict "no_data" always.
-        raw_stats is {} for empty responses, or contains cert_count/earliest/latest/subdomains.
-    """
     # Empty response: no certificates found
     if not body:
         return EnrichmentResult(

@@ -31,7 +31,7 @@
   - Estimate: 20m
   - Files: app/enrichment/adapters/threatminer.py, app/enrichment/adapters/whois_lookup.py, app/enrichment/adapters/ip_api.py, app/enrichment/adapters/asn_cymru.py
   - Verify: python3 -c "import app.enrichment.adapters.threatminer; import app.enrichment.adapters.whois_lookup; import app.enrichment.adapters.ip_api; import app.enrichment.adapters.asn_cymru; print('All 4 OK')" && python3 -m pytest tests/test_threatminer.py tests/test_whois_lookup.py tests/test_ip_api.py tests/test_asn_cymru.py -x -q
-- [ ] **T02: Trim standard HTTP adapter docstrings (abuseipdb, crtsh, greynoise, hashlookup, otx, shodan, threatfox, virustotal)** — Mechanical docstring trim on the 8 standard HTTP adapters that follow the BaseHTTPAdapter template pattern with no special edge cases beyond minor inline comments.
+- [x] **T02: Trimmed 515 lines of verbose docstrings from 8 standard HTTP adapter files, leaving one-liner module + class docstrings and zero method docstrings** — Mechanical docstring trim on the 8 standard HTTP adapters that follow the BaseHTTPAdapter template pattern with no special edge cases beyond minor inline comments.
 
 ## Steps
 

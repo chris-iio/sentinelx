@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-04T11:30:44.078Z",
+  "exported_at": "2026-04-04T11:40:48.224Z",
   "milestones": [
     {
       "id": "M001",
@@ -1435,19 +1435,30 @@
       "milestone_id": "M011",
       "slice_id": "S01",
       "id": "T02",
-      "title": "Trim standard HTTP adapter docstrings (abuseipdb, crtsh, greynoise, hashlookup, otx, shodan, threatfox, virustotal)",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Trimmed 515 lines of verbose docstrings from 8 standard HTTP adapter files, leaving one-liner module + class docstrings and zero method docstrings",
+      "status": "complete",
+      "one_liner": "Trimmed 515 lines of verbose docstrings from 8 standard HTTP adapter files, leaving one-liner module + class docstrings and zero method docstrings",
+      "narrative": "Applied the same mechanical trim pattern to all 8 standard HTTP adapter files (abuseipdb, crtsh, greynoise, hashlookup, otx, shodan, threatfox, virustotal): module docstring → one-liner, class docstring → one-liner, all method-level docstrings deleted. Existing inline comments preserved. 515 lines removed, 18 lines added. All 1,061 tests pass unchanged.",
+      "verification_result": "All 8 modules import cleanly. 125 adapter-specific tests pass. Full suite 1,061 tests pass. Each file has exactly 2 triple-quote lines (module + class one-liners). git diff: 8 files changed, 18 insertions, 515 deletions.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-04T11:40:48.205Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "VT test file is tests/test_vt_adapter.py, not tests/test_virustotal.py as plan stated. Trivial path correction.",
+      "known_issues": "None.",
+      "key_files": [
+        "app/enrichment/adapters/abuseipdb.py",
+        "app/enrichment/adapters/crtsh.py",
+        "app/enrichment/adapters/greynoise.py",
+        "app/enrichment/adapters/hashlookup.py",
+        "app/enrichment/adapters/otx.py",
+        "app/enrichment/adapters/shodan.py",
+        "app/enrichment/adapters/threatfox.py",
+        "app/enrichment/adapters/virustotal.py"
+      ],
+      "key_decisions": [
+        "Used inline comment for hashlookup known_good explanation instead of preserving docstring"
+      ],
+      "full_summary_md": "---\nid: T02\nparent: S01\nmilestone: M011\nkey_files:\n  - app/enrichment/adapters/abuseipdb.py\n  - app/enrichment/adapters/crtsh.py\n  - app/enrichment/adapters/greynoise.py\n  - app/enrichment/adapters/hashlookup.py\n  - app/enrichment/adapters/otx.py\n  - app/enrichment/adapters/shodan.py\n  - app/enrichment/adapters/threatfox.py\n  - app/enrichment/adapters/virustotal.py\nkey_decisions:\n  - Used inline comment for hashlookup known_good explanation instead of preserving docstring\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-04-04T11:40:48.205Z\nblocker_discovered: false\n---\n\n# T02: Trimmed 515 lines of verbose docstrings from 8 standard HTTP adapter files, leaving one-liner module + class docstrings and zero method docstrings\n\n**Trimmed 515 lines of verbose docstrings from 8 standard HTTP adapter files, leaving one-liner module + class docstrings and zero method docstrings**\n\n## What Happened\n\nApplied the same mechanical trim pattern to all 8 standard HTTP adapter files (abuseipdb, crtsh, greynoise, hashlookup, otx, shodan, threatfox, virustotal): module docstring → one-liner, class docstring → one-liner, all method-level docstrings deleted. Existing inline comments preserved. 515 lines removed, 18 lines added. All 1,061 tests pass unchanged.\n\n## Verification\n\nAll 8 modules import cleanly. 125 adapter-specific tests pass. Full suite 1,061 tests pass. Each file has exactly 2 triple-quote lines (module + class one-liners). git diff: 8 files changed, 18 insertions, 515 deletions.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `python3 -c \"import app.enrichment.adapters.abuseipdb; ...8 modules...; print('All 8 OK')\"` | 0 | ✅ pass | 9100ms |\n| 2 | `python3 -m pytest tests/test_abuseipdb.py tests/test_crtsh.py tests/test_greynoise.py tests/test_hashlookup.py tests/test_otx.py tests/test_shodan.py tests/test_threatfox.py tests/test_vt_adapter.py -x -q` | 0 | ✅ pass | 6400ms |\n| 3 | `python3 -m pytest tests/ -x -q` | 0 | ✅ pass | 87200ms |\n\n\n## Deviations\n\nVT test file is tests/test_vt_adapter.py, not tests/test_virustotal.py as plan stated. Trivial path correction.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `app/enrichment/adapters/abuseipdb.py`\n- `app/enrichment/adapters/crtsh.py`\n- `app/enrichment/adapters/greynoise.py`\n- `app/enrichment/adapters/hashlookup.py`\n- `app/enrichment/adapters/otx.py`\n- `app/enrichment/adapters/shodan.py`\n- `app/enrichment/adapters/threatfox.py`\n- `app/enrichment/adapters/virustotal.py`\n",
       "description": "Mechanical docstring trim on the 8 standard HTTP adapters that follow the BaseHTTPAdapter template pattern with no special edge cases beyond minor inline comments.\n\n## Steps\n\n1. For each of the 8 files, apply the identical trim pattern:\n   - **Module-level docstring**: Replace with one-liner (e.g., `\"\"\"AbuseIPDB IP reputation adapter.\"\"\"`).\n   - **Class-level docstring**: Replace with one-liner referencing BaseHTTPAdapter (e.g., `\"\"\"AbuseIPDB check endpoint — see BaseHTTPAdapter for the template pattern.\"\"\"`).\n   - **Method-level docstrings**: Delete entirely for all `_build_url`, `_parse_response`, `_auth_headers`, `_make_pre_raise_hook`, `_build_request_body`, and `lookup` override docstrings.\n   - **Minor edge cases to keep as inline comments** (already present in code, just ensure not deleted):\n     - `abuseipdb.py`: Verdict threshold comments on if/elif branches (score >= 75 → malicious, etc.) — these are already inline comments, just verify they survive.\n     - `hashlookup.py`: \"200 always means known_good\" — keep as one-line comment.\n2. Verify all 8 files import cleanly: `python3 -c \"import app.enrichment.adapters.{module}\"` for each.\n3. Run tests for these 8 adapters: `python3 -m pytest tests/test_abuseipdb.py tests/test_crtsh.py tests/test_greynoise.py tests/test_hashlookup.py tests/test_otx.py tests/test_shodan.py tests/test_threatfox.py tests/test_virustotal.py -x -q`\n\n## Must-Haves\n\n- [ ] All 8 files have one-liner module + class docstrings\n- [ ] All method-level docstrings deleted\n- [ ] All 8 modules importable\n- [ ] All adapter-specific tests pass",
       "estimate": "20m",
       "files": [
@@ -2566,6 +2577,39 @@
       "verdict": "✅ pass",
       "duration_ms": 51700,
       "created_at": "2026-04-04T11:30:44.061Z"
+    },
+    {
+      "id": 42,
+      "task_id": "T02",
+      "slice_id": "S01",
+      "milestone_id": "M011",
+      "command": "python3 -c \"import app.enrichment.adapters.abuseipdb; ...8 modules...; print('All 8 OK')\"",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 9100,
+      "created_at": "2026-04-04T11:40:48.205Z"
+    },
+    {
+      "id": 43,
+      "task_id": "T02",
+      "slice_id": "S01",
+      "milestone_id": "M011",
+      "command": "python3 -m pytest tests/test_abuseipdb.py tests/test_crtsh.py tests/test_greynoise.py tests/test_hashlookup.py tests/test_otx.py tests/test_shodan.py tests/test_threatfox.py tests/test_vt_adapter.py -x -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 6400,
+      "created_at": "2026-04-04T11:40:48.205Z"
+    },
+    {
+      "id": 44,
+      "task_id": "T02",
+      "slice_id": "S01",
+      "milestone_id": "M011",
+      "command": "python3 -m pytest tests/ -x -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 87200,
+      "created_at": "2026-04-04T11:40:48.205Z"
     }
   ]
 }

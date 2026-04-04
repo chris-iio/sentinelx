@@ -1,29 +1,4 @@
-"""OTX AlienVault API adapter.
-
-Implements IP, domain, URL, hash (MD5/SHA1/SHA256), and CVE enrichment against
-the OTX AlienVault v1 API. Delegates all HTTP safety controls to safe_request()
-in http_safety.py.
-
-OTX API behavior (all endpoints are GET with X-OTX-API-KEY header):
-  - GET /api/v1/indicators/IPv4/{value}/general
-  - GET /api/v1/indicators/IPv6/{value}/general
-  - GET /api/v1/indicators/domain/{value}/general
-  - GET /api/v1/indicators/url/{value}/general
-  - GET /api/v1/indicators/file/{value}/general  (MD5, SHA1, SHA256 ALL map to "file")
-  - GET /api/v1/indicators/cve/{value}/general
-
-CRITICAL: All three hash types (MD5, SHA1, SHA256) use "file" in the URL path.
-OTX does not have separate endpoints per hash type.
-
-Verdict from pulse_info.count:
-  - count >= 5 -> malicious
-  - count 1-4  -> suspicious
-  - count == 0 -> no_data
-
-404 response -> no_data (not an error) — handled via pre_raise_hook.
-
-Supports 8 IOCType values (all except EMAIL) including CVE (the first CVE-capable provider).
-"""
+"""OTX AlienVault API adapter."""
 from __future__ import annotations
 
 import logging
@@ -55,31 +30,7 @@ _SUSPICIOUS_MIN = 1       # pulse_info.count >= this -> suspicious (below malici
 
 
 class OTXAdapter(BaseHTTPAdapter):
-    """Adapter for the OTX AlienVault v1 API.
-
-    Extends BaseHTTPAdapter for multi-type IOC enrichment against the OTX
-    AlienVault v1 API. All HTTP safety controls (SSRF allowlist, size cap,
-    timeouts) are inherited.
-
-    Supports 8 IOC types (IPV4, IPV6, DOMAIN, URL, MD5, SHA1, SHA256, CVE).
-    EMAIL is intentionally excluded — OTX has no email lookup endpoint.
-    Uses GET requests with X-OTX-API-KEY header.
-
-    Verdict is derived from pulse_info.count in the response:
-    - count >= 5  -> malicious
-    - count 1-4   -> suspicious
-    - count == 0  -> no_data
-    - 404         -> no_data (IOC not in OTX)
-
-    All hash types (MD5, SHA1, SHA256) map to the "file" endpoint path.
-
-    Thread safety: a persistent requests.Session is created by BaseHTTPAdapter.__init__
-    and reused across lookup() calls for TCP connection pooling.
-
-    Args:
-        allowed_hosts: SSRF allowlist -- only these hostnames may be contacted.
-        api_key:       OTX API key for the X-OTX-API-KEY header (keyword-only).
-    """
+    """OTX AlienVault v1 endpoint — see BaseHTTPAdapter for the template pattern."""
 
     supported_types: frozenset[IOCType] = frozenset({
         IOCType.IPV4, IOCType.IPV6, IOCType.DOMAIN, IOCType.URL,
@@ -118,23 +69,6 @@ class OTXAdapter(BaseHTTPAdapter):
 
 
 def _parse_response(ioc: IOC, body: dict, provider_name: str) -> EnrichmentResult:
-    """Parse an OTX AlienVault API response into an EnrichmentResult.
-
-    Derives verdict from pulse_info.count using these thresholds:
-      - count >= 5  -> malicious
-      - count 1-4   -> suspicious
-      - count == 0  -> no_data
-
-    Extracts pulse_count, reputation, and type_title for raw_stats.
-
-    Args:
-        ioc:           The IOC that was queried.
-        body:          Parsed JSON from OTX API response.
-        provider_name: Provider name string for result construction.
-
-    Returns:
-        EnrichmentResult with verdict "malicious", "suspicious", or "no_data".
-    """
     pulse_info: dict = body.get("pulse_info", {}) or {}
     pulse_count: int = pulse_info.get("count", 0) or 0
     reputation: int = body.get("reputation", 0) or 0
