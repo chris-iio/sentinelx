@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import pytest
+
 from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.enrichment.adapters.ip_api import IPApiAdapter
 from tests.helpers import (
@@ -288,7 +290,7 @@ class TestGeoFormatting:
 
 class TestFlagsFiltering:
 
-    def test_flags_field_present(self) -> None:
+    def test_flags_field_present_as_list(self) -> None:
         """raw_stats must contain a 'flags' list."""
         ioc = make_ipv4_ioc("95.172.185.24")
         mock_resp = make_mock_response(200, IPINFO_PUBLIC_IP_RESPONSE)
@@ -301,10 +303,16 @@ class TestFlagsFiltering:
         assert "flags" in result.raw_stats
         assert isinstance(result.raw_stats["flags"], list)
 
-    def test_flags_always_empty(self) -> None:
+    @pytest.mark.parametrize("ip,response_body", [
+        ("95.172.185.24", IPINFO_PUBLIC_IP_RESPONSE),
+        ("1.2.3.4", IPINFO_MOSCOW_RESPONSE),
+        ("1.2.3.4", IPINFO_LONDON_RESPONSE),
+        ("8.8.8.8", IPINFO_MINIMAL_RESPONSE),
+    ], ids=["germany", "moscow", "london", "minimal"])
+    def test_flags_always_empty(self, ip: str, response_body: dict) -> None:
         """flags list is always empty — ipinfo.io free tier has no flag data."""
-        ioc = make_ipv4_ioc("95.172.185.24")
-        mock_resp = make_mock_response(200, IPINFO_PUBLIC_IP_RESPONSE)
+        ioc = make_ipv4_ioc(ip)
+        mock_resp = make_mock_response(200, response_body)
 
         adapter = _make_adapter()
         mock_adapter_session(adapter, response=mock_resp)
@@ -315,47 +323,11 @@ class TestFlagsFiltering:
             f"ipinfo.io free tier has no flag data — expected [], got: {result.raw_stats['flags']!r}"
         )
 
-    def test_flags_empty_for_moscow_response(self) -> None:
-        """flags list is empty even for non-US IPs."""
-        ioc = make_ipv4_ioc("1.2.3.4")
-        mock_resp = make_mock_response(200, IPINFO_MOSCOW_RESPONSE)
-
-        adapter = _make_adapter()
-        mock_adapter_session(adapter, response=mock_resp)
-        result = adapter.lookup(ioc)
-
-        assert isinstance(result, EnrichmentResult)
-        assert result.raw_stats["flags"] == []
-
-    def test_flags_empty_for_london_response(self) -> None:
-        """flags list is always [] regardless of IP origin."""
-        ioc = make_ipv4_ioc("1.2.3.4")
-        mock_resp = make_mock_response(200, IPINFO_LONDON_RESPONSE)
-
-        adapter = _make_adapter()
-        mock_adapter_session(adapter, response=mock_resp)
-        result = adapter.lookup(ioc)
-
-        assert isinstance(result, EnrichmentResult)
-        assert result.raw_stats["flags"] == []
-
-    def test_flags_empty_for_minimal_response(self) -> None:
-        """flags list is empty when response has minimal fields."""
-        ioc = make_ipv4_ioc("8.8.8.8")
-        mock_resp = make_mock_response(200, IPINFO_MINIMAL_RESPONSE)
-
-        adapter = _make_adapter()
-        mock_adapter_session(adapter, response=mock_resp)
-        result = adapter.lookup(ioc)
-
-        assert isinstance(result, EnrichmentResult)
-        assert result.raw_stats["flags"] == []
-
 
 class TestPrivateIP:
 
-    def test_private_ip_returns_no_data_result(self) -> None:
-        """HTTP 404 (private IP) -> EnrichmentResult(verdict='no_data'), not EnrichmentError."""
+    def test_private_ip_returns_no_data_with_empty_raw_stats(self) -> None:
+        """HTTP 404 (private IP) -> EnrichmentResult(verdict='no_data', raw_stats={})."""
         ioc = make_ipv4_ioc("192.168.1.1")
         # ipinfo.io returns HTTP 404 for private/reserved IPs — do NOT call raise_for_status
         mock_resp = MagicMock()
@@ -370,36 +342,8 @@ class TestPrivateIP:
             f"Private IP must return EnrichmentResult (not EnrichmentError), got {type(result).__name__}"
         )
         assert result.verdict == "no_data"
-
-    def test_private_ip_returns_empty_raw_stats(self) -> None:
-        """HTTP 404 -> raw_stats is empty dict."""
-        ioc = make_ipv4_ioc("192.168.1.1")
-        mock_resp = MagicMock()
-        mock_resp.status_code = 404
-        mock_resp.raise_for_status = MagicMock()
-
-        adapter = _make_adapter()
-        mock_adapter_session(adapter, response=mock_resp)
-        result = adapter.lookup(ioc)
-
-        assert isinstance(result, EnrichmentResult)
         assert result.raw_stats == {}, (
             f"Private IP must return empty raw_stats, got: {result.raw_stats!r}"
-        )
-
-    def test_private_ip_is_not_enrichment_error(self) -> None:
-        """HTTP 404 -> NOT an EnrichmentError (private IPs are not lookup failures)."""
-        ioc = make_ipv4_ioc("10.0.0.1")
-        mock_resp = MagicMock()
-        mock_resp.status_code = 404
-        mock_resp.raise_for_status = MagicMock()
-
-        adapter = _make_adapter()
-        mock_adapter_session(adapter, response=mock_resp)
-        result = adapter.lookup(ioc)
-
-        assert not isinstance(result, EnrichmentError), (
-            "Private IP HTTP 404 must return EnrichmentResult, not EnrichmentError"
         )
 
 

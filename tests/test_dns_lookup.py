@@ -369,8 +369,8 @@ class TestRawStatsStructure:
 
 class TestNXDOMAIN:
 
-    def test_nxdomain_returns_enrichment_result(self) -> None:
-        """NXDOMAIN must return EnrichmentResult(verdict='no_data'), NOT EnrichmentError."""
+    def test_nxdomain_returns_no_data_result(self) -> None:
+        """NXDOMAIN must return EnrichmentResult(verdict='no_data') with empty record lists."""
         resolver = MagicMock()
         resolver.resolve.side_effect = dns.resolver.NXDOMAIN()
         with patch("dns.resolver.Resolver", return_value=resolver):
@@ -379,51 +379,13 @@ class TestNXDOMAIN:
         assert isinstance(result, EnrichmentResult), (
             f"NXDOMAIN must return EnrichmentResult not EnrichmentError, got {type(result).__name__}"
         )
-
-    def test_nxdomain_verdict_is_no_data(self) -> None:
-        """NXDOMAIN -> verdict='no_data' (domain doesn't exist, not an error)."""
-        resolver = MagicMock()
-        resolver.resolve.side_effect = dns.resolver.NXDOMAIN()
-        with patch("dns.resolver.Resolver", return_value=resolver):
-            result = _make_adapter().lookup(DOMAIN_IOC)
-
-        assert isinstance(result, EnrichmentResult)
         assert result.verdict == "no_data"
-
-    def test_nxdomain_returns_empty_lists(self) -> None:
-        """NXDOMAIN -> all record lists in raw_stats are empty."""
-        resolver = MagicMock()
-        resolver.resolve.side_effect = dns.resolver.NXDOMAIN()
-        with patch("dns.resolver.Resolver", return_value=resolver):
-            result = _make_adapter().lookup(DOMAIN_IOC)
-
-        assert isinstance(result, EnrichmentResult)
         assert result.raw_stats["a"] == []
         assert result.raw_stats["mx"] == []
         assert result.raw_stats["ns"] == []
         assert result.raw_stats["txt"] == []
-
-    def test_nxdomain_not_in_lookup_errors(self) -> None:
-        """NXDOMAIN is expected — it must NOT be added to lookup_errors."""
-        resolver = MagicMock()
-        resolver.resolve.side_effect = dns.resolver.NXDOMAIN()
-        with patch("dns.resolver.Resolver", return_value=resolver):
-            result = _make_adapter().lookup(DOMAIN_IOC)
-
-        assert isinstance(result, EnrichmentResult)
         assert result.raw_stats["lookup_errors"] == [], (
             "NXDOMAIN is a normal outcome, not an error to track in lookup_errors"
-        )
-
-    def test_nxdomain_is_not_enrichment_error(self) -> None:
-        """NXDOMAIN must NOT return EnrichmentError."""
-        resolver = MagicMock()
-        resolver.resolve.side_effect = dns.resolver.NXDOMAIN()
-        with patch("dns.resolver.Resolver", return_value=resolver):
-            result = _make_adapter().lookup(DOMAIN_IOC)
-
-        assert not isinstance(result, EnrichmentError), (
-            "NXDOMAIN is 'domain not found', NOT a lookup failure — return EnrichmentResult"
         )
 
 
@@ -475,15 +437,6 @@ class TestNoAnswer:
         assert result.raw_stats["lookup_errors"] == [], (
             "NoAnswer is a normal outcome, not an error"
         )
-
-    def test_no_answer_returns_enrichment_result_not_error(self) -> None:
-        """NoAnswer -> EnrichmentResult, NOT EnrichmentError."""
-        resolver = MagicMock()
-        resolver.resolve.side_effect = dns.resolver.NoAnswer()
-        with patch("dns.resolver.Resolver", return_value=resolver):
-            result = _make_adapter().lookup(DOMAIN_IOC)
-
-        assert not isinstance(result, EnrichmentError)
 
 
 # ---------------------------------------------------------------------------
@@ -567,7 +520,7 @@ class TestTimeout:
         assert len(errors) == 4  # one per rdtype
         assert all("timeout" in e.lower() for e in errors)
 
-    def test_timeout_returns_enrichment_result_not_error(self) -> None:
+    def test_timeout_returns_enrichment_result(self) -> None:
         """Timeout -> EnrichmentResult (partial failure), not EnrichmentError."""
         resolver = MagicMock()
         resolver.resolve.side_effect = dns.exception.Timeout()
@@ -575,7 +528,6 @@ class TestTimeout:
             result = _make_adapter().lookup(DOMAIN_IOC)
 
         assert isinstance(result, EnrichmentResult)
-        assert not isinstance(result, EnrichmentError)
 
 
 # ---------------------------------------------------------------------------
@@ -605,7 +557,6 @@ class TestNoNameservers:
             result = _make_adapter().lookup(DOMAIN_IOC)
 
         assert isinstance(result, EnrichmentResult)
-        assert not isinstance(result, EnrichmentError)
 
 
 # ---------------------------------------------------------------------------

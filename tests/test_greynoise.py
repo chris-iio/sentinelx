@@ -174,19 +174,6 @@ class TestGreyNoiseLookup:
         assert result.verdict == "no_data"
         assert result.detection_count == 0
 
-    def test_404_is_not_enrichment_error(self) -> None:
-        """404 response -> not isinstance EnrichmentError."""
-        ioc = make_ipv4_ioc("192.0.2.99")
-        mock_resp = make_mock_response(404, GREYNOISE_404_RESPONSE)
-
-        adapter = _make_adapter()
-        mock_adapter_session(adapter, response=mock_resp)
-        result = adapter.lookup(ioc)
-
-        assert not isinstance(result, EnrichmentError), (
-            "404 from GreyNoise is not an error — it means 'no data', not 'failure'"
-        )
-
     def test_ipv6_lookup_works(self) -> None:
         """IPv6 IOC with malicious classification -> verdict 'malicious'."""
         ipv6 = "2001:db8::bad"

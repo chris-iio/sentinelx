@@ -306,15 +306,6 @@ class TestDomainNotFound:
         assert result.raw_stats["org"] is None
         assert result.raw_stats["lookup_errors"] == []
 
-    def test_not_found_is_not_enrichment_error(self) -> None:
-        """WhoisDomainNotFoundError must NOT return EnrichmentError."""
-        with patch("app.enrichment.adapters.whois_lookup.whois.whois", side_effect=WhoisDomainNotFoundError("example.com")):
-            result = _make_adapter().lookup(DOMAIN_IOC)
-
-        assert not isinstance(result, EnrichmentError), (
-            "Domain not found is 'no data', NOT a lookup failure"
-        )
-
 
 # ---------------------------------------------------------------------------
 # Quota exceeded handling
@@ -324,27 +315,13 @@ class TestDomainNotFound:
 class TestQuotaExceeded:
 
     def test_quota_exceeded_returns_enrichment_error(self) -> None:
-        """WhoisQuotaExceededError -> EnrichmentError."""
-        with patch("app.enrichment.adapters.whois_lookup.whois.whois", side_effect=WhoisQuotaExceededError("rate limited")):
-            result = _make_adapter().lookup(DOMAIN_IOC)
-
-        assert isinstance(result, EnrichmentError)
-
-    def test_quota_exceeded_error_message(self) -> None:
-        """WhoisQuotaExceededError -> error contains 'quota'."""
-        with patch("app.enrichment.adapters.whois_lookup.whois.whois", side_effect=WhoisQuotaExceededError("rate limited")):
-            result = _make_adapter().lookup(DOMAIN_IOC)
-
-        assert isinstance(result, EnrichmentError)
-        assert "quota" in result.error.lower()
-
-    def test_quota_exceeded_provider_name(self) -> None:
-        """QuotaExceeded error has correct provider name."""
+        """WhoisQuotaExceededError -> EnrichmentError mentioning 'quota' from WHOIS provider."""
         with patch("app.enrichment.adapters.whois_lookup.whois.whois", side_effect=WhoisQuotaExceededError("rate limited")):
             result = _make_adapter().lookup(DOMAIN_IOC)
 
         assert isinstance(result, EnrichmentError)
         assert result.provider == "WHOIS"
+        assert "quota" in result.error.lower()
 
 
 # ---------------------------------------------------------------------------
@@ -355,14 +332,7 @@ class TestQuotaExceeded:
 class TestCommandFailed:
 
     def test_command_failed_returns_enrichment_error(self) -> None:
-        """WhoisCommandFailedError -> EnrichmentError."""
-        with patch("app.enrichment.adapters.whois_lookup.whois.whois", side_effect=WhoisCommandFailedError("whois: not found")):
-            result = _make_adapter().lookup(DOMAIN_IOC)
-
-        assert isinstance(result, EnrichmentError)
-
-    def test_command_failed_error_message(self) -> None:
-        """WhoisCommandFailedError -> error contains 'command' or 'failed'."""
+        """WhoisCommandFailedError -> EnrichmentError mentioning 'command' or 'failed'."""
         with patch("app.enrichment.adapters.whois_lookup.whois.whois", side_effect=WhoisCommandFailedError("whois: not found")):
             result = _make_adapter().lookup(DOMAIN_IOC)
 
@@ -377,47 +347,20 @@ class TestCommandFailed:
 
 class TestGracefulDegrade:
 
-    def test_failed_parsing_returns_enrichment_result(self) -> None:
-        """FailedParsingWhoisOutputError -> EnrichmentResult with lookup_errors, not EnrichmentError."""
-        with patch("app.enrichment.adapters.whois_lookup.whois.whois", side_effect=FailedParsingWhoisOutputError("bad output")):
+    @pytest.mark.parametrize("exception", [
+        FailedParsingWhoisOutputError("bad output"),
+        UnknownTldError(".xyz"),
+    ], ids=["parse-failure", "unknown-tld"])
+    def test_graceful_degrade_returns_result_with_lookup_errors(self, exception) -> None:
+        """Parse failures and unknown TLDs -> EnrichmentResult(verdict='no_data') with lookup_errors."""
+        with patch("app.enrichment.adapters.whois_lookup.whois.whois", side_effect=exception):
             result = _make_adapter().lookup(DOMAIN_IOC)
 
         assert isinstance(result, EnrichmentResult), (
-            f"Parse failure should degrade gracefully, got {type(result).__name__}"
+            f"{type(exception).__name__} should degrade gracefully, got {type(result).__name__}"
         )
-        assert not isinstance(result, EnrichmentError)
-
-    def test_failed_parsing_has_lookup_errors(self) -> None:
-        """FailedParsingWhoisOutputError -> lookup_errors is non-empty."""
-        with patch("app.enrichment.adapters.whois_lookup.whois.whois", side_effect=FailedParsingWhoisOutputError("bad output")):
-            result = _make_adapter().lookup(DOMAIN_IOC)
-
-        assert isinstance(result, EnrichmentResult)
-        assert len(result.raw_stats["lookup_errors"]) > 0
-
-    def test_unknown_tld_returns_enrichment_result(self) -> None:
-        """UnknownTldError -> EnrichmentResult with lookup_errors, not EnrichmentError."""
-        with patch("app.enrichment.adapters.whois_lookup.whois.whois", side_effect=UnknownTldError(".xyz")):
-            result = _make_adapter().lookup(DOMAIN_IOC)
-
-        assert isinstance(result, EnrichmentResult)
-        assert not isinstance(result, EnrichmentError)
-
-    def test_unknown_tld_has_lookup_errors(self) -> None:
-        """UnknownTldError -> lookup_errors is non-empty."""
-        with patch("app.enrichment.adapters.whois_lookup.whois.whois", side_effect=UnknownTldError(".xyz")):
-            result = _make_adapter().lookup(DOMAIN_IOC)
-
-        assert isinstance(result, EnrichmentResult)
-        assert len(result.raw_stats["lookup_errors"]) > 0
-
-    def test_graceful_degrade_verdict_is_no_data(self) -> None:
-        """Gracefully degraded results still have verdict='no_data'."""
-        with patch("app.enrichment.adapters.whois_lookup.whois.whois", side_effect=FailedParsingWhoisOutputError("bad")):
-            result = _make_adapter().lookup(DOMAIN_IOC)
-
-        assert isinstance(result, EnrichmentResult)
         assert result.verdict == "no_data"
+        assert len(result.raw_stats["lookup_errors"]) > 0
 
 
 # ---------------------------------------------------------------------------
@@ -428,15 +371,8 @@ class TestGracefulDegrade:
 class TestUnexpectedException:
 
     def test_unexpected_exception_returns_enrichment_error(self) -> None:
-        """Unexpected exceptions -> EnrichmentError."""
+        """Unexpected exceptions -> EnrichmentError mentioning 'unexpected'."""
         with patch("app.enrichment.adapters.whois_lookup.whois.whois", side_effect=RuntimeError("socket exploded")):
-            result = _make_adapter().lookup(DOMAIN_IOC)
-
-        assert isinstance(result, EnrichmentError)
-
-    def test_unexpected_exception_error_message(self) -> None:
-        """Unexpected exceptions -> error mentions 'unexpected'."""
-        with patch("app.enrichment.adapters.whois_lookup.whois.whois", side_effect=RuntimeError("boom")):
             result = _make_adapter().lookup(DOMAIN_IOC)
 
         assert isinstance(result, EnrichmentError)

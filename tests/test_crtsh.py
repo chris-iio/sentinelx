@@ -283,8 +283,8 @@ class TestCertDataExtraction:
 
 class TestEmptyResponse:
 
-    def test_empty_array_returns_no_data(self) -> None:
-        """Empty [] response -> EnrichmentResult(verdict='no_data') with zero detection count."""
+    def test_empty_array_returns_no_data_with_empty_raw_stats(self) -> None:
+        """Empty [] response -> EnrichmentResult(verdict='no_data', raw_stats={})."""
         ioc = make_domain_ioc("example.com")
 
         adapter = _make_adapter()
@@ -296,16 +296,6 @@ class TestEmptyResponse:
         )
         assert result.verdict == "no_data"
         assert result.detection_count == 0, "empty response — detection_count must be 0"
-
-    def test_empty_array_returns_empty_raw_stats(self) -> None:
-        """Empty [] response -> raw_stats is {} (empty dict)."""
-        ioc = make_domain_ioc("example.com")
-
-        adapter = _make_adapter()
-        mock_adapter_session(adapter, response=make_mock_response(200, []))
-        result = adapter.lookup(ioc)
-
-        assert isinstance(result, EnrichmentResult)
         assert result.raw_stats == {}
 
 

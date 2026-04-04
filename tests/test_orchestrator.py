@@ -125,10 +125,7 @@ class TestEnrichAll:
             _make_ioc(IOCType.MD5, "a" * 32),
         ]
 
-        def side_effect(ioc):
-            return _make_result(ioc)
-
-        mock_adapter.lookup.side_effect = side_effect
+        mock_adapter.lookup.side_effect = _make_result
 
         orchestrator = _make_orchestrator(mock_adapter)
         orchestrator.enrich_all("job-results", iocs)
@@ -434,17 +431,13 @@ class TestPerProviderSemaphore:
     def test_zero_auth_completes_without_waiting_for_vt(self):
         """Zero-auth adapter (no semaphore) finishes all lookups alongside VT.
 
-        VT uses an Event.wait with near-instant timeout (no real delay).
-        DNS is instant. All 16 results (8 VT + 8 DNS) must be present,
-        and DNS must have completed all 8 calls.
+        VT has a brief gate (near-instant Event.wait). DNS is instant.
+        All 16 results (8 VT + 8 DNS) must be present after enrich_all completes.
         """
         iocs = [_make_ioc(IOCType.IPV4, f"10.0.1.{i}") for i in range(8)]
 
         vt_adapter = _make_keyed_adapter("VirusTotal", supported_types={IOCType.IPV4})
         dns_adapter = _make_public_adapter("DNS", supported_types={IOCType.IPV4})
-        dns_call_count = threading.Event()
-        dns_calls = [0]
-        dns_lock = threading.Lock()
 
         vt_gate = threading.Event()  # never set — expires near-instantly
 
@@ -452,15 +445,8 @@ class TestPerProviderSemaphore:
             vt_gate.wait(timeout=0.01)  # near-instant expiry, no real delay
             return _make_result(ioc, provider="VirusTotal")
 
-        def instant_dns_lookup(ioc):
-            with dns_lock:
-                dns_calls[0] += 1
-                if dns_calls[0] == 8:
-                    dns_call_count.set()
-            return _make_result(ioc, provider="DNS")
-
         vt_adapter.lookup.side_effect = gated_vt_lookup
-        dns_adapter.lookup.side_effect = instant_dns_lookup
+        dns_adapter.lookup.side_effect = lambda ioc: _make_result(ioc, provider="DNS")
 
         orchestrator = EnrichmentOrchestrator(
             adapters=[vt_adapter, dns_adapter], max_workers=20
@@ -469,13 +455,9 @@ class TestPerProviderSemaphore:
             orchestrator.enrich_all("job-dns-free", iocs)
 
         status = orchestrator.get_status("job-dns-free")
-        # All 16 results must be present (8 VT + 8 DNS)
         assert len(status["results"]) == 16, (
             f"Expected 16 results (8 VT + 8 DNS), got {len(status['results'])}"
         )
-        # DNS must have completed all 8 calls (event was set)
-        assert dns_call_count.is_set(), "DNS adapter did not complete all 8 lookups"
-        # Verify DNS adapter was called 8 times
         assert dns_adapter.lookup.call_count == 8
 
     def test_semaphore_built_only_for_keyed_adapters(self):
@@ -529,8 +511,7 @@ class TestPerProviderSemaphore:
 
 def _make_vt_adapter() -> MagicMock:
     """Create a keyed VT-style adapter (requires_api_key=True) for backoff tests."""
-    adapter = _make_keyed_adapter("VirusTotal", supported_types={IOCType.IPV4})
-    return adapter
+    return _make_keyed_adapter("VirusTotal", supported_types={IOCType.IPV4})
 
 
 class TestBackoff429:

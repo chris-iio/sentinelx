@@ -18,6 +18,7 @@ from unittest.mock import MagicMock, patch
 
 import dns.exception
 import dns.resolver
+import pytest
 
 from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.pipeline.models import IOC, IOCType
@@ -168,8 +169,14 @@ class TestSuccessfulLookup:
             f"ASN context is informational, verdict must be 'no_data', got: {result.verdict!r}"
         )
 
-    def test_raw_stats_asn_value(self) -> None:
-        """raw_stats['asn'] must be '23028' from sample TXT response."""
+    @pytest.mark.parametrize("field,expected", [
+        ("asn", "23028"),
+        ("prefix", "216.90.108.0/24"),
+        ("rir", "arin"),
+        ("allocated", "1998-09-25"),
+    ])
+    def test_raw_stats_field_values(self, field: str, expected: str) -> None:
+        """raw_stats fields must match the parsed TXT response values."""
         mock_resolver = MagicMock()
         mock_resolver.resolve.return_value = _make_txt_answer(SAMPLE_TXT)
 
@@ -177,47 +184,8 @@ class TestSuccessfulLookup:
             result = _make_adapter().lookup(IPV4_IOC)
 
         assert isinstance(result, EnrichmentResult)
-        assert result.raw_stats["asn"] == "23028", (
-            f"Expected asn='23028', got: {result.raw_stats.get('asn')!r}"
-        )
-
-    def test_raw_stats_prefix_value(self) -> None:
-        """raw_stats['prefix'] must be '216.90.108.0/24' from sample TXT response."""
-        mock_resolver = MagicMock()
-        mock_resolver.resolve.return_value = _make_txt_answer(SAMPLE_TXT)
-
-        with patch("dns.resolver.Resolver", return_value=mock_resolver):
-            result = _make_adapter().lookup(IPV4_IOC)
-
-        assert isinstance(result, EnrichmentResult)
-        assert result.raw_stats["prefix"] == "216.90.108.0/24", (
-            f"Expected prefix='216.90.108.0/24', got: {result.raw_stats.get('prefix')!r}"
-        )
-
-    def test_raw_stats_rir_value(self) -> None:
-        """raw_stats['rir'] must be 'arin' from sample TXT response."""
-        mock_resolver = MagicMock()
-        mock_resolver.resolve.return_value = _make_txt_answer(SAMPLE_TXT)
-
-        with patch("dns.resolver.Resolver", return_value=mock_resolver):
-            result = _make_adapter().lookup(IPV4_IOC)
-
-        assert isinstance(result, EnrichmentResult)
-        assert result.raw_stats["rir"] == "arin", (
-            f"Expected rir='arin', got: {result.raw_stats.get('rir')!r}"
-        )
-
-    def test_raw_stats_allocated_value(self) -> None:
-        """raw_stats['allocated'] must be '1998-09-25' from sample TXT response."""
-        mock_resolver = MagicMock()
-        mock_resolver.resolve.return_value = _make_txt_answer(SAMPLE_TXT)
-
-        with patch("dns.resolver.Resolver", return_value=mock_resolver):
-            result = _make_adapter().lookup(IPV4_IOC)
-
-        assert isinstance(result, EnrichmentResult)
-        assert result.raw_stats["allocated"] == "1998-09-25", (
-            f"Expected allocated='1998-09-25', got: {result.raw_stats.get('allocated')!r}"
+        assert result.raw_stats[field] == expected, (
+            f"Expected {field}={expected!r}, got: {result.raw_stats.get(field)!r}"
         )
 
 
@@ -228,7 +196,7 @@ class TestSuccessfulLookup:
 
 class TestNXDOMAIN:
 
-    def test_nxdomain_returns_enrichment_result(self) -> None:
+    def test_nxdomain_returns_no_data_result(self) -> None:
         """NXDOMAIN must return EnrichmentResult(verdict='no_data') with correct response shape.
 
         Private/RFC-1918 IPs return NXDOMAIN — this is expected 'no BGP entry', not an error.
@@ -242,19 +210,9 @@ class TestNXDOMAIN:
         assert isinstance(result, EnrichmentResult), (
             f"NXDOMAIN must return EnrichmentResult not EnrichmentError, got {type(result).__name__}"
         )
+        assert result.verdict == "no_data"
         assert result.detection_count == 0, "NXDOMAIN — detection_count must be 0"
         assert result.scan_date is None, "NXDOMAIN — scan_date must be None"
-
-    def test_nxdomain_verdict_is_no_data(self) -> None:
-        """NXDOMAIN -> verdict='no_data' (private IP has no BGP route, not an error)."""
-        mock_resolver = MagicMock()
-        mock_resolver.resolve.side_effect = dns.resolver.NXDOMAIN()
-
-        with patch("dns.resolver.Resolver", return_value=mock_resolver):
-            result = _make_adapter().lookup(PRIVATE_IPV4_IOC)
-
-        assert isinstance(result, EnrichmentResult)
-        assert result.verdict == "no_data"
 
     def test_nxdomain_returns_empty_raw_stats(self) -> None:
         """NXDOMAIN -> raw_stats={} (no BGP entry for private IP)."""
@@ -269,18 +227,6 @@ class TestNXDOMAIN:
             f"NXDOMAIN must return empty raw_stats, got: {result.raw_stats!r}"
         )
 
-    def test_nxdomain_is_not_enrichment_error(self) -> None:
-        """NXDOMAIN must NOT return EnrichmentError."""
-        mock_resolver = MagicMock()
-        mock_resolver.resolve.side_effect = dns.resolver.NXDOMAIN()
-
-        with patch("dns.resolver.Resolver", return_value=mock_resolver):
-            result = _make_adapter().lookup(PRIVATE_IPV4_IOC)
-
-        assert not isinstance(result, EnrichmentError), (
-            "NXDOMAIN is 'no BGP entry' (private IP), NOT a lookup failure — return EnrichmentResult"
-        )
-
 
 # ---------------------------------------------------------------------------
 # DNS error handling (NoAnswer, NoNameservers, Timeout)
@@ -289,106 +235,23 @@ class TestNXDOMAIN:
 
 class TestDNSErrors:
 
-    def test_no_answer_returns_enrichment_result(self) -> None:
-        """NoAnswer must return EnrichmentResult(verdict='no_data'), NOT EnrichmentError."""
+    @pytest.mark.parametrize("exception", [
+        dns.resolver.NoAnswer(),
+        dns.resolver.NoNameservers(),
+        dns.exception.Timeout(),
+    ], ids=["NoAnswer", "NoNameservers", "Timeout"])
+    def test_dns_error_returns_no_data_with_empty_raw_stats(self, exception) -> None:
+        """DNS errors (NoAnswer/NoNameservers/Timeout) -> EnrichmentResult(verdict='no_data', raw_stats={})."""
         mock_resolver = MagicMock()
-        mock_resolver.resolve.side_effect = dns.resolver.NoAnswer()
+        mock_resolver.resolve.side_effect = exception
 
         with patch("dns.resolver.Resolver", return_value=mock_resolver):
             result = _make_adapter().lookup(IPV4_IOC)
 
         assert isinstance(result, EnrichmentResult), (
-            f"NoAnswer must return EnrichmentResult, got {type(result).__name__}"
+            f"{type(exception).__name__} must return EnrichmentResult, got {type(result).__name__}"
         )
-
-    def test_no_answer_verdict_is_no_data(self) -> None:
-        """NoAnswer -> verdict='no_data'."""
-        mock_resolver = MagicMock()
-        mock_resolver.resolve.side_effect = dns.resolver.NoAnswer()
-
-        with patch("dns.resolver.Resolver", return_value=mock_resolver):
-            result = _make_adapter().lookup(IPV4_IOC)
-
-        assert isinstance(result, EnrichmentResult)
         assert result.verdict == "no_data"
-
-    def test_no_nameservers_returns_enrichment_result(self) -> None:
-        """NoNameservers must return EnrichmentResult(verdict='no_data'), NOT EnrichmentError."""
-        mock_resolver = MagicMock()
-        mock_resolver.resolve.side_effect = dns.resolver.NoNameservers()
-
-        with patch("dns.resolver.Resolver", return_value=mock_resolver):
-            result = _make_adapter().lookup(IPV4_IOC)
-
-        assert isinstance(result, EnrichmentResult), (
-            f"NoNameservers must return EnrichmentResult, got {type(result).__name__}"
-        )
-
-    def test_no_nameservers_verdict_is_no_data(self) -> None:
-        """NoNameservers -> verdict='no_data'."""
-        mock_resolver = MagicMock()
-        mock_resolver.resolve.side_effect = dns.resolver.NoNameservers()
-
-        with patch("dns.resolver.Resolver", return_value=mock_resolver):
-            result = _make_adapter().lookup(IPV4_IOC)
-
-        assert isinstance(result, EnrichmentResult)
-        assert result.verdict == "no_data"
-
-    def test_timeout_returns_enrichment_result(self) -> None:
-        """dns.exception.Timeout must return EnrichmentResult(verdict='no_data'), NOT EnrichmentError."""
-        mock_resolver = MagicMock()
-        mock_resolver.resolve.side_effect = dns.exception.Timeout()
-
-        with patch("dns.resolver.Resolver", return_value=mock_resolver):
-            result = _make_adapter().lookup(IPV4_IOC)
-
-        assert isinstance(result, EnrichmentResult), (
-            f"Timeout must return EnrichmentResult, got {type(result).__name__}"
-        )
-
-    def test_timeout_verdict_is_no_data(self) -> None:
-        """Timeout -> verdict='no_data'."""
-        mock_resolver = MagicMock()
-        mock_resolver.resolve.side_effect = dns.exception.Timeout()
-
-        with patch("dns.resolver.Resolver", return_value=mock_resolver):
-            result = _make_adapter().lookup(IPV4_IOC)
-
-        assert isinstance(result, EnrichmentResult)
-        assert result.verdict == "no_data"
-
-    def test_no_answer_returns_empty_raw_stats(self) -> None:
-        """NoAnswer -> raw_stats={}."""
-        mock_resolver = MagicMock()
-        mock_resolver.resolve.side_effect = dns.resolver.NoAnswer()
-
-        with patch("dns.resolver.Resolver", return_value=mock_resolver):
-            result = _make_adapter().lookup(IPV4_IOC)
-
-        assert isinstance(result, EnrichmentResult)
-        assert result.raw_stats == {}
-
-    def test_timeout_returns_empty_raw_stats(self) -> None:
-        """Timeout -> raw_stats={}."""
-        mock_resolver = MagicMock()
-        mock_resolver.resolve.side_effect = dns.exception.Timeout()
-
-        with patch("dns.resolver.Resolver", return_value=mock_resolver):
-            result = _make_adapter().lookup(IPV4_IOC)
-
-        assert isinstance(result, EnrichmentResult)
-        assert result.raw_stats == {}
-
-    def test_no_nameservers_returns_empty_raw_stats(self) -> None:
-        """NoNameservers -> raw_stats={}."""
-        mock_resolver = MagicMock()
-        mock_resolver.resolve.side_effect = dns.resolver.NoNameservers()
-
-        with patch("dns.resolver.Resolver", return_value=mock_resolver):
-            result = _make_adapter().lookup(IPV4_IOC)
-
-        assert isinstance(result, EnrichmentResult)
         assert result.raw_stats == {}
 
 
@@ -400,7 +263,7 @@ class TestDNSErrors:
 class TestUnexpectedError:
 
     def test_generic_exception_returns_enrichment_error(self) -> None:
-        """Generic/unexpected Exception must return EnrichmentError, NOT EnrichmentResult."""
+        """Generic/unexpected Exception must return EnrichmentError with correct provider."""
         mock_resolver = MagicMock()
         mock_resolver.resolve.side_effect = RuntimeError("unexpected failure")
 
@@ -410,16 +273,6 @@ class TestUnexpectedError:
         assert isinstance(result, EnrichmentError), (
             f"Unexpected exception must return EnrichmentError, got {type(result).__name__}"
         )
-
-    def test_generic_exception_provider_name_correct(self) -> None:
-        """EnrichmentError from unexpected exception must have provider='ASN Intel'."""
-        mock_resolver = MagicMock()
-        mock_resolver.resolve.side_effect = RuntimeError("unexpected failure")
-
-        with patch("dns.resolver.Resolver", return_value=mock_resolver):
-            result = _make_adapter().lookup(IPV4_IOC)
-
-        assert isinstance(result, EnrichmentError)
         assert result.provider == "ASN Intel"
 
 
@@ -432,24 +285,14 @@ class TestUnexpectedError:
 class TestInvalidIP:
 
     def test_invalid_ip_returns_enrichment_error(self) -> None:
-        """Invalid IP string -> EnrichmentError (ipaddress.ip_address() raises ValueError)."""
-        result = _make_adapter().lookup(INVALID_IP_IOC)
+        """Invalid IP string -> EnrichmentError with correct provider, no DNS attempted."""
+        with patch("dns.resolver.Resolver") as mock_cls:
+            result = _make_adapter().lookup(INVALID_IP_IOC)
 
         assert isinstance(result, EnrichmentError), (
             f"Invalid IP must return EnrichmentError, got {type(result).__name__}"
         )
-
-    def test_invalid_ip_provider_name(self) -> None:
-        """EnrichmentError from invalid IP must have provider='ASN Intel'."""
-        result = _make_adapter().lookup(INVALID_IP_IOC)
-
-        assert isinstance(result, EnrichmentError)
         assert result.provider == "ASN Intel"
-
-    def test_invalid_ip_does_not_call_dns(self) -> None:
-        """Invalid IP -> no DNS resolution attempted."""
-        with patch("dns.resolver.Resolver") as mock_cls:
-            _make_adapter().lookup(INVALID_IP_IOC)
         mock_cls.assert_not_called()
 
 
