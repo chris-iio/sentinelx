@@ -23,7 +23,7 @@ Steps:
   - Estimate: 30m
   - Files: app/routes/history.py, app/routes/analysis.py, app/templates/history.html, app/templates/index.html, app/templates/base.html, app/templates/macros/icons.html, app/static/src/ts/modules/ui.ts
   - Verify: python -c "from app import create_app; app=create_app(); c=app.test_client(); r1=c.get('/'); r2=c.get('/history'); assert r1.status_code==200; assert b'Recent Analyses' not in r1.data; assert r2.status_code==200; print('OK')" && make typecheck && make js
-- [ ] **T02: Update tests for /history route and stripped-down home page** — Rewrite TestIndexWithHistory in test_history_routes.py to test the new /history route instead of GET /. Add tests for the history list page (populated, empty, error). Verify index still returns 200 without recent analyses.
+- [x] **T02: Added error-propagation test for /history and verified all history + index tests pass** — Rewrite TestIndexWithHistory in test_history_routes.py to test the new /history route instead of GET /. Add tests for the history list page (populated, empty, error). Verify index still returns 200 without recent analyses.
 
 Steps:
 1. In tests/test_history_routes.py, rename TestIndexWithHistory to TestHistoryList (or similar). Rewrite the 4 tests:

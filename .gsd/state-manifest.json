@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-04T05:17:08.801Z",
+  "exported_at": "2026-04-04T05:20:42.171Z",
   "milestones": [
     {
       "id": "M001",
@@ -1223,19 +1223,21 @@
       "milestone_id": "M010",
       "slice_id": "S02",
       "id": "T02",
-      "title": "Update tests for /history route and stripped-down home page",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Added error-propagation test for /history and verified all history + index tests pass",
+      "status": "complete",
+      "one_liner": "Added error-propagation test for /history and verified all history + index tests pass",
+      "narrative": "T01 already rewrote TestIndexWithHistory → TestHistoryListRoute with tests for populated list, empty state, verdict badge, and index-no-longer-shows-recent-analyses. This task added the missing test_history_list_error_propagates test (GET /history when list_recent() raises propagates the exception under Flask TESTING mode) and confirmed test_index_returns_200 in test_routes.py needed no changes — index() no longer queries history_store so no mock simplification was necessary.",
+      "verification_result": "pytest tests/test_history_routes.py tests/test_routes.py --tb=short -q: 43 passed. pytest tests/test_history_routes.py -v: 14 passed. pytest --tb=short -q: 1061 passed, no regressions.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-04T05:20:42.158Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
+      "deviations": "T01 had already completed most planned test rewrites. Error test uses pytest.raises(Exception) instead of asserting status_code == 500 because Flask propagates exceptions under TESTING=True.",
+      "known_issues": "None.",
+      "key_files": [
+        "tests/test_history_routes.py"
+      ],
       "key_decisions": [],
-      "full_summary_md": "",
+      "full_summary_md": "---\nid: T02\nparent: S02\nmilestone: M010\nkey_files:\n  - tests/test_history_routes.py\nkey_decisions:\n  - (none)\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-04-04T05:20:42.158Z\nblocker_discovered: false\n---\n\n# T02: Added error-propagation test for /history and verified all history + index tests pass\n\n**Added error-propagation test for /history and verified all history + index tests pass**\n\n## What Happened\n\nT01 already rewrote TestIndexWithHistory → TestHistoryListRoute with tests for populated list, empty state, verdict badge, and index-no-longer-shows-recent-analyses. This task added the missing test_history_list_error_propagates test (GET /history when list_recent() raises propagates the exception under Flask TESTING mode) and confirmed test_index_returns_200 in test_routes.py needed no changes — index() no longer queries history_store so no mock simplification was necessary.\n\n## Verification\n\npytest tests/test_history_routes.py tests/test_routes.py --tb=short -q: 43 passed. pytest tests/test_history_routes.py -v: 14 passed. pytest --tb=short -q: 1061 passed, no regressions.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `pytest tests/test_history_routes.py tests/test_routes.py --tb=short -q` | 0 | ✅ pass | 760ms |\n| 2 | `pytest tests/test_history_routes.py -v` | 0 | ✅ pass | 420ms |\n| 3 | `pytest --tb=short -q` | 0 | ✅ pass | 50860ms |\n\n\n## Deviations\n\nT01 had already completed most planned test rewrites. Error test uses pytest.raises(Exception) instead of asserting status_code == 500 because Flask propagates exceptions under TESTING=True.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `tests/test_history_routes.py`\n",
       "description": "Rewrite TestIndexWithHistory in test_history_routes.py to test the new /history route instead of GET /. Add tests for the history list page (populated, empty, error). Verify index still returns 200 without recent analyses.\n\nSteps:\n1. In tests/test_history_routes.py, rename TestIndexWithHistory to TestHistoryList (or similar). Rewrite the 4 tests:\n   - test_index_shows_recent_analyses → test_history_list_shows_analyses: GET /history with seeded store, assert 200, assert b'Recent Analyses' or analysis text in response, assert link to /history/abc123deadbeef\n   - test_index_no_history → test_history_list_empty: GET /history with empty store, assert 200, assert empty-state message present\n   - test_index_history_error_graceful → test_history_list_error_graceful: GET /history with store that raises Exception, assert 500 (or handle gracefully if the route has try/except — check T01's implementation)\n   - test_index_shows_verdict_badge → test_history_list_shows_verdict_badge: GET /history with seeded store, assert verdict badge text present\n2. In tests/test_routes.py, verify test_index_returns_200 still passes. The index route no longer passes recent_analyses, so mock_store may no longer be needed for that test — check and simplify if applicable.\n3. Run pytest --tb=short -q to confirm all tests pass.\n4. Run pytest tests/test_history_routes.py -v to confirm the rewritten tests specifically pass.",
       "estimate": "20m",
       "files": [
@@ -2222,6 +2224,39 @@
       "verdict": "✅ pass",
       "duration_ms": 2700,
       "created_at": "2026-04-04T05:17:08.783Z"
+    },
+    {
+      "id": 36,
+      "task_id": "T02",
+      "slice_id": "S02",
+      "milestone_id": "M010",
+      "command": "pytest tests/test_history_routes.py tests/test_routes.py --tb=short -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 760,
+      "created_at": "2026-04-04T05:20:42.158Z"
+    },
+    {
+      "id": 37,
+      "task_id": "T02",
+      "slice_id": "S02",
+      "milestone_id": "M010",
+      "command": "pytest tests/test_history_routes.py -v",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 420,
+      "created_at": "2026-04-04T05:20:42.158Z"
+    },
+    {
+      "id": 38,
+      "task_id": "T02",
+      "slice_id": "S02",
+      "milestone_id": "M010",
+      "command": "pytest --tb=short -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 50860,
+      "created_at": "2026-04-04T05:20:42.158Z"
     }
   ]
 }

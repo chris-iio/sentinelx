@@ -233,6 +233,14 @@ class TestHistoryListRoute:
         assert response.status_code == 200
         assert b"malicious" in response.data
 
+    def test_history_list_error_propagates(self, client):
+        """GET /history propagates when history_store.list_recent raises."""
+        mock_store = MagicMock()
+        mock_store.list_recent.side_effect = Exception("DB corrupt")
+        client.application.history_store = mock_store
+        with pytest.raises(Exception, match="DB corrupt"):
+            client.get("/history")
+
     def test_index_no_recent_analyses(self, client, seeded_store):
         """GET / no longer shows recent analyses section."""
         store, _, _, _ = seeded_store
