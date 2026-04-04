@@ -7,4 +7,4 @@ Eliminate route layer duplication (orchestrator setup, status endpoints), remove
 | ID | Slice | Risk | Depends | Done | After this |
 |----|-------|------|---------|------|------------|
 | S01 | Route Duplication & Dead Code Cleanup | medium | — | ✅ | After this: analysis.py and api.py share a single orchestrator setup helper; status endpoints consolidated; dead imports/exports removed; all tests pass. |
-| S02 | Recent Analyses → Dedicated /history Page | low | S01 | ⬜ | After this: home page shows only the paste form; /history lists recent analyses with links to detail pages. |
+| S02 | Recent Analyses → Dedicated /history Page | low | S01 | ✅ | After this: home page shows only the paste form; /history lists recent analyses with links to detail pages. |

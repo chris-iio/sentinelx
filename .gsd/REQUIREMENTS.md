@@ -587,71 +587,64 @@ This file is the explicit capability and coverage contract for the project.
 
 ## Active
 
+None.
+
+## Validated (M010)
+
 ### R050 — Orchestrator setup logic extracted into a shared helper, eliminating duplication between analysis.py and api.py
 - Class: quality-attribute
-- Status: active
+- Status: validated
 - Description: The ~20-line orchestrator creation block (ConfigStore, cache TTL, EnrichmentOrchestrator init, _orchestrators registration, _enrichment_pool.submit) is extracted into a single helper in _helpers.py. Both analysis.py and api.py call it.
 - Why it matters: Identical logic in two files means every change must be applied twice. Extraction eliminates this maintenance burden and prevents drift.
 - Source: execution
 - Primary owning slice: M010/S01
 - Supporting slices: none
-- Validation: unmapped
-- Notes: Each caller still handles its own error response format (flash+redirect for HTML, JSON 400 for API)
+- Validation: S01: _setup_orchestrator() in _helpers.py; zero inline EnrichmentOrchestrator( in analysis.py/api.py. 1061 tests pass.
 
 ### R051 — enrichment_status() and api_status() consolidated — single implementation serving both blueprints
 - Class: quality-attribute
-- Status: active
+- Status: validated
 - Description: The enrichment polling logic exists identically in enrichment.py (HTML blueprint) and api.py (API blueprint). Consolidated to a single implementation.
-- Why it matters: Two copies of the same polling logic is pure duplication. A bug fix in one must be mirrored in the other.
 - Source: execution
 - Primary owning slice: M010/S01
 - Supporting slices: none
-- Validation: unmapped
-- Notes: Both routes return identical JSON — the only difference is the URL path
+- Validation: S01: _get_enrichment_status() in _helpers.py; enrichment.py and api.py delegate as one-liners. 1061 tests pass.
 
 ### R052 — Unused imports and dead exports removed
 - Class: quality-attribute
-- Status: active
+- Status: validated
 - Description: Unused `json` import in api.py, unused `ResultDisplay` export in shared-rendering.ts, and any other dead imports/exports discovered during audit are removed.
-- Why it matters: Dead code misleads readers and adds noise. Removing it keeps the codebase honest.
 - Source: execution
 - Primary owning slice: M010/S01
 - Supporting slices: none
-- Validation: unmapped
-- Notes: from __future__ import annotations is intentional and not dead
+- Validation: S01: No uuid/json/ConfigStore imports in cleaned modules; export keyword removed from ResultDisplay. make typecheck passes.
 
 ### R053 — Recent Analyses removed from home page — index.html renders only the paste form
 - Class: core-capability
-- Status: active
+- Status: validated
 - Description: The Recent Analyses collapsible section, its CSS (~130 lines), its JS toggle handler in ui.ts, and the list_recent() call in the index route are all removed from the home page.
-- Why it matters: Keeps the home page focused on the primary action — pasting IOCs.
 - Source: user
 - Primary owning slice: M010/S02
 - Supporting slices: none
-- Validation: unmapped
-- Notes: The list_recent() call and CSS move to the new /history page, not deleted entirely
+- Validation: S02: No 'Recent Analyses' in index.html; no list_recent call in analysis.py; no initRecentAnalysesToggle in ui.ts. GET / returns paste form only.
 
 ### R054 — Dedicated /history page lists recent analyses with links to individual analysis detail pages
 - Class: core-capability
-- Status: active
+- Status: validated
 - Description: A new /history route renders a page listing recent analyses. Each entry links to /history/<analysis_id> for the full detail view. Accessible from nav.
-- Why it matters: Analysts need to access past analyses. Moving from collapsed home page section to a dedicated page gives it proper visibility and room to grow.
 - Source: user
 - Primary owning slice: M010/S02
 - Supporting slices: none
-- Validation: unmapped
-- Notes: Reuses existing HistoryStore.list_recent() and existing CSS patterns
+- Validation: S02: history_list() route in history.py; history.html template; clock nav icon in base.html; links to /history/<id> detail pages. GET /history returns 200.
 
 ### R055 — All existing tests pass after refactoring with zero behavior changes
 - Class: continuity
-- Status: active
+- Status: validated
 - Description: All 1060 tests pass after all refactoring. No user-visible behavior changes — same responses, same UI, same enrichment flow.
-- Why it matters: Refactoring must not break anything.
 - Source: inferred
 - Primary owning slice: M010/all
 - Supporting slices: none
-- Validation: unmapped
-- Notes: Test count may change slightly if tests reference removed dead code
+- Validation: 1061 tests passed (up from 1060 baseline — 1 error-propagation test added, 0 removed). Zero behavior changes confirmed.
 
 ## Traceability
 
@@ -705,16 +698,16 @@ This file is the explicit capability and coverage contract for the project.
 | R047 | quality-attribute | validated | M009/S04 | none | validated |
 | R048 | continuity | validated | M009/all | none | validated |
 | R049 | quality-attribute | validated | M009/all | none | validated |
-| R050 | quality-attribute | active | M010/S01 | none | unmapped |
-| R051 | quality-attribute | active | M010/S01 | none | unmapped |
-| R052 | quality-attribute | active | M010/S01 | none | unmapped |
-| R053 | core-capability | active | M010/S02 | none | unmapped |
-| R054 | core-capability | active | M010/S02 | none | unmapped |
-| R055 | continuity | active | M010/all | none | unmapped |
+| R050 | quality-attribute | validated | M010/S01 | none | S01: _setup_orchestrator() in _helpers.py; zero inline EnrichmentOrchestrator( in analysis.py/api.py. 1061 tests pass. |
+| R051 | quality-attribute | validated | M010/S01 | none | S01: _get_enrichment_status() in _helpers.py; one-liner delegations. 1061 tests pass. |
+| R052 | quality-attribute | validated | M010/S01 | none | S01: No dead imports in cleaned modules; ResultDisplay export removed. make typecheck passes. |
+| R053 | core-capability | validated | M010/S02 | none | S02: No Recent Analyses in index.html; no list_recent in analysis.py; no toggle JS. |
+| R054 | core-capability | validated | M010/S02 | none | S02: history_list() route; history.html template; clock nav icon; links to detail pages. |
+| R055 | continuity | validated | M010/all | none | 1061 tests passed (up from 1060). Zero behavior changes. |
 
 ## Coverage Summary
 
-- Active requirements: 6 (R050, R051, R052, R053, R054, R055)
-- Mapped to slices: 6
-- Validated: 48 (R001–R049)
+- Active requirements: 0
+- Mapped to slices: 0
+- Validated: 54 (R001–R055)
 - Unmapped active requirements: 0

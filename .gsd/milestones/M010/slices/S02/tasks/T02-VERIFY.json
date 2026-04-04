@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T02",
+  "unitId": "M010/S02/T02",
+  "timestamp": 1775280059057,
+  "passed": true,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "pytest tests/test_history_routes.py tests/test_routes.py --tb=short -q",
+      "exitCode": 0,
+      "durationMs": 971,
+      "verdict": "pass"
+    },
+    {
+      "command": "pytest --tb=short -q",
+      "exitCode": 0,
+      "durationMs": 85541,
+      "verdict": "pass"
+    }
+  ]
+}

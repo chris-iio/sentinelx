@@ -10,7 +10,7 @@ Safe, correct, and transparent IOC extraction and enrichment — never invent sc
 
 ## Current State
 
-**M010/S01 complete (2026-04-04).** 1060 tests passing. Route layer duplication eliminated: _setup_orchestrator() and _get_enrichment_status() extracted into _helpers.py, removing ~40 duplicated lines across analysis.py, api.py, and enrichment.py. Unused ResultDisplay export removed from shared-rendering.ts. M010/S02 (Recent Analyses → /history page) pending.
+**M010 complete (2026-04-04).** 1061 tests passing. Route duplication eliminated — _setup_orchestrator() and _get_enrichment_status() shared helpers in _helpers.py. Recent Analyses relocated from home page to dedicated /history page with clock nav icon. Codebase clean and ready for next feature milestone.
 
 ## Architecture / Key Patterns
 
@@ -21,7 +21,7 @@ Safe, correct, and transparent IOC extraction and enrichment — never invent sc
 - **Persistence:** SQLite WAL-mode stores (CacheStore for enrichment cache, HistoryStore for analysis history) at ~/.sentinelx/
 - **Security:** CSP (7 directives), CSRF, SSRF allowlist, host validation, textContent-only DOM (SEC-08)
 - **Build:** Makefile targets — `css`, `js`, `js-dev`, `js-watch`, `typecheck`, `build`
-- **Tests:** 1060 total (unit + E2E via Playwright with route-mocking)
+- **Tests:** 1061 total (unit + E2E via Playwright with route-mocking)
 - **Routes:** `app/routes/` package with shared `main` Blueprint, separate `api` Blueprint (CSRF-exempt)
 
 ## Capability Contract
@@ -39,7 +39,7 @@ See `.gsd/REQUIREMENTS.md` for the explicit capability contract, requirement sta
 - [x] M007: Dead Code & Boilerplate Reduction — safe_request() consolidation across 12 adapters, adapter docstring trimming & dead CSS, test DRY-up with shared helpers. Net -418 LOC, 1057 tests, 0 failures.
 - [x] M008: Routes Decomposition & REST API — routes.py decomposed into app/routes/ package, REST API blueprint added (POST /api/analyze, GET /api/status). 1075 tests, 0 failures.
 - [x] M009: Codebase Reduction — BaseHTTPAdapter consolidation (12 adapters), parametrized contract tests (172 replacing 208), CSS audit (clean), frontend TS dedup (4 functions shared). Net -1,143 LOC, 947 tests, 0 failures.
-- [ ] M010: Cleanup & History Page — Route duplication cleanup, dead import/export removal, Recent Analyses relocated from home page to dedicated /history page.
+- [x] M010: Cleanup & History Page — Route duplication cleanup (_setup_orchestrator, _get_enrichment_status shared helpers), dead import/export removal, Recent Analyses relocated from home page to dedicated /history page. 1061 tests, 0 failures.
 
 ---
 *Last updated: 2026-04-04 — M010 planning.*
