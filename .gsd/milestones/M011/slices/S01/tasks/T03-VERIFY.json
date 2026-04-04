@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T03",
+  "unitId": "M011/S01/T03",
+  "timestamp": 1775303140950,
+  "passed": true,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "python3 -m pytest tests/ -x -q",
+      "exitCode": 0,
+      "durationMs": 86218,
+      "verdict": "pass"
+    },
+    {
+      "command": "python3 -c \"\nimport importlib, pathlib\nfor f in sorted(pathlib.Path('app/enrichment/adapters').glob('*.py')):\n    if f.name == '__init__.py': continue\n    mod = f'app.enrichment.adapters.{f.stem}'\n    importlib.import_module(mod)\n    print(f'  OK {mod}')\n\"",
+      "exitCode": 0,
+      "durationMs": 158,
+      "verdict": "pass"
+    },
+    {
+      "command": "echo \"Non-base line count:\"",
+      "exitCode": 0,
+      "durationMs": 2,
+      "verdict": "pass"
+    },
+    {
+      "command": "echo \"base.py:\"",
+      "exitCode": 0,
+      "durationMs": 2,
+      "verdict": "pass"
+    },
+    {
+      "command": "wc -l app/enrichment/adapters/base.py",
+      "exitCode": 0,
+      "durationMs": 2,
+      "verdict": "pass"
+    }
+  ]
+}

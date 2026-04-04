@@ -358,6 +358,45 @@ class TestProtocolConformance:
 
 
 # ---------------------------------------------------------------------------
+# 1b. Protocol negative tests — non-conforming classes rejected
+# ---------------------------------------------------------------------------
+
+class TestProtocolNegative:
+
+    def test_non_conforming_class_fails_isinstance(self) -> None:
+        """A class missing the `name` attribute does not satisfy Provider."""
+        class MissingName:
+            supported_types = {IOCType.IPV4}
+            requires_api_key = False
+
+            def lookup(self, ioc):
+                pass
+
+            def is_configured(self) -> bool:
+                return True
+
+        obj = MissingName()
+        assert not isinstance(obj, Provider), (
+            "class missing 'name' must not satisfy the Provider protocol"
+        )
+
+    def test_non_conforming_class_missing_lookup_fails(self) -> None:
+        """A class missing the `lookup` method does not satisfy Provider."""
+        class MissingLookup:
+            name = "Test"
+            supported_types = {IOCType.IPV4}
+            requires_api_key = False
+
+            def is_configured(self) -> bool:
+                return True
+
+        obj = MissingLookup()
+        assert not isinstance(obj, Provider), (
+            "class missing 'lookup' must not satisfy the Provider protocol"
+        )
+
+
+# ---------------------------------------------------------------------------
 # 2. Adapter name (all 15)
 # ---------------------------------------------------------------------------
 

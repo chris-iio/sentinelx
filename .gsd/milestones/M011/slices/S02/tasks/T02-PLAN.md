@@ -1,41 +1,12 @@
-# S02: Per-Adapter Test Consolidation
+---
+estimated_steps: 65
+estimated_files: 8
+skills_used: []
+---
 
-**Goal:** Granular one-field-per-test patterns collapsed into single response-shape tests per the contract-suite dedup strategy (D049); ~400-600 test lines removed with zero assertion coverage loss; all tests still pass.
-**Demo:** After this: After this: granular one-field-per-test patterns collapsed into single response-shape tests; ~400-600 test lines removed; all tests still pass.
+# T02: Consolidate per-field tests across 7 adapter test files into response-shape tests
 
-## Tasks
-- [x] **T01: Deleted test_provider_protocol.py (17 tests) and relocated 2 unique negative Protocol tests to test_adapter_contract.py; net -15 tests, full suite green at 933 passed** — ## Description
-
-`test_provider_protocol.py` contains 17 tests: 15 positive protocol/attribute tests (isinstance, name, requires_api_key, is_configured) for VT/MB/TF adapters, plus 2 negative tests (`test_non_conforming_class_fails_isinstance`, `test_non_conforming_class_missing_lookup_fails`) that verify the Protocol runtime check rejects non-conforming classes.
-
-All 15 positive tests are parametrically covered by `test_adapter_contract.py` across all 15 adapters (test_isinstance_provider, test_name_matches, test_requires_api_key_matches, test_configured_when_key_provided_or_not_needed, test_not_configured_when_key_missing). The 2 negative tests are unique — they test Protocol rejection, not any specific adapter — and must be relocated to `test_adapter_contract.py`.
-
-## Steps
-
-1. Read `tests/test_provider_protocol.py` — identify the 2 negative test methods and their imports (IOCType, Provider).
-2. Read `tests/test_adapter_contract.py` — find the appropriate insertion point (near the existing `test_isinstance_provider` test or at the end of the protocol section).
-3. Add a new test class `TestProtocolNegative` (or individual test functions) to `test_adapter_contract.py` containing the 2 negative tests. Ensure the IOCType and Provider imports already exist (they should — verify).
-4. Delete `tests/test_provider_protocol.py` entirely.
-5. Run `python3 -m pytest tests/test_adapter_contract.py -v --tb=short` — all existing + 2 new tests pass.
-6. Run `python3 -c "import tests.test_provider_protocol"` — confirm ImportError (file deleted).
-7. Run `python3 -m pytest tests/ --ignore=tests/e2e -q --tb=short` — full suite still passes.
-
-## Must-Haves
-
-- [ ] Both negative Protocol tests exist in `test_adapter_contract.py` and pass
-- [ ] `tests/test_provider_protocol.py` is deleted
-- [ ] Full unit test suite passes with 0 failures
-- [ ] Net test count change: -15 (17 removed from old file, 2 added to new file)
-
-## Verification
-
-- `python3 -m pytest tests/test_adapter_contract.py -v --tb=short` — all tests pass including 2 new negative tests
-- `python3 -c "import tests.test_provider_protocol" 2>&1 | grep -q ModuleNotFoundError && echo PASS` — file is deleted
-- `python3 -m pytest tests/ --ignore=tests/e2e -q --tb=short` — full suite passes
-  - Estimate: 15m
-  - Files: tests/test_provider_protocol.py, tests/test_adapter_contract.py
-  - Verify: python3 -m pytest tests/test_adapter_contract.py -v --tb=short && python3 -m pytest tests/ --ignore=tests/e2e -q --tb=short
-- [ ] **T02: Consolidate per-field tests across 7 adapter test files into response-shape tests** — ## Description
+## Description
 
 Across 7 adapter test files, ~37 tests repeat identical fixture setup to assert a single field (detection_count, total_engines, scan_date, raw_stats key existence, provider name). Per D049, these are removed and their assertions folded into existing tests that already use the same fixture.
 
@@ -118,6 +89,29 @@ Use descriptive assert messages for all folded assertions, e.g.:
 - `python3 -m pytest tests/ --ignore=tests/e2e -q --tb=short` — 0 failures
 - `python3 -m pytest --co -q 2>&1 | tail -1` — count ~1,009
 - All 7 individual file test runs pass with -v flag
-  - Estimate: 45m
-  - Files: tests/test_ip_api.py, tests/test_asn_cymru.py, tests/test_crtsh.py, tests/test_dns_lookup.py, tests/test_threatminer.py, tests/test_abuseipdb.py, tests/test_greynoise.py, tests/test_whois_lookup.py
-  - Verify: python3 -m pytest tests/ --ignore=tests/e2e -q --tb=short && python3 -m pytest --co -q 2>&1 | tail -1
+
+## Inputs
+
+- ``tests/test_ip_api.py` — adapter test file to consolidate`
+- ``tests/test_asn_cymru.py` — adapter test file to consolidate`
+- ``tests/test_crtsh.py` — adapter test file to consolidate`
+- ``tests/test_dns_lookup.py` — adapter test file to consolidate`
+- ``tests/test_threatminer.py` — adapter test file to consolidate`
+- ``tests/test_abuseipdb.py` — adapter test file to consolidate`
+- ``tests/test_greynoise.py` — adapter test file to consolidate`
+- ``tests/test_whois_lookup.py` — adapter test file to consolidate`
+
+## Expected Output
+
+- ``tests/test_ip_api.py` — 3 tests removed, assertions folded`
+- ``tests/test_asn_cymru.py` — 9-10 tests removed, assertions folded`
+- ``tests/test_crtsh.py` — 4 tests removed, assertions folded`
+- ``tests/test_dns_lookup.py` — 4 tests removed, assertions folded`
+- ``tests/test_threatminer.py` — 3 tests removed, assertions folded`
+- ``tests/test_abuseipdb.py` — 3 tests removed, assertions folded`
+- ``tests/test_greynoise.py` — 3 tests removed, assertions folded`
+- ``tests/test_whois_lookup.py` — 3-4 tests removed, assertions folded`
+
+## Verification
+
+python3 -m pytest tests/ --ignore=tests/e2e -q --tb=short && python3 -m pytest --co -q 2>&1 | tail -1

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-04T11:45:37.199Z",
+  "exported_at": "2026-04-04T11:59:01.583Z",
   "milestones": [
     {
       "id": "M001",
@@ -541,14 +541,14 @@
       "milestone_id": "M011",
       "id": "S01",
       "title": "Adapter Docstring Trim",
-      "status": "pending",
+      "status": "complete",
       "risk": "medium",
       "depends": [],
       "demo": "After this: all 16 adapter files have one-liner + edge-case-only docstrings; ~650 lines removed; all tests pass unchanged.",
       "created_at": "2026-04-04T11:19:03.453Z",
-      "completed_at": null,
-      "full_summary_md": "",
-      "full_uat_md": "",
+      "completed_at": "2026-04-04T11:49:49.590Z",
+      "full_summary_md": "---\nid: S01\nparent: M011\nmilestone: M011\nprovides:\n  - All 15 non-base adapter files trimmed to one-liner docstrings; 1,597 total lines (down from 2,659)\nrequires:\n  []\naffects:\n  - S02\nkey_files:\n  - app/enrichment/adapters/threatminer.py\n  - app/enrichment/adapters/whois_lookup.py\n  - app/enrichment/adapters/ip_api.py\n  - app/enrichment/adapters/asn_cymru.py\n  - app/enrichment/adapters/abuseipdb.py\n  - app/enrichment/adapters/crtsh.py\n  - app/enrichment/adapters/greynoise.py\n  - app/enrichment/adapters/hashlookup.py\n  - app/enrichment/adapters/otx.py\n  - app/enrichment/adapters/shodan.py\n  - app/enrichment/adapters/threatfox.py\n  - app/enrichment/adapters/virustotal.py\n  - app/enrichment/adapters/dns_lookup.py\n  - app/enrichment/adapters/malwarebazaar.py\n  - app/enrichment/adapters/urlhaus.py\nkey_decisions:\n  - Preserved _normalise_datetime short docstring as the sole method-level docstring exception (documents 4-way type union)\n  - DnsAdapter class docstring references port 53 / no SSRF instead of BaseHTTPAdapter since it uses a different inheritance chain\n  - Edge cases preserved as inline comments rather than docstrings — keeps knowledge accessible without inflating line count\npatterns_established:\n  - Adapter docstring convention: one-liner module docstring + one-liner class docstring + zero method docstrings. Edge-case notes live as inline comments near the relevant code.\nobservability_surfaces:\n  - none\ndrill_down_paths:\n  - .gsd/milestones/M011/slices/S01/tasks/T01-SUMMARY.md\n  - .gsd/milestones/M011/slices/S01/tasks/T02-SUMMARY.md\n  - .gsd/milestones/M011/slices/S01/tasks/T03-SUMMARY.md\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-04-04T11:49:49.591Z\nblocker_discovered: false\n---\n\n# S01: Adapter Docstring Trim\n\n**Trimmed verbose docstrings from all 15 non-base adapter files, removing 1,062 lines while preserving edge-case knowledge as inline comments; all 1,061 tests pass unchanged.**\n\n## What Happened\n\nAll 15 non-base adapter files had multi-paragraph module, class, and method docstrings — most restating BaseHTTPAdapter's template pattern or documenting HTTP request/response details already obvious from the code. The trim replaced every module and class docstring with a one-liner and deleted all method-level docstrings, with three exceptions where edge-case knowledge was preserved.\n\nT01 handled the 4 high-gotcha files (threatminer, whois_lookup, ip_api, asn_cymru) that required judgment about what to keep. ThreatMiner's body status_code \"404\" behavior, WHOIS's port-43 no-SSRF note and _normalise_datetime's 4-way type union, ipinfo.io's 404-for-private-IPs, and Cymru's pipe-delimited format were all preserved as inline comments or kept as short docstrings. 416 lines removed.\n\nT02 applied the mechanical trim to 8 standard HTTP adapters (abuseipdb, crtsh, greynoise, hashlookup, otx, shodan, threatfox, virustotal). Purely deletion work — no edge cases requiring preservation beyond existing inline comments. 515 lines removed.\n\nT03 completed the remaining 3 files (dns_lookup, malwarebazaar, urlhaus). DnsAdapter got a port-53-specific one-liner since it doesn't extend BaseHTTPAdapter. ~131 lines removed.\n\nTotal: 1,062 lines removed (2,659 baseline → 1,597). base.py untouched at 161 lines. All 1,061 tests pass unchanged across all three tasks.\n\n## Verification\n\nIndependent closer verification (not inherited from task summaries):\n1. Full test suite: `python3 -m pytest tests/ -x -q` → 1,061 passed in 49.86s\n2. All 16 modules importable: `python3 -c \"import ...\"` → all 16 OK\n3. Non-base line count: `find ... wc -l` → 1,597 (target ≤1,900) ✅\n4. base.py unchanged: `wc -l` → 161 ✅\n\n## Requirements Advanced\n\nNone.\n\n## Requirements Validated\n\nNone.\n\n## New Requirements Surfaced\n\nNone.\n\n## Requirements Invalidated or Re-scoped\n\nNone.\n\n## Deviations\n\nDnsAdapter class docstring references port 53 instead of BaseHTTPAdapter since it doesn't extend BaseHTTPAdapter — correct deviation from the blanket pattern. _normalise_datetime in whois_lookup.py retains a short docstring as the sole method-level exception — as planned.\n\n## Known Limitations\n\nNone.\n\n## Follow-ups\n\nNone.\n\n## Files Created/Modified\n\n- `app/enrichment/adapters/threatminer.py` — Module/class docstrings → one-liners; method docstrings deleted; ThreatMiner body status_code '404' preserved as inline comment\n- `app/enrichment/adapters/whois_lookup.py` — Module/class docstrings → one-liners; _normalise_datetime keeps short docstring; port 43 no-SSRF preserved as inline comment\n- `app/enrichment/adapters/ip_api.py` — Module/class docstrings → one-liners; method docstrings deleted; 404-for-private-IPs preserved as inline comment\n- `app/enrichment/adapters/asn_cymru.py` — Module/class docstrings → one-liners; method docstrings deleted; pipe-delimited format preserved as inline comment\n- `app/enrichment/adapters/abuseipdb.py` — Module/class docstrings → one-liners; all method docstrings deleted\n- `app/enrichment/adapters/crtsh.py` — Module/class docstrings → one-liners; all method docstrings deleted\n- `app/enrichment/adapters/greynoise.py` — Module/class docstrings → one-liners; all method docstrings deleted\n- `app/enrichment/adapters/hashlookup.py` — Module/class docstrings → one-liners; all method docstrings deleted; known_good note kept as inline comment\n- `app/enrichment/adapters/otx.py` — Module/class docstrings → one-liners; all method docstrings deleted\n- `app/enrichment/adapters/shodan.py` — Module/class docstrings → one-liners; all method docstrings deleted\n- `app/enrichment/adapters/threatfox.py` — Module/class docstrings → one-liners; all method docstrings deleted\n- `app/enrichment/adapters/virustotal.py` — Module/class docstrings → one-liners; all method docstrings deleted\n- `app/enrichment/adapters/dns_lookup.py` — Module/class docstrings → one-liners (port 53 reference); all method docstrings deleted\n- `app/enrichment/adapters/malwarebazaar.py` — Module/class docstrings → one-liners; all method docstrings deleted\n- `app/enrichment/adapters/urlhaus.py` — Module/class docstrings → one-liners; all method docstrings deleted\n",
+      "full_uat_md": "# S01: Adapter Docstring Trim — UAT\n\n**Milestone:** M011\n**Written:** 2026-04-04T11:49:49.591Z\n\n## UAT: Adapter Docstring Trim\n\n### Preconditions\n- Working directory: `/home/chris/projects/sentinelx`\n- Python 3 with project dependencies installed\n- All adapter source files present under `app/enrichment/adapters/`\n\n### Test 1: All 16 adapter modules importable\n```bash\npython3 -c \"\nimport importlib, pathlib\nfor f in sorted(pathlib.Path('app/enrichment/adapters').glob('*.py')):\n    if f.name == '__init__.py': continue\n    mod = f'app.enrichment.adapters.{f.stem}'\n    importlib.import_module(mod)\n    print(f'  OK {mod}')\n\"\n```\n**Expected:** All 16 modules print OK, exit code 0.\n\n### Test 2: Full test suite unchanged\n```bash\npython3 -m pytest tests/ -x -q\n```\n**Expected:** 1,061 passed, 0 failures.\n\n### Test 3: Non-base adapter line count ≤ 1,900\n```bash\nfind app/enrichment/adapters -name '*.py' ! -name '__init__.py' ! -name 'base.py' -exec cat {} + | wc -l\n```\n**Expected:** ≤ 1,900 lines (actual: 1,597).\n\n### Test 4: base.py unchanged\n```bash\nwc -l app/enrichment/adapters/base.py\n```\n**Expected:** 161 lines.\n\n### Test 5: One-liner docstring convention enforced\n```bash\nfor f in app/enrichment/adapters/*.py; do\n  [ \"$(basename \"$f\")\" = \"__init__.py\" ] && continue\n  [ \"$(basename \"$f\")\" = \"base.py\" ] && continue\n  count=$(grep -c '\"\"\"' \"$f\")\n  echo \"$(basename \"$f\"): $count triple-quote lines\"\ndone\n```\n**Expected:** Each non-base adapter file has exactly 4 triple-quote lines (2 pairs = module one-liner + class one-liner), except `whois_lookup.py` which has 6 (extra pair for `_normalise_datetime` short docstring).\n\n### Test 6: Edge-case inline comments preserved\n```bash\ngrep -c \"status_code.*404\" app/enrichment/adapters/threatminer.py\ngrep -c \"port 43\\|Port 43\\|no SSRF\\|no.*SSRF\" app/enrichment/adapters/whois_lookup.py\ngrep -c \"404.*private\\|private.*404\\|reserved\" app/enrichment/adapters/ip_api.py\ngrep -c \"pipe.delimited\\|Pipe.delimited\\|no_data\" app/enrichment/adapters/asn_cymru.py\n```\n**Expected:** Each grep returns ≥ 1 match, confirming edge-case knowledge was not deleted.\n\n### Test 7: No method-level docstrings remain (except _normalise_datetime)\n```bash\npython3 -c \"\nimport ast, pathlib\nfor f in sorted(pathlib.Path('app/enrichment/adapters').glob('*.py')):\n    if f.name in ('__init__.py', 'base.py'): continue\n    tree = ast.parse(f.read_text())\n    for node in ast.walk(tree):\n        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):\n            ds = ast.get_docstring(node)\n            if ds:\n                print(f'  {f.name}:{node.name} has docstring')\n\"\n```\n**Expected:** Only `whois_lookup.py:_normalise_datetime` appears. No other method-level docstrings.\n",
       "goal": "All 16 adapter files (15 non-base + base untouched) have one-liner + edge-case-only docstrings; ~1,000 lines removed; all 1,061 tests pass unchanged.",
       "success_criteria": "- All 15 non-base adapter files have ≤2-line module docstrings and ≤1-line class docstrings\n- Method-level docstrings removed except for documented edge cases (datetime polymorphism, pipe-delimited format, HTTP 200/body-404 pattern, HTTP 404 for private IPs)\n- `python3 -m pytest tests/ -x -q` passes with 0 failures\n- All 15 adapter modules importable without errors\n- Total non-base adapter line count drops by ≥800 lines from baseline of ~2,659\n- `base.py` unchanged (161 lines)\n- No behavioral changes — only docstring/comment modifications",
       "proof_level": "contract — tests pass unchanged, modules importable, line count reduced",
@@ -569,11 +569,11 @@
       "completed_at": null,
       "full_summary_md": "",
       "full_uat_md": "",
-      "goal": "Consolidate per-adapter granular field tests (test_raw_stats_has_asn_key, test_detection_count_always_zero, etc.) into single response-shape tests that assert the full result object.",
-      "success_criteria": "- Granular field tests in asn_cymru, whois_lookup, dns_lookup, threatminer, ip_api, crtsh consolidated\n- Test line count reduced by ≥ 400 lines\n- Same assertion coverage (every field still asserted, just grouped)\n- All tests pass",
-      "proof_level": "contract",
-      "integration_closure": "All tests pass. Contract tests still cover protocol conformance.",
-      "observability_impact": "None.",
+      "goal": "Granular one-field-per-test patterns collapsed into single response-shape tests per the contract-suite dedup strategy (D049); ~400-600 test lines removed with zero assertion coverage loss; all tests still pass.",
+      "success_criteria": "- `python3 -m pytest tests/ --ignore=tests/e2e -q --tb=short` passes with 0 failures\n- Test count drops by ~52 (54 removed - 2 relocated) to ~1,009\n- `tests/test_provider_protocol.py` no longer exists\n- Every assertion from a deleted test appears in its folding-target test\n- R057 (per-adapter test consolidation) and R060 (zero behavior changes) satisfied",
+      "proof_level": "This slice proves: contract (test refactoring with identical assertion coverage). Real runtime required: no. Human/UAT required: no.",
+      "integration_closure": "Upstream surfaces consumed: `tests/test_adapter_contract.py` (receives 2 relocated negative tests). No new wiring. Nothing remains — this is a self-contained test cleanup slice.",
+      "observability_impact": "None — pure test refactoring, no runtime changes.",
       "sequence": 0,
       "replan_triggered_at": null
     },
@@ -1536,6 +1536,101 @@
         "`app/enrichment/adapters/dns_lookup.py` — trimmed to one-liner docstrings",
         "`app/enrichment/adapters/malwarebazaar.py` — trimmed to one-liner docstrings",
         "`app/enrichment/adapters/urlhaus.py` — trimmed to one-liner docstrings"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M011",
+      "slice_id": "S02",
+      "id": "T01",
+      "title": "Deleted test_provider_protocol.py (17 tests) and relocated 2 unique negative Protocol tests to test_adapter_contract.py; net -15 tests, full suite green at 933 passed",
+      "status": "complete",
+      "one_liner": "Deleted test_provider_protocol.py (17 tests) and relocated 2 unique negative Protocol tests to test_adapter_contract.py; net -15 tests, full suite green at 933 passed",
+      "narrative": "Read test_provider_protocol.py and confirmed 17 tests: 15 positive protocol/attribute tests redundant with test_adapter_contract.py's parametric coverage, plus 2 unique negative tests verifying Protocol rejection. Added TestProtocolNegative class to test_adapter_contract.py with the 2 relocated tests, placed after TestProtocolConformance. Deleted the source file. All 174 contract tests pass, full suite green at 933.",
+      "verification_result": "pytest tests/test_adapter_contract.py: 174 passed (172 existing + 2 new). Import of deleted file raises ModuleNotFoundError. Full suite: 933 passed.",
+      "duration": "",
+      "completed_at": "2026-04-04T11:59:01.565Z",
+      "blocker_discovered": false,
+      "deviations": "None.",
+      "known_issues": "None.",
+      "key_files": [
+        "tests/test_adapter_contract.py",
+        "tests/test_provider_protocol.py"
+      ],
+      "key_decisions": [
+        "Placed negative tests in TestProtocolNegative class after TestProtocolConformance for logical grouping"
+      ],
+      "full_summary_md": "---\nid: T01\nparent: S02\nmilestone: M011\nkey_files:\n  - tests/test_adapter_contract.py\n  - tests/test_provider_protocol.py\nkey_decisions:\n  - Placed negative tests in TestProtocolNegative class after TestProtocolConformance for logical grouping\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-04-04T11:59:01.565Z\nblocker_discovered: false\n---\n\n# T01: Deleted test_provider_protocol.py (17 tests) and relocated 2 unique negative Protocol tests to test_adapter_contract.py; net -15 tests, full suite green at 933 passed\n\n**Deleted test_provider_protocol.py (17 tests) and relocated 2 unique negative Protocol tests to test_adapter_contract.py; net -15 tests, full suite green at 933 passed**\n\n## What Happened\n\nRead test_provider_protocol.py and confirmed 17 tests: 15 positive protocol/attribute tests redundant with test_adapter_contract.py's parametric coverage, plus 2 unique negative tests verifying Protocol rejection. Added TestProtocolNegative class to test_adapter_contract.py with the 2 relocated tests, placed after TestProtocolConformance. Deleted the source file. All 174 contract tests pass, full suite green at 933.\n\n## Verification\n\npytest tests/test_adapter_contract.py: 174 passed (172 existing + 2 new). Import of deleted file raises ModuleNotFoundError. Full suite: 933 passed.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `python3 -m pytest tests/test_adapter_contract.py -v --tb=short` | 0 | ✅ pass | 3600ms |\n| 2 | `python3 -c \"import tests.test_provider_protocol\" 2>&1 | grep -q ModuleNotFoundError && echo PASS` | 0 | ✅ pass | 300ms |\n| 3 | `python3 -m pytest tests/ --ignore=tests/e2e -q --tb=short` | 0 | ✅ pass | 9600ms |\n\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `tests/test_adapter_contract.py`\n- `tests/test_provider_protocol.py`\n",
+      "description": "## Description\n\n`test_provider_protocol.py` contains 17 tests: 15 positive protocol/attribute tests (isinstance, name, requires_api_key, is_configured) for VT/MB/TF adapters, plus 2 negative tests (`test_non_conforming_class_fails_isinstance`, `test_non_conforming_class_missing_lookup_fails`) that verify the Protocol runtime check rejects non-conforming classes.\n\nAll 15 positive tests are parametrically covered by `test_adapter_contract.py` across all 15 adapters (test_isinstance_provider, test_name_matches, test_requires_api_key_matches, test_configured_when_key_provided_or_not_needed, test_not_configured_when_key_missing). The 2 negative tests are unique — they test Protocol rejection, not any specific adapter — and must be relocated to `test_adapter_contract.py`.\n\n## Steps\n\n1. Read `tests/test_provider_protocol.py` — identify the 2 negative test methods and their imports (IOCType, Provider).\n2. Read `tests/test_adapter_contract.py` — find the appropriate insertion point (near the existing `test_isinstance_provider` test or at the end of the protocol section).\n3. Add a new test class `TestProtocolNegative` (or individual test functions) to `test_adapter_contract.py` containing the 2 negative tests. Ensure the IOCType and Provider imports already exist (they should — verify).\n4. Delete `tests/test_provider_protocol.py` entirely.\n5. Run `python3 -m pytest tests/test_adapter_contract.py -v --tb=short` — all existing + 2 new tests pass.\n6. Run `python3 -c \"import tests.test_provider_protocol\"` — confirm ImportError (file deleted).\n7. Run `python3 -m pytest tests/ --ignore=tests/e2e -q --tb=short` — full suite still passes.\n\n## Must-Haves\n\n- [ ] Both negative Protocol tests exist in `test_adapter_contract.py` and pass\n- [ ] `tests/test_provider_protocol.py` is deleted\n- [ ] Full unit test suite passes with 0 failures\n- [ ] Net test count change: -15 (17 removed from old file, 2 added to new file)\n\n## Verification\n\n- `python3 -m pytest tests/test_adapter_contract.py -v --tb=short` — all tests pass including 2 new negative tests\n- `python3 -c \"import tests.test_provider_protocol\" 2>&1 | grep -q ModuleNotFoundError && echo PASS` — file is deleted\n- `python3 -m pytest tests/ --ignore=tests/e2e -q --tb=short` — full suite passes",
+      "estimate": "15m",
+      "files": [
+        "tests/test_provider_protocol.py",
+        "tests/test_adapter_contract.py"
+      ],
+      "verify": "python3 -m pytest tests/test_adapter_contract.py -v --tb=short && python3 -m pytest tests/ --ignore=tests/e2e -q --tb=short",
+      "inputs": [
+        "`tests/test_provider_protocol.py` — source of 2 negative tests to relocate",
+        "`tests/test_adapter_contract.py` — destination for relocated tests"
+      ],
+      "expected_output": [
+        "`tests/test_adapter_contract.py` — updated with 2 relocated negative Protocol tests",
+        "`tests/test_provider_protocol.py` — deleted"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M011",
+      "slice_id": "S02",
+      "id": "T02",
+      "title": "Consolidate per-field tests across 7 adapter test files into response-shape tests",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "## Description\n\nAcross 7 adapter test files, ~37 tests repeat identical fixture setup to assert a single field (detection_count, total_engines, scan_date, raw_stats key existence, provider name). Per D049, these are removed and their assertions folded into existing tests that already use the same fixture.\n\nThe consolidation pattern per file:\n- Identify tests that duplicate fixture setup for a single assertion\n- Find the existing \"folding target\" test that already does the same setup\n- Add the assertion(s) to the folding target with descriptive assert messages\n- Delete the standalone test function entirely\n\n**File-by-file consolidation map:**\n\n1. **`tests/test_ip_api.py`** (~3 tests, ~39 lines):\n   - Delete: `test_public_ip_provider_name`, `test_public_ip_detection_counts_always_zero`, `test_public_ip_scan_date_is_none`\n   - Fold into: `test_public_ip_returns_enrichment_result` — add `assert result.provider == \"IP Context\"`, `assert result.detection_count == 0`, `assert result.total_engines == 0`, `assert result.scan_date is None`\n\n2. **`tests/test_asn_cymru.py`** (~9 tests, ~100 lines):\n   - Delete: `test_successful_lookup_provider_name`, `test_detection_count_always_zero`, `test_total_engines_always_zero`, `test_scan_date_always_none`, `test_raw_stats_has_asn_key`, `test_raw_stats_has_prefix_key`, `test_raw_stats_has_rir_key`, `test_raw_stats_has_allocated_key`, `test_nxdomain_detection_count_zero`\n   - Fold provider/detection/scan assertions into `test_successful_lookup_returns_enrichment_result`\n   - Fold raw_stats key assertions into `test_raw_stats_asn_value` (key existence is implied by value assertion)\n   - Fold nxdomain detection into `test_nxdomain_returns_enrichment_result`\n   - Also delete `test_nxdomain_scan_date_none` — fold into `test_nxdomain_returns_enrichment_result`\n\n3. **`tests/test_crtsh.py`** (~4 tests, ~44 lines):\n   - Delete: `test_detection_count_always_zero`, `test_total_engines_always_zero`, `test_scan_date_always_none`, `test_empty_array_detection_count_zero`\n   - Fold first 3 into the test that returns EnrichmentResult for certificates found\n   - Fold `test_empty_array_detection_count_zero` into `test_empty_array_returns_no_data`\n\n4. **`tests/test_dns_lookup.py`** (~4 tests, ~44 lines):\n   - Delete: `test_successful_lookup_provider_name`, `test_detection_count_always_zero`, `test_total_engines_always_zero`, `test_scan_date_always_none`\n   - Fold into `test_successful_lookup_returns_enrichment_result` (or equivalent test that does the A-record mock)\n\n5. **`tests/test_threatminer.py`** (~3 tests, ~33 lines):\n   - Delete: `test_ip_lookup_detection_count_always_zero`, `test_ip_lookup_total_engines_always_zero`, `test_ip_lookup_scan_date_always_none`\n   - Fold into the existing IP lookup success test\n\n6. **`tests/test_abuseipdb.py`** (~3 tests, ~33 lines):\n   - Delete: `test_detection_count_equals_total_reports`, `test_total_engines_equals_num_distinct_users`, `test_scan_date_is_last_reported_at`\n   - Fold into `test_high_score_returns_malicious` — these assert parsed values, not zero-constants\n\n7. **`tests/test_greynoise.py`** (~3 tests, ~33 lines):\n   - Delete: `test_detection_count_malicious_is_one`, `test_detection_count_clean_is_zero`, `test_scan_date_is_last_seen`\n   - Fold detection_count assertions into existing malicious/clean verdict tests\n   - Fold scan_date into the malicious verdict test\n\n8. **`tests/test_whois_lookup.py`** (~3 tests, ~33 lines):\n   - Delete: `test_successful_lookup_provider_name`, `test_detection_count_always_zero`, `test_total_engines_always_zero`, `test_scan_date_always_none`\n   - Fold into `test_successful_domain_lookup_returns_result` (or equivalent)\n\nUse descriptive assert messages for all folded assertions, e.g.:\n`assert result.detection_count == 0, \"informational adapter — detection_count must be 0\"`\n\n## Steps\n\n1. For each of the 7 files listed above:\n   a. Read the file to confirm the test names and folding targets match the map\n   b. Add assertions to the folding-target test (with descriptive messages)\n   c. Delete the standalone test functions\n2. After all 7 files are edited, run the full unit test suite: `python3 -m pytest tests/ --ignore=tests/e2e -q --tb=short`\n3. Count tests: `python3 -m pytest --co -q 2>&1 | tail -1` — expect ~1,009 (1,061 baseline - 15 from T01 - ~37 from T02 + 2 relocated in T01)\n4. Spot-check individual files to confirm all assertions present:\n   - `python3 -m pytest tests/test_ip_api.py -v --tb=short`\n   - `python3 -m pytest tests/test_asn_cymru.py -v --tb=short`\n   - `python3 -m pytest tests/test_crtsh.py -v --tb=short`\n   - `python3 -m pytest tests/test_dns_lookup.py -v --tb=short`\n   - `python3 -m pytest tests/test_threatminer.py -v --tb=short`\n   - `python3 -m pytest tests/test_abuseipdb.py -v --tb=short`\n   - `python3 -m pytest tests/test_greynoise.py -v --tb=short`\n   - `python3 -m pytest tests/test_whois_lookup.py -v --tb=short`\n\n## Must-Haves\n\n- [ ] Every assertion from a deleted test appears in its folding-target test\n- [ ] All 7 adapter test files edited\n- [ ] Full unit test suite passes with 0 failures\n- [ ] Test count decreased by ~37 from T01 baseline (total ~52 from original 1,061)\n- [ ] No test file has a standalone test that only asserts detection_count, total_engines, or scan_date when the adapter is informational\n\n## Verification\n\n- `python3 -m pytest tests/ --ignore=tests/e2e -q --tb=short` — 0 failures\n- `python3 -m pytest --co -q 2>&1 | tail -1` — count ~1,009\n- All 7 individual file test runs pass with -v flag",
+      "estimate": "45m",
+      "files": [
+        "tests/test_ip_api.py",
+        "tests/test_asn_cymru.py",
+        "tests/test_crtsh.py",
+        "tests/test_dns_lookup.py",
+        "tests/test_threatminer.py",
+        "tests/test_abuseipdb.py",
+        "tests/test_greynoise.py",
+        "tests/test_whois_lookup.py"
+      ],
+      "verify": "python3 -m pytest tests/ --ignore=tests/e2e -q --tb=short && python3 -m pytest --co -q 2>&1 | tail -1",
+      "inputs": [
+        "`tests/test_ip_api.py` — adapter test file to consolidate",
+        "`tests/test_asn_cymru.py` — adapter test file to consolidate",
+        "`tests/test_crtsh.py` — adapter test file to consolidate",
+        "`tests/test_dns_lookup.py` — adapter test file to consolidate",
+        "`tests/test_threatminer.py` — adapter test file to consolidate",
+        "`tests/test_abuseipdb.py` — adapter test file to consolidate",
+        "`tests/test_greynoise.py` — adapter test file to consolidate",
+        "`tests/test_whois_lookup.py` — adapter test file to consolidate"
+      ],
+      "expected_output": [
+        "`tests/test_ip_api.py` — 3 tests removed, assertions folded",
+        "`tests/test_asn_cymru.py` — 9-10 tests removed, assertions folded",
+        "`tests/test_crtsh.py` — 4 tests removed, assertions folded",
+        "`tests/test_dns_lookup.py` — 4 tests removed, assertions folded",
+        "`tests/test_threatminer.py` — 3 tests removed, assertions folded",
+        "`tests/test_abuseipdb.py` — 3 tests removed, assertions folded",
+        "`tests/test_greynoise.py` — 3 tests removed, assertions folded",
+        "`tests/test_whois_lookup.py` — 3-4 tests removed, assertions folded"
       ],
       "observability_impact": "",
       "full_plan_md": "",
@@ -2660,6 +2755,39 @@
       "verdict": "✅ pass (161)",
       "duration_ms": 100,
       "created_at": "2026-04-04T11:45:37.186Z"
+    },
+    {
+      "id": 49,
+      "task_id": "T01",
+      "slice_id": "S02",
+      "milestone_id": "M011",
+      "command": "python3 -m pytest tests/test_adapter_contract.py -v --tb=short",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 3600,
+      "created_at": "2026-04-04T11:59:01.565Z"
+    },
+    {
+      "id": 50,
+      "task_id": "T01",
+      "slice_id": "S02",
+      "milestone_id": "M011",
+      "command": "python3 -c \"import tests.test_provider_protocol\" 2>&1 | grep -q ModuleNotFoundError && echo PASS",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 300,
+      "created_at": "2026-04-04T11:59:01.565Z"
+    },
+    {
+      "id": 51,
+      "task_id": "T01",
+      "slice_id": "S02",
+      "milestone_id": "M011",
+      "command": "python3 -m pytest tests/ --ignore=tests/e2e -q --tb=short",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 9600,
+      "created_at": "2026-04-04T11:59:01.565Z"
     }
   ]
 }
