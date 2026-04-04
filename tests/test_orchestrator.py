@@ -150,16 +150,17 @@ class TestEnrichAll:
         mock_adapter.lookup.side_effect = side_effect
 
         orchestrator = _make_orchestrator(mock_adapter)
-        orchestrator.enrich_all("job-isolation", [ioc_a, ioc_b, ioc_c])
+        with patch("app.enrichment.orchestrator.time.sleep"):
+            orchestrator.enrich_all("job-isolation", [ioc_a, ioc_b, ioc_c])
 
-        status = orchestrator.get_status("job-isolation")
-        assert len(status["results"]) == 3
+            status = orchestrator.get_status("job-isolation")
+            assert len(status["results"]) == 3
 
-        results = status["results"]
-        error_count = sum(1 for r in results if isinstance(r, EnrichmentError))
-        success_count = sum(1 for r in results if isinstance(r, EnrichmentResult))
-        assert error_count == 1
-        assert success_count == 2
+            results = status["results"]
+            error_count = sum(1 for r in results if isinstance(r, EnrichmentError))
+            success_count = sum(1 for r in results if isinstance(r, EnrichmentResult))
+            assert error_count == 1
+            assert success_count == 2
 
 
 class TestRetryBehavior:
@@ -176,12 +177,13 @@ class TestRetryBehavior:
         mock_adapter.lookup.side_effect = [error_result, success_result]
 
         orchestrator = _make_orchestrator(mock_adapter)
-        orchestrator.enrich_all("job-retry-success", [ioc])
+        with patch("app.enrichment.orchestrator.time.sleep"):
+            orchestrator.enrich_all("job-retry-success", [ioc])
 
-        status = orchestrator.get_status("job-retry-success")
-        assert len(status["results"]) == 1
-        assert isinstance(status["results"][0], EnrichmentResult)
-        assert mock_adapter.lookup.call_count == 2
+            status = orchestrator.get_status("job-retry-success")
+            assert len(status["results"]) == 1
+            assert isinstance(status["results"][0], EnrichmentResult)
+            assert mock_adapter.lookup.call_count == 2
 
     def test_retry_still_fails(self, mock_adapter):
         """Adapter returns EnrichmentError on both calls.
@@ -194,12 +196,13 @@ class TestRetryBehavior:
         mock_adapter.lookup.side_effect = [error_result, error_result]
 
         orchestrator = _make_orchestrator(mock_adapter)
-        orchestrator.enrich_all("job-retry-fail", [ioc])
+        with patch("app.enrichment.orchestrator.time.sleep"):
+            orchestrator.enrich_all("job-retry-fail", [ioc])
 
-        status = orchestrator.get_status("job-retry-fail")
-        assert len(status["results"]) == 1
-        assert isinstance(status["results"][0], EnrichmentError)
-        assert mock_adapter.lookup.call_count == 2
+            status = orchestrator.get_status("job-retry-fail")
+            assert len(status["results"]) == 1
+            assert isinstance(status["results"][0], EnrichmentError)
+            assert mock_adapter.lookup.call_count == 2
 
 
 class TestJobStatusTracking:
@@ -346,16 +349,17 @@ class TestMultiAdapterDispatch:
         adapter_b.lookup.return_value = _make_result(ioc, provider="ProviderB")
 
         orchestrator = EnrichmentOrchestrator(adapters=[adapter_a, adapter_b], max_workers=4)
-        orchestrator.enrich_all("job-provider-isolation", [ioc])
+        with patch("app.enrichment.orchestrator.time.sleep"):
+            orchestrator.enrich_all("job-provider-isolation", [ioc])
 
-        status = orchestrator.get_status("job-provider-isolation")
-        # Both results present: one error from a, one result from b
-        assert len(status["results"]) == 2
+            status = orchestrator.get_status("job-provider-isolation")
+            # Both results present: one error from a, one result from b
+            assert len(status["results"]) == 2
 
-        error_count = sum(1 for r in status["results"] if isinstance(r, EnrichmentError))
-        result_count = sum(1 for r in status["results"] if isinstance(r, EnrichmentResult))
-        assert error_count == 1
-        assert result_count == 1
+            error_count = sum(1 for r in status["results"] if isinstance(r, EnrichmentError))
+            result_count = sum(1 for r in status["results"] if isinstance(r, EnrichmentResult))
+            assert error_count == 1
+            assert result_count == 1
 
 
 # ---------------------------------------------------------------------------
