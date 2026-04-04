@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-04T05:06:34.424Z",
+  "exported_at": "2026-04-04T05:17:08.801Z",
   "milestones": [
     {
       "id": "M001",
@@ -438,14 +438,14 @@
       "milestone_id": "M010",
       "id": "S01",
       "title": "Route Duplication & Dead Code Cleanup",
-      "status": "pending",
+      "status": "complete",
       "risk": "medium",
       "depends": [],
       "demo": "After this: analysis.py and api.py share a single orchestrator setup helper; status endpoints consolidated; dead imports/exports removed; all tests pass.",
       "created_at": "2026-04-04T04:50:31.357Z",
-      "completed_at": null,
-      "full_summary_md": "",
-      "full_uat_md": "",
+      "completed_at": "2026-04-04T05:09:08.486Z",
+      "full_summary_md": "---\nid: S01\nparent: M010\nmilestone: M010\nprovides:\n  - _setup_orchestrator() shared helper in _helpers.py\n  - _get_enrichment_status() shared helper in _helpers.py\n  - Clean route modules with no duplicated orchestrator setup\nrequires:\n  []\naffects:\n  - S02\nkey_files:\n  - app/routes/_helpers.py\n  - app/routes/analysis.py\n  - app/routes/api.py\n  - app/routes/enrichment.py\n  - app/static/src/ts/modules/shared-rendering.ts\n  - tests/test_routes.py\n  - tests/test_api.py\nkey_decisions:\n  - _setup_orchestrator returns (job_id, orchestrator, registry) tuple so callers can use registry for template_extras without a second lookup\npatterns_established:\n  - Route helper extraction: when multiple route modules share identical setup logic, extract into _helpers.py and retarget test patches from app.routes.<module>.Symbol to app.routes._helpers.Symbol\nobservability_surfaces:\n  - none\ndrill_down_paths:\n  - .gsd/milestones/M010/slices/S01/tasks/T01-SUMMARY.md\n  - .gsd/milestones/M010/slices/S01/tasks/T02-SUMMARY.md\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-04-04T05:09:08.487Z\nblocker_discovered: false\n---\n\n# S01: Route Duplication & Dead Code Cleanup\n\n**Extracted _setup_orchestrator() and _get_enrichment_status() into _helpers.py eliminating ~40 duplicated lines across route modules, removed unused ResultDisplay export, and updated 13 test patch targets — all 1060 tests pass.**\n\n## What Happened\n\nTwo tasks completed this cleanup slice.\n\nT01 extracted two shared helpers into app/routes/_helpers.py. `_setup_orchestrator()` consolidates the uuid/cache/config/constructor/registry/pool-submit block (~20 lines) that was duplicated between analysis.py and api.py. `_get_enrichment_status()` consolidates the lock/lookup/serialize/jsonify status endpoint body that was duplicated between enrichment.py and api.py. Both analysis.py and api.py now call `_setup_orchestrator()` instead of constructing EnrichmentOrchestrator inline. Both enrichment_status() and api_status() now delegate to `_get_enrichment_status()` as one-liners. 13 test patch targets across test_routes.py and test_api.py were retargeted from the old module paths (app.routes.analysis.*, app.routes.api.*) to app.routes._helpers.*.\n\nT02 removed the unused `export` keyword from `interface ResultDisplay` in shared-rendering.ts. No consumer imports the type by name — both enrichment.ts and history.ts destructure the return value of `computeResultDisplay` inline, so the interface type is inferred structurally.\n\n## Verification\n\nAll 1060 tests pass (pytest --tb=short -q, exit 0, 52s). grep confirms zero inline EnrichmentOrchestrator( constructors in analysis.py and api.py. grep confirms zero 'export interface ResultDisplay' in shared-rendering.ts. make typecheck passes (tsc --noEmit, exit 0).\n\n## Requirements Advanced\n\nNone.\n\n## Requirements Validated\n\nNone.\n\n## New Requirements Surfaced\n\nNone.\n\n## Requirements Invalidated or Re-scoped\n\nNone.\n\n## Deviations\n\nNone.\n\n## Known Limitations\n\nNone.\n\n## Follow-ups\n\nNone.\n\n## Files Created/Modified\n\n- `app/routes/_helpers.py` — Added _setup_orchestrator() and _get_enrichment_status() shared helpers\n- `app/routes/analysis.py` — Replaced inline orchestrator setup with _setup_orchestrator() call; removed uuid/ConfigStore/EnrichmentOrchestrator imports\n- `app/routes/api.py` — Replaced inline orchestrator setup and status body with helper calls; removed json/uuid/ConfigStore/EnrichmentOrchestrator imports\n- `app/routes/enrichment.py` — Replaced enrichment_status() body with _get_enrichment_status() delegation\n- `app/static/src/ts/modules/shared-rendering.ts` — Removed export keyword from ResultDisplay interface\n- `tests/test_routes.py` — Retargeted 12 patch paths from app.routes.analysis.* to app.routes._helpers.*\n- `tests/test_api.py` — Retargeted 1 patch path from app.routes.api._enrichment_pool to app.routes._helpers._enrichment_pool\n",
+      "full_uat_md": "# S01: Route Duplication & Dead Code Cleanup — UAT\n\n**Milestone:** M010\n**Written:** 2026-04-04T05:09:08.487Z\n\n## UAT: S01 — Route Duplication & Dead Code Cleanup\n\n### Preconditions\n- Python 3.10+ with project dependencies installed\n- Node.js with TypeScript compiler available via `make typecheck`\n- All 1060 tests passing before verification\n\n---\n\n### TC-01: _setup_orchestrator() exists and is used exclusively\n\n**Steps:**\n1. Open `app/routes/_helpers.py`\n2. Search for `def _setup_orchestrator(`\n3. Confirm it accepts `iocs`, `text`, `mode`, `history_store` parameters\n4. Confirm it returns a tuple of `(job_id, orchestrator, registry)`\n5. `grep -c 'EnrichmentOrchestrator(' app/routes/analysis.py` → expect `0`\n6. `grep -c 'EnrichmentOrchestrator(' app/routes/api.py` → expect `0`\n7. `grep -c '_setup_orchestrator' app/routes/analysis.py` → expect `≥1`\n8. `grep -c '_setup_orchestrator' app/routes/api.py` → expect `≥1`\n\n**Expected:** No inline EnrichmentOrchestrator construction remains in analysis.py or api.py. Both call the shared helper.\n\n---\n\n### TC-02: _get_enrichment_status() exists and is used exclusively\n\n**Steps:**\n1. Open `app/routes/_helpers.py`\n2. Search for `def _get_enrichment_status(`\n3. Confirm it accepts `job_id` parameter\n4. `grep -c '_get_enrichment_status' app/routes/enrichment.py` → expect `≥1`\n5. `grep -c '_get_enrichment_status' app/routes/api.py` → expect `≥1`\n6. Confirm enrichment_status() in enrichment.py is a one-liner delegation\n7. Confirm api_status() in api.py is a one-liner delegation\n\n**Expected:** Both status endpoints delegate to the shared helper with no duplicated body.\n\n---\n\n### TC-03: Test patch targets correctly updated\n\n**Steps:**\n1. `grep -c 'app.routes.analysis.EnrichmentOrchestrator' tests/test_routes.py` → expect `0`\n2. `grep -c 'app.routes.analysis._enrichment_pool' tests/test_routes.py` → expect `0`\n3. `grep -c 'app.routes.api._enrichment_pool' tests/test_api.py` → expect `0`\n4. `grep -c 'app.routes._helpers.EnrichmentOrchestrator' tests/test_routes.py` → expect `≥1`\n5. `grep -c 'app.routes._helpers._enrichment_pool' tests/test_routes.py` → expect `≥1`\n6. `python3 -m pytest --tb=short -q` → expect `1060 passed`\n\n**Expected:** All old patch paths removed, new paths target _helpers module, full suite green.\n\n---\n\n### TC-04: ResultDisplay export removed\n\n**Steps:**\n1. `grep -c 'export interface ResultDisplay' app/static/src/ts/modules/shared-rendering.ts` → expect `0`\n2. `grep -c 'interface ResultDisplay' app/static/src/ts/modules/shared-rendering.ts` → expect `1`\n3. `rg 'import.*ResultDisplay' app/static/src/ts/` → expect no matches\n4. `make typecheck` → expect exit 0\n\n**Expected:** ResultDisplay is a module-private interface. No consumer imports it. TypeScript compiles cleanly.\n\n---\n\n### TC-05: No dead imports in cleaned route modules\n\n**Steps:**\n1. `grep 'import uuid' app/routes/analysis.py` → expect no match\n2. `grep 'import json' app/routes/api.py` → expect no match\n3. `grep 'ConfigStore' app/routes/analysis.py` → expect no match (unless re-exported from _helpers)\n4. `grep 'ConfigStore' app/routes/api.py` → expect no match\n\n**Expected:** Imports that moved to _helpers.py are no longer present in the route modules that no longer need them.\n",
       "goal": "Eliminate route-layer duplication (orchestrator setup, status endpoints) and remove dead imports/exports. analysis.py and api.py share a single orchestrator setup helper; status endpoint bodies consolidated; dead code removed; all tests pass.",
       "success_criteria": "- `_setup_orchestrator()` helper exists in `_helpers.py` and is called by both `analysis.py` and `api.py`\n- `_get_enrichment_status()` helper exists in `_helpers.py` and is called by both `enrichment.py` and `api.py`\n- `grep -c 'EnrichmentOrchestrator(' app/routes/analysis.py app/routes/api.py` returns 0 for both files\n- `grep -c '^import json' app/routes/api.py` returns 0\n- `grep -c 'export interface ResultDisplay' app/static/src/ts/modules/shared-rendering.ts` returns 0\n- `python3 -m pytest --tb=short -q` — all 1060 tests pass\n- `make typecheck` passes",
       "proof_level": "Contract — unit + integration tests prove orchestrator setup and status endpoints work identically post-extraction. No runtime or UAT needed.",
@@ -468,11 +468,11 @@
       "completed_at": null,
       "full_summary_md": "",
       "full_uat_md": "",
-      "goal": "Remove Recent Analyses from index.html and create a dedicated /history list page.",
-      "success_criteria": "- index.html contains no recent-analyses markup\n- /history route returns 200 and lists analyses\n- Each entry links to /history/<id> which loads correctly\n- Nav includes link to /history\n- CSS for recent-analyses moved to new template context\n- All tests pass",
-      "proof_level": "integration — route + template + nav verified in browser tests",
-      "integration_closure": "Home page clean. /history page functional. Nav link present.",
-      "observability_impact": "None.",
+      "goal": "Home page shows only the paste form; /history lists recent analyses with links to detail pages; nav bar includes a History link.",
+      "success_criteria": "- GET / returns 200 with no \"Recent Analyses\" section\n- GET /history returns 200 with analysis rows linking to /history/<id>\n- base.html nav includes a History icon link\n- initRecentAnalysesToggle() removed from ui.ts\n- All existing tests pass (unit + E2E)\n- TestIndexWithHistory rewritten to assert against /history",
+      "proof_level": "integration — real Flask test client exercises both routes",
+      "integration_closure": "- Upstream: S01 extracted _setup_orchestrator() into _helpers.py; history.py already exists with history_detail(). This slice adds history_list() alongside it.\n- New wiring: /history route, nav link in base.html, clock icon in icons.html\n- After this slice: M010 is complete — no further slices.",
+      "observability_impact": "None — simple template/route change with no async, background, or stateful behavior.",
       "sequence": 0,
       "replan_triggered_at": null
     }
@@ -1152,6 +1152,107 @@
       ],
       "expected_output": [
         "`app/static/src/ts/modules/shared-rendering.ts` — ResultDisplay changed from exported to non-exported interface"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M010",
+      "slice_id": "S02",
+      "id": "T01",
+      "title": "Added /history list route, history.html template, clock nav icon, and removed Recent Analyses from the home page",
+      "status": "complete",
+      "one_liner": "Added /history list route, history.html template, clock nav icon, and removed Recent Analyses from the home page",
+      "narrative": "Added history_list() route to history.py serving up to 50 recent analyses via a new history.html template. Added clock Heroicon to icons.html and a History nav link in base.html. Removed the collapsible Recent Analyses block from index.html, simplified index() in analysis.py to no longer query history_store, and removed initRecentAnalysesToggle() from ui.ts. Updated test_history_routes.py to test the new /history route and confirm the home page no longer shows Recent Analyses.",
+      "verification_result": "Flask boot + test client assertions pass (GET / has no 'Recent Analyses', GET /history returns 200). make typecheck and make js both pass. 13/13 history route tests pass.",
+      "duration": "",
+      "completed_at": "2026-04-04T05:17:08.783Z",
+      "blocker_discovered": false,
+      "deviations": "Replaced TestIndexWithHistory test class with TestHistoryListRoute targeting the new /history route. Removed the graceful-error test since index() no longer queries history_store.",
+      "known_issues": "None.",
+      "key_files": [
+        "app/routes/history.py",
+        "app/templates/history.html",
+        "app/templates/index.html",
+        "app/routes/analysis.py",
+        "app/templates/base.html",
+        "app/templates/macros/icons.html",
+        "app/static/src/ts/modules/ui.ts",
+        "tests/test_history_routes.py"
+      ],
+      "key_decisions": [
+        "Reused .recent-analyses-list/.recent-analysis-row CSS classes in history.html for visual consistency with the old home page block"
+      ],
+      "full_summary_md": "---\nid: T01\nparent: S02\nmilestone: M010\nkey_files:\n  - app/routes/history.py\n  - app/templates/history.html\n  - app/templates/index.html\n  - app/routes/analysis.py\n  - app/templates/base.html\n  - app/templates/macros/icons.html\n  - app/static/src/ts/modules/ui.ts\n  - tests/test_history_routes.py\nkey_decisions:\n  - Reused .recent-analyses-list/.recent-analysis-row CSS classes in history.html for visual consistency with the old home page block\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-04-04T05:17:08.785Z\nblocker_discovered: false\n---\n\n# T01: Added /history list route, history.html template, clock nav icon, and removed Recent Analyses from the home page\n\n**Added /history list route, history.html template, clock nav icon, and removed Recent Analyses from the home page**\n\n## What Happened\n\nAdded history_list() route to history.py serving up to 50 recent analyses via a new history.html template. Added clock Heroicon to icons.html and a History nav link in base.html. Removed the collapsible Recent Analyses block from index.html, simplified index() in analysis.py to no longer query history_store, and removed initRecentAnalysesToggle() from ui.ts. Updated test_history_routes.py to test the new /history route and confirm the home page no longer shows Recent Analyses.\n\n## Verification\n\nFlask boot + test client assertions pass (GET / has no 'Recent Analyses', GET /history returns 200). make typecheck and make js both pass. 13/13 history route tests pass.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `python3 -c 'from app import create_app; ...' (flask boot + route assertions)` | 0 | ✅ pass | 2900ms |\n| 2 | `make typecheck` | 0 | ✅ pass | 2900ms |\n| 3 | `make js` | 0 | ✅ pass | 2900ms |\n| 4 | `python3 -m pytest tests/test_history_routes.py -x -q` | 0 | ✅ pass | 2700ms |\n\n\n## Deviations\n\nReplaced TestIndexWithHistory test class with TestHistoryListRoute targeting the new /history route. Removed the graceful-error test since index() no longer queries history_store.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `app/routes/history.py`\n- `app/templates/history.html`\n- `app/templates/index.html`\n- `app/routes/analysis.py`\n- `app/templates/base.html`\n- `app/templates/macros/icons.html`\n- `app/static/src/ts/modules/ui.ts`\n- `tests/test_history_routes.py`\n",
+      "description": "Create the /history list route in history.py, create history.html template, add a clock icon to icons.html, add a History nav link to base.html, remove the Recent Analyses HTML block from index.html, remove the list_recent() call from analysis.py index(), and remove initRecentAnalysesToggle() from ui.ts.\n\nSteps:\n1. Add a 'clock' Heroicons v2 solid SVG path to app/templates/macros/icons.html (new elif branch).\n2. Add a History nav link to base.html inside <nav class=\"floating-settings\">, before the Settings link. Use: <a href=\"{{ url_for('main.history_list') }}\" class=\"nav-link nav-link--icon\" aria-label=\"History\">{{ icon(\"clock\", class=\"nav-icon nav-icon--lg\") }}</a>\n3. Add history_list() route to app/routes/history.py:\n   @bp.route(\"/history\")\n   @limiter.limit(\"30 per minute\")\n   def history_list():\n       analyses = current_app.history_store.list_recent(limit=50)\n       return render_template(\"history.html\", analyses=analyses)\n4. Create app/templates/history.html extending base.html. Reuse the .recent-analyses-list / .recent-analysis-row HTML structure from index.html but without the collapse toggle — the list is always visible. Include a heading. Show an empty-state message when analyses is empty.\n5. In app/templates/index.html, delete the entire {% if recent_analyses %} ... {% endif %} block (the .recent-analyses section, approximately lines 62-82).\n6. In app/routes/analysis.py index(), remove the try/except block that calls history_store.list_recent() and stop passing recent_analyses to render_template. The index() function should just return render_template(\"index.html\").\n7. In app/static/src/ts/modules/ui.ts, delete the initRecentAnalysesToggle() function (lines 45-58) and remove its call from init() (line 64). Run make js to rebuild.\n8. Run make typecheck to confirm TS compiles. Run python -c \"from app import create_app; create_app()\" to confirm Flask boots.",
+      "estimate": "30m",
+      "files": [
+        "app/routes/history.py",
+        "app/routes/analysis.py",
+        "app/templates/history.html",
+        "app/templates/index.html",
+        "app/templates/base.html",
+        "app/templates/macros/icons.html",
+        "app/static/src/ts/modules/ui.ts"
+      ],
+      "verify": "python -c \"from app import create_app; app=create_app(); c=app.test_client(); r1=c.get('/'); r2=c.get('/history'); assert r1.status_code==200; assert b'Recent Analyses' not in r1.data; assert r2.status_code==200; print('OK')\" && make typecheck && make js",
+      "inputs": [
+        "`app/routes/history.py` — existing history_detail route, add history_list alongside it",
+        "`app/routes/analysis.py` — index() currently calls list_recent and passes recent_analyses",
+        "`app/templates/index.html` — contains the Recent Analyses HTML block to remove (lines 62-82)",
+        "`app/templates/base.html` — nav with Settings link, needs History link added",
+        "`app/templates/macros/icons.html` — icon macro, needs clock icon added",
+        "`app/static/src/ts/modules/ui.ts` — initRecentAnalysesToggle() to delete"
+      ],
+      "expected_output": [
+        "`app/routes/history.py` — history_list() route added",
+        "`app/routes/analysis.py` — index() simplified, no more list_recent call",
+        "`app/templates/history.html` — new template listing recent analyses",
+        "`app/templates/index.html` — Recent Analyses block removed",
+        "`app/templates/base.html` — History nav link added",
+        "`app/templates/macros/icons.html` — clock icon added",
+        "`app/static/src/ts/modules/ui.ts` — initRecentAnalysesToggle removed",
+        "`app/static/dist/main.js` — rebuilt JS bundle"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M010",
+      "slice_id": "S02",
+      "id": "T02",
+      "title": "Update tests for /history route and stripped-down home page",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "Rewrite TestIndexWithHistory in test_history_routes.py to test the new /history route instead of GET /. Add tests for the history list page (populated, empty, error). Verify index still returns 200 without recent analyses.\n\nSteps:\n1. In tests/test_history_routes.py, rename TestIndexWithHistory to TestHistoryList (or similar). Rewrite the 4 tests:\n   - test_index_shows_recent_analyses → test_history_list_shows_analyses: GET /history with seeded store, assert 200, assert b'Recent Analyses' or analysis text in response, assert link to /history/abc123deadbeef\n   - test_index_no_history → test_history_list_empty: GET /history with empty store, assert 200, assert empty-state message present\n   - test_index_history_error_graceful → test_history_list_error_graceful: GET /history with store that raises Exception, assert 500 (or handle gracefully if the route has try/except — check T01's implementation)\n   - test_index_shows_verdict_badge → test_history_list_shows_verdict_badge: GET /history with seeded store, assert verdict badge text present\n2. In tests/test_routes.py, verify test_index_returns_200 still passes. The index route no longer passes recent_analyses, so mock_store may no longer be needed for that test — check and simplify if applicable.\n3. Run pytest --tb=short -q to confirm all tests pass.\n4. Run pytest tests/test_history_routes.py -v to confirm the rewritten tests specifically pass.",
+      "estimate": "20m",
+      "files": [
+        "tests/test_history_routes.py",
+        "tests/test_routes.py"
+      ],
+      "verify": "pytest tests/test_history_routes.py tests/test_routes.py --tb=short -q && pytest --tb=short -q",
+      "inputs": [
+        "`app/routes/history.py` — T01 added history_list() route",
+        "`app/routes/analysis.py` — T01 simplified index()",
+        "`app/templates/history.html` — T01 created this template",
+        "`tests/test_history_routes.py` — existing TestIndexWithHistory to rewrite",
+        "`tests/test_routes.py` — test_index_returns_200 may need mock update"
+      ],
+      "expected_output": [
+        "`tests/test_history_routes.py` — TestIndexWithHistory rewritten as TestHistoryList testing /history",
+        "`tests/test_routes.py` — test_index_returns_200 updated if needed"
       ],
       "observability_impact": "",
       "full_plan_md": "",
@@ -2077,6 +2178,50 @@
       "verdict": "✅ pass (no type-only imports)",
       "duration_ms": 50,
       "created_at": "2026-04-04T05:06:34.411Z"
+    },
+    {
+      "id": 32,
+      "task_id": "T01",
+      "slice_id": "S02",
+      "milestone_id": "M010",
+      "command": "python3 -c 'from app import create_app; ...' (flask boot + route assertions)",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 2900,
+      "created_at": "2026-04-04T05:17:08.783Z"
+    },
+    {
+      "id": 33,
+      "task_id": "T01",
+      "slice_id": "S02",
+      "milestone_id": "M010",
+      "command": "make typecheck",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 2900,
+      "created_at": "2026-04-04T05:17:08.783Z"
+    },
+    {
+      "id": 34,
+      "task_id": "T01",
+      "slice_id": "S02",
+      "milestone_id": "M010",
+      "command": "make js",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 2900,
+      "created_at": "2026-04-04T05:17:08.783Z"
+    },
+    {
+      "id": 35,
+      "task_id": "T01",
+      "slice_id": "S02",
+      "milestone_id": "M010",
+      "command": "python3 -m pytest tests/test_history_routes.py -x -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 2700,
+      "created_at": "2026-04-04T05:17:08.783Z"
     }
   ]
 }

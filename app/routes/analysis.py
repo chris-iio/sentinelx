@@ -17,12 +17,8 @@ from ._helpers import _setup_orchestrator
 @bp.route("/")
 @limiter.limit("60 per minute")
 def index():
-    """Home page — shows the IOC paste form with recent analyses."""
-    try:
-        recent_analyses = current_app.history_store.list_recent(limit=10)
-    except Exception:
-        recent_analyses = []
-    return render_template("index.html", recent_analyses=recent_analyses)
+    """Home page — shows the IOC paste form."""
+    return render_template("index.html")
 
 
 @bp.route("/analyze", methods=["POST"])

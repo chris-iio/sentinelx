@@ -1,4 +1,4 @@
-"""History routes: reload past analyses."""
+"""History routes: list and reload past analyses."""
 
 import json
 
@@ -8,6 +8,14 @@ from app import limiter
 from app.pipeline.models import IOC, IOCType, group_by_type
 
 from . import bp
+
+
+@bp.route("/history")
+@limiter.limit("30 per minute")
+def history_list():
+    """List recent analyses."""
+    analyses = current_app.history_store.list_recent(limit=50)
+    return render_template("history.html", analyses=analyses)
 
 
 @bp.route("/history/<analysis_id>")

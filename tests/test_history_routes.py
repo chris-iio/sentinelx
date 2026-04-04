@@ -204,43 +204,42 @@ class TestHistoryDetailRoute:
 # ---------------------------------------------------------------------------
 
 
-class TestIndexWithHistory:
-    """Tests for GET / including recent analyses."""
+class TestHistoryListRoute:
+    """Tests for GET /history listing recent analyses."""
 
-    def test_index_shows_recent_analyses(self, client, seeded_store):
-        """GET / includes recent analyses section when history exists."""
+    def test_history_list_shows_analyses(self, client, seeded_store):
+        """GET /history lists recent analyses when history exists."""
         store, _, _, _ = seeded_store
         client.application.history_store = store
-        response = client.get("/")
+        response = client.get("/history")
         assert response.status_code == 200
         assert b"Recent Analyses" in response.data
         assert b"abc123deadbeef" in response.data  # link contains analysis id
 
-    def test_index_no_history(self, client):
-        """GET / works fine with no history — no recent analyses section."""
+    def test_history_list_empty(self, client):
+        """GET /history shows empty-state message with no history."""
         mock_store = MagicMock()
         mock_store.list_recent.return_value = []
         client.application.history_store = mock_store
-        response = client.get("/")
+        response = client.get("/history")
         assert response.status_code == 200
-        assert b"Recent Analyses" not in response.data
+        assert b"No analyses yet" in response.data
 
-    def test_index_history_error_graceful(self, client):
-        """GET / handles HistoryStore exceptions gracefully."""
-        mock_store = MagicMock()
-        mock_store.list_recent.side_effect = Exception("DB error")
-        client.application.history_store = mock_store
-        response = client.get("/")
+    def test_history_list_shows_verdict_badge(self, client, seeded_store):
+        """GET /history shows verdict badge for each analysis."""
+        store, _, _, _ = seeded_store
+        client.application.history_store = store
+        response = client.get("/history")
         assert response.status_code == 200
-        assert b"Recent Analyses" not in response.data
+        assert b"malicious" in response.data
 
-    def test_index_shows_verdict_badge(self, client, seeded_store):
-        """GET / shows verdict badge for each recent analysis."""
+    def test_index_no_recent_analyses(self, client, seeded_store):
+        """GET / no longer shows recent analyses section."""
         store, _, _, _ = seeded_store
         client.application.history_store = store
         response = client.get("/")
         assert response.status_code == 200
-        assert b"malicious" in response.data
+        assert b"Recent Analyses" not in response.data
 
 
 # ---------------------------------------------------------------------------

@@ -10,7 +10,7 @@ Safe, correct, and transparent IOC extraction and enrichment — never invent sc
 
 ## Current State
 
-**M009 complete (2026-03-29).** 1060 tests passing. BaseHTTPAdapter consolidates 12 HTTP adapter skeletons into a single template-method base class. Parametrized contract test suite (172 tests) replaces 208 duplicated per-adapter tests. 4 shared TypeScript rendering functions extracted from enrichment.ts/history.ts into shared-rendering.ts. Net -1,143 LOC across 38 files. All 9 M009 requirements (R041–R049) validated.
+**M010/S01 complete (2026-04-04).** 1060 tests passing. Route layer duplication eliminated: _setup_orchestrator() and _get_enrichment_status() extracted into _helpers.py, removing ~40 duplicated lines across analysis.py, api.py, and enrichment.py. Unused ResultDisplay export removed from shared-rendering.ts. M010/S02 (Recent Analyses → /history page) pending.
 
 ## Architecture / Key Patterns
 

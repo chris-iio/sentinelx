@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-history">
+    <div class="history-card">
+        <h1 class="history-heading">Recent Analyses</h1>
+
+        {% if analyses %}
+        <div class="recent-analyses-list">
+            {% for entry in analyses %}
+            <a href="{{ url_for('main.history_detail', analysis_id=entry.id) }}" class="recent-analysis-row">
+                <span class="recent-analysis-text">{{ entry.input_text }}</span>
+                <span class="recent-analysis-meta">
+                    <span class="recent-analysis-count">{{ entry.total_count }} IOC{{ "s" if entry.total_count != 1 }}</span>
+                    <span class="verdict-badge verdict-{{ entry.top_verdict }}">{{ entry.top_verdict }}</span>
+                    <span class="recent-analysis-time">{{ entry.created_at[:16].replace('T', ' ') }}</span>
+                </span>
+            </a>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="history-empty">No analyses yet. Submit some IOCs to get started.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
