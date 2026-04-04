@@ -382,6 +382,7 @@
         resize: none;
         overflow-y: auto;
         max-height: 400px;
+        caret-color: var(--accent);
         transition: border-color var(--duration-normal) var(--ease-out-quart),
                     box-shadow var(--duration-normal) var(--ease-out-quart);
     }
@@ -389,10 +390,6 @@
     .ioc-textarea:focus-visible {
         border-color: var(--accent);
         box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.12), var(--shadow-glow-accent);
-    }
-
-    .ioc-textarea {
-        caret-color: var(--accent);
     }
 
     .form-options {
@@ -422,8 +419,8 @@
         background-color: var(--bg-tertiary);
         border: 1px solid var(--border);
         cursor: pointer;
-        transition: background-color var(--duration-fast) var(--ease-out-quart),
-                    border-color var(--duration-fast) var(--ease-out-quart);
+        transition: background-color var(--duration-normal) var(--ease-out-quart),
+                    border-color var(--duration-normal) var(--ease-out-quart);
         padding: 0;
         flex-shrink: 0;
     }
@@ -440,8 +437,8 @@
         height: 16px;
         border-radius: 50%;
         background-color: var(--text-secondary);
-        transition: transform var(--duration-fast) var(--ease-out-quart),
-                    background-color var(--duration-fast) var(--ease-out-quart);
+        transition: transform var(--duration-normal) var(--ease-out-expo),
+                    background-color var(--duration-normal) var(--ease-out-quart);
     }
 
     .mode-toggle-widget[data-mode="online"] .mode-toggle-track {
@@ -601,6 +598,8 @@
         gap: 1rem;
         margin-bottom: 1.5rem;
         flex-wrap: wrap;
+        animation: fadeSlideUp var(--duration-slow) var(--ease-out-expo) both;
+        animation-delay: 50ms;
     }
 
     .mode-indicator {
@@ -613,12 +612,7 @@
         border: 1px solid;
     }
 
-    .mode-indicator.mode-offline {
-        background-color: var(--bg-tertiary);
-        border-color: var(--border-default);
-        color: var(--text-secondary);
-    }
-
+    .mode-indicator.mode-offline,
     .mode-indicator.mode-online {
         background-color: var(--bg-tertiary);
         border-color: var(--border-default);
@@ -875,25 +869,11 @@
         color: var(--text-primary);
     }
 
+    /* Type-active pills use this neutral treatment — only verdict pills get color */
     .filter-pill--active {
         background-color: var(--bg-tertiary);
         border-color: var(--text-secondary);
         color: var(--text-primary);
-    }
-
-    /* Quiet precision: type-active pills use neutral treatment — only verdict pills get color */
-    .filter-pill--ipv4.filter-pill--active,
-    .filter-pill--ipv6.filter-pill--active,
-    .filter-pill--domain.filter-pill--active,
-    .filter-pill--url.filter-pill--active,
-    .filter-pill--md5.filter-pill--active,
-    .filter-pill--sha1.filter-pill--active,
-    .filter-pill--sha256.filter-pill--active,
-    .filter-pill--cve.filter-pill--active,
-    .filter-pill--email.filter-pill--active {
-        border-color: var(--text-secondary);
-        color: var(--text-primary);
-        background-color: var(--bg-tertiary);
     }
 
     /* ---- Filter Search Input ---- */
@@ -1108,6 +1088,8 @@
 
     .enrich-progress {
         margin-bottom: 1.25rem;
+        animation: fadeIn var(--duration-normal) var(--ease-out-expo) both;
+        animation-delay: 100ms;
     }
 
     .enrich-progress-bar {
@@ -1893,34 +1875,6 @@
         border-color: rgba(248, 113, 113, 0.3);
     }
 
-    /* ---- Results page animation ---- */
-
-    .results-header {
-        animation: fadeSlideUp var(--duration-slow) var(--ease-out-expo) both;
-        animation-delay: 50ms;
-    }
-
-    .enrich-progress {
-        animation: fadeIn var(--duration-normal) var(--ease-out-expo) both;
-        animation-delay: 100ms;
-    }
-
-    /* ---- Mode toggle transition upgrade ---- */
-
-    .mode-toggle-track {
-        transition: background-color var(--duration-normal) var(--ease-out-quart),
-                    border-color var(--duration-normal) var(--ease-out-quart);
-    }
-
-    .mode-toggle-thumb {
-        transition: transform var(--duration-normal) var(--ease-out-expo),
-                    background-color var(--duration-normal) var(--ease-out-quart);
-    }
-
-    .mode-toggle-label {
-        transition: color var(--duration-fast) var(--ease-out-quart);
-    }
-
     /* ---- Responsive ---- */
 
     @media (max-width: 640px) {
@@ -1976,84 +1930,7 @@
         }
     }
 
-    /* ---- Recent analyses list (home page) ---- */
-
-    .recent-analyses {
-        width: 100%;
-        max-width: 720px;
-        margin: 2rem auto 0;
-        animation: fadeSlideUp var(--duration-slow) var(--ease-out-expo) both;
-        animation-delay: 200ms;
-    }
-
-    .recent-analyses-toggle {
-        display: flex;
-        align-items: center;
-        gap: 0.4rem;
-        width: 100%;
-        padding: 0;
-        border: none;
-        background: none;
-        cursor: pointer;
-        margin-bottom: 0;
-        transition: margin-bottom 200ms ease;
-    }
-
-    .recent-analyses.is-open .recent-analyses-toggle {
-        margin-bottom: 0.75rem;
-    }
-
-    .recent-analyses-toggle:focus-visible {
-        outline: 2px solid var(--accent-interactive);
-        outline-offset: 2px;
-        border-radius: var(--radius);
-    }
-
-    .recent-analyses-chevron {
-        width: 14px;
-        height: 14px;
-        flex-shrink: 0;
-        color: var(--text-muted);
-        transition: transform 200ms ease, color 150ms ease;
-    }
-
-    .recent-analyses.is-open .recent-analyses-chevron {
-        transform: rotate(90deg);
-        color: var(--text-secondary);
-    }
-
-    .recent-analyses-title {
-        font-size: 0.8rem;
-        font-weight: 600;
-        color: var(--text-secondary);
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        margin: 0;
-    }
-
-    .recent-analyses-count {
-        font-size: 0.7rem;
-        font-weight: 500;
-        color: var(--text-muted);
-        background-color: var(--bg-tertiary);
-        padding: 0.1rem 0.45rem;
-        border-radius: 9999px;
-        line-height: 1.3;
-    }
-
-    .recent-analyses-body {
-        display: grid;
-        grid-template-rows: 0fr;
-        transition: grid-template-rows 200ms ease;
-    }
-
-    .recent-analyses.is-open .recent-analyses-body {
-        grid-template-rows: 1fr;
-    }
-
-    .recent-analyses-body-inner {
-        overflow: hidden;
-    }
+    /* ---- Recent analyses list (history page) ---- */
 
     .recent-analyses-list {
         display: flex;
