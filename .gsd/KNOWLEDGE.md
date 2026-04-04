@@ -533,3 +533,38 @@ The registry captures per-adapter variation (constructor kwargs, api_key require
 **Pattern location:** `tests/test_adapter_contract.py`
 
 Discovered: M009/S03
+
+---
+
+## MagicMock attributes are truthy by default — explicitly set boolean adapter flags in tests
+
+When using `MagicMock()` as an adapter stub, any attribute access (e.g., `mock_adapter.requires_api_key`) returns another `MagicMock` object, which is truthy. This silently triggers semaphore gating in `EnrichmentOrchestrator` for adapters that shouldn't have rate-limit caps.
+
+**Fix:** Explicitly set `mock_adapter.requires_api_key = False` when the test expects the adapter to behave as a public/no-auth adapter (no semaphore gating). This is especially critical in concurrency tests using `threading.Barrier` — if the barrier expects N threads but semaphore caps at 4, the barrier deadlocks.
+
+Discovered: M011/S03/T02
+
+---
+
+## threading.Barrier is strictly better than wall-clock timing for proving parallelism
+
+`threading.Barrier(N, timeout=T)` structurally proves N threads run concurrently: the barrier only releases when all N arrive. If concurrency is capped below N (e.g., by a semaphore), the barrier **deadlocks** — producing a clear, deterministic failure rather than flaky intermittent timing failures.
+
+Compare to wall-clock assertions like `assert elapsed < 1.5 * single_call_time` which are fragile under CI load, GC pauses, and OS scheduling jitter.
+
+**Pattern:** Replace `time.sleep(X)` side effects + elapsed-time assertions with `Barrier(expected_parallelism, timeout=2)` inside the mock side effect. If the test passes, parallelism is proven.
+
+Discovered: M011/S03/T02
+
+---
+
+## CSS dead-code audits must account for dynamic class construction in TypeScript
+
+Literal grep for CSS class names misses classes built via string concatenation:
+- `row-factory.ts:336` → `"micro-bar-segment micro-bar-segment--" + verdict`
+- `row-factory.ts:309/416` → `"verdict-badge verdict-" + verdict`  
+- `cards.ts:60` → `"verdict-label--" + worstVerdict`
+
+These classes appear unreferenced in literal search but are actively used at runtime. When auditing for dead CSS, search for class name **prefixes** (e.g., `micro-bar-segment--`) in addition to full class names, and inspect any string concatenation patterns that build class names dynamically.
+
+Discovered: M011/S03/T01

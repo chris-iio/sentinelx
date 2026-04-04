@@ -587,57 +587,54 @@ This file is the explicit capability and coverage contract for the project.
 
 ## Active
 
+(No active requirements — all M011 requirements validated.)
+
+## Validated (M011)
+
 ### R056 — Adapter docstrings trimmed to one-liner + edge cases only — no API status code walkthroughs
 - Class: quality-attribute
-- Status: active
+- Status: validated
 - Description: Each adapter's module and class docstrings are reduced to a one-liner purpose sentence plus genuinely non-obvious gotchas. API endpoint URLs, HTTP status code tables, verdict priority lists, and parameter walkthroughs are removed — the code and tests prove those.
 - Why it matters: Adapter docstrings are 42% of adapter code (1,176 of 2,816 lines). Trimming to essentials makes files navigable and removes maintenance burden of keeping prose in sync with code.
 - Source: user
 - Primary owning slice: M011/S01
-- Supporting slices: none
-- Validation: unmapped
-- Notes: Target ~55-60% reduction in docstring lines. Keep any edge case that would surprise a reader (e.g. ThreatMiner always returns HTTP 200).
+- Validation: 15 non-base adapter files trimmed to 1,597 lines (down from 2,659). One-liner module+class docstrings. Only _normalise_datetime retains a method docstring. All 1,012 tests pass unchanged.
 
 ### R057 — Per-adapter granular field tests consolidated — one test per response scenario instead of one per field
 - Class: quality-attribute
-- Status: active
+- Status: validated
 - Description: Per-adapter test files that assert individual fields (test_raw_stats_has_asn_key, test_raw_stats_asn_value, test_detection_count_always_zero, etc.) are consolidated into single response-shape tests that assert the full result object in one test.
 - Why it matters: ~72 granular one-assertion tests across 7 adapter test files produce ~400-600 lines of boilerplate. Consolidation reduces test count without losing coverage — the same assertions exist, just grouped.
 - Source: user
 - Primary owning slice: M011/S02
-- Supporting slices: none
-- Validation: unmapped
-- Notes: Focus on asn_cymru (26 granular), whois_lookup (14), dns_lookup (12), threatminer (9), ip_api (6), crtsh (5). OTX already clean.
+- Validation: 49 standalone per-field tests removed across 8 adapter test files + test_provider_protocol.py. Assertions folded into response-shape tests with descriptive messages. Net -431 lines. 899 unit tests pass.
 
 ### R058 — Dead CSS removed from input.css — every remaining class referenced by at least one template or TS file
 - Class: quality-attribute
-- Status: active
+- Status: validated
 - Description: Cross-reference every CSS class in input.css against all templates (.html) and TypeScript files (.ts). Remove classes with zero references. Rebuild dist/style.css and verify visually.
 - Why it matters: 2,006 lines of CSS accumulated over 10 milestones. Dead rules bloat the stylesheet and confuse future editors.
 - Source: user
 - Primary owning slice: M011/S03
-- Supporting slices: none
-- Validation: unmapped
-- Notes: settings-provider-card classes are prime candidates — appear in CSS but not in templates.
+- Validation: CSS audit verified all 207 classes in input.css are referenced. 3 dynamic classes confirmed via string concatenation in row-factory.ts:336, row-factory.ts:309/416, cards.ts:60. Zero dead CSS found.
 
 ### R059 — Orchestrator concurrency tests run in <1s total instead of ~6s — sleep mocks replaced with synchronization primitives
 - Class: quality-attribute
-- Status: active
+- Status: validated
 - Description: The 7 orchestrator tests that use time.sleep-based timing (accounting for ~6.2s of 9s unit suite) are rewritten to use threading Events/barriers or tighter mocks so they complete in <1s total.
 - Why it matters: 6s of 9s unit test time comes from 7 tests. Faster tests mean faster feedback loops during development.
 - Source: user
 - Primary owning slice: M011/S03
-- Supporting slices: none
-- Validation: unmapped
-- Notes: Tests: test_adapter_failure_isolated, test_retry_on_failure, test_retry_still_fails, test_error_isolation, test_enrich_all_parallel, test_zero_auth_completes, test_vt_peak_concurrency.
+- Validation: 7 orchestrator tests rewritten with threading.Barrier/Event primitives. Suite runs in 0.09s (target <1s, was 6.2s). 27 orchestrator tests pass.
 
 ### R060 — All existing tests pass after refactoring with zero behavior changes
 - Class: continuity
-- Status: active
+- Status: validated
 - Description: All tests pass after all refactoring. Test count may decrease from consolidation but zero coverage regression. No behavior changes.
 - Why it matters: Refactoring must not break anything.
 - Source: inferred
 - Primary owning slice: M011/all
+- Validation: 1,012 tests pass (899 unit + 113 e2e). make typecheck, make js, make css all exit 0. No adapter logic, CSS, or test behavior changed.
 - Supporting slices: none
 - Validation: unmapped
 - Notes: Test count expected to decrease (granular tests consolidated). Coverage same or better.
