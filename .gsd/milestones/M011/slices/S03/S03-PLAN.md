@@ -78,7 +78,7 @@ python3 -m pytest --tb=short -q
   - Estimate: 25m
   - Files: tests/test_orchestrator.py, app/static/src/input.css
   - Verify: python3 -m pytest tests/test_orchestrator.py -q --durations=10 && python3 -m pytest --tb=short -q
-- [ ] **T02: Replace time.sleep concurrency proofs with threading synchronization primitives** — ## Description
+- [x] **T02: Replaced time.sleep in 3 orchestrator concurrency tests with threading.Barrier/Event primitives; full orchestrator suite now runs in 0.11s (down from 6.2s)** — ## Description
 
 Rewrite 3 orchestrator concurrency tests that use real `time.sleep()` inside mock side-effect functions. Replace the sleep-based timing with `threading.Barrier`, `threading.Event`, and `threading.Lock` synchronization primitives that prove concurrency without wall-clock delays. Target: all 3 tests complete in <0.1s each (down from 0.6-1.0s), bringing total orchestrator suite under 1s.
 

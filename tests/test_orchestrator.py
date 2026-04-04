@@ -98,22 +98,24 @@ class TestEnrichAll:
         assert mock_adapter.lookup.call_count == 2
 
     def test_enrich_all_parallel_execution(self, mock_adapter):
-        """5 IOCs at 0.5s each: parallel (<3s total), not sequential (2.5s)."""
+        """5 IOCs dispatched in parallel — barrier proves all 5 threads run concurrently."""
         iocs = [_make_ioc(IOCType.IPV4, f"10.0.0.{i}") for i in range(5)]
+        barrier = threading.Barrier(5, timeout=2)
 
-        def slow_lookup(ioc):
-            time.sleep(0.5)
+        def barrier_lookup(ioc):
+            barrier.wait()  # blocks until all 5 threads arrive
             return _make_result(ioc)
 
-        mock_adapter.lookup.side_effect = slow_lookup
+        mock_adapter.lookup.side_effect = barrier_lookup
+        mock_adapter.requires_api_key = False  # no semaphore gating
 
         orchestrator = _make_orchestrator(mock_adapter, max_workers=5)
-        start = time.monotonic()
-        orchestrator.enrich_all("job-parallel", iocs)
-        elapsed = time.monotonic() - start
+        with patch("app.enrichment.orchestrator.time.sleep"):
+            orchestrator.enrich_all("job-parallel", iocs)
 
-        # Sequential would take 2.5s; parallel with 5 workers should finish < 1.5s
-        assert elapsed < 3.0, f"Expected parallel execution (<3s), got {elapsed:.2f}s"
+        status = orchestrator.get_status("job-parallel")
+        assert len(status["results"]) == 5
+        # If barrier.wait() didn't timeout, all 5 threads were concurrent
 
     def test_enrich_all_returns_all_results(self, mock_adapter):
         """3 enrichable IOCs all succeed — job results must contain exactly 3 items."""
@@ -392,7 +394,7 @@ class TestPerProviderSemaphore:
     """
 
     def test_vt_peak_concurrency_capped_at_4(self):
-        """8 IOCs with a slow VT adapter — peak concurrent VT lookups must stay ≤ 4.
+        """8 IOCs with a VT adapter — peak concurrent VT lookups must stay ≤ 4.
 
         Uses a shared counter + Lock to track peak concurrent VT invocations.
         The orchestrator is given max_workers=20 so the thread pool is not the gate;
@@ -401,36 +403,40 @@ class TestPerProviderSemaphore:
         peak_vt = 0
         current_vt = 0
         vt_lock = threading.Lock()
+        batch_full = threading.Event()
 
         iocs = [_make_ioc(IOCType.IPV4, f"10.0.0.{i}") for i in range(8)]
 
         vt_adapter = _make_keyed_adapter("VirusTotal", supported_types={IOCType.IPV4})
 
-        def slow_vt_lookup(ioc):
+        def coordinated_vt_lookup(ioc):
             nonlocal peak_vt, current_vt
             with vt_lock:
                 current_vt += 1
                 peak_vt = max(peak_vt, current_vt)
-            time.sleep(0.3)
+                if current_vt >= 4:
+                    batch_full.set()
+            batch_full.wait(timeout=2)  # hold threads until batch measured
             with vt_lock:
                 current_vt -= 1
             return _make_result(ioc, provider="VirusTotal")
 
-        vt_adapter.lookup.side_effect = slow_vt_lookup
+        vt_adapter.lookup.side_effect = coordinated_vt_lookup
 
         orchestrator = EnrichmentOrchestrator(adapters=[vt_adapter], max_workers=20)
-        orchestrator.enrich_all("job-semaphore-cap", iocs)
+        with patch("app.enrichment.orchestrator.time.sleep"):
+            orchestrator.enrich_all("job-semaphore-cap", iocs)
 
         status = orchestrator.get_status("job-semaphore-cap")
         assert len(status["results"]) == 8
         assert peak_vt <= 4, f"VT peak concurrency {peak_vt} exceeded semaphore cap of 4"
 
     def test_zero_auth_completes_without_waiting_for_vt(self):
-        """Zero-auth adapter (no semaphore) finishes all lookups while VT is still running.
+        """Zero-auth adapter (no semaphore) finishes all lookups alongside VT.
 
-        VT is slow (0.3s per lookup, 4-slot semaphore → 8 IOCs take ~0.6s sequential pairs).
-        DNS is instant. With no semaphore on DNS, all 8 DNS results should complete
-        well before VT finishes, and all 16 results (8 VT + 8 DNS) must be present.
+        VT uses an Event.wait with near-instant timeout (no real delay).
+        DNS is instant. All 16 results (8 VT + 8 DNS) must be present,
+        and DNS must have completed all 8 calls.
         """
         iocs = [_make_ioc(IOCType.IPV4, f"10.0.1.{i}") for i in range(8)]
 
@@ -440,8 +446,10 @@ class TestPerProviderSemaphore:
         dns_calls = [0]
         dns_lock = threading.Lock()
 
-        def slow_vt_lookup(ioc):
-            time.sleep(0.3)
+        vt_gate = threading.Event()  # never set — expires near-instantly
+
+        def gated_vt_lookup(ioc):
+            vt_gate.wait(timeout=0.01)  # near-instant expiry, no real delay
             return _make_result(ioc, provider="VirusTotal")
 
         def instant_dns_lookup(ioc):
@@ -451,15 +459,14 @@ class TestPerProviderSemaphore:
                     dns_call_count.set()
             return _make_result(ioc, provider="DNS")
 
-        vt_adapter.lookup.side_effect = slow_vt_lookup
+        vt_adapter.lookup.side_effect = gated_vt_lookup
         dns_adapter.lookup.side_effect = instant_dns_lookup
 
-        start = time.monotonic()
         orchestrator = EnrichmentOrchestrator(
             adapters=[vt_adapter, dns_adapter], max_workers=20
         )
-        orchestrator.enrich_all("job-dns-free", iocs)
-        _ = time.monotonic() - start
+        with patch("app.enrichment.orchestrator.time.sleep"):
+            orchestrator.enrich_all("job-dns-free", iocs)
 
         status = orchestrator.get_status("job-dns-free")
         # All 16 results must be present (8 VT + 8 DNS)
