@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-04T11:59:01.583Z",
+  "exported_at": "2026-04-04T12:05:30.584Z",
   "milestones": [
     {
       "id": "M001",
@@ -1586,19 +1586,30 @@
       "milestone_id": "M011",
       "slice_id": "S02",
       "id": "T02",
-      "title": "Consolidate per-field tests across 7 adapter test files into response-shape tests",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Removed 34 standalone per-field tests across 8 adapter test files and folded all assertions into existing response-shape tests with descriptive messages",
+      "status": "complete",
+      "one_liner": "Removed 34 standalone per-field tests across 8 adapter test files and folded all assertions into existing response-shape tests with descriptive messages",
+      "narrative": "Consolidated 34 standalone tests that each duplicated fixture setup to assert a single field (detection_count, total_engines, scan_date, provider_name) by folding their assertions into existing tests that already used the same fixture. Breakdown: test_ip_api.py (-3), test_asn_cymru.py (-10), test_crtsh.py (-4), test_dns_lookup.py (-4), test_threatminer.py (-3), test_abuseipdb.py (-3), test_greynoise.py (-3), test_whois_lookup.py (-4). All folded assertions use descriptive messages. Test count went from 933 (T01 baseline) to 899.",
+      "verification_result": "Full unit test suite: 899 passed, 0 failures. Contract tests: 174 passed. All 8 individual adapter test files pass with -v flag. test_provider_protocol.py deletion confirmed. No standalone per-field tests remain for informational adapters.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-04T12:05:30.565Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "Plan estimated ~37 tests to remove; actual was 34. The asn_cymru file had 10 removals (including 4 has_key tests and nxdomain_scan_date_none). The plan listed 7 adapter test files but the consolidation map included 8 (whois_lookup was item 8).",
+      "known_issues": "None.",
+      "key_files": [
+        "tests/test_ip_api.py",
+        "tests/test_asn_cymru.py",
+        "tests/test_crtsh.py",
+        "tests/test_dns_lookup.py",
+        "tests/test_threatminer.py",
+        "tests/test_abuseipdb.py",
+        "tests/test_greynoise.py",
+        "tests/test_whois_lookup.py"
+      ],
+      "key_decisions": [
+        "Folded all per-field assertions into existing response-shape tests with descriptive messages rather than creating new combined tests"
+      ],
+      "full_summary_md": "---\nid: T02\nparent: S02\nmilestone: M011\nkey_files:\n  - tests/test_ip_api.py\n  - tests/test_asn_cymru.py\n  - tests/test_crtsh.py\n  - tests/test_dns_lookup.py\n  - tests/test_threatminer.py\n  - tests/test_abuseipdb.py\n  - tests/test_greynoise.py\n  - tests/test_whois_lookup.py\nkey_decisions:\n  - Folded all per-field assertions into existing response-shape tests with descriptive messages rather than creating new combined tests\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-04-04T12:05:30.567Z\nblocker_discovered: false\n---\n\n# T02: Removed 34 standalone per-field tests across 8 adapter test files and folded all assertions into existing response-shape tests with descriptive messages\n\n**Removed 34 standalone per-field tests across 8 adapter test files and folded all assertions into existing response-shape tests with descriptive messages**\n\n## What Happened\n\nConsolidated 34 standalone tests that each duplicated fixture setup to assert a single field (detection_count, total_engines, scan_date, provider_name) by folding their assertions into existing tests that already used the same fixture. Breakdown: test_ip_api.py (-3), test_asn_cymru.py (-10), test_crtsh.py (-4), test_dns_lookup.py (-4), test_threatminer.py (-3), test_abuseipdb.py (-3), test_greynoise.py (-3), test_whois_lookup.py (-4). All folded assertions use descriptive messages. Test count went from 933 (T01 baseline) to 899.\n\n## Verification\n\nFull unit test suite: 899 passed, 0 failures. Contract tests: 174 passed. All 8 individual adapter test files pass with -v flag. test_provider_protocol.py deletion confirmed. No standalone per-field tests remain for informational adapters.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `python3 -m pytest tests/test_adapter_contract.py -v --tb=short` | 0 | ✅ pass | 9200ms |\n| 2 | `python3 -c \"import tests.test_provider_protocol\" 2>&1 | grep -q ModuleNotFoundError && echo PASS` | 0 | ✅ pass | 200ms |\n| 3 | `python3 -m pytest tests/ --ignore=tests/e2e -q --tb=short` | 0 | ✅ pass | 9300ms |\n| 4 | `python3 -m pytest tests/ --ignore=tests/e2e --co -q` | 0 | ✅ pass (899 tests) | 200ms |\n| 5 | `python3 -m pytest tests/test_ip_api.py tests/test_asn_cymru.py tests/test_crtsh.py tests/test_dns_lookup.py tests/test_threatminer.py tests/test_abuseipdb.py tests/test_greynoise.py tests/test_whois_lookup.py -v --tb=short` | 0 | ✅ pass (227 tests) | 340ms |\n\n\n## Deviations\n\nPlan estimated ~37 tests to remove; actual was 34. The asn_cymru file had 10 removals (including 4 has_key tests and nxdomain_scan_date_none). The plan listed 7 adapter test files but the consolidation map included 8 (whois_lookup was item 8).\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `tests/test_ip_api.py`\n- `tests/test_asn_cymru.py`\n- `tests/test_crtsh.py`\n- `tests/test_dns_lookup.py`\n- `tests/test_threatminer.py`\n- `tests/test_abuseipdb.py`\n- `tests/test_greynoise.py`\n- `tests/test_whois_lookup.py`\n",
       "description": "## Description\n\nAcross 7 adapter test files, ~37 tests repeat identical fixture setup to assert a single field (detection_count, total_engines, scan_date, raw_stats key existence, provider name). Per D049, these are removed and their assertions folded into existing tests that already use the same fixture.\n\nThe consolidation pattern per file:\n- Identify tests that duplicate fixture setup for a single assertion\n- Find the existing \"folding target\" test that already does the same setup\n- Add the assertion(s) to the folding target with descriptive assert messages\n- Delete the standalone test function entirely\n\n**File-by-file consolidation map:**\n\n1. **`tests/test_ip_api.py`** (~3 tests, ~39 lines):\n   - Delete: `test_public_ip_provider_name`, `test_public_ip_detection_counts_always_zero`, `test_public_ip_scan_date_is_none`\n   - Fold into: `test_public_ip_returns_enrichment_result` — add `assert result.provider == \"IP Context\"`, `assert result.detection_count == 0`, `assert result.total_engines == 0`, `assert result.scan_date is None`\n\n2. **`tests/test_asn_cymru.py`** (~9 tests, ~100 lines):\n   - Delete: `test_successful_lookup_provider_name`, `test_detection_count_always_zero`, `test_total_engines_always_zero`, `test_scan_date_always_none`, `test_raw_stats_has_asn_key`, `test_raw_stats_has_prefix_key`, `test_raw_stats_has_rir_key`, `test_raw_stats_has_allocated_key`, `test_nxdomain_detection_count_zero`\n   - Fold provider/detection/scan assertions into `test_successful_lookup_returns_enrichment_result`\n   - Fold raw_stats key assertions into `test_raw_stats_asn_value` (key existence is implied by value assertion)\n   - Fold nxdomain detection into `test_nxdomain_returns_enrichment_result`\n   - Also delete `test_nxdomain_scan_date_none` — fold into `test_nxdomain_returns_enrichment_result`\n\n3. **`tests/test_crtsh.py`** (~4 tests, ~44 lines):\n   - Delete: `test_detection_count_always_zero`, `test_total_engines_always_zero`, `test_scan_date_always_none`, `test_empty_array_detection_count_zero`\n   - Fold first 3 into the test that returns EnrichmentResult for certificates found\n   - Fold `test_empty_array_detection_count_zero` into `test_empty_array_returns_no_data`\n\n4. **`tests/test_dns_lookup.py`** (~4 tests, ~44 lines):\n   - Delete: `test_successful_lookup_provider_name`, `test_detection_count_always_zero`, `test_total_engines_always_zero`, `test_scan_date_always_none`\n   - Fold into `test_successful_lookup_returns_enrichment_result` (or equivalent test that does the A-record mock)\n\n5. **`tests/test_threatminer.py`** (~3 tests, ~33 lines):\n   - Delete: `test_ip_lookup_detection_count_always_zero`, `test_ip_lookup_total_engines_always_zero`, `test_ip_lookup_scan_date_always_none`\n   - Fold into the existing IP lookup success test\n\n6. **`tests/test_abuseipdb.py`** (~3 tests, ~33 lines):\n   - Delete: `test_detection_count_equals_total_reports`, `test_total_engines_equals_num_distinct_users`, `test_scan_date_is_last_reported_at`\n   - Fold into `test_high_score_returns_malicious` — these assert parsed values, not zero-constants\n\n7. **`tests/test_greynoise.py`** (~3 tests, ~33 lines):\n   - Delete: `test_detection_count_malicious_is_one`, `test_detection_count_clean_is_zero`, `test_scan_date_is_last_seen`\n   - Fold detection_count assertions into existing malicious/clean verdict tests\n   - Fold scan_date into the malicious verdict test\n\n8. **`tests/test_whois_lookup.py`** (~3 tests, ~33 lines):\n   - Delete: `test_successful_lookup_provider_name`, `test_detection_count_always_zero`, `test_total_engines_always_zero`, `test_scan_date_always_none`\n   - Fold into `test_successful_domain_lookup_returns_result` (or equivalent)\n\nUse descriptive assert messages for all folded assertions, e.g.:\n`assert result.detection_count == 0, \"informational adapter — detection_count must be 0\"`\n\n## Steps\n\n1. For each of the 7 files listed above:\n   a. Read the file to confirm the test names and folding targets match the map\n   b. Add assertions to the folding-target test (with descriptive messages)\n   c. Delete the standalone test functions\n2. After all 7 files are edited, run the full unit test suite: `python3 -m pytest tests/ --ignore=tests/e2e -q --tb=short`\n3. Count tests: `python3 -m pytest --co -q 2>&1 | tail -1` — expect ~1,009 (1,061 baseline - 15 from T01 - ~37 from T02 + 2 relocated in T01)\n4. Spot-check individual files to confirm all assertions present:\n   - `python3 -m pytest tests/test_ip_api.py -v --tb=short`\n   - `python3 -m pytest tests/test_asn_cymru.py -v --tb=short`\n   - `python3 -m pytest tests/test_crtsh.py -v --tb=short`\n   - `python3 -m pytest tests/test_dns_lookup.py -v --tb=short`\n   - `python3 -m pytest tests/test_threatminer.py -v --tb=short`\n   - `python3 -m pytest tests/test_abuseipdb.py -v --tb=short`\n   - `python3 -m pytest tests/test_greynoise.py -v --tb=short`\n   - `python3 -m pytest tests/test_whois_lookup.py -v --tb=short`\n\n## Must-Haves\n\n- [ ] Every assertion from a deleted test appears in its folding-target test\n- [ ] All 7 adapter test files edited\n- [ ] Full unit test suite passes with 0 failures\n- [ ] Test count decreased by ~37 from T01 baseline (total ~52 from original 1,061)\n- [ ] No test file has a standalone test that only asserts detection_count, total_engines, or scan_date when the adapter is informational\n\n## Verification\n\n- `python3 -m pytest tests/ --ignore=tests/e2e -q --tb=short` — 0 failures\n- `python3 -m pytest --co -q 2>&1 | tail -1` — count ~1,009\n- All 7 individual file test runs pass with -v flag",
       "estimate": "45m",
       "files": [
@@ -2788,6 +2799,61 @@
       "verdict": "✅ pass",
       "duration_ms": 9600,
       "created_at": "2026-04-04T11:59:01.565Z"
+    },
+    {
+      "id": 52,
+      "task_id": "T02",
+      "slice_id": "S02",
+      "milestone_id": "M011",
+      "command": "python3 -m pytest tests/test_adapter_contract.py -v --tb=short",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 9200,
+      "created_at": "2026-04-04T12:05:30.565Z"
+    },
+    {
+      "id": 53,
+      "task_id": "T02",
+      "slice_id": "S02",
+      "milestone_id": "M011",
+      "command": "python3 -c \"import tests.test_provider_protocol\" 2>&1 | grep -q ModuleNotFoundError && echo PASS",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 200,
+      "created_at": "2026-04-04T12:05:30.565Z"
+    },
+    {
+      "id": 54,
+      "task_id": "T02",
+      "slice_id": "S02",
+      "milestone_id": "M011",
+      "command": "python3 -m pytest tests/ --ignore=tests/e2e -q --tb=short",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 9300,
+      "created_at": "2026-04-04T12:05:30.565Z"
+    },
+    {
+      "id": 55,
+      "task_id": "T02",
+      "slice_id": "S02",
+      "milestone_id": "M011",
+      "command": "python3 -m pytest tests/ --ignore=tests/e2e --co -q",
+      "exit_code": 0,
+      "verdict": "✅ pass (899 tests)",
+      "duration_ms": 200,
+      "created_at": "2026-04-04T12:05:30.565Z"
+    },
+    {
+      "id": 56,
+      "task_id": "T02",
+      "slice_id": "S02",
+      "milestone_id": "M011",
+      "command": "python3 -m pytest tests/test_ip_api.py tests/test_asn_cymru.py tests/test_crtsh.py tests/test_dns_lookup.py tests/test_threatminer.py tests/test_abuseipdb.py tests/test_greynoise.py tests/test_whois_lookup.py -v --tb=short",
+      "exit_code": 0,
+      "verdict": "✅ pass (227 tests)",
+      "duration_ms": 340,
+      "created_at": "2026-04-04T12:05:30.565Z"
     }
   ]
 }

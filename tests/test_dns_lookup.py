@@ -120,7 +120,7 @@ class TestUnsupportedType:
 class TestSuccessfulLookup:
 
     def test_successful_lookup_returns_enrichment_result(self) -> None:
-        """Successful DNS lookup returns EnrichmentResult, not EnrichmentError."""
+        """Successful DNS lookup returns EnrichmentResult with correct response shape."""
         mock_resolver = _full_mock_resolver(
             a_records=[_make_a_rdata("93.184.216.34")],
         )
@@ -130,6 +130,10 @@ class TestSuccessfulLookup:
         assert isinstance(result, EnrichmentResult), (
             f"Expected EnrichmentResult, got {type(result).__name__}: {result!r}"
         )
+        assert result.provider == "DNS Records", "DNS adapter — provider must be 'DNS Records'"
+        assert result.detection_count == 0, "informational adapter — detection_count must be 0"
+        assert result.total_engines == 0, "informational adapter — total_engines must be 0"
+        assert result.scan_date is None, "informational adapter — scan_date must be None"
 
     def test_successful_lookup_verdict_is_no_data(self) -> None:
         """DNS adapter always returns verdict='no_data' — records are informational."""
@@ -143,50 +147,6 @@ class TestSuccessfulLookup:
         assert result.verdict == "no_data", (
             f"DNS records are informational, verdict must be 'no_data', got: {result.verdict!r}"
         )
-
-    def test_successful_lookup_provider_name(self) -> None:
-        """Result provider must be 'DNS Records'."""
-        mock_resolver = _full_mock_resolver(
-            a_records=[_make_a_rdata("93.184.216.34")],
-        )
-        with patch("dns.resolver.Resolver", return_value=mock_resolver):
-            result = _make_adapter().lookup(DOMAIN_IOC)
-
-        assert isinstance(result, EnrichmentResult)
-        assert result.provider == "DNS Records"
-
-    def test_detection_count_always_zero(self) -> None:
-        """detection_count must always be 0 — DNS is informational."""
-        mock_resolver = _full_mock_resolver(
-            a_records=[_make_a_rdata("1.2.3.4")],
-        )
-        with patch("dns.resolver.Resolver", return_value=mock_resolver):
-            result = _make_adapter().lookup(DOMAIN_IOC)
-
-        assert isinstance(result, EnrichmentResult)
-        assert result.detection_count == 0
-
-    def test_total_engines_always_zero(self) -> None:
-        """total_engines must always be 0 — DNS is informational."""
-        mock_resolver = _full_mock_resolver(
-            a_records=[_make_a_rdata("1.2.3.4")],
-        )
-        with patch("dns.resolver.Resolver", return_value=mock_resolver):
-            result = _make_adapter().lookup(DOMAIN_IOC)
-
-        assert isinstance(result, EnrichmentResult)
-        assert result.total_engines == 0
-
-    def test_scan_date_always_none(self) -> None:
-        """scan_date must always be None — DNS has no scan date concept."""
-        mock_resolver = _full_mock_resolver(
-            a_records=[_make_a_rdata("1.2.3.4")],
-        )
-        with patch("dns.resolver.Resolver", return_value=mock_resolver):
-            result = _make_adapter().lookup(DOMAIN_IOC)
-
-        assert isinstance(result, EnrichmentResult)
-        assert result.scan_date is None
 
 
 # ---------------------------------------------------------------------------

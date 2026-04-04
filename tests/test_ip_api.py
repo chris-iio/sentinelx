@@ -88,7 +88,7 @@ def _make_adapter(allowed_hosts: list[str] | None = None) -> IPApiAdapter:
 class TestLookupPublicIP:
 
     def test_public_ip_returns_enrichment_result(self) -> None:
-        """Public IP with HTTP 200 + country field -> EnrichmentResult (not EnrichmentError)."""
+        """Public IP with HTTP 200 + country field -> EnrichmentResult with correct shape."""
         ioc = make_ipv4_ioc("95.172.185.24")
         mock_resp = make_mock_response(200, IPINFO_PUBLIC_IP_RESPONSE)
 
@@ -99,6 +99,10 @@ class TestLookupPublicIP:
         assert isinstance(result, EnrichmentResult), (
             f"Expected EnrichmentResult, got {type(result).__name__}: {result!r}"
         )
+        assert result.provider == "IP Context", "IP Context adapter — provider must be 'IP Context'"
+        assert result.detection_count == 0, "informational adapter — detection_count must be 0"
+        assert result.total_engines == 0, "informational adapter — total_engines must be 0"
+        assert result.scan_date is None, "informational adapter — scan_date must be None"
 
     def test_public_ip_verdict_is_no_data(self) -> None:
         """IP Context never assigns threat verdicts — verdict is always no_data."""
@@ -113,43 +117,6 @@ class TestLookupPublicIP:
         assert result.verdict == "no_data", (
             f"IP Context must never set threat verdicts, got: {result.verdict!r}"
         )
-
-    def test_public_ip_provider_name(self) -> None:
-        """Result provider must be 'IP Context'."""
-        ioc = make_ipv4_ioc("95.172.185.24")
-        mock_resp = make_mock_response(200, IPINFO_PUBLIC_IP_RESPONSE)
-
-        adapter = _make_adapter()
-        mock_adapter_session(adapter, response=mock_resp)
-        result = adapter.lookup(ioc)
-
-        assert isinstance(result, EnrichmentResult)
-        assert result.provider == "IP Context"
-
-    def test_public_ip_detection_counts_always_zero(self) -> None:
-        """IP Context is informational only — detection counts are always 0."""
-        ioc = make_ipv4_ioc("95.172.185.24")
-        mock_resp = make_mock_response(200, IPINFO_PUBLIC_IP_RESPONSE)
-
-        adapter = _make_adapter()
-        mock_adapter_session(adapter, response=mock_resp)
-        result = adapter.lookup(ioc)
-
-        assert isinstance(result, EnrichmentResult)
-        assert result.detection_count == 0
-        assert result.total_engines == 0
-
-    def test_public_ip_scan_date_is_none(self) -> None:
-        """IP Context provides no scan date."""
-        ioc = make_ipv4_ioc("95.172.185.24")
-        mock_resp = make_mock_response(200, IPINFO_PUBLIC_IP_RESPONSE)
-
-        adapter = _make_adapter()
-        mock_adapter_session(adapter, response=mock_resp)
-        result = adapter.lookup(ioc)
-
-        assert isinstance(result, EnrichmentResult)
-        assert result.scan_date is None
 
     def test_raw_stats_contains_required_fields(self) -> None:
         """raw_stats must contain country_code, city, as_info, asname, reverse, proxy, hosting, mobile."""

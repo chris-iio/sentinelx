@@ -95,7 +95,7 @@ class TestGreyNoiseLookup:
     """Tests for GreyNoiseAdapter.lookup() verdict logic."""
 
     def test_riot_true_returns_clean(self) -> None:
-        """riot=True IP -> verdict 'clean' (known benign service like Google DNS)."""
+        """riot=True IP -> verdict 'clean' with detection_count=0 (known benign service like Google DNS)."""
         ioc = make_ipv4_ioc("8.8.8.8")
         mock_resp = make_mock_response(200, GREYNOISE_RIOT_RESPONSE)
 
@@ -108,9 +108,11 @@ class TestGreyNoiseLookup:
         )
         assert result.provider == "GreyNoise"
         assert result.verdict == "clean"
+        assert result.detection_count == 0, "clean verdict (riot=True) — detection_count must be 0"
+        assert result.total_engines == 1, "clean verdict (riot=True) — total_engines must be 1"
 
     def test_classification_malicious_returns_malicious(self) -> None:
-        """classification='malicious' IP -> verdict 'malicious'."""
+        """classification='malicious' IP -> verdict 'malicious' with detection_count=1 and scan_date."""
         ioc = make_ipv4_ioc("1.2.3.4")
         mock_resp = make_mock_response(200, GREYNOISE_MALICIOUS_RESPONSE)
 
@@ -121,6 +123,11 @@ class TestGreyNoiseLookup:
         assert isinstance(result, EnrichmentResult)
         assert result.provider == "GreyNoise"
         assert result.verdict == "malicious"
+        assert result.detection_count == 1, "malicious verdict — detection_count must be 1"
+        assert result.total_engines == 1, "malicious verdict — total_engines must be 1"
+        assert result.scan_date == GREYNOISE_MALICIOUS_RESPONSE["last_seen"], (
+            "scan_date must equal body.last_seen value"
+        )
 
     def test_noise_true_benign_classification_returns_suspicious(self) -> None:
         """noise=True and classification='benign' -> verdict 'suspicious' (mass scanner, not malicious)."""
@@ -214,44 +221,6 @@ class TestGreyNoiseLookup:
         assert isinstance(result, EnrichmentResult)
         for key in ("noise", "riot", "classification", "name", "link", "last_seen"):
             assert key in result.raw_stats, f"raw_stats missing key: {key!r}"
-
-    def test_detection_count_malicious_is_one(self) -> None:
-        """Malicious verdict -> detection_count=1, total_engines=1."""
-        ioc = make_ipv4_ioc("1.2.3.4")
-        mock_resp = make_mock_response(200, GREYNOISE_MALICIOUS_RESPONSE)
-
-        adapter = _make_adapter()
-        mock_adapter_session(adapter, response=mock_resp)
-        result = adapter.lookup(ioc)
-
-        assert isinstance(result, EnrichmentResult)
-        assert result.detection_count == 1
-        assert result.total_engines == 1
-
-    def test_detection_count_clean_is_zero(self) -> None:
-        """Clean verdict (riot=True) -> detection_count=0, total_engines=1."""
-        ioc = make_ipv4_ioc("8.8.8.8")
-        mock_resp = make_mock_response(200, GREYNOISE_RIOT_RESPONSE)
-
-        adapter = _make_adapter()
-        mock_adapter_session(adapter, response=mock_resp)
-        result = adapter.lookup(ioc)
-
-        assert isinstance(result, EnrichmentResult)
-        assert result.detection_count == 0
-        assert result.total_engines == 1
-
-    def test_scan_date_is_last_seen(self) -> None:
-        """scan_date should equal body.last_seen value."""
-        ioc = make_ipv4_ioc("1.2.3.4")
-        mock_resp = make_mock_response(200, GREYNOISE_MALICIOUS_RESPONSE)
-
-        adapter = _make_adapter()
-        mock_adapter_session(adapter, response=mock_resp)
-        result = adapter.lookup(ioc)
-
-        assert isinstance(result, EnrichmentResult)
-        assert result.scan_date == GREYNOISE_MALICIOUS_RESPONSE["last_seen"]
 
     def test_auth_header_uses_lowercase_key(self) -> None:
         """CRITICAL: GreyNoise auth header must be lowercase 'key', NOT 'Key' or 'Authorization'."""

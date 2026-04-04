@@ -108,7 +108,7 @@ class TestAbuseIPDBLookup:
     """Tests for AbuseIPDBAdapter.lookup() verdict logic."""
 
     def test_high_score_returns_malicious(self) -> None:
-        """abuseConfidenceScore >= 75 -> verdict 'malicious'."""
+        """abuseConfidenceScore >= 75 -> verdict 'malicious' with correct parsed fields."""
         ioc = make_ipv4_ioc("1.2.3.4")
         mock_resp = make_mock_response(200, ABUSEIPDB_MALICIOUS_RESPONSE)
 
@@ -121,6 +121,17 @@ class TestAbuseIPDBLookup:
         )
         assert result.provider == "AbuseIPDB"
         assert result.verdict == "malicious"
+
+        expected_data = ABUSEIPDB_MALICIOUS_RESPONSE["data"]
+        assert result.detection_count == expected_data["totalReports"], (
+            "detection_count must equal totalReports from response"
+        )
+        assert result.total_engines == expected_data["numDistinctUsers"], (
+            "total_engines must equal numDistinctUsers from response"
+        )
+        assert result.scan_date == expected_data["lastReportedAt"], (
+            "scan_date must equal lastReportedAt from response"
+        )
 
     def test_medium_score_returns_suspicious(self) -> None:
         """25 <= abuseConfidenceScore < 75 -> verdict 'suspicious'."""
@@ -160,45 +171,6 @@ class TestAbuseIPDBLookup:
         assert isinstance(result, EnrichmentResult)
         assert result.provider == "AbuseIPDB"
         assert result.verdict == "no_data"
-
-    def test_detection_count_equals_total_reports(self) -> None:
-        """detection_count must equal totalReports from response."""
-        ioc = make_ipv4_ioc("1.2.3.4")
-        mock_resp = make_mock_response(200, ABUSEIPDB_MALICIOUS_RESPONSE)
-
-        adapter = _make_adapter()
-        mock_adapter_session(adapter, response=mock_resp)
-        result = adapter.lookup(ioc)
-
-        assert isinstance(result, EnrichmentResult)
-        expected_reports = ABUSEIPDB_MALICIOUS_RESPONSE["data"]["totalReports"]
-        assert result.detection_count == expected_reports
-
-    def test_total_engines_equals_num_distinct_users(self) -> None:
-        """total_engines must equal numDistinctUsers from response."""
-        ioc = make_ipv4_ioc("1.2.3.4")
-        mock_resp = make_mock_response(200, ABUSEIPDB_MALICIOUS_RESPONSE)
-
-        adapter = _make_adapter()
-        mock_adapter_session(adapter, response=mock_resp)
-        result = adapter.lookup(ioc)
-
-        assert isinstance(result, EnrichmentResult)
-        expected_users = ABUSEIPDB_MALICIOUS_RESPONSE["data"]["numDistinctUsers"]
-        assert result.total_engines == expected_users
-
-    def test_scan_date_is_last_reported_at(self) -> None:
-        """scan_date must equal data.lastReportedAt from response."""
-        ioc = make_ipv4_ioc("1.2.3.4")
-        mock_resp = make_mock_response(200, ABUSEIPDB_MALICIOUS_RESPONSE)
-
-        adapter = _make_adapter()
-        mock_adapter_session(adapter, response=mock_resp)
-        result = adapter.lookup(ioc)
-
-        assert isinstance(result, EnrichmentResult)
-        expected_date = ABUSEIPDB_MALICIOUS_RESPONSE["data"]["lastReportedAt"]
-        assert result.scan_date == expected_date
 
     def test_raw_stats_content(self) -> None:
         """200 response -> raw_stats contains expected keys."""

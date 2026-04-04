@@ -100,7 +100,7 @@ def _mock_get_returning(response_body: dict) -> MagicMock:
 class TestIPLookup:
 
     def test_ip_lookup_returns_enrichment_result(self) -> None:
-        """IPv4 lookup returns EnrichmentResult (not EnrichmentError)."""
+        """IPv4 lookup returns EnrichmentResult with correct response shape."""
         ioc = make_ipv4_ioc()
 
         adapter = _make_adapter()
@@ -110,6 +110,9 @@ class TestIPLookup:
         assert isinstance(result, EnrichmentResult), (
             f"Expected EnrichmentResult, got {type(result).__name__}: {result!r}"
         )
+        assert result.detection_count == 0, "informational adapter — detection_count must be 0"
+        assert result.total_engines == 0, "informational adapter — total_engines must be 0"
+        assert result.scan_date is None, "informational adapter — scan_date must be None"
 
     def test_ip_lookup_returns_passive_dns_list(self) -> None:
         """IPv4 lookup returns passive_dns list in raw_stats."""
@@ -191,39 +194,6 @@ class TestIPLookup:
 
         assert isinstance(result, EnrichmentResult)
         assert result.verdict == "no_data"
-
-    def test_ip_lookup_detection_count_always_zero(self) -> None:
-        """detection_count is always 0 for ThreatMiner results."""
-        ioc = make_ipv4_ioc()
-
-        adapter = _make_adapter()
-        mock_adapter_session(adapter, response=_mock_get_returning(IP_PASSIVE_DNS_RESPONSE))
-        result = adapter.lookup(ioc)
-
-        assert isinstance(result, EnrichmentResult)
-        assert result.detection_count == 0
-
-    def test_ip_lookup_total_engines_always_zero(self) -> None:
-        """total_engines is always 0 for ThreatMiner results."""
-        ioc = make_ipv4_ioc()
-
-        adapter = _make_adapter()
-        mock_adapter_session(adapter, response=_mock_get_returning(IP_PASSIVE_DNS_RESPONSE))
-        result = adapter.lookup(ioc)
-
-        assert isinstance(result, EnrichmentResult)
-        assert result.total_engines == 0
-
-    def test_ip_lookup_scan_date_always_none(self) -> None:
-        """scan_date is always None for ThreatMiner results."""
-        ioc = make_ipv4_ioc()
-
-        adapter = _make_adapter()
-        mock_adapter_session(adapter, response=_mock_get_returning(IP_PASSIVE_DNS_RESPONSE))
-        result = adapter.lookup(ioc)
-
-        assert isinstance(result, EnrichmentResult)
-        assert result.scan_date is None
 
     def test_ipv6_lookup_uses_host_php(self) -> None:
         """IPv6 lookup also uses host.php (same endpoint as IPv4)."""

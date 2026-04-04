@@ -267,7 +267,7 @@ class TestCertDataExtraction:
         assert result.raw_stats["latest"] == "2024-03-15"
 
     def test_verdict_is_no_data(self) -> None:
-        """verdict is always 'no_data' for crt.sh (CT history, not a threat verdict)."""
+        """verdict is always 'no_data' for crt.sh; detection/scan fields are informational defaults."""
         ioc = make_domain_ioc("example.com")
 
         adapter = _make_adapter()
@@ -276,45 +276,15 @@ class TestCertDataExtraction:
 
         assert isinstance(result, EnrichmentResult)
         assert result.verdict == "no_data"
-
-    def test_detection_count_always_zero(self) -> None:
-        """detection_count is always 0 (crt.sh doesn't provide threat detection)."""
-        ioc = make_domain_ioc("example.com")
-
-        adapter = _make_adapter()
-        mock_adapter_session(adapter, response=make_mock_response(200, SAMPLE_CERTS))
-        result = adapter.lookup(ioc)
-
-        assert isinstance(result, EnrichmentResult)
-        assert result.detection_count == 0
-
-    def test_total_engines_always_zero(self) -> None:
-        """total_engines is always 0 (crt.sh is a certificate registry, not a scanner)."""
-        ioc = make_domain_ioc("example.com")
-
-        adapter = _make_adapter()
-        mock_adapter_session(adapter, response=make_mock_response(200, SAMPLE_CERTS))
-        result = adapter.lookup(ioc)
-
-        assert isinstance(result, EnrichmentResult)
-        assert result.total_engines == 0
-
-    def test_scan_date_always_none(self) -> None:
-        """scan_date is always None (crt.sh doesn't have a scan date concept)."""
-        ioc = make_domain_ioc("example.com")
-
-        adapter = _make_adapter()
-        mock_adapter_session(adapter, response=make_mock_response(200, SAMPLE_CERTS))
-        result = adapter.lookup(ioc)
-
-        assert isinstance(result, EnrichmentResult)
-        assert result.scan_date is None
+        assert result.detection_count == 0, "informational adapter — detection_count must be 0"
+        assert result.total_engines == 0, "informational adapter — total_engines must be 0"
+        assert result.scan_date is None, "informational adapter — scan_date must be None"
 
 
 class TestEmptyResponse:
 
     def test_empty_array_returns_no_data(self) -> None:
-        """Empty [] response -> EnrichmentResult(verdict='no_data')."""
+        """Empty [] response -> EnrichmentResult(verdict='no_data') with zero detection count."""
         ioc = make_domain_ioc("example.com")
 
         adapter = _make_adapter()
@@ -325,6 +295,7 @@ class TestEmptyResponse:
         f"Empty response must return EnrichmentResult, got {type(result).__name__}: {result!r}"
         )
         assert result.verdict == "no_data"
+        assert result.detection_count == 0, "empty response — detection_count must be 0"
 
     def test_empty_array_returns_empty_raw_stats(self) -> None:
         """Empty [] response -> raw_stats is {} (empty dict)."""
@@ -336,17 +307,6 @@ class TestEmptyResponse:
 
         assert isinstance(result, EnrichmentResult)
         assert result.raw_stats == {}
-
-    def test_empty_array_detection_count_zero(self) -> None:
-        """Empty [] response -> detection_count=0."""
-        ioc = make_domain_ioc("example.com")
-
-        adapter = _make_adapter()
-        mock_adapter_session(adapter, response=make_mock_response(200, []))
-        result = adapter.lookup(ioc)
-
-        assert isinstance(result, EnrichmentResult)
-        assert result.detection_count == 0
 
 
 class TestHTTPErrors:

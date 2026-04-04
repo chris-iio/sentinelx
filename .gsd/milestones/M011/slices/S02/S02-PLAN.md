@@ -35,7 +35,7 @@ All 15 positive tests are parametrically covered by `test_adapter_contract.py` a
   - Estimate: 15m
   - Files: tests/test_provider_protocol.py, tests/test_adapter_contract.py
   - Verify: python3 -m pytest tests/test_adapter_contract.py -v --tb=short && python3 -m pytest tests/ --ignore=tests/e2e -q --tb=short
-- [ ] **T02: Consolidate per-field tests across 7 adapter test files into response-shape tests** — ## Description
+- [x] **T02: Removed 34 standalone per-field tests across 8 adapter test files and folded all assertions into existing response-shape tests with descriptive messages** — ## Description
 
 Across 7 adapter test files, ~37 tests repeat identical fixture setup to assert a single field (detection_count, total_engines, scan_date, raw_stats key existence, provider name). Per D049, these are removed and their assertions folded into existing tests that already use the same fixture.
 

@@ -140,7 +140,7 @@ class TestQueryConstruction:
 class TestSuccessfulLookup:
 
     def test_successful_lookup_returns_enrichment_result(self) -> None:
-        """Successful TXT lookup returns EnrichmentResult, not EnrichmentError."""
+        """Successful TXT lookup returns EnrichmentResult with correct response shape."""
         mock_resolver = MagicMock()
         mock_resolver.resolve.return_value = _make_txt_answer(SAMPLE_TXT)
 
@@ -150,6 +150,10 @@ class TestSuccessfulLookup:
         assert isinstance(result, EnrichmentResult), (
             f"Expected EnrichmentResult, got {type(result).__name__}: {result!r}"
         )
+        assert result.provider == "ASN Intel", "ASN adapter — provider must be 'ASN Intel'"
+        assert result.detection_count == 0, "informational adapter — detection_count must be 0"
+        assert result.total_engines == 0, "informational adapter — total_engines must be 0"
+        assert result.scan_date is None, "informational adapter — scan_date must be None"
 
     def test_successful_lookup_verdict_is_no_data(self) -> None:
         """ASN adapter always returns verdict='no_data' — ASN context is informational."""
@@ -163,94 +167,6 @@ class TestSuccessfulLookup:
         assert result.verdict == "no_data", (
             f"ASN context is informational, verdict must be 'no_data', got: {result.verdict!r}"
         )
-
-    def test_successful_lookup_provider_name(self) -> None:
-        """Result provider must be 'ASN Intel'."""
-        mock_resolver = MagicMock()
-        mock_resolver.resolve.return_value = _make_txt_answer(SAMPLE_TXT)
-
-        with patch("dns.resolver.Resolver", return_value=mock_resolver):
-            result = _make_adapter().lookup(IPV4_IOC)
-
-        assert isinstance(result, EnrichmentResult)
-        assert result.provider == "ASN Intel"
-
-    def test_detection_count_always_zero(self) -> None:
-        """detection_count must always be 0 — ASN is informational."""
-        mock_resolver = MagicMock()
-        mock_resolver.resolve.return_value = _make_txt_answer(SAMPLE_TXT)
-
-        with patch("dns.resolver.Resolver", return_value=mock_resolver):
-            result = _make_adapter().lookup(IPV4_IOC)
-
-        assert isinstance(result, EnrichmentResult)
-        assert result.detection_count == 0
-
-    def test_total_engines_always_zero(self) -> None:
-        """total_engines must always be 0 — ASN is informational."""
-        mock_resolver = MagicMock()
-        mock_resolver.resolve.return_value = _make_txt_answer(SAMPLE_TXT)
-
-        with patch("dns.resolver.Resolver", return_value=mock_resolver):
-            result = _make_adapter().lookup(IPV4_IOC)
-
-        assert isinstance(result, EnrichmentResult)
-        assert result.total_engines == 0
-
-    def test_scan_date_always_none(self) -> None:
-        """scan_date must always be None — ASN has no scan date concept."""
-        mock_resolver = MagicMock()
-        mock_resolver.resolve.return_value = _make_txt_answer(SAMPLE_TXT)
-
-        with patch("dns.resolver.Resolver", return_value=mock_resolver):
-            result = _make_adapter().lookup(IPV4_IOC)
-
-        assert isinstance(result, EnrichmentResult)
-        assert result.scan_date is None
-
-    def test_raw_stats_has_asn_key(self) -> None:
-        """raw_stats must contain 'asn' key from parsed TXT response."""
-        mock_resolver = MagicMock()
-        mock_resolver.resolve.return_value = _make_txt_answer(SAMPLE_TXT)
-
-        with patch("dns.resolver.Resolver", return_value=mock_resolver):
-            result = _make_adapter().lookup(IPV4_IOC)
-
-        assert isinstance(result, EnrichmentResult)
-        assert "asn" in result.raw_stats, "raw_stats must contain 'asn' key"
-
-    def test_raw_stats_has_prefix_key(self) -> None:
-        """raw_stats must contain 'prefix' key from parsed TXT response."""
-        mock_resolver = MagicMock()
-        mock_resolver.resolve.return_value = _make_txt_answer(SAMPLE_TXT)
-
-        with patch("dns.resolver.Resolver", return_value=mock_resolver):
-            result = _make_adapter().lookup(IPV4_IOC)
-
-        assert isinstance(result, EnrichmentResult)
-        assert "prefix" in result.raw_stats, "raw_stats must contain 'prefix' key"
-
-    def test_raw_stats_has_rir_key(self) -> None:
-        """raw_stats must contain 'rir' key from parsed TXT response."""
-        mock_resolver = MagicMock()
-        mock_resolver.resolve.return_value = _make_txt_answer(SAMPLE_TXT)
-
-        with patch("dns.resolver.Resolver", return_value=mock_resolver):
-            result = _make_adapter().lookup(IPV4_IOC)
-
-        assert isinstance(result, EnrichmentResult)
-        assert "rir" in result.raw_stats, "raw_stats must contain 'rir' key"
-
-    def test_raw_stats_has_allocated_key(self) -> None:
-        """raw_stats must contain 'allocated' key from parsed TXT response."""
-        mock_resolver = MagicMock()
-        mock_resolver.resolve.return_value = _make_txt_answer(SAMPLE_TXT)
-
-        with patch("dns.resolver.Resolver", return_value=mock_resolver):
-            result = _make_adapter().lookup(IPV4_IOC)
-
-        assert isinstance(result, EnrichmentResult)
-        assert "allocated" in result.raw_stats, "raw_stats must contain 'allocated' key"
 
     def test_raw_stats_asn_value(self) -> None:
         """raw_stats['asn'] must be '23028' from sample TXT response."""
@@ -313,7 +229,7 @@ class TestSuccessfulLookup:
 class TestNXDOMAIN:
 
     def test_nxdomain_returns_enrichment_result(self) -> None:
-        """NXDOMAIN must return EnrichmentResult(verdict='no_data'), NOT EnrichmentError.
+        """NXDOMAIN must return EnrichmentResult(verdict='no_data') with correct response shape.
 
         Private/RFC-1918 IPs return NXDOMAIN — this is expected 'no BGP entry', not an error.
         """
@@ -326,6 +242,8 @@ class TestNXDOMAIN:
         assert isinstance(result, EnrichmentResult), (
             f"NXDOMAIN must return EnrichmentResult not EnrichmentError, got {type(result).__name__}"
         )
+        assert result.detection_count == 0, "NXDOMAIN — detection_count must be 0"
+        assert result.scan_date is None, "NXDOMAIN — scan_date must be None"
 
     def test_nxdomain_verdict_is_no_data(self) -> None:
         """NXDOMAIN -> verdict='no_data' (private IP has no BGP route, not an error)."""
@@ -362,28 +280,6 @@ class TestNXDOMAIN:
         assert not isinstance(result, EnrichmentError), (
             "NXDOMAIN is 'no BGP entry' (private IP), NOT a lookup failure — return EnrichmentResult"
         )
-
-    def test_nxdomain_detection_count_zero(self) -> None:
-        """NXDOMAIN -> detection_count=0."""
-        mock_resolver = MagicMock()
-        mock_resolver.resolve.side_effect = dns.resolver.NXDOMAIN()
-
-        with patch("dns.resolver.Resolver", return_value=mock_resolver):
-            result = _make_adapter().lookup(PRIVATE_IPV4_IOC)
-
-        assert isinstance(result, EnrichmentResult)
-        assert result.detection_count == 0
-
-    def test_nxdomain_scan_date_none(self) -> None:
-        """NXDOMAIN -> scan_date=None."""
-        mock_resolver = MagicMock()
-        mock_resolver.resolve.side_effect = dns.resolver.NXDOMAIN()
-
-        with patch("dns.resolver.Resolver", return_value=mock_resolver):
-            result = _make_adapter().lookup(PRIVATE_IPV4_IOC)
-
-        assert isinstance(result, EnrichmentResult)
-        assert result.scan_date is None
 
 
 # ---------------------------------------------------------------------------
