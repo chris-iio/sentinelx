@@ -5,10 +5,14 @@ and enrichment_status (which reads them) share the same registry.
 """
 
 import logging
+import uuid
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 from threading import Lock
 
+from flask import current_app, jsonify, request
+
+from app.enrichment.config_store import ConfigStore
 from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.enrichment.orchestrator import EnrichmentOrchestrator
 from app.pipeline.models import IOC
@@ -105,3 +109,71 @@ def _run_enrichment_and_save(
         )
     except Exception:
         logger.warning("Failed to save analysis %s to history", job_id, exc_info=True)
+
+
+def _setup_orchestrator(
+    iocs: list[IOC],
+    text: str,
+    mode: str,
+    history_store: object,
+) -> tuple[str, EnrichmentOrchestrator, object]:
+    """Create an orchestrator, register it, and submit the enrichment job.
+
+    Returns (job_id, orchestrator, registry). The 'not configured' guard
+    stays in each caller since the response format differs (redirect vs JSON).
+    """
+    registry = current_app.registry
+    job_id = uuid.uuid4().hex
+    cache = current_app.cache_store
+    config_store = ConfigStore()
+    cache_ttl_hours = config_store.get_cache_ttl()
+    orchestrator = EnrichmentOrchestrator(
+        adapters=registry.configured(),
+        cache=cache,
+        cache_ttl_seconds=cache_ttl_hours * 3600,
+    )
+
+    with _orch_lock:
+        _orchestrators[job_id] = orchestrator
+        while len(_orchestrators) > _MAX_ORCHESTRATORS:
+            _orchestrators.popitem(last=False)
+
+    _enrichment_pool.submit(
+        _run_enrichment_and_save,
+        orchestrator, job_id, iocs, text, mode,
+        history_store,
+    )
+
+    return job_id, orchestrator, registry
+
+
+def _get_enrichment_status(job_id: str):
+    """Shared status endpoint body for both HTML and API routes.
+
+    Returns a Flask JSON response tuple.
+    """
+    with _orch_lock:
+        orchestrator = _orchestrators.get(job_id)
+    if orchestrator is None:
+        return jsonify({"error": "job not found"}), 404
+
+    status = orchestrator.get_status(job_id)
+    if status is None:
+        return jsonify({"error": "job not found"}), 404
+
+    since = request.args.get("since", 0, type=int)
+    cached_markers = orchestrator.cached_markers
+
+    all_results = status["results"]
+    new_results = all_results[since:]
+    serialized = [
+        _serialize_result(r, cached_markers) for r in new_results
+    ]
+
+    return jsonify({
+        "total": status["total"],
+        "done": status["done"],
+        "complete": status["complete"],
+        "results": serialized,
+        "next_since": len(all_results),
+    })

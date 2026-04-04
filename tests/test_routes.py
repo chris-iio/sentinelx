@@ -231,8 +231,8 @@ def test_analyze_online_without_api_key_redirects_follows(client):
 def test_analyze_online_with_api_key_returns_job_id(client):
     """POST /analyze online mode with configured registry returns results page with job_id."""
     with (
-        patch("app.routes.analysis.EnrichmentOrchestrator") as MockOrchestrator,
-        patch("app.routes.analysis._enrichment_pool") as mock_pool,
+        patch("app.routes._helpers.EnrichmentOrchestrator") as MockOrchestrator,
+        patch("app.routes._helpers._enrichment_pool") as mock_pool,
     ):
         mock_registry = MagicMock()
         mock_registry.configured.return_value = [MagicMock()]
@@ -257,8 +257,8 @@ def test_analyze_online_with_api_key_returns_job_id(client):
 def test_analyze_online_creates_all_three_adapters(client):
     """Online mode uses current_app.registry and passes registry.configured() to the orchestrator."""
     with (
-        patch("app.routes.analysis.EnrichmentOrchestrator") as MockOrchestrator,
-        patch("app.routes.analysis._enrichment_pool") as mock_pool,
+        patch("app.routes._helpers.EnrichmentOrchestrator") as MockOrchestrator,
+        patch("app.routes._helpers._enrichment_pool") as mock_pool,
     ):
         mock_provider_vt = MagicMock(name="VTProvider")
         mock_provider_mb = MagicMock(name="MBProvider")
@@ -288,8 +288,8 @@ def test_enrichable_count_multi_provider(client):
     """SHA256 hash IOC yields enrichable_count=3 (VT + MB + TF all support hashes)."""
 
     with (
-        patch("app.routes.analysis.EnrichmentOrchestrator") as MockOrchestrator,
-        patch("app.routes.analysis._enrichment_pool") as mock_pool,
+        patch("app.routes._helpers.EnrichmentOrchestrator") as MockOrchestrator,
+        patch("app.routes._helpers._enrichment_pool") as mock_pool,
     ):
         mock_registry = MagicMock()
         mock_registry.configured.return_value = [MagicMock(), MagicMock(), MagicMock()]
@@ -312,8 +312,8 @@ def test_enrichable_count_multi_provider(client):
 def test_enrichable_count_domain_two_providers(client):
     """Domain IOC yields enrichable_count=2 (VT + TF support domains, MB does not)."""
     with (
-        patch("app.routes.analysis.EnrichmentOrchestrator") as MockOrchestrator,
-        patch("app.routes.analysis._enrichment_pool") as mock_pool,
+        patch("app.routes._helpers.EnrichmentOrchestrator") as MockOrchestrator,
+        patch("app.routes._helpers._enrichment_pool") as mock_pool,
     ):
         mock_registry = MagicMock()
         mock_registry.configured.return_value = [MagicMock(), MagicMock()]
@@ -335,7 +335,7 @@ def test_enrichable_count_domain_two_providers(client):
 
 def test_analyze_offline_unchanged(client):
     """POST /analyze offline mode behaves identically to Phase 1 (no job_id, no enrichment)."""
-    with patch("app.routes.analysis._enrichment_pool") as mock_pool:
+    with patch("app.routes._helpers._enrichment_pool") as mock_pool:
         response = client.post(
             "/analyze",
             data={"text": "10[.]0[.]0[.]1", "mode": "offline"},
@@ -362,7 +362,7 @@ def test_enrichment_status_unknown_job(client):
 
 def test_enrichment_status_returns_json(client):
     """GET /enrichment/status/{job_id} returns correct JSON structure."""
-    import app.routes.analysis as routes_module
+    import app.routes._helpers as routes_module
 
     mock_orchestrator = MagicMock()
     mock_orchestrator.cached_markers = {}
@@ -391,7 +391,7 @@ def test_enrichment_status_returns_json(client):
 
 def test_enrichment_result_serialization(client):
     """GET /enrichment/status/{job_id} serializes EnrichmentResult with provider, verdict, scan_date (ENRC-05)."""
-    import app.routes.analysis as routes_module
+    import app.routes._helpers as routes_module
     from app.enrichment.models import EnrichmentResult
     from app.pipeline.models import IOC, IOCType
 
@@ -439,7 +439,7 @@ def test_enrichment_result_serialization(client):
 
 def test_enrichment_error_serialization(client):
     """GET /enrichment/status/{job_id} serializes EnrichmentError with provider and error fields."""
-    import app.routes.analysis as routes_module
+    import app.routes._helpers as routes_module
     from app.enrichment.models import EnrichmentError
     from app.pipeline.models import IOC, IOCType
 
@@ -512,7 +512,7 @@ def _make_three_result_orchestrator():
 
 def test_enrichment_status_since_returns_slice(client):
     """?since=2 returns only the 1 result at index 2 and next_since == 3."""
-    import app.routes.analysis as routes_module
+    import app.routes._helpers as routes_module
 
     mock_orch = _make_three_result_orchestrator()
     job_id = "cursor_slice_job"
@@ -529,7 +529,7 @@ def test_enrichment_status_since_returns_slice(client):
 
 def test_enrichment_status_since_zero_returns_all(client):
     """?since=0 returns all 3 results and next_since == 3."""
-    import app.routes.analysis as routes_module
+    import app.routes._helpers as routes_module
 
     mock_orch = _make_three_result_orchestrator()
     job_id = "cursor_zero_job"
@@ -546,7 +546,7 @@ def test_enrichment_status_since_zero_returns_all(client):
 
 def test_enrichment_status_no_since_returns_all(client):
     """No since param returns all 3 results (backward compat) and next_since == 3."""
-    import app.routes.analysis as routes_module
+    import app.routes._helpers as routes_module
 
     mock_orch = _make_three_result_orchestrator()
     job_id = "cursor_nosince_job"
@@ -563,7 +563,7 @@ def test_enrichment_status_no_since_returns_all(client):
 
 def test_enrichment_status_since_beyond_length(client):
     """?since=99 with 3 results returns 0 results and next_since == 3."""
-    import app.routes.analysis as routes_module
+    import app.routes._helpers as routes_module
 
     mock_orch = _make_three_result_orchestrator()
     job_id = "cursor_beyond_job"

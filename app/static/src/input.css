@@ -1986,13 +1986,73 @@
         animation-delay: 200ms;
     }
 
+    .recent-analyses-toggle {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        width: 100%;
+        padding: 0;
+        border: none;
+        background: none;
+        cursor: pointer;
+        margin-bottom: 0;
+        transition: margin-bottom 200ms ease;
+    }
+
+    .recent-analyses.is-open .recent-analyses-toggle {
+        margin-bottom: 0.75rem;
+    }
+
+    .recent-analyses-toggle:focus-visible {
+        outline: 2px solid var(--accent-interactive);
+        outline-offset: 2px;
+        border-radius: var(--radius);
+    }
+
+    .recent-analyses-chevron {
+        width: 14px;
+        height: 14px;
+        flex-shrink: 0;
+        color: var(--text-muted);
+        transition: transform 200ms ease, color 150ms ease;
+    }
+
+    .recent-analyses.is-open .recent-analyses-chevron {
+        transform: rotate(90deg);
+        color: var(--text-secondary);
+    }
+
     .recent-analyses-title {
         font-size: 0.8rem;
         font-weight: 600;
         color: var(--text-secondary);
         text-transform: uppercase;
         letter-spacing: 0.05em;
-        margin-bottom: 0.75rem;
+        margin: 0;
+    }
+
+    .recent-analyses-count {
+        font-size: 0.7rem;
+        font-weight: 500;
+        color: var(--text-muted);
+        background-color: var(--bg-tertiary);
+        padding: 0.1rem 0.45rem;
+        border-radius: 9999px;
+        line-height: 1.3;
+    }
+
+    .recent-analyses-body {
+        display: grid;
+        grid-template-rows: 0fr;
+        transition: grid-template-rows 200ms ease;
+    }
+
+    .recent-analyses.is-open .recent-analyses-body {
+        grid-template-rows: 1fr;
+    }
+
+    .recent-analyses-body-inner {
+        overflow: hidden;
     }
 
     .recent-analyses-list {

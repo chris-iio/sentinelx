@@ -39,9 +39,27 @@ function initCardStagger(): void {
 }
 
 /**
+ * Wire the Recent Analyses collapsible section on the index page.
+ * Collapsed by default; toggled via the header button.
+ */
+function initRecentAnalysesToggle(): void {
+  const section = document.querySelector<HTMLElement>(".recent-analyses");
+  if (!section) return;
+
+  const toggle = section.querySelector<HTMLButtonElement>(".recent-analyses-toggle");
+  if (!toggle) return;
+
+  toggle.addEventListener("click", () => {
+    const isOpen = section.classList.toggle("is-open");
+    toggle.setAttribute("aria-expanded", String(isOpen));
+  });
+}
+
+/**
  * Initialise all UI enhancements: scroll-aware filter bar and card stagger.
  */
 export function init(): void {
   initScrollAwareFilterBar();
   initCardStagger();
+  initRecentAnalysesToggle();
 }

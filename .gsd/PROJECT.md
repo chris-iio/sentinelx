@@ -10,7 +10,7 @@ Safe, correct, and transparent IOC extraction and enrichment — never invent sc
 
 ## Current State
 
-**M009 complete (2026-03-29).** 947 tests passing. BaseHTTPAdapter consolidates 12 HTTP adapter skeletons into a single template-method base class. Parametrized contract test suite (172 tests) replaces 208 duplicated per-adapter tests. 4 shared TypeScript rendering functions extracted from enrichment.ts/history.ts into shared-rendering.ts. Net -1,143 LOC across 38 files. All 9 M009 requirements (R041–R049) validated.
+**M009 complete (2026-03-29).** 1060 tests passing. BaseHTTPAdapter consolidates 12 HTTP adapter skeletons into a single template-method base class. Parametrized contract test suite (172 tests) replaces 208 duplicated per-adapter tests. 4 shared TypeScript rendering functions extracted from enrichment.ts/history.ts into shared-rendering.ts. Net -1,143 LOC across 38 files. All 9 M009 requirements (R041–R049) validated.
 
 ## Architecture / Key Patterns
 
@@ -21,7 +21,8 @@ Safe, correct, and transparent IOC extraction and enrichment — never invent sc
 - **Persistence:** SQLite WAL-mode stores (CacheStore for enrichment cache, HistoryStore for analysis history) at ~/.sentinelx/
 - **Security:** CSP (7 directives), CSRF, SSRF allowlist, host validation, textContent-only DOM (SEC-08)
 - **Build:** Makefile targets — `css`, `js`, `js-dev`, `js-watch`, `typecheck`, `build`
-- **Tests:** 947 total (unit + E2E via Playwright with route-mocking)
+- **Tests:** 1060 total (unit + E2E via Playwright with route-mocking)
+- **Routes:** `app/routes/` package with shared `main` Blueprint, separate `api` Blueprint (CSRF-exempt)
 
 ## Capability Contract
 
@@ -38,6 +39,7 @@ See `.gsd/REQUIREMENTS.md` for the explicit capability contract, requirement sta
 - [x] M007: Dead Code & Boilerplate Reduction — safe_request() consolidation across 12 adapters, adapter docstring trimming & dead CSS, test DRY-up with shared helpers. Net -418 LOC, 1057 tests, 0 failures.
 - [x] M008: Routes Decomposition & REST API — routes.py decomposed into app/routes/ package, REST API blueprint added (POST /api/analyze, GET /api/status). 1075 tests, 0 failures.
 - [x] M009: Codebase Reduction — BaseHTTPAdapter consolidation (12 adapters), parametrized contract tests (172 replacing 208), CSS audit (clean), frontend TS dedup (4 functions shared). Net -1,143 LOC, 947 tests, 0 failures.
+- [ ] M010: Cleanup & History Page — Route duplication cleanup, dead import/export removal, Recent Analyses relocated from home page to dedicated /history page.
 
 ---
-*Last updated: 2026-03-29 — M009 complete.*
+*Last updated: 2026-04-04 — M010 planning.*

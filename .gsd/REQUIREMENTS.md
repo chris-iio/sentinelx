@@ -585,9 +585,136 @@ This file is the explicit capability and coverage contract for the project.
 | R048 | continuity | validated | M009/all | none | 947 tests pass, 0 failures. Count decreased from 1,075 to 947 only from consolidation (208 duplicates removed, 172 parametrized replacements added). Zero behavior changes — same verdicts, same HTTP calls, same error handling. |
 | R049 | quality-attribute | validated | M009/all | none | Net -1,143 LOC across 38 files (1,669 added, 2,812 deleted). Reduction in both app/ (adapter consolidation -112 LOC, TS dedup -84 LOC) and tests/ (contract test consolidation, bulk of remaining reduction). |
 
+## Active
+
+### R050 — Orchestrator setup logic extracted into a shared helper, eliminating duplication between analysis.py and api.py
+- Class: quality-attribute
+- Status: active
+- Description: The ~20-line orchestrator creation block (ConfigStore, cache TTL, EnrichmentOrchestrator init, _orchestrators registration, _enrichment_pool.submit) is extracted into a single helper in _helpers.py. Both analysis.py and api.py call it.
+- Why it matters: Identical logic in two files means every change must be applied twice. Extraction eliminates this maintenance burden and prevents drift.
+- Source: execution
+- Primary owning slice: M010/S01
+- Supporting slices: none
+- Validation: unmapped
+- Notes: Each caller still handles its own error response format (flash+redirect for HTML, JSON 400 for API)
+
+### R051 — enrichment_status() and api_status() consolidated — single implementation serving both blueprints
+- Class: quality-attribute
+- Status: active
+- Description: The enrichment polling logic exists identically in enrichment.py (HTML blueprint) and api.py (API blueprint). Consolidated to a single implementation.
+- Why it matters: Two copies of the same polling logic is pure duplication. A bug fix in one must be mirrored in the other.
+- Source: execution
+- Primary owning slice: M010/S01
+- Supporting slices: none
+- Validation: unmapped
+- Notes: Both routes return identical JSON — the only difference is the URL path
+
+### R052 — Unused imports and dead exports removed
+- Class: quality-attribute
+- Status: active
+- Description: Unused `json` import in api.py, unused `ResultDisplay` export in shared-rendering.ts, and any other dead imports/exports discovered during audit are removed.
+- Why it matters: Dead code misleads readers and adds noise. Removing it keeps the codebase honest.
+- Source: execution
+- Primary owning slice: M010/S01
+- Supporting slices: none
+- Validation: unmapped
+- Notes: from __future__ import annotations is intentional and not dead
+
+### R053 — Recent Analyses removed from home page — index.html renders only the paste form
+- Class: core-capability
+- Status: active
+- Description: The Recent Analyses collapsible section, its CSS (~130 lines), its JS toggle handler in ui.ts, and the list_recent() call in the index route are all removed from the home page.
+- Why it matters: Keeps the home page focused on the primary action — pasting IOCs.
+- Source: user
+- Primary owning slice: M010/S02
+- Supporting slices: none
+- Validation: unmapped
+- Notes: The list_recent() call and CSS move to the new /history page, not deleted entirely
+
+### R054 — Dedicated /history page lists recent analyses with links to individual analysis detail pages
+- Class: core-capability
+- Status: active
+- Description: A new /history route renders a page listing recent analyses. Each entry links to /history/<analysis_id> for the full detail view. Accessible from nav.
+- Why it matters: Analysts need to access past analyses. Moving from collapsed home page section to a dedicated page gives it proper visibility and room to grow.
+- Source: user
+- Primary owning slice: M010/S02
+- Supporting slices: none
+- Validation: unmapped
+- Notes: Reuses existing HistoryStore.list_recent() and existing CSS patterns
+
+### R055 — All existing tests pass after refactoring with zero behavior changes
+- Class: continuity
+- Status: active
+- Description: All 1060 tests pass after all refactoring. No user-visible behavior changes — same responses, same UI, same enrichment flow.
+- Why it matters: Refactoring must not break anything.
+- Source: inferred
+- Primary owning slice: M010/all
+- Supporting slices: none
+- Validation: unmapped
+- Notes: Test count may change slightly if tests reference removed dead code
+
+## Traceability
+
+| ID | Class | Status | Primary owner | Supporting | Proof |
+|---|---|---|---|---|---|
+| R001 | core-capability | validated | M002/S01 | none | validated |
+| R002 | primary-user-loop | validated | M002/S02 | M002/S01 | validated |
+| R003 | quality-attribute | validated | M002/S01 | M002/S02, M002/S03 | validated |
+| R004 | core-capability | validated | M002/S03 | none | validated |
+| R005 | core-capability | validated | M002/S02 | M002/S01 | validated |
+| R006 | core-capability | validated | M002/S02 | M002/S01 | validated |
+| R007 | quality-attribute | validated | M002/S03 | M002/S02 | validated |
+| R008 | continuity | validated | M002/S04 | M002/S01, M002/S02, M002/S03 | validated |
+| R009 | compliance/security | validated | M002/S04 | none | validated |
+| R010 | quality-attribute | validated | M002/S04 | none | validated |
+| R011 | continuity | validated | M002/S05 | none | validated |
+| R012 | quality-attribute | validated | M002/S01 | none | validated |
+| R013 | quality-attribute | validated | M003/S01 | none | validated |
+| R014 | quality-attribute | validated | M003/S01 | none | validated |
+| R015 | core-capability | validated | M003/S02 | none | validated |
+| R016 | core-capability | validated | M003/S03 | none | validated |
+| R017 | quality-attribute | validated | M003/S04 | none | validated |
+| R018 | quality-attribute | validated | M004/S01 | none | validated |
+| R019 | quality-attribute | validated | M004/S01 | none | validated |
+| R020 | quality-attribute | validated | M004/S02 | none | validated |
+| R021 | quality-attribute | validated | M004/S02 | none | validated |
+| R022 | quality-attribute | validated | M004/S02 | none | validated |
+| R023 | quality-attribute | validated | M004/S03 | none | validated |
+| R024 | quality-attribute | validated | M004/S04 | none | validated |
+| R025 | compliance/security | validated | M004/S04 | none | validated |
+| R026 | quality-attribute | validated | M007/S01 | none | validated |
+| R027 | quality-attribute | validated | M007/S01 | none | validated |
+| R028 | quality-attribute | validated | M005/S03 | none | validated |
+| R029 | quality-attribute | validated | M005/S03 | none | validated |
+| R030 | core-capability | validated | M006/S01 | none | validated |
+| R031 | primary-user-loop | validated | M006/S01 | M006/S04 | validated |
+| R032 | core-capability | validated | M006/S02 | none | validated |
+| R033 | core-capability | validated | M006/S03 | none | validated |
+| R035 | integration | validated | M008/S02 | none | validated |
+| R036 | quality-attribute | validated | M007/S01 | none | validated |
+| R037 | quality-attribute | validated | M007/S02 | none | validated |
+| R038 | quality-attribute | validated | M007/S02 | none | validated |
+| R039 | quality-attribute | validated | M007/S03 | none | validated |
+| R040 | continuity | validated | M007/all | none | validated |
+| R041 | quality-attribute | validated | M009/S01 | M009/S02 | validated |
+| R042 | quality-attribute | validated | M009/S02 | M009/S01 | validated |
+| R043 | constraint | validated | M009/S02 | none | validated |
+| R044 | quality-attribute | validated | M009/S03 | none | validated |
+| R045 | quality-attribute | validated | M009/S03 | none | validated |
+| R046 | quality-attribute | validated | M009/S04 | none | validated |
+| R047 | quality-attribute | validated | M009/S04 | none | validated |
+| R048 | continuity | validated | M009/all | none | validated |
+| R049 | quality-attribute | validated | M009/all | none | validated |
+| R050 | quality-attribute | active | M010/S01 | none | unmapped |
+| R051 | quality-attribute | active | M010/S01 | none | unmapped |
+| R052 | quality-attribute | active | M010/S01 | none | unmapped |
+| R053 | core-capability | active | M010/S02 | none | unmapped |
+| R054 | core-capability | active | M010/S02 | none | unmapped |
+| R055 | continuity | active | M010/all | none | unmapped |
+
 ## Coverage Summary
 
-- Active requirements: 0
-- Mapped to slices: 0
-- Validated: 48 (R001, R002, R003, R004, R005, R006, R007, R008, R009, R010, R011, R012, R013, R014, R015, R016, R017, R018, R019, R020, R021, R022, R023, R024, R025, R026, R027, R028, R029, R030, R031, R032, R033, R035, R036, R037, R038, R039, R040, R041, R042, R043, R044, R045, R046, R047, R048, R049)
+- Active requirements: 6 (R050, R051, R052, R053, R054, R055)
+- Mapped to slices: 6
+- Validated: 48 (R001–R049)
 - Unmapped active requirements: 0

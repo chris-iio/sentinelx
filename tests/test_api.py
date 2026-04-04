@@ -139,7 +139,7 @@ class TestApiAnalyzeOnline:
         client.application.registry.all.return_value = [mock_provider]
         client.application.registry.providers_for_type.return_value = [mock_provider]
 
-        with patch("app.routes.api._enrichment_pool") as mock_pool:
+        with patch("app.routes._helpers._enrichment_pool") as mock_pool:
             resp = client.post("/api/analyze", json={"text": "8.8.8.8", "mode": "online"})
             assert resp.status_code == 200
             data = resp.get_json()

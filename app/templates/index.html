@@ -60,18 +60,26 @@
 
     {% if recent_analyses %}
     <div class="recent-analyses">
-        <h3 class="recent-analyses-title">Recent Analyses</h3>
-        <div class="recent-analyses-list">
-            {% for entry in recent_analyses %}
-            <a href="{{ url_for('main.history_detail', analysis_id=entry.id) }}" class="recent-analysis-row">
-                <span class="recent-analysis-text">{{ entry.input_text }}</span>
-                <span class="recent-analysis-meta">
-                    <span class="recent-analysis-count">{{ entry.total_count }} IOC{{ "s" if entry.total_count != 1 }}</span>
-                    <span class="verdict-badge verdict-{{ entry.top_verdict }}">{{ entry.top_verdict }}</span>
-                    <span class="recent-analysis-time">{{ entry.created_at[:16].replace('T', ' ') }}</span>
-                </span>
-            </a>
-            {% endfor %}
+        <button class="recent-analyses-toggle" aria-expanded="false" aria-controls="recent-analyses-list">
+            <svg class="recent-analyses-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l4 4-4 4"/></svg>
+            <h3 class="recent-analyses-title">Recent Analyses</h3>
+            <span class="recent-analyses-count">{{ recent_analyses|length }}</span>
+        </button>
+        <div class="recent-analyses-body">
+            <div class="recent-analyses-body-inner">
+                <div id="recent-analyses-list" class="recent-analyses-list">
+                    {% for entry in recent_analyses %}
+                    <a href="{{ url_for('main.history_detail', analysis_id=entry.id) }}" class="recent-analysis-row">
+                        <span class="recent-analysis-text">{{ entry.input_text }}</span>
+                        <span class="recent-analysis-meta">
+                            <span class="recent-analysis-count">{{ entry.total_count }} IOC{{ "s" if entry.total_count != 1 }}</span>
+                            <span class="verdict-badge verdict-{{ entry.top_verdict }}">{{ entry.top_verdict }}</span>
+                            <span class="recent-analysis-time">{{ entry.created_at[:16].replace('T', ' ') }}</span>
+                        </span>
+                    </a>
+                    {% endfor %}
+                </div>
+            </div>
         </div>
     </div>
     {% endif %}

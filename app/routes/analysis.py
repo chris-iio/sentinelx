@@ -1,26 +1,17 @@
 """Analysis routes: home page and IOC analysis endpoint."""
 
 import json
-import uuid
 
 from flask import (
     current_app, flash, redirect, render_template, request, url_for,
 )
 
 from app import limiter
-from app.enrichment.config_store import ConfigStore
-from app.enrichment.orchestrator import EnrichmentOrchestrator
 from app.pipeline.extractor import run_pipeline
 from app.pipeline.models import IOCType, group_by_type
 
 from . import bp
-from ._helpers import (
-    _MAX_ORCHESTRATORS,
-    _enrichment_pool,
-    _orch_lock,
-    _orchestrators,
-    _run_enrichment_and_save,
-)
+from ._helpers import _setup_orchestrator
 
 
 @bp.route("/")
@@ -63,25 +54,8 @@ def analyze():
             )
             return redirect(url_for("main.settings_get"))
 
-        job_id = uuid.uuid4().hex
-        cache = current_app.cache_store
-        config_store = ConfigStore()
-        cache_ttl_hours = config_store.get_cache_ttl()
-        orchestrator = EnrichmentOrchestrator(
-            adapters=registry.configured(),
-            cache=cache,
-            cache_ttl_seconds=cache_ttl_hours * 3600,
-        )
-
-        with _orch_lock:
-            _orchestrators[job_id] = orchestrator
-            while len(_orchestrators) > _MAX_ORCHESTRATORS:
-                _orchestrators.popitem(last=False)
-
-        _enrichment_pool.submit(
-            _run_enrichment_and_save,
-            orchestrator, job_id, iocs, text, mode,
-            current_app.history_store,
+        job_id, _, registry = _setup_orchestrator(
+            iocs, text, mode, current_app.history_store,
         )
 
         type_providers = {
