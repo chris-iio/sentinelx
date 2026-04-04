@@ -54,7 +54,7 @@
   - Estimate: 20m
   - Files: app/enrichment/adapters/abuseipdb.py, app/enrichment/adapters/crtsh.py, app/enrichment/adapters/greynoise.py, app/enrichment/adapters/hashlookup.py, app/enrichment/adapters/otx.py, app/enrichment/adapters/shodan.py, app/enrichment/adapters/threatfox.py, app/enrichment/adapters/virustotal.py
   - Verify: python3 -c "import app.enrichment.adapters.abuseipdb; import app.enrichment.adapters.crtsh; import app.enrichment.adapters.greynoise; import app.enrichment.adapters.hashlookup; import app.enrichment.adapters.otx; import app.enrichment.adapters.shodan; import app.enrichment.adapters.threatfox; import app.enrichment.adapters.virustotal; print('All 8 OK')" && python3 -m pytest tests/test_abuseipdb.py tests/test_crtsh.py tests/test_greynoise.py tests/test_hashlookup.py tests/test_otx.py tests/test_shodan.py tests/test_threatfox.py tests/test_virustotal.py -x -q
-- [ ] **T03: Trim remaining adapters (dns_lookup, malwarebazaar, urlhaus) and run full verification** — Apply the same mechanical trim to the final 3 adapter files, then run the full test suite and line-count verification to confirm the slice goal.
+- [x] **T03: Trimmed 3 final adapter files (~100 lines removed), all 1,061 tests pass, non-base adapter total is 1,597 lines (target ≤1,900)** — Apply the same mechanical trim to the final 3 adapter files, then run the full test suite and line-count verification to confirm the slice goal.
 
 ## Steps
 

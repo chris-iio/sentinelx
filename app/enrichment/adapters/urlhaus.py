@@ -1,26 +1,4 @@
-"""URLhaus API adapter.
-
-Implements URL, IP, domain, and hash enrichment against the URLhaus API
-(abuse.ch). Delegates all HTTP safety controls to safe_request() in http_safety.py.
-
-URLhaus API behavior (all endpoints are POST with form-encoded bodies):
-  - POST /v1/url/      {"url": value}        Auth-Key header required
-  - POST /v1/host/     {"host": value}       Auth-Key header required
-  - POST /v1/payload/  {"md5_hash": value}   Auth-Key header required
-  - POST /v1/payload/  {"sha256_hash": value} Auth-Key header required
-  - All endpoints return HTTP 200 (not 404) for missing data —
-    "no_results"/"no_result" in query_status
-  - Auth-Key header contains the API key
-
-Verdict logic:
-  - query_status == "is_listed" (URL endpoint)       -> malicious
-  - query_status == "ok" + urls_count > 0 (host)     -> malicious
-  - query_status == "ok" + urls (payload endpoint)   -> malicious
-  - query_status "no_results" or "no_result"         -> no_data
-
-Supported IOC types: URL, IPv4, IPv6, DOMAIN, MD5, SHA256
-NOT supported: SHA1, CVE
-"""
+"""URLhaus URL/host/payload lookup adapter (abuse.ch)."""
 from __future__ import annotations
 
 import logging
@@ -45,26 +23,7 @@ _ENDPOINT_MAP: dict[IOCType, tuple[str, str]] = {
 
 
 class URLhausAdapter(BaseHTTPAdapter):
-    """Adapter for the URLhaus API (abuse.ch).
-
-    Extends BaseHTTPAdapter for URL, IP (v4/v6), domain, MD5, and SHA256 IOC
-    lookups via POST requests with form-encoded bodies. An Auth-Key header is
-    required.
-
-    Verdict is derived from the query_status field in the response:
-    - "is_listed"                   -> malicious (URL endpoint)
-    - "ok" + urls_count > 0         -> malicious (host/payload endpoint)
-    - "no_results" or "no_result"   -> no_data
-
-    SHA1 and CVE are not supported by URLhaus.
-
-    Thread safety: a persistent requests.Session is created by BaseHTTPAdapter.__init__
-    and reused across lookup() calls for TCP connection pooling.
-
-    Args:
-        allowed_hosts: SSRF allowlist -- only these hostnames may be contacted.
-        api_key:       URLhaus API key for the Auth-Key header (keyword-only).
-    """
+    """URLhaus multi-endpoint lookup — see BaseHTTPAdapter for the template pattern."""
 
     supported_types: frozenset[IOCType] = frozenset({
         IOCType.URL,
@@ -98,25 +57,6 @@ class URLhausAdapter(BaseHTTPAdapter):
 
 
 def _parse_response(ioc: IOC, body: dict, provider_name: str) -> EnrichmentResult:
-    """Parse a URLhaus API response into an EnrichmentResult.
-
-    Inspects query_status and urls_count to determine verdict.
-    Extracts tags, blacklists, and urls_count for raw_stats.
-
-    Verdict rules:
-      - "is_listed"                   -> malicious (URL endpoint response)
-      - "ok" + urls_count > 0         -> malicious (host or payload endpoint)
-      - "no_results" or "no_result"   -> no_data
-      - "ok" + urls_count == 0        -> no_data (IP/domain not active on URLhaus)
-
-    Args:
-        ioc:           The IOC that was queried.
-        body:          Parsed JSON from URLhaus API response.
-        provider_name: Provider name string for result construction.
-
-    Returns:
-        EnrichmentResult with verdict "malicious" or "no_data".
-    """
     query_status: str = body.get("query_status", "")
     urls_count: int = body.get("urls_count", 0) or 0
     tags: list[str] | None = body.get("tags")

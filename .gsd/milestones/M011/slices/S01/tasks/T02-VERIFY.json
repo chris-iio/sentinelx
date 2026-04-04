@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T02",
+  "unitId": "M011/S01/T02",
+  "timestamp": 1775302874302,
+  "passed": false,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "python3 -m pytest tests/test_abuseipdb.py tests/test_crtsh.py tests/test_greynoise.py tests/test_hashlookup.py tests/test_otx.py tests/test_shodan.py tests/test_threatfox.py tests/test_virustotal.py -x -q",
+      "exitCode": 4,
+      "durationMs": 229,
+      "verdict": "fail"
+    }
+  ],
+  "retryAttempt": 1,
+  "maxRetries": 2
+}

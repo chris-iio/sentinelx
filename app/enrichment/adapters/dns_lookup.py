@@ -1,28 +1,4 @@
-"""DNS record lookup adapter.
-
-Implements live DNS resolution for domain IOCs using dnspython, returning A, MX,
-NS, and TXT records in raw_stats.
-
-Design notes:
-  - DNS uses port 53 directly — NOT HTTP. Do NOT import or use http_safety.py.
-    validate_endpoint(), TIMEOUT, and read_limited() are HTTP-specific controls
-    that are irrelevant and must not be used here.
-  - No API key required — uses the system resolver (resolv.conf).
-  - allowed_hosts parameter is accepted for API compatibility with the Provider
-    protocol (other adapters pass it in from setup.py) but is intentionally
-    ignored here. DNS does not make HTTP calls; there is no SSRF surface.
-  - resolver.lifetime=5.0 (seconds): a single float timeout for the resolver,
-    distinct from the (connect, read) tuple used by HTTP adapters.
-  - NXDOMAIN and NoAnswer are expected outcomes, not errors. They result in
-    EnrichmentResult(verdict='no_data') with empty record lists.
-  - Partial failures (e.g., MX times out but A succeeds) populate lookup_errors
-    while keeping the successfully-resolved record types.
-  - verdict is always 'no_data' — DNS records are informational context, not
-    threat signals.
-
-Thread safety: a fresh dns.resolver.Resolver instance is created per lookup()
-call (no shared state).
-"""
+"""DNS record lookup adapter using dnspython."""
 from __future__ import annotations
 
 import logging
@@ -48,57 +24,20 @@ _RESOLVER_LIFETIME: float = 5.0
 
 
 class DnsAdapter:
-    """Adapter for live DNS record lookups using dnspython.
-
-    Supports DOMAIN IOC type only. Queries A, MX, NS, and TXT records for
-    each domain. Returns all found records in raw_stats; never assigns a
-    threat verdict (verdict is always 'no_data').
-
-    No API key required — uses the system resolver. No HTTP calls are made.
-
-    DNS resolution goes directly to port 53. This adapter intentionally does
-    NOT use http_safety.py controls (validate_endpoint, TIMEOUT, read_limited),
-    which apply only to HTTP/HTTPS traffic.
-
-    Args:
-        allowed_hosts: Accepted for API compatibility with the Provider protocol
-            but unused. DNS does not make HTTP calls, so SSRF allowlisting is
-            not applicable.
-    """
+    """Live DNS record lookup via port 53 — no HTTP, no SSRF surface."""
 
     name = "DNS Records"
     supported_types: frozenset[IOCType] = frozenset({IOCType.DOMAIN})
     requires_api_key = False
 
     def __init__(self, allowed_hosts: list[str]) -> None:
-        # Accepted for API compatibility with Provider protocol; intentionally unused.
-        # DNS uses port 53 directly — no HTTP, no SSRF surface.
+        # allowed_hosts accepted for Provider protocol compat; unused (DNS, not HTTP).
         pass
 
     def is_configured(self) -> bool:
-        """Always returns True — no API key or configuration required."""
         return True
 
     def lookup(self, ioc: IOC) -> EnrichmentResult | EnrichmentError:
-        """Perform DNS resolution for a domain IOC.
-
-        Queries A, MX, NS, and TXT records independently using dnspython.
-        Each record type is resolved in a separate resolver.resolve() call so
-        that failure of one type does not prevent the others from succeeding.
-
-        Expected DNS conditions are handled gracefully:
-          - NXDOMAIN: domain does not exist -> no_data result (not an error)
-          - NoAnswer: record type not present for this domain -> empty list
-          - Timeout: resolver timed out -> appended to lookup_errors
-          - NoNameservers: no nameservers authoritative -> appended to lookup_errors
-
-        Returns:
-            EnrichmentResult with verdict='no_data' and raw_stats containing
-            'a', 'mx', 'ns', 'txt' lists plus 'lookup_errors' for any partial
-            failures.
-
-            EnrichmentError only for unsupported IOC types.
-        """
         if ioc.type not in self.supported_types:
             return EnrichmentError(
                 ioc=ioc,

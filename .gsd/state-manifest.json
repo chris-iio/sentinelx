@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-04T11:40:48.224Z",
+  "exported_at": "2026-04-04T11:45:37.199Z",
   "milestones": [
     {
       "id": "M001",
@@ -1500,19 +1500,25 @@
       "milestone_id": "M011",
       "slice_id": "S01",
       "id": "T03",
-      "title": "Trim remaining adapters (dns_lookup, malwarebazaar, urlhaus) and run full verification",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Trimmed 3 final adapter files (~100 lines removed), all 1,061 tests pass, non-base adapter total is 1,597 lines (target ≤1,900)",
+      "status": "complete",
+      "one_liner": "Trimmed 3 final adapter files (~100 lines removed), all 1,061 tests pass, non-base adapter total is 1,597 lines (target ≤1,900)",
+      "narrative": "Applied standard docstring trim to dns_lookup.py, malwarebazaar.py, and urlhaus.py — replacing verbose module/class docstrings with one-liners and deleting all method-level docstrings. DnsAdapter got a port-53-specific one-liner since it doesn't extend BaseHTTPAdapter. All 1,061 tests pass, all 16 modules import cleanly, non-base adapter line count is 1,597 (down from ~2,659 baseline).",
+      "verification_result": "python3 -m pytest tests/ -x -q → 1,061 passed. All 16 adapter modules importable. Non-base line count 1,597 ≤ 1,900. base.py unchanged at 161 lines.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-04T11:45:37.186Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "DnsAdapter class docstring references port 53 instead of BaseHTTPAdapter since it doesn't extend BaseHTTPAdapter.",
+      "known_issues": "Slice plan T02 verify command references tests/test_virustotal.py which doesn't exist (actual file is tests/test_vt_adapter.py).",
+      "key_files": [
+        "app/enrichment/adapters/dns_lookup.py",
+        "app/enrichment/adapters/malwarebazaar.py",
+        "app/enrichment/adapters/urlhaus.py"
+      ],
+      "key_decisions": [
+        "DnsAdapter class docstring mentions port 53 / no SSRF rather than BaseHTTPAdapter since it doesn't extend BaseHTTPAdapter"
+      ],
+      "full_summary_md": "---\nid: T03\nparent: S01\nmilestone: M011\nkey_files:\n  - app/enrichment/adapters/dns_lookup.py\n  - app/enrichment/adapters/malwarebazaar.py\n  - app/enrichment/adapters/urlhaus.py\nkey_decisions:\n  - DnsAdapter class docstring mentions port 53 / no SSRF rather than BaseHTTPAdapter since it doesn't extend BaseHTTPAdapter\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-04-04T11:45:37.186Z\nblocker_discovered: false\n---\n\n# T03: Trimmed 3 final adapter files (~100 lines removed), all 1,061 tests pass, non-base adapter total is 1,597 lines (target ≤1,900)\n\n**Trimmed 3 final adapter files (~100 lines removed), all 1,061 tests pass, non-base adapter total is 1,597 lines (target ≤1,900)**\n\n## What Happened\n\nApplied standard docstring trim to dns_lookup.py, malwarebazaar.py, and urlhaus.py — replacing verbose module/class docstrings with one-liners and deleting all method-level docstrings. DnsAdapter got a port-53-specific one-liner since it doesn't extend BaseHTTPAdapter. All 1,061 tests pass, all 16 modules import cleanly, non-base adapter line count is 1,597 (down from ~2,659 baseline).\n\n## Verification\n\npython3 -m pytest tests/ -x -q → 1,061 passed. All 16 adapter modules importable. Non-base line count 1,597 ≤ 1,900. base.py unchanged at 161 lines.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `python3 -m pytest tests/ -x -q` | 0 | ✅ pass | 50660ms |\n| 2 | `python3 -c 'import all 16 modules'` | 0 | ✅ pass | 1000ms |\n| 3 | `find ... wc -l (non-base adapter count)` | 0 | ✅ pass (1597 ≤ 1900) | 500ms |\n| 4 | `wc -l app/enrichment/adapters/base.py` | 0 | ✅ pass (161) | 100ms |\n\n\n## Deviations\n\nDnsAdapter class docstring references port 53 instead of BaseHTTPAdapter since it doesn't extend BaseHTTPAdapter.\n\n## Known Issues\n\nSlice plan T02 verify command references tests/test_virustotal.py which doesn't exist (actual file is tests/test_vt_adapter.py).\n\n## Files Created/Modified\n\n- `app/enrichment/adapters/dns_lookup.py`\n- `app/enrichment/adapters/malwarebazaar.py`\n- `app/enrichment/adapters/urlhaus.py`\n",
       "description": "Apply the same mechanical trim to the final 3 adapter files, then run the full test suite and line-count verification to confirm the slice goal.\n\n## Steps\n\n1. For each of the 3 files, apply the standard trim pattern:\n   - **Module-level docstring**: Replace with one-liner.\n   - **Class-level docstring**: Replace with one-liner referencing BaseHTTPAdapter.\n   - **Method-level docstrings**: Delete entirely.\n2. Verify all 3 files import cleanly.\n3. Run the **full** test suite: `python3 -m pytest tests/ -x -q` — all 1,061 tests must pass.\n4. Verify all 15 non-base adapter modules are importable in one shot.\n5. Measure total line count: `find app/enrichment/adapters -name '*.py' ! -name '__init__.py' ! -name 'base.py' -exec cat {} + | wc -l` — must be ≤1,900 (down from ~2,659 baseline).\n6. Confirm `base.py` is unchanged: `wc -l app/enrichment/adapters/base.py` should be 161.\n\n## Must-Haves\n\n- [ ] All 3 files have one-liner module + class docstrings\n- [ ] All method-level docstrings deleted\n- [ ] Full test suite passes (1,061 tests, 0 failures)\n- [ ] Total non-base adapter line count ≤ 1,900\n- [ ] base.py unchanged at 161 lines",
       "estimate": "15m",
       "files": [
@@ -2610,6 +2616,50 @@
       "verdict": "✅ pass",
       "duration_ms": 87200,
       "created_at": "2026-04-04T11:40:48.205Z"
+    },
+    {
+      "id": 45,
+      "task_id": "T03",
+      "slice_id": "S01",
+      "milestone_id": "M011",
+      "command": "python3 -m pytest tests/ -x -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 50660,
+      "created_at": "2026-04-04T11:45:37.186Z"
+    },
+    {
+      "id": 46,
+      "task_id": "T03",
+      "slice_id": "S01",
+      "milestone_id": "M011",
+      "command": "python3 -c 'import all 16 modules'",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 1000,
+      "created_at": "2026-04-04T11:45:37.186Z"
+    },
+    {
+      "id": 47,
+      "task_id": "T03",
+      "slice_id": "S01",
+      "milestone_id": "M011",
+      "command": "find ... wc -l (non-base adapter count)",
+      "exit_code": 0,
+      "verdict": "✅ pass (1597 ≤ 1900)",
+      "duration_ms": 500,
+      "created_at": "2026-04-04T11:45:37.186Z"
+    },
+    {
+      "id": 48,
+      "task_id": "T03",
+      "slice_id": "S01",
+      "milestone_id": "M011",
+      "command": "wc -l app/enrichment/adapters/base.py",
+      "exit_code": 0,
+      "verdict": "✅ pass (161)",
+      "duration_ms": 100,
+      "created_at": "2026-04-04T11:45:37.186Z"
     }
   ]
 }
