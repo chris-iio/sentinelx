@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-04T05:03:59.142Z",
+  "exported_at": "2026-04-04T05:06:34.424Z",
   "milestones": [
     {
       "id": "M001",
@@ -1126,19 +1126,21 @@
       "milestone_id": "M010",
       "slice_id": "S01",
       "id": "T02",
-      "title": "Remove dead ResultDisplay export from shared-rendering.ts",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Removed unused export keyword from ResultDisplay interface in shared-rendering.ts — no consumer imports the type by name",
+      "status": "complete",
+      "one_liner": "Removed unused export keyword from ResultDisplay interface in shared-rendering.ts — no consumer imports the type by name",
+      "narrative": "The ResultDisplay interface in shared-rendering.ts was exported but never imported by name in any consumer module. Both enrichment.ts and history.ts destructure the return value of computeResultDisplay inline, so the interface type is inferred structurally. Changed 'export interface ResultDisplay {' to 'interface ResultDisplay {', keeping it as the function's local return type annotation.",
+      "verification_result": "make typecheck passes (exit 0). grep -c 'export interface ResultDisplay' returns 0. rg 'import.*ResultDisplay' finds no type-only imports — only computeResultDisplay function imports.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-04T05:06:34.411Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
+      "deviations": "None.",
+      "known_issues": "None.",
+      "key_files": [
+        "app/static/src/ts/modules/shared-rendering.ts"
+      ],
       "key_decisions": [],
-      "full_summary_md": "",
+      "full_summary_md": "---\nid: T02\nparent: S01\nmilestone: M010\nkey_files:\n  - app/static/src/ts/modules/shared-rendering.ts\nkey_decisions:\n  - (none)\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-04-04T05:06:34.411Z\nblocker_discovered: false\n---\n\n# T02: Removed unused export keyword from ResultDisplay interface in shared-rendering.ts — no consumer imports the type by name\n\n**Removed unused export keyword from ResultDisplay interface in shared-rendering.ts — no consumer imports the type by name**\n\n## What Happened\n\nThe ResultDisplay interface in shared-rendering.ts was exported but never imported by name in any consumer module. Both enrichment.ts and history.ts destructure the return value of computeResultDisplay inline, so the interface type is inferred structurally. Changed 'export interface ResultDisplay {' to 'interface ResultDisplay {', keeping it as the function's local return type annotation.\n\n## Verification\n\nmake typecheck passes (exit 0). grep -c 'export interface ResultDisplay' returns 0. rg 'import.*ResultDisplay' finds no type-only imports — only computeResultDisplay function imports.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `make typecheck` | 0 | ✅ pass | 3600ms |\n| 2 | `grep -c 'export interface ResultDisplay' app/static/src/ts/modules/shared-rendering.ts` | 1 | ✅ pass (count=0) | 50ms |\n| 3 | `rg 'import.*ResultDisplay' app/static/src/ts/` | 0 | ✅ pass (no type-only imports) | 50ms |\n\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `app/static/src/ts/modules/shared-rendering.ts`\n",
       "description": "Change `export interface ResultDisplay` to `interface ResultDisplay` in shared-rendering.ts. The interface is used as the return type of `computeResultDisplay` but never imported by name anywhere — callers destructure the return value inline.\n\n## Steps\n\n1. Read `app/static/src/ts/modules/shared-rendering.ts` line 21.\n2. Change `export interface ResultDisplay {` to `interface ResultDisplay {`.\n3. Run `make typecheck` to confirm TypeScript still compiles (the function return type annotation uses `ResultDisplay` locally, which is fine as a non-exported interface).\n4. Verify no module imports `ResultDisplay` by name: `rg 'ResultDisplay' app/static/src/ts/ --no-filename` should show only the definition and the function signature, not any import.\n\n## Must-Haves\n\n- [ ] `ResultDisplay` is no longer exported\n- [ ] `make typecheck` passes\n- [ ] No import of `ResultDisplay` by name exists in any TS file",
       "estimate": "5m",
       "files": [
@@ -2042,6 +2044,39 @@
       "verdict": "✅ pass",
       "duration_ms": 100,
       "created_at": "2026-04-04T05:03:59.124Z"
+    },
+    {
+      "id": 29,
+      "task_id": "T02",
+      "slice_id": "S01",
+      "milestone_id": "M010",
+      "command": "make typecheck",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 3600,
+      "created_at": "2026-04-04T05:06:34.411Z"
+    },
+    {
+      "id": 30,
+      "task_id": "T02",
+      "slice_id": "S01",
+      "milestone_id": "M010",
+      "command": "grep -c 'export interface ResultDisplay' app/static/src/ts/modules/shared-rendering.ts",
+      "exit_code": 1,
+      "verdict": "✅ pass (count=0)",
+      "duration_ms": 50,
+      "created_at": "2026-04-04T05:06:34.411Z"
+    },
+    {
+      "id": 31,
+      "task_id": "T02",
+      "slice_id": "S01",
+      "milestone_id": "M010",
+      "command": "rg 'import.*ResultDisplay' app/static/src/ts/",
+      "exit_code": 0,
+      "verdict": "✅ pass (no type-only imports)",
+      "duration_ms": 50,
+      "created_at": "2026-04-04T05:06:34.411Z"
     }
   ]
 }

@@ -58,7 +58,7 @@
   - Estimate: 45m
   - Files: app/routes/_helpers.py, app/routes/analysis.py, app/routes/api.py, app/routes/enrichment.py, tests/test_routes.py, tests/test_api.py
   - Verify: python3 -m pytest --tb=short -q && grep -c 'EnrichmentOrchestrator(' app/routes/analysis.py app/routes/api.py | grep -v ':0$' | wc -l | grep -q '^0$' && echo 'PASS: no inline orchestrator constructors in route files'
-- [ ] **T02: Remove dead ResultDisplay export from shared-rendering.ts** — Change `export interface ResultDisplay` to `interface ResultDisplay` in shared-rendering.ts. The interface is used as the return type of `computeResultDisplay` but never imported by name anywhere — callers destructure the return value inline.
+- [x] **T02: Removed unused export keyword from ResultDisplay interface in shared-rendering.ts — no consumer imports the type by name** — Change `export interface ResultDisplay` to `interface ResultDisplay` in shared-rendering.ts. The interface is used as the return type of `computeResultDisplay` but never imported by name anywhere — callers destructure the return value inline.
 
 ## Steps
 

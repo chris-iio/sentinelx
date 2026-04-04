@@ -18,7 +18,7 @@ import { exportJSON, exportCSV, copyAllIOCs } from "./export";
 // ---- Types ----
 
 /** Return shape of computeResultDisplay — verdict + display strings. */
-export interface ResultDisplay {
+interface ResultDisplay {
   verdict: VerdictKey;
   statText: string;
   summaryText: string;
