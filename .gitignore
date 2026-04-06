@@ -90,3 +90,14 @@ tmp/
 
 # ── GSD baseline (auto-generated) ──
 .gsd-id
+
+# ── GSD runtime (not source) ──
+.gsd/journal/
+.gsd/activity/
+.gsd/runtime/
+.gsd/worktrees/
+.gsd/gsd.db-shm
+.gsd/gsd.db-wal
+.gsd/doctor-history.jsonl
+.gsd/browser-state/
+.gsd/browser-baselines/
