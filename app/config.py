@@ -30,25 +30,19 @@ class Config:
     SESSION_COOKIE_SAMESITE: str = "Lax"
 
     # SSRF prevention: allowlist of permitted outbound API hostnames (SEC-16)
-    # Phase 2: VirusTotal; Phase 3: MalwareBazaar and ThreatFox (abuse.ch) added.
-    # Phase 25: Shodan InternetDB (zero-auth)
-    # v6.0 Phase 01-01: ipinfo.io GeoIP (zero-auth, HTTPS)
-    # v6.0 Phase 01-01: CIRCL Hashlookup NSRL (zero-auth)
-    # v6.0 Phase 02-03: crt.sh Certificate Transparency (zero-auth)
-    # v6.0 Phase 03-01: ThreatMiner passive DNS (zero-auth)
     ALLOWED_API_HOSTS: list[str] = [
-        "www.virustotal.com",
-        "mb-api.abuse.ch",
-        "threatfox-api.abuse.ch",
-        "internetdb.shodan.io",    # Phase 25: Shodan InternetDB (zero-auth)
-        "urlhaus-api.abuse.ch",    # Phase 03-01: URLhaus (free-key)
-        "otx.alienvault.com",      # Phase 03-01: OTX AlienVault (free-key)
-        "api.greynoise.io",        # Phase 03-02: GreyNoise Community (free-key)
-        "api.abuseipdb.com",       # Phase 03-02: AbuseIPDB (free-key)
-        "ipinfo.io",               # v6.0 Phase 01-01: ipinfo.io GeoIP (zero-auth, HTTPS)
-        "hashlookup.circl.lu",     # v6.0 Phase 01-01: CIRCL Hashlookup NSRL (zero-auth)
-        "crt.sh",                  # v6.0 Phase 02-03: crt.sh Certificate Transparency (zero-auth)
-        "api.threatminer.org",     # v6.0 Phase 03-01: ThreatMiner passive DNS (zero-auth)
+        "www.virustotal.com",        # VirusTotal (key-required)
+        "mb-api.abuse.ch",           # MalwareBazaar (key-required)
+        "threatfox-api.abuse.ch",    # ThreatFox (key-required)
+        "urlhaus-api.abuse.ch",      # URLhaus (key-required)
+        "otx.alienvault.com",        # OTX AlienVault (key-required)
+        "api.greynoise.io",          # GreyNoise (key-required)
+        "api.abuseipdb.com",         # AbuseIPDB (key-required)
+        "internetdb.shodan.io",      # Shodan InternetDB (zero-auth)
+        "ipinfo.io",                 # ipinfo.io GeoIP (zero-auth)
+        "hashlookup.circl.lu",       # CIRCL Hashlookup (zero-auth)
+        "crt.sh",                    # Certificate Transparency (zero-auth)
+        "api.threatminer.org",       # ThreatMiner (zero-auth)
     ]
 
     def validate(self) -> None:

@@ -258,7 +258,7 @@ def test_analyze_online_creates_all_three_adapters(client):
     """Online mode uses current_app.registry and passes registry.configured() to the orchestrator."""
     with (
         patch("app.routes._helpers.EnrichmentOrchestrator") as MockOrchestrator,
-        patch("app.routes._helpers._enrichment_pool") as mock_pool,
+        patch("app.routes._helpers._enrichment_pool"),
     ):
         mock_provider_vt = MagicMock(name="VTProvider")
         mock_provider_mb = MagicMock(name="MBProvider")
@@ -289,7 +289,7 @@ def test_enrichable_count_multi_provider(client):
 
     with (
         patch("app.routes._helpers.EnrichmentOrchestrator") as MockOrchestrator,
-        patch("app.routes._helpers._enrichment_pool") as mock_pool,
+        patch("app.routes._helpers._enrichment_pool"),
     ):
         mock_registry = MagicMock()
         mock_registry.configured.return_value = [MagicMock(), MagicMock(), MagicMock()]
@@ -313,7 +313,7 @@ def test_enrichable_count_domain_two_providers(client):
     """Domain IOC yields enrichable_count=2 (VT + TF support domains, MB does not)."""
     with (
         patch("app.routes._helpers.EnrichmentOrchestrator") as MockOrchestrator,
-        patch("app.routes._helpers._enrichment_pool") as mock_pool,
+        patch("app.routes._helpers._enrichment_pool"),
     ):
         mock_registry = MagicMock()
         mock_registry.configured.return_value = [MagicMock(), MagicMock()]

@@ -1,5 +1,5 @@
 """Enrichment package.
 
-Provides VirusTotal API v3 adapter, enrichment result models, and API key
-config store for Phase 2 IOC enrichment pipeline.
+Provides 15 threat intelligence adapters, enrichment models, orchestration,
+cache integration, provider registry, and API key config store.
 """

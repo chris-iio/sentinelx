@@ -5,13 +5,11 @@ chain, pre_raise_hook short-circuit and pass-through, and stream/redirect flags.
 """
 from __future__ import annotations
 
-import json
 from unittest.mock import MagicMock
 
-import pytest
 import requests
 
-from app.enrichment.http_safety import safe_request, validate_endpoint, read_limited
+from app.enrichment.http_safety import safe_request
 from app.enrichment.models import EnrichmentError, EnrichmentResult
 from tests.helpers import make_mock_response, make_ipv4_ioc
 

@@ -17,7 +17,7 @@ from unittest.mock import MagicMock, patch
 import dns.exception
 import dns.resolver
 
-from app.enrichment.models import EnrichmentError, EnrichmentResult
+from app.enrichment.models import EnrichmentResult
 from app.pipeline.models import IOC, IOCType
 
 

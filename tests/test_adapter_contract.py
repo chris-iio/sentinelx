@@ -40,7 +40,6 @@ from tests.helpers import (
     make_domain_ioc,
     make_ipv4_ioc,
     make_md5_ioc,
-    make_sha256_ioc,
     make_url_ioc,
     mock_adapter_session,
 )

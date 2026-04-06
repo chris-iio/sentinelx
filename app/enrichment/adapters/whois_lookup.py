@@ -34,7 +34,10 @@ def _normalise_datetime(value: datetime | list[datetime] | str | None) -> str | 
 
 
 class WhoisAdapter:
-    """WHOIS domain registration data — port 43, not HTTP. See _normalise_datetime for date handling."""
+    """WHOIS domain registration data — port 43, not HTTP.
+
+    See _normalise_datetime for date polymorphism handling.
+    """
 
     name = "WHOIS"
     supported_types: frozenset[IOCType] = frozenset({IOCType.DOMAIN})

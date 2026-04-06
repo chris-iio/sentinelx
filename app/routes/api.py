@@ -17,7 +17,6 @@ from app.pipeline.models import IOCType, group_by_type
 from ._helpers import (
     _get_enrichment_status,
     _serialize_ioc,
-    _serialize_result,
     _setup_orchestrator,
 )
 
@@ -82,7 +81,10 @@ def api_analyze():
 
         if not registry.configured():
             return jsonify({
-                "error": "No provider API keys configured. Configure at least one provider in /settings.",
+                "error": (
+                    "No provider API keys configured. "
+                    "Configure at least one provider in /settings."
+                ),
             }), 400
 
         job_id, _, registry = _setup_orchestrator(

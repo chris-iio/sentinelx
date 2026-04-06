@@ -12,7 +12,7 @@ All HTTP calls are mocked using unittest.mock.patch -- no real API calls.
 """
 from __future__ import annotations
 
-from app.enrichment.models import EnrichmentError, EnrichmentResult
+from app.enrichment.models import EnrichmentResult
 from app.enrichment.adapters.greynoise import GreyNoiseAdapter
 from tests.helpers import (
     make_mock_response,

@@ -8,7 +8,6 @@ Tests cover:
 - GET / works with no history (empty list)
 - History results are embedded as data-history-results attribute
 """
-import json
 from unittest.mock import MagicMock
 
 import pytest

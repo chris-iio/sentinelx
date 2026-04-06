@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 
 from app.enrichment.adapters.base import BaseHTTPAdapter
-from app.enrichment.models import EnrichmentError, EnrichmentResult
+from app.enrichment.models import EnrichmentResult
 from app.pipeline.models import IOC, IOCType
 
 logger = logging.getLogger(__name__)

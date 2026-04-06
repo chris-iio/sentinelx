@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import base64
 
-import requests
 
 from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.enrichment.adapters.virustotal import VTAdapter
