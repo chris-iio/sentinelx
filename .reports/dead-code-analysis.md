@@ -1,137 +1,96 @@
 # Dead Code Analysis Report
 
 **Project:** SentinelX
-**Date:** 2026-03-14
-**Tools Used:** custom AST analysis, TS export cross-reference, template/route cross-reference, CSS class scan
-**Test Baseline:** 758 tests (757 passing, 1 pre-existing failure in test_analyze_deduplicates)
+**Date:** 2026-04-10
+**Scope:** Runtime code only (`app/`, `app/templates/`, `app/static/src/ts/`, runtime-served assets)
+**Tools Used:** `rg` cross-reference scans, Python AST symbol scan, template/route/static reference checks
 
 ---
 
 ## Summary
 
-| Category | Items Found | Severity |
-|----------|-------------|----------|
-| Python dead code (vulture) | 0 | Clean |
-| TypeScript unused exports | 0 | Clean |
-| Unused Python imports | 0 | Clean |
-| Unused Python packages | 0 | Clean |
-| Unused template partials | 0 | Clean |
-| Test-only method (no prod callers) | 1 | SAFE (kept) |
+| Category | Result | Status |
+|----------|--------|--------|
+| TypeScript exports | 0 actionable unused exports | Clean |
+| Python runtime symbols | 0 actionable dead functions/classes | Clean |
+| Runtime templates/partials | 0 orphaned templates | Clean |
+| Runtime static assets | 0 unreferenced served assets | Clean |
+| Report staleness | 1 stale historical claim removed | Fixed |
 
-**Verdict: Codebase is clean.** All actionable dead code has been removed.
-
----
-
-## SAFE: Kept Without Change
-
-### `all_provider_keys()` -- Test-Only Method
-
-**File:** `app/enrichment/config_store.py:128`
-**Confidence:** SAFE
-
-Method is defined but never called in production code. Only consumed by 3 tests in `tests/test_config_store.py`. Kept as a useful public API for the ConfigStore class.
-
-### `Config.validate()` -- Intentional No-Op Hook
-
-**File:** `app/config.py:50`
-**Confidence:** SAFE
-
-Empty method with docstring explaining it's a deliberate no-op. The VT API key is configured via Settings page, not at startup. Kept as a validation hook for future use.
-
-### `requires_api_key` -- Protocol Attribute
-
-**File:** `app/enrichment/provider.py:38` + all 8 adapters
-**Confidence:** SAFE
-
-Part of the `Provider` protocol, never read in application code (only in tests). Kept for protocol completeness; `PROVIDER_INFO` in `setup.py` serves the UI role.
-
-### `.alert-warning` CSS -- Defensive Definition
-
-**File:** `app/static/src/input.css:309`
-**Confidence:** CAREFUL
-
-No `flash("...", "warning")` exists today, but the class completes the alert triad and costs ~4 lines. Kept as forward-looking defensive CSS.
+**Verdict:** no actionable dead runtime code found in the current codebase.
 
 ---
 
-## False Positives Investigated (NOT Dead Code)
+## Findings
 
-### TypeScript Exports -- All Active
+### 1. Previous report was stale
 
-All TypeScript exports are actively consumed via import chain from `main.ts`:
+The prior version of this report referenced `annotations.ts` as an active TypeScript export source. That file is no longer present in the repository, so the historical report was not a reliable current source of truth.
 
-| Export | File | Consumer |
-|--------|------|----------|
-| `init()` | All 8 modules | main.ts |
-| `findCardForIoc()` | cards.ts | enrichment.ts |
-| `updateCardVerdict()` | cards.ts | enrichment.ts |
-| `updateDashboardCounts()` | cards.ts | enrichment.ts |
-| `sortCardsBySeverity()` | cards.ts | enrichment.ts |
-| `writeToClipboard()` | clipboard.ts | export.ts |
-| `attr()` | dom.ts | 5 modules |
-| `verdictSeverityIndex()` | ioc.ts | cards.ts, enrichment.ts |
-| `VERDICT_LABELS` | ioc.ts | cards.ts, enrichment.ts |
-| `getProviderCounts()` | ioc.ts | enrichment.ts |
-| `VerdictKey` | ioc.ts | cards.ts, enrichment.ts, api.ts |
-| `EnrichmentResultItem` | api.ts | enrichment.ts |
-| `EnrichmentItem` | api.ts | enrichment.ts, export.ts |
-| `EnrichmentStatus` | api.ts | enrichment.ts |
-| `exportJSON()` | export.ts | enrichment.ts |
-| `exportCSV()` | export.ts | enrichment.ts |
-| `copyAllIOCs()` | export.ts | enrichment.ts |
-| `init()` | annotations.ts | main.ts |
-
-### Python Adapter Pattern -- Intentional Duplication
-
-8 adapters each implement `_parse_response()` -- intentional per-provider design since each API returns different response schemas.
-
-### Flask Route Handlers
-
-All Python functions flagged by AST analysis are Flask route handlers, error handlers, `__init__` constructors, or factory functions invoked by the framework.
+**Action taken:** this report now reflects the current runtime surface only.
 
 ---
 
-## Dependency Analysis -- All Used
+## Verified Live Runtime Surface
 
-| Package | Import Count | Status |
-|---------|-------------|--------|
-| Flask 3.1.1 | 5 | Used |
-| Flask-Limiter 4.1.1 | 2 | Used |
-| Flask-WTF 1.2.2 | 1 | Used |
-| iocextract 1.16.1 | 1 | Used |
-| iocsearcher 2.7.2 | 1 | Used |
-| python-dotenv 1.1.0 | 1 | Used |
-| requests 2.32.5 | 7 | Used |
+### TypeScript entrypoint and import chain are active
+
+- [`app/static/src/ts/main.ts`](../app/static/src/ts/main.ts) imports and initializes the frontend modules.
+- Cross-reference scan of all exported TS symbols in `app/static/src/ts/**/*.ts` found no unreferenced runtime exports.
+- Type-only exports in [`app/static/src/ts/types/api.ts`](../app/static/src/ts/types/api.ts) and [`app/static/src/ts/types/ioc.ts`](../app/static/src/ts/types/ioc.ts) are consumed by runtime modules and tests.
+
+### Flask routes are framework entrypoints, not dead code
+
+Naive symbol scans reported these functions as unreferenced:
+
+- [`app/routes/api.py:30`](../app/routes/api.py#L30) `api_analyze`
+- [`app/routes/api.py:102`](../app/routes/api.py#L102) `api_status`
+
+These are live because they are registered via `@bp_api.route(...)` on the API blueprint, which is imported by [`app/routes/__init__.py`](../app/routes/__init__.py) and registered in [`app/__init__.py`](../app/__init__.py).
+
+### Templates and served assets are referenced
+
+- [`app/templates/base.html`](../app/templates/base.html) serves:
+  - `static/dist/style.css`
+  - `static/dist/main.js`
+  - `static/images/logo.svg`
+  - both font files in `app/static/fonts/`
+- Route handlers render the current template set through `render_template(...)`.
+- Partial includes under `app/templates/partials/` are referenced from `results.html` and `_ioc_card.html`.
 
 ---
 
-## Previously Resolved
+## Safe To Keep
 
-| Finding | Status |
-|---------|--------|
-| 7 unused `import pytest` in test files | Fixed |
-| Unused `IOCType` import in test_routes.py | Fixed |
-| Unused `csrf_app` variable in test_routes.py | Fixed |
-| `TestConfig` class in config.py | Removed |
-| `.btn-ghost` CSS class | Removed |
-| Stale STATE.md backups | Cleaned |
-| `everything-claude-code/` dir | Gitignored |
-| Phase 18 artifacts | Archived |
-| `pycryptodome` unused package | Uninstalled |
-| Missing `.alert-success`/`.alert-warning` CSS | Added |
-| Ruff config deprecation | Fixed |
-| `verdictSeverityIndex()` duplicate | Extracted to types/ioc.ts |
-| `Config.DEBUG` attribute (never read) | Removed (2026-03-11) |
-| `writeToClipboard` unused import in enrichment.ts | Removed (2026-03-11) |
-| `VERDICT_SEVERITY` unnecessary export | Made private (2026-03-11) |
-| `analyze_url` unused E2E fixture | Removed (2026-03-11) |
-| Unused imports: `json`, `time` (test_cache_store) | Removed (2026-03-11) |
-| Unused imports: `call`, `pytest` (test_registry_setup) | Removed (2026-03-11) |
-| `OTX_BASE` unused constant (test_otx) | Removed (2026-03-11) |
-| 8 unused ResultsPage POM methods | Removed (2026-03-11) |
-| 3 unused SettingsPage POM methods/attrs | Removed (2026-03-11) |
-| `test_save_api_key` duplicate test | Removed (2026-03-11) |
-| MEMORY.md stale `bulk.py` reference | Updated (2026-03-11) |
-| Unused `import pytest` in test_ioc_detail_routes.py | Removed (2026-03-14) |
-| Unused `import pytest` in test_provider_protocol.py | Removed (2026-03-14) |
-| Unused `routes_module` alias in test_ioc_detail_routes.py | Cleaned up (2026-03-14) |
+### `Config.validate()` is live
+
+- Definition: [`app/config.py:48`](../app/config.py#L48)
+- Runtime use: [`app/__init__.py:73`](../app/__init__.py#L73)
+
+This is not dead code. It remains a startup validation hook invoked by the app factory.
+
+### `requires_api_key` is live production behavior
+
+- Protocol declaration: [`app/enrichment/provider.py:38`](../app/enrichment/provider.py#L38)
+- Runtime read: [`app/enrichment/orchestrator.py:97`](../app/enrichment/orchestrator.py#L97)
+
+This attribute is used in production to decide which adapters receive semaphore-based concurrency limits.
+
+### `all_provider_keys()` is test-only but intentional
+
+- Definition: [`app/enrichment/config_store.py:138`](../app/enrichment/config_store.py#L138)
+- Test use: [`tests/test_config_store.py:110`](../tests/test_config_store.py#L110)
+
+This is still not called by production code, but it is an intentional test-facing API and not dead runtime code under the selected audit scope.
+
+---
+
+## Reproduction Notes
+
+The conclusions above were based on:
+
+- TS export cross-reference scan across `app/static/src/ts` and `tests`
+- Python AST scan for top-level functions/classes under `app/`, followed by repo-wide reference checks
+- Template reachability scan for `render_template(...)`, `{% include %}`, `{% extends %}`, and `url_for('static', ...)`
+
+If this report is refreshed later, Flask-decorated route handlers should continue to be treated as live entrypoints rather than dead symbols.
