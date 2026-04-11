@@ -58,7 +58,7 @@ Plans:
 
 </details>
 
-### 🚧 v1.2 SSH Login Anomaly Detection (In Progress)
+### v1.2 SSH Login Anomaly Detection (In Progress)
 
 **Milestone Goal:** Upload an SSH auth.log file and receive clear, deduplicated anomaly alerts for suspicious login behavior — new IPs, new countries, impossible travel, and unusual hours — with per-alert enrichment links into the existing SentinelX detail pages.
 
@@ -73,8 +73,12 @@ Plans:
   2. The parser correctly handles BSD syslog timestamps (including December→January year rollover) and RFC3339 timestamps on the same file, line by line
   3. The parser extracts both IPv4 and IPv6 source addresses; hostname entries (when UseDNS is on) are retained in the event with a flag indicating GeoIP should be skipped
   4. File uploads up to 5 MB are accepted — a 30-day real auth.log no longer triggers a 413 error
-  5. The `[ssh]` section is recognized in `~/.sentinelx/config.ini` and the normal hours window can be read from it with a default of 06:00–22:00 when absent
-**Plans**: TBD
+  5. The `[ssh]` section is recognized in `~/.sentinelx/config.ini` and the normal hours window can be read from it with a default of 06:00-22:00 when absent
+**Plans**: 3 plans
+Plans:
+- [ ] 06-01-PLAN.md — SSH package skeleton with LoginEvent and ParseSummary frozen dataclasses
+- [ ] 06-02-PLAN.md — ConfigStore SSH normal-hours extension and MAX_CONTENT_LENGTH increase to 5 MB
+- [ ] 06-03-PLAN.md — SSH auth.log parser with dual-format timestamp support and TDD
 **UI hint**: no
 
 ### Phase 7: GeoIP Wrapper
@@ -95,7 +99,7 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. A login from an IP address not previously seen for that user in the log produces a LOW risk alert; a login from a previously-seen IP produces no new-IP alert
   2. A login from a country not previously seen for that user produces a MEDIUM risk alert; country rules are silently skipped when `geo_map` has no entry for the IP
-  3. A login outside the configured normal hours window (default 06:00–22:00) produces a MEDIUM risk alert with the actual login time in the reason text
+  3. A login outside the configured normal hours window (default 06:00-22:00) produces a MEDIUM risk alert with the actual login time in the reason text
   4. Two logins for the same user from different countries with less than 3 hours elapsed produce a HIGH risk impossible-travel alert with the distance and elapsed time in the reason text
   5. A log file with 8,000 lines from one IP for one rule produces exactly one alert — deduplication by `(username, source_ip, rule_type)` is applied before any alert is returned
   6. Each returned alert contains username, timestamp, IP address, country (or "unknown"), a human-readable reason string, and a risk level of low, medium, or high
@@ -125,7 +129,7 @@ Plans:
 | 3. Visual Redesign | v1.1 | 0/0 | Dropped | - |
 | 4. Template Restructuring | v1.1 | 0/0 | Dropped | - |
 | 5. Context and Staleness | v1.1 | 0/0 | Dropped | - |
-| 6. Models, Parser, and Foundation | v1.2 | 0/TBD | Not started | - |
+| 6. Models, Parser, and Foundation | v1.2 | 0/3 | Not started | - |
 | 7. GeoIP Wrapper | v1.2 | 0/TBD | Not started | - |
 | 8. Anomaly Detector | v1.2 | 0/TBD | Not started | - |
 | 9. Routes, Templates, and TypeScript | v1.2 | 0/TBD | Not started | - |
