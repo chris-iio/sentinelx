@@ -1,69 +1,68 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.2
-milestone_name: SSH Login Anomaly Detection
+milestone: v1.1
+milestone_name: Results Page Redesign
 status: planning
-stopped_at: Phase 6 context gathered
-last_updated: "2026-04-11T21:58:44.311Z"
-last_activity: 2026-04-12 — Roadmap created; Phase 6 is next
+stopped_at: Phase 3 UI-SPEC approved
+last_updated: "2026-03-17T00:48:25.400Z"
+last_activity: 2026-03-17 — Phase 2 Plan 1 complete, enrichment.ts monolith split into 3 modules
 progress:
-  total_phases: 4
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  total_phases: 5
+  completed_phases: 2
+  total_plans: 2
+  completed_plans: 2
+  percent: 40
 ---
 
 # Session State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-12)
+See: .planning/PROJECT.md (updated 2026-03-16)
 
 **Core value:** Safe, correct, and transparent IOC extraction and enrichment
-**Current focus:** v1.2 SSH Login Anomaly Detection — Phase 6 ready to plan
+**Current focus:** v1.1 Results Page Redesign — Phase 2: TypeScript Module Extractions
 
 ## Current Position
 
-Phase: 6 of 9 (Models, Parser, and Foundation)
-Plan: 0 of TBD in current phase
-Status: Ready to plan
-Last activity: 2026-04-12 — Roadmap created; Phase 6 is next
+**Milestone:** v1.1 Results Page Redesign
+**Phase:** 2 of 5 (TypeScript Module Extractions)
+**Status:** Ready to plan
+**Last activity:** 2026-03-17 — Phase 2 Plan 1 complete, enrichment.ts monolith split into 3 modules
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [████░░░░░░] 40%
 
 ## Performance Metrics
 
 **Velocity:**
-
-- Total plans completed: 0
-- Average duration: —
-- Total execution time: —
-
-*Updated after each plan completion*
+- Total plans completed: 2
+- Average duration: 8min
+- Total execution time: ~16min (Phase 1 + Phase 2)
 
 ## Accumulated Context
 
 ### Decisions
 
 - [v1.0]: Version reset — all previous milestones collapsed into v1.0 Foundation
-- [v1.1 partial]: Phases 1-2 complete (CSS contracts, TS extraction); Phases 3-5 dropped
-- [v1.2]: GeoIP provider is ipinfo.io — NOT ip-api.com (ip-api.com HTTPS returns 403; ipinfo.io already in ALLOWED_API_HOSTS)
-- [v1.2]: Detector receives `geo_map` as parameter — never makes HTTP calls (testable in isolation)
-- [v1.2]: Alert deduplication by `(username, source_ip, rule_type)` is mandatory from Phase 8 day one
-- [v1.2]: BSD syslog year rollover must be handled in Phase 6 parser before any detection logic
+- [v1.0]: Annotations removed, ASN Intelligence added as 14th provider
+- [v1.1 roadmap]: Phase ordering is non-negotiable — contracts before code, extractions before visual, CSS before HTML
+- [v1.1 roadmap]: 91 E2E tests with 20+ hard-coded CSS selectors are the primary risk; test gate after every phase
+- [Phase 01-contracts-and-foundation]: E2E baseline is 89/91 — 2 pre-existing title capitalization failures confirmed before Phase 1 changes; out of scope
+- [Phase 01-contracts-and-foundation]: CSS-CONTRACTS.md catalogues 24 E2E-locked selectors, 18 JS-created runtime classes, and 3 data-attribute triple-consumer contracts as the Phase 1 deliverable
+- [Phase 02-typescript-module-extractions]: formatDate exported from row-factory.ts (not private) because renderEnrichmentResult needs it for scan_date formatting
+- [Phase 02-typescript-module-extractions]: createProviderRow thin dispatcher added to row-factory.ts as stable API for Phase 3 visual work
+- [Phase 02-typescript-module-extractions]: One-directional dependency graph: enrichment.ts -> verdict-compute.ts, enrichment.ts -> row-factory.ts, row-factory.ts -> verdict-compute.ts (no reverse)
 
 ### Blockers/Concerns
 
-- [v1.2 research]: PITFALLS.md contains residual ip-api.com references — treat as stale; ipinfo.io is authoritative
-- [v1.2 research]: Impossible travel timezone: BSD timestamps are server local time; haversine uses elapsed local time only — document limitation in UI
+- Phase 5 (Context and Staleness): context providers may arrive after initial summary row render — confirm enrichment polling handles partial results for the new inline slot during Phase 5 planning
 
 ### Pending Todos
 
-None.
+1 pending todo from previous work.
 
 ## Session Continuity
 
-Last session: 2026-04-11T21:58:44.309Z
-Stopped at: Phase 6 context gathered
-Resume file: .planning/phases/06-models-parser-and-foundation/06-CONTEXT.md
+Last session: 2026-03-17T00:48:25.395Z
+Stopped at: Phase 3 UI-SPEC approved
+Resume file: .planning/phases/03-visual-redesign/03-UI-SPEC.md

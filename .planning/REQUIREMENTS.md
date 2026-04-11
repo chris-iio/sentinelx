@@ -1,68 +1,40 @@
 # Requirements: SentinelX
 
-**Defined:** 2026-04-12
+**Defined:** 2026-03-16
 **Core Value:** Safe, correct, and transparent IOC extraction and enrichment
 
-## v1.2 Requirements
+## v1.1 Requirements
 
-Requirements for SSH Login Anomaly Detection. Each maps to roadmap phases.
+Requirements for the Results Page Redesign. Each maps to roadmap phases.
 
-### Parsing
+### Visual Hierarchy
 
-- [ ] **PARSE-01**: Parser extracts structured login events from auth.log lines containing "Accepted password" or "Accepted publickey" — each event has username, source IP, and timestamp
-- [ ] **PARSE-02**: Parser detects BSD syslog and RFC3339 timestamp formats per-line and handles year rollover for BSD timestamps (December→January boundary)
-- [ ] **PARSE-03**: Parser supports both IPv4 and IPv6 source addresses
-- [ ] **PARSE-04**: Parser handles hostname entries when sshd UseDNS is enabled — skip GeoIP for non-IP values
+- [ ] **VIS-01**: Worst verdict is the dominant visual element in each IOC card header
+- [ ] **VIS-02**: Verdict breakdown shows visual count bar of malicious/suspicious/clean/no-data providers (replaces text consensus badge)
+- [ ] **VIS-03**: Provider rows display distinct category labels distinguishing Reputation from Infrastructure
 
-### Detection
+### Information Grouping
 
-- [ ] **DETECT-01**: Detector flags login from an IP never seen before for that user (low risk)
-- [ ] **DETECT-02**: Detector flags login from a country never seen before for that user (medium risk)
-- [ ] **DETECT-03**: Detector flags login outside configurable hour window (default 6am–10pm) as unusual hour (medium risk)
-- [ ] **DETECT-04**: Detector flags impossible travel — different country with less than 3 hours elapsed since last login from a different country (high risk)
-- [ ] **DETECT-05**: Detector deduplicates alerts — one alert per (user, IP, rule_type) combination, not per log line
-- [ ] **DETECT-06**: Each alert includes username, timestamp, IP address, country, human-readable reason, and risk level (low/medium/high)
+- [ ] **GRP-01**: Provider results are grouped into three sections: Reputation, Infrastructure Context, and No Data
+- [ ] **GRP-02**: No-data providers are collapsed by default with a count summary ("5 had no record")
 
-### GeoIP
+### Context Visibility
 
-- [ ] **GEO-01**: GeoIP lookup maps IP addresses to country codes via ipinfo.io using existing http_safety infrastructure
-- [ ] **GEO-02**: GeoIP deduplicates IPs before lookup — one request per unique IP, not per log line
-- [ ] **GEO-03**: GeoIP degrades gracefully if ipinfo.io is unavailable — skip country-based rules (DETECT-02, DETECT-04), still run IP and hour rules
-- [ ] **GEO-04**: GeoIP returns latitude/longitude for impossible travel distance calculation
-
-### Web Interface
-
-- [ ] **WEB-01**: GET /ssh route shows an upload form for auth.log files with file size guidance
-- [ ] **WEB-02**: POST /ssh/upload accepts file upload, parses it, runs detection, and displays flagged alerts in a table
-- [ ] **WEB-03**: GET /ssh/events returns all flagged alerts as JSON
-- [ ] **WEB-04**: SSH section appears as a navigation item in existing SentinelX UI shell (shared base.html)
-- [ ] **WEB-05**: Alerts table shows username, timestamp, IP, country, reason, and risk level with risk-appropriate visual styling
-- [ ] **WEB-06**: MAX_CONTENT_LENGTH increased from 512KB to 5MB to accommodate auth.log file uploads
-
-### Configuration
-
-- [ ] **CFG-01**: Normal hours window is configurable via ConfigStore [ssh] section (default 6am–10pm)
-
-## Previous Milestone Requirements (v1.1 — partial)
-
-v1.1 Phases 1-2 completed; Phases 3-5 dropped. Completed work retained as infrastructure.
-
-### Completed (v1.1 Phases 1-2)
-
-- ✓ **CSS-CONTRACTS**: CSS contract catalog documenting all E2E-locked selectors — Phase 1
-- ✓ **TS-EXTRACT**: enrichment.ts split into verdict-compute.ts, row-factory.ts, enrichment.ts — Phase 2
-
-### Deferred (v1.1 Phases 3-5)
-
-- **VIS-01**: Worst verdict as dominant visual element — deferred
-- **VIS-02**: Visual count bar replacing text consensus badge — deferred
-- **VIS-03**: Category labels on provider rows — deferred
-- **GRP-01**: Three-section grouping (Reputation, Infrastructure, No Data) — deferred
-- **GRP-02**: No-data collapse with count summary — deferred
-- **CTX-01**: Context fields in card header — deferred
-- **CTX-02**: Staleness indicator — deferred
+- [ ] **CTX-01**: Key context fields (GeoIP country, ASN org for IPs; registrar for domains) are visible in IOC card header without expanding
+- [ ] **CTX-02**: Cached results show a staleness indicator ("data from 4h ago") in the summary row
 
 ## Future Requirements
+
+Deferred to future release. Tracked but not in current roadmap.
+
+### Context Visibility
+
+- **CTX-03**: Scan date from verdict providers shown on summary row
+- **CTX-04**: Per-category expand/collapse toggle (collapse Infrastructure for clean IOCs)
+
+### Results Organization
+
+- **ORG-01**: IOC card sort by IOC type as alternative to severity sort (for mixed bulk input)
 
 ### DNSBL Reputation (from v7.0)
 
@@ -70,22 +42,17 @@ v1.1 Phases 1-2 completed; Phases 3-5 dropped. Completed work retained as infras
 - **DNSBL-02**: Domain reputation via Spamhaus DBL + SURBL
 - **DNSBL-03**: IPv6 DNSBL with nibble reversal
 
-### Results Organization
-
-- **ORG-01**: IOC card sort by IOC type as alternative to severity sort
-
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| Other log types (Apache, nginx, syslog) | SSH auth.log only for v1.2 — focused scope |
-| ML/AI anomaly models | Simple rule-based detection per spec — explainable over complex |
-| Real-time log streaming/tailing | Upload-based batch analysis only |
-| Generic SIEM platform | SSH detection is a focused addition, not a platform pivot |
-| Failed login / brute-force detection | v1.2 scope is successful login anomalies only |
-| Persistent history across uploads | In-memory per-upload only; no cross-session learning |
-| GeoLite2 local database | ipinfo.io reuse avoids download requirement |
-| Composite threat score | Core design philosophy: transparency over convenience |
+| Composite threat score | Core design philosophy: never invent scores — transparency over convenience |
+| Provider logos in rows | Page weight (14 logos x N IOCs), licensing, textContent-only DOM constraint |
+| Auto-expand all IOC cards | 10 IOCs x 14 providers = 140 rows — catastrophic for scan time |
+| Tabs replacing accordion | Complex per-card tab state; breaks at-a-glance comparison across IOCs |
+| Analyst verdict overrides | Annotations removed in v7.0; couples triage to case management |
+| New providers | v1.1 is presentation-only — no new data sources |
+| Detail page redesign | Architecturally independent (CSS-only tabs); defer to v1.2 if needed |
 
 ## Traceability
 
@@ -93,33 +60,19 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PARSE-01 | Phase 6 | Pending |
-| PARSE-02 | Phase 6 | Pending |
-| PARSE-03 | Phase 6 | Pending |
-| PARSE-04 | Phase 6 | Pending |
-| WEB-06 | Phase 6 | Pending |
-| CFG-01 | Phase 6 | Pending |
-| GEO-01 | Phase 7 | Pending |
-| GEO-02 | Phase 7 | Pending |
-| GEO-03 | Phase 7 | Pending |
-| GEO-04 | Phase 7 | Pending |
-| DETECT-01 | Phase 8 | Pending |
-| DETECT-02 | Phase 8 | Pending |
-| DETECT-03 | Phase 8 | Pending |
-| DETECT-04 | Phase 8 | Pending |
-| DETECT-05 | Phase 8 | Pending |
-| DETECT-06 | Phase 8 | Pending |
-| WEB-01 | Phase 9 | Pending |
-| WEB-02 | Phase 9 | Pending |
-| WEB-03 | Phase 9 | Pending |
-| WEB-04 | Phase 9 | Pending |
-| WEB-05 | Phase 9 | Pending |
+| VIS-01 | Phase 3 | Pending |
+| VIS-02 | Phase 3 | Pending |
+| VIS-03 | Phase 3 | Pending |
+| GRP-01 | Phase 4 | Pending |
+| GRP-02 | Phase 3 | Pending |
+| CTX-01 | Phase 5 | Pending |
+| CTX-02 | Phase 5 | Pending |
 
 **Coverage:**
-- v1.2 requirements: 17 total
-- Mapped to phases: 17
-- Unmapped: 0 ✓
+- v1.1 requirements: 7 total
+- Mapped to phases: 7
+- Unmapped: 0
 
 ---
-*Requirements defined: 2026-04-12*
-*Last updated: 2026-04-12 — traceability populated after roadmap creation*
+*Requirements defined: 2026-03-16*
+*Last updated: 2026-03-16 — traceability populated after roadmap creation*

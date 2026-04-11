@@ -27,6 +27,9 @@ _PROVIDERS_SECTION = "providers"
 _CACHE_SECTION = "cache"
 _CACHE_TTL_KEY = "ttl_hours"
 _CACHE_TTL_DEFAULT = 24
+_SSH_SECTION = "ssh"
+_SSH_NORMAL_HOURS_KEY = "normal_hours"
+_SSH_NORMAL_HOURS_DEFAULT = "06:00-22:00"
 
 
 class ConfigStore:
@@ -149,3 +152,23 @@ class ConfigStore:
         if _PROVIDERS_SECTION not in cfg:
             return {}
         return dict(cfg[_PROVIDERS_SECTION])
+
+    def get_ssh_normal_hours(self) -> str:
+        """Read the normal hours window from [ssh] config section.
+
+        Returns:
+            String in "HH:MM-HH:MM" format. Returns "06:00-22:00" if the
+            [ssh] section or normal_hours key is absent (D-09 default).
+        """
+        value = self._read_config().get(
+            _SSH_SECTION, _SSH_NORMAL_HOURS_KEY, fallback=_SSH_NORMAL_HOURS_DEFAULT
+        )
+        return value or _SSH_NORMAL_HOURS_DEFAULT
+
+    def set_ssh_normal_hours(self, hours_range: str) -> None:
+        """Write the normal hours window to [ssh] config section.
+
+        Args:
+            hours_range: String in "HH:MM-HH:MM" format, e.g. "08:00-20:00".
+        """
+        self._set_value(_SSH_SECTION, _SSH_NORMAL_HOURS_KEY, hours_range)

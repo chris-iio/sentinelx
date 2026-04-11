@@ -143,3 +143,62 @@ class TestConfigStoreMultiProvider:
         # [virustotal] section key must not appear here
         assert "api_key" not in result
         assert result == {"urlhaus": "uh-key"}
+
+
+class TestSshSection:
+    """Tests for SSH normal-hours configuration via get/set_ssh_normal_hours."""
+
+    def test_get_ssh_normal_hours_returns_default_when_no_config_file(self, tmp_path: Path) -> None:
+        """get_ssh_normal_hours returns '06:00-22:00' when no config file exists."""
+        store = ConfigStore(config_path=tmp_path / "nonexistent" / "config.ini")
+        assert store.get_ssh_normal_hours() == "06:00-22:00"
+
+    def test_get_ssh_normal_hours_returns_default_when_no_ssh_section(self, tmp_path: Path) -> None:
+        """get_ssh_normal_hours returns '06:00-22:00' when config file has no [ssh] section."""
+        config_path = tmp_path / "config.ini"
+        config_path.write_text("[virustotal]\napi_key = vt-key\n")
+        store = ConfigStore(config_path=config_path)
+        assert store.get_ssh_normal_hours() == "06:00-22:00"
+
+    def test_set_and_get_ssh_normal_hours_roundtrip(self, tmp_path: Path) -> None:
+        """set_ssh_normal_hours then get_ssh_normal_hours returns the stored value."""
+        store = ConfigStore(config_path=tmp_path / "config.ini")
+        store.set_ssh_normal_hours("08:00-20:00")
+        assert store.get_ssh_normal_hours() == "08:00-20:00"
+
+    def test_set_ssh_normal_hours_overwrites_previous_value(self, tmp_path: Path) -> None:
+        """Calling set_ssh_normal_hours twice returns the latest value."""
+        store = ConfigStore(config_path=tmp_path / "config.ini")
+        store.set_ssh_normal_hours("07:00-21:00")
+        store.set_ssh_normal_hours("09:00-18:00")
+        assert store.get_ssh_normal_hours() == "09:00-18:00"
+
+    def test_ssh_normal_hours_persisted_to_disk(self, tmp_path: Path) -> None:
+        """SSH normal hours survive creating a new ConfigStore instance (disk persistence)."""
+        config_path = tmp_path / "config.ini"
+        store1 = ConfigStore(config_path=config_path)
+        store1.set_ssh_normal_hours("08:00-20:00")
+        store2 = ConfigStore(config_path=config_path)
+        assert store2.get_ssh_normal_hours() == "08:00-20:00"
+
+    def test_ssh_section_coexists_with_other_sections(self, tmp_path: Path) -> None:
+        """SSH section coexists with [virustotal], [providers], and [cache] sections."""
+        store = ConfigStore(config_path=tmp_path / "config.ini")
+        store.set_vt_api_key("vt-key")
+        store.set_provider_key("greynoise", "gn-key")
+        store.set_cache_ttl(48)
+        store.set_ssh_normal_hours("08:00-20:00")
+        # All values remain independently accessible
+        assert store.get_vt_api_key() == "vt-key"
+        assert store.get_provider_key("greynoise") == "gn-key"
+        assert store.get_cache_ttl() == 48
+        assert store.get_ssh_normal_hours() == "08:00-20:00"
+
+    def test_get_ssh_normal_hours_returns_default_when_key_absent_in_ssh_section(
+        self, tmp_path: Path
+    ) -> None:
+        """get_ssh_normal_hours returns '06:00-22:00' when [ssh] section exists but normal_hours key is absent."""
+        config_path = tmp_path / "config.ini"
+        config_path.write_text("[ssh]\nother_key = other_value\n")
+        store = ConfigStore(config_path=config_path)
+        assert store.get_ssh_normal_hours() == "06:00-22:00"

@@ -3,8 +3,7 @@
 ## Milestones
 
 - ✅ **v1.0 Foundation** — All prior work (shipped 2026-03-14)
-- ✅ **v1.1 Results Page Redesign** — Phases 1-2 completed; Phases 3-5 dropped (shipped 2026-03-17)
-- 🚧 **v1.2 SSH Login Anomaly Detection** — Phases 6-9 (in progress)
+- 🚧 **v1.1 Results Page Redesign** — Phases 1-5 (in progress)
 
 ## Phases
 
@@ -18,8 +17,11 @@ See `.planning/MILESTONES.md` for full internal milestone history.
 
 </details>
 
-<details>
-<summary>✅ v1.1 Results Page Redesign — Phases 1-2 SHIPPED 2026-03-17; Phases 3-5 DROPPED</summary>
+### 🚧 v1.1 Results Page Redesign (In Progress)
+
+**Milestone Goal:** Make 14 providers feel like one cohesive intelligence report instead of 14 separate search results stapled together.
+
+## Phase Details
 
 ### Phase 1: Contracts and Foundation
 **Goal**: All preservation contracts are documented and enforced before a single line of visual code changes
@@ -47,89 +49,46 @@ Plans:
 Plans:
 - [x] 02-01-PLAN.md — Extract verdict-compute.ts, row-factory.ts, and trim enrichment.ts
 
-### Phase 3: Visual Redesign (DROPPED)
-**Status**: Dropped — deferred to future milestone
-
-### Phase 4: Template Restructuring (DROPPED)
-**Status**: Dropped — deferred to future milestone
-
-### Phase 5: Context and Staleness (DROPPED)
-**Status**: Dropped — deferred to future milestone
-
-</details>
-
-### v1.2 SSH Login Anomaly Detection (In Progress)
-
-**Milestone Goal:** Upload an SSH auth.log file and receive clear, deduplicated anomaly alerts for suspicious login behavior — new IPs, new countries, impossible travel, and unusual hours — with per-alert enrichment links into the existing SentinelX detail pages.
-
-## Phase Details
-
-### Phase 6: Models, Parser, and Foundation
-**Goal**: A correct, fully-tested SSH log parser exists and all blocking infrastructure changes are in place before any detection logic is written
-**Depends on**: Phase 2 (existing codebase; no cross-phase code dependency)
-**Requirements**: PARSE-01, PARSE-02, PARSE-03, PARSE-04, WEB-06, CFG-01
+### Phase 3: Visual Redesign
+**Goal**: Provider rows display a clear visual hierarchy with verdict prominence, a breakdown micro-bar, category labels, and no-data rows collapsed by default
+**Depends on**: Phase 2
+**Requirements**: VIS-01, VIS-02, VIS-03, GRP-02
 **Success Criteria** (what must be TRUE):
-  1. The parser extracts `LoginEvent` records (username, source IP, timestamp) from auth.log lines containing "Accepted password" or "Accepted publickey"
-  2. The parser correctly handles BSD syslog timestamps (including December→January year rollover) and RFC3339 timestamps on the same file, line by line
-  3. The parser extracts both IPv4 and IPv6 source addresses; hostname entries (when UseDNS is on) are retained in the event with a flag indicating GeoIP should be skipped
-  4. File uploads up to 5 MB are accepted — a 30-day real auth.log no longer triggers a 413 error
-  5. The `[ssh]` section is recognized in `~/.sentinelx/config.ini` and the normal hours window can be read from it with a default of 06:00-22:00 when absent
-**Plans**: 3 plans
-Plans:
-- [ ] 06-01-PLAN.md — SSH package skeleton with LoginEvent and ParseSummary frozen dataclasses
-- [ ] 06-02-PLAN.md — ConfigStore SSH normal-hours extension and MAX_CONTENT_LENGTH increase to 5 MB
-- [ ] 06-03-PLAN.md — SSH auth.log parser with dual-format timestamp support and TDD
-**UI hint**: no
-
-### Phase 7: GeoIP Wrapper
-**Goal**: IP addresses from parsed login events can be mapped to country codes and coordinates via ipinfo.io, with private IPs and unavailable service handled gracefully
-**Depends on**: Phase 6
-**Requirements**: GEO-01, GEO-02, GEO-03, GEO-04
-**Success Criteria** (what must be TRUE):
-  1. Given a list of login events with duplicate IPs, exactly one HTTP request is made per unique routable IP — private, loopback, and reserved IPs receive no request
-  2. A `GeoLocation` result is returned containing country code and latitude/longitude (the `loc` field from ipinfo.io) for each resolved IP
-  3. When ipinfo.io is unreachable, `lookup_country()` returns `None` for affected IPs — the caller can detect this and skip country-dependent rules while still running IP and hour rules
+  1. The worst verdict badge is the dominant visual element in each IOC card header — noticeably larger and higher-contrast than provider row verdicts (VIS-01)
+  2. The summary row shows a visual count bar of malicious/suspicious/clean/no-data providers — the `[2/5]` text consensus badge is gone and replaced by the micro-bar (VIS-02)
+  3. Provider rows within the Reputation and Infrastructure sections display a distinct category label so analysts can tell at a glance which section they are reading (VIS-03)
+  4. No-data providers are collapsed by default — only a count summary ("5 had no record") is visible without interaction (GRP-02)
+  5. All 91 E2E tests pass; no information density regression (all content visible without hover)
 **Plans**: TBD
-**UI hint**: no
 
-### Phase 8: Anomaly Detector
-**Goal**: A pure, network-free detector function applies all four anomaly rules to a list of login events and returns deduplicated, risk-labeled alerts
-**Depends on**: Phase 7
-**Requirements**: DETECT-01, DETECT-02, DETECT-03, DETECT-04, DETECT-05, DETECT-06
+### Phase 4: Template Restructuring
+**Goal**: The HTML template delivers three explicit sections — Reputation, Infrastructure Context, No Data — as the structural backbone of each IOC card
+**Depends on**: Phase 3
+**Requirements**: GRP-01
 **Success Criteria** (what must be TRUE):
-  1. A login from an IP address not previously seen for that user in the log produces a LOW risk alert; a login from a previously-seen IP produces no new-IP alert
-  2. A login from a country not previously seen for that user produces a MEDIUM risk alert; country rules are silently skipped when `geo_map` has no entry for the IP
-  3. A login outside the configured normal hours window (default 06:00-22:00) produces a MEDIUM risk alert with the actual login time in the reason text
-  4. Two logins for the same user from different countries with less than 3 hours elapsed produce a HIGH risk impossible-travel alert with the distance and elapsed time in the reason text
-  5. A log file with 8,000 lines from one IP for one rule produces exactly one alert — deduplication by `(username, source_ip, rule_type)` is applied before any alert is returned
-  6. Each returned alert contains username, timestamp, IP address, country (or "unknown"), a human-readable reason string, and a risk level of low, medium, or high
+  1. Each IOC card visibly organizes provider results under three labeled sections: Reputation, Infrastructure Context, and No Data (GRP-01)
+  2. All `data-ioc-value`, `data-ioc-type`, and `data-verdict` attributes remain on the `.ioc-card` root element — filtering, verdict updates, and card sorting all function correctly
+  3. URL IOC detail links resolve correctly — `/ioc/url/https://evil.com/beacon` returns 200 (the `<path:>` route contract is preserved)
+  4. All 91 E2E tests pass at zero failures after template restructuring
 **Plans**: TBD
-**UI hint**: no
 
-### Phase 9: Routes, Templates, and TypeScript
-**Goal**: Analysts can upload an auth.log file from the SentinelX UI, view a table of anomaly alerts with risk-appropriate styling, and fetch alerts as JSON — the SSH section is fully integrated into the shared navigation
-**Depends on**: Phase 8
-**Requirements**: WEB-01, WEB-02, WEB-03, WEB-04, WEB-05
+### Phase 5: Context and Staleness
+**Goal**: Key context fields and cache age are visible in the IOC card header without requiring any accordion expansion
+**Depends on**: Phase 4
+**Requirements**: CTX-01, CTX-02
 **Success Criteria** (what must be TRUE):
-  1. Navigating to `/ssh` renders an upload form with file size guidance and a CSRF token; the SSH section appears as a navigation item in the shared `base.html` header
-  2. Uploading a valid auth.log file via the form returns a results page showing all flagged alerts in a table with columns for username, timestamp, IP, country, reason, and risk level
-  3. Each alert row links the IP address directly to `/ioc/ipv4/<ip>` for one-click SentinelX enrichment
-  4. Risk levels are visually distinct in the alerts table — HIGH, MEDIUM, and LOW alerts use different colors or badge styles so severity is apparent at a glance
-  5. `GET /ssh/events` returns the flagged alerts as JSON; uploading a file with no anomalies returns an empty alerts list, not an error page
-  6. All dynamic content in the SSH TypeScript module uses `createElement + textContent` only — no `innerHTML` is used anywhere in `ssh.ts`
+  1. For IP IOCs, GeoIP country and ASN org are visible in the card header before the analyst expands any section (CTX-01)
+  2. For domain IOCs, the registrar is visible in the card header before the analyst expands any section (CTX-01)
+  3. IOC cards with cached results show a staleness indicator (e.g., "data from 4h ago") in the summary row without requiring any interaction (CTX-02)
+  4. All 91 E2E tests pass; context fields degrade gracefully when data is unavailable (no layout shift, no blank UI slots)
 **Plans**: TBD
-**UI hint**: yes
 
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 1. Contracts and Foundation | v1.1 | 1/1 | Complete | 2026-03-16 |
+| 1. Contracts and Foundation | 1/1 | Complete   | 2026-03-16 | - |
 | 2. TypeScript Module Extractions | v1.1 | 1/1 | Complete | 2026-03-17 |
-| 3. Visual Redesign | v1.1 | 0/0 | Dropped | - |
-| 4. Template Restructuring | v1.1 | 0/0 | Dropped | - |
-| 5. Context and Staleness | v1.1 | 0/0 | Dropped | - |
-| 6. Models, Parser, and Foundation | v1.2 | 0/3 | Not started | - |
-| 7. GeoIP Wrapper | v1.2 | 0/TBD | Not started | - |
-| 8. Anomaly Detector | v1.2 | 0/TBD | Not started | - |
-| 9. Routes, Templates, and TypeScript | v1.2 | 0/TBD | Not started | - |
+| 3. Visual Redesign | v1.1 | 0/TBD | Not started | - |
+| 4. Template Restructuring | v1.1 | 0/TBD | Not started | - |
+| 5. Context and Staleness | v1.1 | 0/TBD | Not started | - |
