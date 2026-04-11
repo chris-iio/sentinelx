@@ -1,482 +1,456 @@
-# Architecture Research
+# Architecture Patterns: SSH Log Anomaly Detection Integration
 
-**Domain:** Results page redesign — TypeScript module integration (SentinelX v1.1)
-**Researched:** 2026-03-16
-**Confidence:** HIGH (full source code review, all modules and templates read directly)
+**Domain:** SSH auth.log parsing and behavioral anomaly detection added to SentinelX
+**Researched:** 2026-04-12
+**Confidence:** HIGH — based on direct codebase inspection of all affected files
 
-## Standard Architecture
+---
 
-### System Overview
+## Integration Philosophy
+
+SSH detection is a second vertical inside the same Flask shell. It shares the UI chrome,
+security scaffold, and GeoIP infrastructure but does not touch the IOC enrichment pipeline
+at all. Every change to existing files is additive. The only existing files that need
+modification are three small additions: the app factory (2 lines), base.html (3 lines), and
+main.ts (2 lines). Everything else is new.
+
+---
+
+## Recommended Architecture
+
+### New File Layout
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                         Flask Template Layer                         │
-│  results.html -> _ioc_card.html -> _enrichment_slot.html            │
-│  (server-rendered shell; enrichment containers start empty)          │
-├─────────────────────────────────────────────────────────────────────┤
-│                      TypeScript Module Layer                         │
-│  main.ts (init orchestrator — 8 modules in fixed init order)         │
-├──────────────┬──────────────┬──────────────┬────────────────────────┤
-│  enrichment  │    cards     │    filter    │  graph / export / etc  │
-│  (928 LOC)   │  (136 LOC)   │  (143 LOC)   │  (no redesign impact)  │
-│  - polling   │  - verdict   │  - filter    │                        │
-│  - rendering │    update    │    state     │                        │
-│  - summary   │  - dashboard │  - apply     │                        │
-│  - detail    │    counts    │    filter    │                        │
-│  - context   │  - sort      │              │                        │
-│    row fork  │    cards     │              │                        │
-└──────────────┴──────────────┴──────────────┴────────────────────────┘
-│                         Data Flow (API)                              │
-│  GET /enrichment/status/<job_id> -> EnrichmentStatus JSON            │
-│  (750ms polling interval, incremental delivery)                      │
-└─────────────────────────────────────────────────────────────────────┘
+app/
+  ssh/                           NEW package — parallel to enrichment/
+    __init__.py
+    models.py                    Frozen dataclasses: LoginEvent, AnomalyAlert
+    parser.py                    Parse auth.log bytes → list[LoginEvent]
+    detector.py                  list[LoginEvent] + geo_map → list[AnomalyAlert]
+    geoip.py                     Thin HTTP wrapper around ipinfo.io (no ProviderRegistry)
+
+  routes/
+    ssh.py                       NEW — route module, registers bp_ssh Blueprint
+
+app/templates/
+  ssh/
+    upload.html                  {% extends "base.html" %}
+    results.html                 {% extends "base.html" %}
+
+app/static/src/ts/modules/
+  ssh.ts                         NEW — upload form validation + alert table interactions
 ```
 
-### Component Responsibilities
+### Existing Files Modified (additions only)
 
-| Component | Responsibility | Integration Points |
+| File | Change | Lines Added |
+|------|--------|-------------|
+| `app/__init__.py` | `register_blueprint(bp_ssh)` | 2 |
+| `app/templates/base.html` | SSH nav link in `<nav class="floating-settings">` | 3 |
+| `app/static/src/ts/main.ts` | `import { init as initSsh }` + `initSsh()` | 2 |
+
+---
+
+## Component Boundaries
+
+| Component | Responsibility | Communicates With |
 |-----------|---------------|-------------------|
-| `enrichment.ts` | Polling loop, result rendering, summary row, detail rows, context rows, export button wiring | Calls `cards.ts` for all card mutations. Consumes `EnrichmentItem` from `types/api.ts`. Owns `iocVerdicts`, `iocResultCounts`, `allResults`, `sortTimers` state. |
-| `cards.ts` | `updateCardVerdict`, `updateDashboardCounts`, `sortCardsBySeverity`, `findCardForIoc` | Called by `enrichment.ts`. Reads card DOM via `data-ioc-value` / `data-verdict` attributes. |
-| `filter.ts` | Verdict/type/search filter state, show/hide cards, active-state sync with dashboard | Reads `.ioc-card[data-verdict]` and `.ioc-card[data-ioc-type]`. Completely independent of enrichment.ts. |
-| `graph.ts` | SVG hub-and-spoke graph on detail page only | Reads `data-graph-nodes` / `data-graph-edges` from `#relationship-graph`. No dependency on enrichment.ts. |
-| `export.ts` | JSON/CSV download, copy-all-IOCs | Called by `enrichment.ts` export button wiring. Consumes `allResults: EnrichmentItem[]`. |
-| `types/api.ts` | `EnrichmentResultItem`, `EnrichmentErrorItem`, `EnrichmentItem`, `EnrichmentStatus` | Pure types — imported by `enrichment.ts` and `export.ts`. Stable API contract. |
-| `types/ioc.ts` | `VerdictKey`, `VERDICT_LABELS`, `verdictSeverityIndex`, `getProviderCounts` | Imported by `enrichment.ts`, `cards.ts`. `getProviderCounts()` reads DOM attribute. |
-| `utils/dom.ts` | `attr()` typed getAttribute wrapper | Imported by `enrichment.ts`, `cards.ts`, `filter.ts`. |
-
----
-
-## The Critical Split: Verdict Rows vs Context Rows
-
-This is the primary architectural seam for the redesign.
-
-### Current Rendering Fork (enrichment.ts ~line 662)
-
-```
-renderEnrichmentResult(result)
-    |
-    ├── CONTEXT_PROVIDERS.has(result.provider)?
-    │   YES:
-    │   ├── remove spinner
-    │   ├── createContextRow(result)       -> prepend to .enrichment-details
-    │   ├── NO iocVerdicts accumulation
-    │   ├── NO summary row update
-    │   ├── NO card verdict / dashboard / sort
-    │   └── return early
-    │
-    └── NO (verdict provider):
-        ├── remove spinner
-        ├── accumulate iocVerdicts[ioc_value]
-        ├── createDetailRow(provider, verdict, statText, result)
-        │                  -> append to .enrichment-details
-        ├── sortDetailRows(detailsContainer, iocValue) [debounced 100ms]
-        ├── updateSummaryRow(slot, iocValue, iocVerdicts)
-        ├── updatePendingIndicator(slot, card, receivedCount)
-        ├── updateCardVerdict(iocValue, worstVerdict)
-        ├── updateDashboardCounts()
-        ├── sortCardsBySeverity()
-        └── updateCopyButtonWorstVerdict(iocValue, iocVerdicts)
-```
-
-**CONTEXT_PROVIDERS** (module-scope Set in enrichment.ts):
-`"IP Context"`, `"DNS Records"`, `"Cert History"`, `"ThreatMiner"`, `"ASN Intel"`
-
-Context rows: no verdict badge, pinned to top of details container after sort, purely informational, do not participate in consensus/attribution/worst-verdict computation.
-
-### Can the Two Rendering Paths Be Unified?
-
-**Yes — with a typed discriminant parameter, not structural changes to the data.**
-
-The current `CONTEXT_PROVIDERS` set is the correct owner of this mapping (it is a display decision, not a data decision). The rendering fork can be unified into a single `createProviderRow(result, kind)` function where `kind: "verdict" | "context"` controls visual rendering. The fork logic moves from a `if/else` in `renderEnrichmentResult` to a `rowKind` parameter derivation before calling the unified factory.
-
-This approach: no API contract changes, no backend changes, no changes to `types/api.ts`. The `CONTEXT_PROVIDERS` set stays as the source of truth; the two separate creation functions collapse into one. The benefit is that a visual redesign to rows only needs one place to change instead of two.
-
----
-
-## DOM Attribute Contract
-
-These attributes are read by TypeScript from server-rendered HTML. They are stable across the redesign. Any template change must preserve every attribute in this table.
-
-| Element | Attribute | Consumer | Constraint |
-|---------|-----------|----------|------------|
-| `.page-results` | `data-job-id` | enrichment.ts init | Required for polling |
-| `.page-results` | `data-mode` | enrichment.ts init | `"online"` / `"offline"` |
-| `.page-results` | `data-provider-counts` | ioc.ts getProviderCounts() | JSON-encoded dict |
-| `.ioc-card` | `data-ioc-value` | cards.ts findCardForIoc, filter.ts | CSS.escape used on read |
-| `.ioc-card` | `data-ioc-type` | enrichment.ts updatePendingIndicator, filter.ts | IOC type string |
-| `.ioc-card` | `data-verdict` | cards.ts updateCardVerdict, filter.ts, cards.ts sort | Written by updateCardVerdict |
-| `.copy-btn` | `data-value` | enrichment.ts findCopyButtonForIoc | Must match ioc_value |
-| `.copy-btn` | `data-enrichment` | enrichment.ts updateCopyButtonWorstVerdict | Written at runtime |
-| `.enrichment-slot` | (class only) | enrichment.ts renderEnrichmentResult | `--loaded` class triggers chevron visibility |
-| `.enrichment-details` | (class only) | enrichment.ts sortDetailRows, createContextRow | `is-open` class controls expand |
-| `.chevron-toggle` | `aria-expanded` | enrichment.ts wireExpandToggles | Set on click |
-| `[data-filter-verdict]` | attribute value | filter.ts | Verdict name string |
-| `[data-filter-type]` | attribute value | filter.ts | IOC type string |
-| `[data-verdict-count]` | attribute value | cards.ts updateDashboardCounts | Verdict name string |
-| `#relationship-graph` | `data-graph-nodes`, `data-graph-edges` | graph.ts | JSON-encoded arrays |
-
----
-
-## New Components Required
-
-### New TypeScript Modules (extractions from enrichment.ts)
-
-| Module | LOC | What It Contains | Why Extract |
-|--------|-----|-----------------|-------------|
-| `verdict-compute.ts` | ~80 | `VerdictEntry` interface, `computeWorstVerdict`, `computeConsensus`, `computeAttribution`, `findWorstEntry` | Pure functions with no DOM dependency — correct boundary, easy to test, enables enrichment.ts to focus on orchestration |
-| `row-factory.ts` | ~150 | `createProviderRow(result, kind, statText)`, `createContextFields`, `createLabeledField`, `PROVIDER_CONTEXT_FIELDS`, `CONTEXT_PROVIDERS` | All row-building DOM code in one place — the redesign modifies this module only for visual changes |
-
-These extractions are not optional cosmetics. `enrichment.ts` is 928 LOC and will grow during the redesign. Keeping computation mixed with DOM mutation makes it impossible to reason about one without the other.
-
-### New TypeScript Module Public APIs (proposed)
-
-```typescript
-// verdict-compute.ts
-export interface VerdictEntry {
-  provider: string;
-  verdict: VerdictKey;
-  summaryText: string;
-  detectionCount: number;
-  totalEngines: number;
-  statText: string;
-}
-export function computeWorstVerdict(entries: VerdictEntry[]): VerdictKey
-export function computeConsensus(entries: VerdictEntry[]): { flagged: number; responded: number }
-export function computeAttribution(entries: VerdictEntry[]): { provider: string; text: string }
-export function findWorstEntry(entries: VerdictEntry[]): VerdictEntry | undefined
-
-// row-factory.ts
-export type RowKind = "verdict" | "context";
-export function rowKindFor(provider: string): RowKind
-export function createProviderRow(
-  result: EnrichmentResultItem,
-  kind: RowKind,
-  statText: string      // pre-computed caller responsibility
-): HTMLElement
-export function createContextFields(result: EnrichmentResultItem): HTMLElement | null
-export { CONTEXT_PROVIDERS }  // re-export for enrichment.ts use
-```
-
-### Modified Components
-
-| Component | Change Type | What Changes | Risk Level |
-|-----------|------------|-------------|------------|
-| `enrichment.ts` | Refactor | Remove extracted functions, import from new modules, simplify `renderEnrichmentResult` dispatch | Medium — largest file, but extraction boundaries are mechanically clear |
-| `_enrichment_slot.html` | Modify | Structure changes for redesigned summary row layout | Low — only renders a DOM shell |
-| `_ioc_card.html` | Modify | Card header changes for new visual design | Low — preserve all `data-*` attributes |
-| `results.html` | Possibly modify | New page-level sections if redesign requires them | Low |
-| `input.css` | Major | New CSS for redesigned row, card, and summary components | Low risk — CSS-only changes |
-
-### Unchanged Components
-
-`filter.ts`, `graph.ts`, `export.ts`, `form.ts`, `clipboard.ts`, `settings.ts`, `ui.ts`, `types/api.ts`, `types/ioc.ts`, `utils/dom.ts`, `ioc_detail.html`, `main.ts` (no new module inits needed unless new modules need DOMContentLoaded wiring)
-
----
-
-## Recommended Project Structure
-
-No directory restructuring. The redesign adds new modules within the existing layout.
-
-```
-app/static/src/ts/
-├── main.ts                     # Add imports for new modules if they export init()
-├── modules/
-│   ├── enrichment.ts           # MODIFY: trim to ~300 LOC, import from new modules
-│   ├── verdict-compute.ts      # NEW: ~80 LOC pure computation
-│   ├── row-factory.ts          # NEW: ~150 LOC unified row DOM builder
-│   ├── cards.ts                # MINOR or NO CHANGE
-│   ├── filter.ts               # NO CHANGE
-│   ├── graph.ts                # NO CHANGE
-│   ├── export.ts               # NO CHANGE
-│   ├── form.ts                 # NO CHANGE
-│   ├── clipboard.ts            # NO CHANGE
-│   ├── settings.ts             # NO CHANGE
-│   └── ui.ts                   # NO CHANGE
-├── types/
-│   ├── api.ts                  # NO CHANGE
-│   └── ioc.ts                  # NO CHANGE
-└── utils/
-    └── dom.ts                  # NO CHANGE
-```
-
----
-
-## Architectural Patterns
-
-### Pattern 1: Separate Computation from DOM Mutation
-
-**What:** Pure functions that compute values (`computeWorstVerdict`, `computeConsensus`, `computeAttribution`) live in `verdict-compute.ts`. DOM mutation functions that act on those values live in `enrichment.ts` and `row-factory.ts`. Pure functions receive values as parameters — they do not touch the DOM.
-
-**When to use:** Immediately as the first step of the redesign. `enrichment.ts` currently mixes both freely, which makes both harder to change.
-
-**Trade-offs:** One extra file, but `enrichment.ts` becomes a clean orchestrator (~300 LOC) rather than a 928-LOC monolith where computation and rendering are interleaved.
-
-**Example:**
-```typescript
-// verdict-compute.ts — no DOM imports, no side effects
-export function computeWorstVerdict(entries: VerdictEntry[]): VerdictKey {
-  if (entries.some((e) => e.verdict === "known_good")) return "known_good";
-  const worst = findWorstEntry(entries);
-  return worst ? worst.verdict : "no_data";
-}
-```
-
-### Pattern 2: Unified Row Factory with RowKind Discriminant
-
-**What:** A single `createProviderRow(result, kind, statText)` replaces the separate `createDetailRow` and `createContextRow` functions. Visual rendering diverges on `kind`, not on `CONTEXT_PROVIDERS.has(result.provider)` — that check happens once at the call site.
-
-**When to use:** During the visual redesign. The redesign changes how rows look; having both types in one function means the visual changes happen in one place.
-
-**Trade-offs:** Slightly more complex single function vs two simple functions. Worth it because the two-path design currently requires applying any row layout change in two places.
-
-**Example:**
-```typescript
-// row-factory.ts
-export function createProviderRow(
-  result: EnrichmentResultItem,
-  kind: RowKind,
-  statText: string
-): HTMLElement {
-  const row = document.createElement("div");
-  row.className = kind === "context"
-    ? "provider-row provider-row--context"
-    : "provider-row provider-row--verdict";
-  row.setAttribute("data-verdict", kind === "context" ? "context" : result.verdict);
-  // provider name: always
-  // verdict badge: verdict rows only
-  // stat text: verdict rows only
-  // context fields: both kinds, prominence differs
-  // cache badge: both kinds
-  return row;
-}
-```
-
-### Pattern 3: Module State Stays in enrichment.ts
-
-**What:** `iocVerdicts`, `iocResultCounts`, `allResults`, and `sortTimers` remain module-private in `enrichment.ts`. New helper modules (`verdict-compute.ts`, `row-factory.ts`) receive values as parameters — they own no state.
-
-**When to use:** Throughout the redesign. Do not create a shared state store.
-
-**Trade-offs:** `enrichment.ts` remains the state owner for results rendering. This is correct — it is the right owner of this state for a single-page polling-based architecture.
+| `ssh/models.py` | Immutable data types: `LoginEvent`, `AnomalyAlert` | Imported by parser, detector, routes |
+| `ssh/parser.py` | Regex-based auth.log line parsing → `list[LoginEvent]` | `models.py` only |
+| `ssh/geoip.py` | `lookup_country(ip, allowed_hosts) -> str \| None` via ipinfo.io | `http_safety.safe_request` |
+| `ssh/detector.py` | Rule engine: per-user aggregation → `list[AnomalyAlert]` | `models.py` only (receives `geo_map` as parameter) |
+| `routes/ssh.py` | Flask handlers: file validation, orchestrate ssh/ modules, render | `ssh/` package, `app.limiter` |
+| `templates/ssh/upload.html` | Upload form with CSRF | `base.html` via `{% extends %}` |
+| `templates/ssh/results.html` | Alert table render | `base.html` via `{% extends %}` |
+| `ssh.ts` | File input validation, alert row interactions | DOM only — no enrichment modules |
 
 ---
 
 ## Data Flow
 
-### Enrichment Result Flow (post-refactor)
-
 ```
-Flask /enrichment/status/<job_id>
-    | (750ms poll)
-EnrichmentStatus { total, done, complete, results: EnrichmentItem[] }
-    |
-renderEnrichmentResult(result, iocVerdicts, iocResultCounts)
-    |
-    +-- spinner removal, slot --loaded class
-    |
-    +-- kind = rowKindFor(result.provider)    [from row-factory.ts]
-    |
-    +-- if kind === "context":
-    |     createProviderRow(result, "context", "") -> prepend to .enrichment-details
-    |     updatePendingIndicator(...)
-    |     return
-    |
-    +-- if kind === "verdict":
-          statText = buildStatText(result)     [local helper, stays in enrichment.ts]
-          accumulate iocVerdicts[ioc_value]    [uses VerdictEntry from verdict-compute.ts]
-          createProviderRow(result, "verdict", statText) -> append to .enrichment-details
-          sortDetailRows(container, iocValue)  [debounced 100ms]
-          updateSummaryRow(slot, iocValue, iocVerdicts)
-          updatePendingIndicator(...)
-          updateCardVerdict(iocValue, computeWorstVerdict(entries))
-          updateDashboardCounts()
-          sortCardsBySeverity()
-          updateCopyButtonWorstVerdict(...)
-```
-
-### State Ownership Map
-
-```
-enrichment.ts (module-private)
-├── iocVerdicts: Record<string, VerdictEntry[]>      -- per-IOC verdict history
-├── iocResultCounts: Record<string, number>           -- for pending indicator
-├── allResults: EnrichmentItem[]                      -- for export
-├── sortTimers: Map<string, ReturnType<setTimeout>>   -- debounce per IOC
-└── rendered: Record<string, boolean>                 -- dedup key per poll
-
-cards.ts (module-private)
-└── sortTimer: ReturnType<typeof setTimeout> | null   -- card sort debounce
-
-filter.ts (closure-private inside init())
-└── filterState: { verdict: string, type: string, search: string }
+Analyst selects auth.log file in browser
+  │
+  ▼
+POST /ssh/analyze  (multipart/form-data — CSRF token required, NOT exempt)
+  │
+  ├─ MAX_CONTENT_LENGTH guard (SEC-12) — rejects >512 KB before route handler
+  │   See "File Size Constraint" section for guidance.
+  │
+  ▼
+routes/ssh.py — validate file: present? extension .log/.txt? read as UTF-8 bytes?
+  │
+  ▼
+ssh/parser.py — parse(content: str) → list[LoginEvent]
+  Each LoginEvent: timestamp, username, source_ip, auth_result, raw_line
+  │
+  ▼
+ssh/geoip.py — deduplicate IPs, call ipinfo.io for each unique IP
+  Returns dict[ip_str → country_code]
+  Typically 5–50 unique IPs → 5–50 HTTP calls (sequential is fine for v1.2)
+  │
+  ▼
+ssh/detector.py — detect(events, geo_map, config) → list[AnomalyAlert]
+  Builds per-user history in one in-memory pass
+  Rules: new_ip, new_country, unusual_hours, impossible_travel
+  │
+  ▼
+render_template("ssh/results.html", alerts=alerts, events=events, stats=stats)
+  OR return jsonify(...)  for GET /api/ssh/analyze (if JSON API added)
 ```
 
 ---
 
-## Suggested Refactoring Order
+## Data Models
 
-This order minimizes breakage by ensuring each step has a stable foundation.
+```python
+# app/ssh/models.py
+from __future__ import annotations
+from dataclasses import dataclass
+from datetime import datetime
 
-### Step 1: Extract verdict-compute.ts
+@dataclass(frozen=True)
+class LoginEvent:
+    timestamp: datetime
+    username: str
+    source_ip: str
+    auth_result: str   # "accepted" | "failed" | "invalid_user"
+    raw_line: str
 
-**What to move:** `VerdictEntry` interface, `computeWorstVerdict`, `computeConsensus`, `computeAttribution`, `findWorstEntry`. Update `enrichment.ts` imports.
+@dataclass(frozen=True)
+class AnomalyAlert:
+    rule: str           # "new_ip" | "new_country" | "unusual_hours" | "impossible_travel"
+    severity: str       # "high" | "medium" | "low"
+    username: str
+    source_ip: str
+    country_code: str | None
+    timestamp: datetime
+    detail: str         # human-readable explanation
+    raw_line: str       # the triggering log line
+```
 
-**Why first:** Zero behavioral change. These are pure functions with no DOM or module-state dependencies. Moving them is a mechanical extraction — copy, export, update imports. Reduces `enrichment.ts` by ~90 LOC.
-
-**Downstream benefit:** Steps 2-4 operate on a smaller `enrichment.ts` where computation and mutation are no longer interleaved.
-
-**Risk:** Negligible. TypeScript compiler catches any import errors.
-
-**Test gate:** `tsc` compilation passes. All existing E2E tests pass unchanged.
-
-### Step 2: Extract row-factory.ts
-
-**What to move:** `createDetailRow`, `createContextRow`, `createLabeledField`, `createContextFields`, `PROVIDER_CONTEXT_FIELDS`, `CONTEXT_PROVIDERS`, `formatRelativeTime` (if shared). Expose unified `createProviderRow` and `rowKindFor`. Update `enrichment.ts` to call the new API.
-
-**Why second:** Depends on Step 1 (`VerdictEntry` is now in `verdict-compute.ts`). After this step, `enrichment.ts` is reduced to ~300 LOC and handles only polling, orchestration, and state. The visual redesign in Steps 3-4 happens exclusively inside `row-factory.ts` and `input.css`.
-
-**Risk:** Low. The rendering logic moves location but does not change behavior. Careful import wiring required.
-
-**Test gate:** `tsc` compilation passes. E2E: provider rows render with correct verdict CSS classes, context rows appear above verdict rows, cache badges appear.
-
-### Step 3: Redesign CSS (input.css)
-
-**What:** Replace `.provider-detail-row` / `.provider-context-row` with new component CSS. Redesign `.ioc-summary-row` layout. Update card header styling if needed.
-
-**Why third:** CSS-only change — zero TypeScript risk. Steps 1-2 mean all row class names are managed in `row-factory.ts`, giving a clean surface for the visual redesign.
-
-**Risk:** Visual regression. Run E2E suite after every significant CSS block change.
-
-**Test gate:** Visual inspection of all verdict states (malicious, suspicious, clean, known_good, no_data, error) and all context providers. E2E suite passes.
-
-### Step 4: Redesign HTML Shell
-
-**What:** Update `_ioc_card.html` and `_enrichment_slot.html` for the new visual design. Preserve every attribute in the DOM Attribute Contract table.
-
-**Why fourth:** After CSS is finalized, HTML adjustments lock in the structure. Template changes are lower risk than TypeScript changes.
-
-**Risk:** Breaking DOM attribute contracts. Use the contract table as a pre-commit checklist — every `data-*` attribute listed must survive unchanged.
-
-**Test gate:** E2E suite — filter behavior, enrichment rendering, card sort, export all function correctly.
-
-### Step 5 (optional): Extract summary.ts
-
-**What:** Move `getOrCreateSummaryRow`, `updateSummaryRow`, `updatePendingIndicator`, `consensusBadgeClass` to a new `summary.ts` module.
-
-**Why optional:** Only needed if `enrichment.ts` exceeds ~350 LOC after Steps 1-2. If the file is manageable, skip this step. The summary row functions are tightly coupled to `iocVerdicts` state anyway — extracting them without moving state adds complexity.
-
-**Risk:** Low if done. Skip if not necessary.
+Both are frozen dataclasses — consistent with the project-wide immutability pattern
+(`IOC`, `EnrichmentResult`, `EnrichmentError` are all frozen). `severity` is a string
+rather than an enum to keep the models dependency-free; validate at construction time.
 
 ---
 
-## Integration Points
+## GeoIP Reuse Without Coupling to the Enrichment Pipeline
 
-### enrichment.ts -> cards.ts (existing, stable, no change)
+`IPApiAdapter` in `app/enrichment/adapters/ip_api.py` is designed for the enrichment
+pipeline: it accepts an `IOC`, returns an `EnrichmentResult`, and is registered in
+`ProviderRegistry`. Do not use it directly in SSH. The coupling — IOC type guard,
+`EnrichmentResult` schema, `CacheStore` key structure — is irrelevant and wrong for SSH.
 
-| Call | When | What It Does |
-|------|------|-------------|
-| `findCardForIoc(iocValue)` | Every result | Returns `HTMLElement \| null` by `data-ioc-value` |
-| `updateCardVerdict(iocValue, worstVerdict)` | After iocVerdicts updated | Sets `data-verdict`, updates `.verdict-label` text + class |
-| `updateDashboardCounts()` | After every verdict result | Counts all `.ioc-card[data-verdict]`, updates count elements |
-| `sortCardsBySeverity()` | After every verdict result | Debounced 100ms, reorders card grid by worst verdict |
+Instead, create `ssh/geoip.py` as a standalone module that reuses only the safe HTTP layer:
 
-This interface is stable. The redesign does not need to change it.
+```python
+# app/ssh/geoip.py
+"""GeoIP country lookup for SSH anomaly detection.
 
-### enrichment.ts -> verdict-compute.ts (new boundary)
+Uses ipinfo.io (already in ALLOWED_API_HOSTS). Reuses the safe_request()
+path from http_safety for SSRF validation, timeout, byte cap, and exception
+handling — without importing any enrichment models.
+"""
+from __future__ import annotations
 
-`enrichment.ts` passes `iocVerdicts[ioc_value]` to pure functions and receives computed values back. No shared state, no DOM access in `verdict-compute.ts`.
+import requests
+from app.enrichment.http_safety import validate_endpoint, TIMEOUT, MAX_RESPONSE_BYTES
 
-### enrichment.ts -> row-factory.ts (new boundary)
+IPINFO_BASE = "https://ipinfo.io"
 
-`enrichment.ts` calls `rowKindFor(result.provider)` to determine kind, then calls `createProviderRow(result, kind, statText)`. The `statText` computation (the `if verdict === "malicious" ...` logic block) stays in `enrichment.ts` — it is caller context, not row-building logic.
 
-### filter.ts <-> cards.ts (indirect, via DOM attributes — no change)
+def lookup_country(ip: str, allowed_hosts: list[str]) -> str | None:
+    """Return ISO-3166-1 alpha-2 country code for ip, or None on any error.
 
-`filter.ts` reads `data-verdict` / `data-ioc-type` / `data-ioc-value` from cards. `cards.ts` writes `data-verdict`. This contract works through DOM attributes and must not be changed. CSS class names on cards can be renamed freely; attribute names must not be renamed.
+    Private/reserved IPs return None (ipinfo.io returns 404 for these).
+    """
+    url = f"{IPINFO_BASE}/{ip}/json"
+    try:
+        validate_endpoint(url, allowed_hosts)
+        resp = requests.get(url, timeout=TIMEOUT, allow_redirects=False, stream=True)
+        if resp.status_code == 404:
+            return None   # private/reserved IP
+        resp.raise_for_status()
+        chunks, total = [], 0
+        for chunk in resp.iter_content(chunk_size=8192):
+            total += len(chunk)
+            if total > MAX_RESPONSE_BYTES:
+                return None
+            chunks.append(chunk)
+        import json
+        body = json.loads(b"".join(chunks))
+        return body.get("country") or None
+    except Exception:
+        return None  # never raise — absence of GeoIP is handled by detector
+```
 
-### Detail Page (ioc_detail.html) — Separate System, No Impact
+This approach reuses `validate_endpoint`, `TIMEOUT`, and `MAX_RESPONSE_BYTES` from
+`http_safety` (the same constants used by every enrichment adapter) without importing
+`EnrichmentError` or `IOC`. The `ipinfo.io` hostname is already in `ALLOWED_API_HOSTS`
+in `app/config.py` — no allowlist change is needed.
 
-The detail page uses CSS-only tabs (radio inputs + adjacent sibling selectors). JavaScript has no involvement in tab switching. `graph.ts` renders the SVG relationship graph. The detail page is architecturally independent of the results page and is not part of the redesign scope.
-
----
-
-## Anti-Patterns
-
-### Anti-Pattern 1: Changing the Flask API Contract to Support the Redesign
-
-**What people do:** Add a `row_kind` field to `EnrichmentResultItem` in the Flask JSON response so the frontend does not need `CONTEXT_PROVIDERS`.
-
-**Why it's wrong:** The rendering decision is a display concern, not a data concern. The Python backend is stable and all 14 providers are working. A backend change requires changes to `app/routes.py`, `app/enrichment/models.py`, `types/api.ts`, and all existing tests.
-
-**Do this instead:** Derive `row_kind` at render time via `rowKindFor(result.provider)` using the `CONTEXT_PROVIDERS` set in `row-factory.ts`. No backend changes.
-
-### Anti-Pattern 2: Refactoring renderEnrichmentResult Before Extracting Pure Functions
-
-**What people do:** Start the redesign by restructuring the rendering dispatch in `renderEnrichmentResult` while computation functions are still inline.
-
-**Why it's wrong:** The computation functions (`computeWorstVerdict` etc.) are entangled with state management code. Refactoring rendering while computation is entangled means touching everything simultaneously.
-
-**Do this instead:** Step 1 (extract `verdict-compute.ts`) takes ~15 minutes and makes all subsequent steps isolated. Never skip it.
-
-### Anti-Pattern 3: Renaming data-* Attributes During HTML Redesign
-
-**What people do:** Rename `.ioc-card[data-verdict]` to `.ioc-card[data-ioc-verdict]` for clarity during the HTML template redesign.
-
-**Why it's wrong:** The `data-verdict` attribute is read by `cards.ts` (3 call sites), `filter.ts` (2 call sites), and written by `updateCardVerdict`. A rename requires coordinated changes in TypeScript, templates, and CSS in one atomic commit. If the rename is incomplete, the sort, filter, and dashboard all silently break.
-
-**Do this instead:** Keep all `data-*` attribute names exactly as they are. Rename CSS class names freely; never rename `data-*` attributes without updating all consumers.
-
-### Anti-Pattern 4: Using innerHTML in Redesigned Row Code
-
-**What people do:** In the new `createProviderRow`, use template literals with `innerHTML` to build complex row HTML more concisely.
-
-**Why it's wrong:** SEC-08 is a hard constraint for this codebase. Provider names, IOC values, verdict text, and `raw_stats` values all arrive from untrusted API responses. A single `innerHTML` with any of these values creates an XSS vector.
-
-**Do this instead:** Continue the `createElement` + `textContent` pattern. For complex layouts, nest `createElement` calls. It is verbose but provably safe.
-
-### Anti-Pattern 5: Moving iocVerdicts State Out of enrichment.ts
-
-**What people do:** Create a shared `verdictStore.ts` module with module-level state so `verdict-compute.ts` can access it directly.
-
-**Why it's wrong:** Shared module-level state creates hidden coupling. `enrichment.ts` is the correct owner of polling-session state — it is the only module that knows when a polling session starts and ends.
-
-**Do this instead:** Pass `iocVerdicts` as a parameter to functions that need it. This is already the pattern in the current code (`renderEnrichmentResult(result, iocVerdicts, iocResultCounts)`) and should be preserved.
+**Caching GeoIP in SSH:** Do not use `CacheStore`. Its key schema is `(ioc_value, ioc_type,
+provider)` — designed for enrichment. Instead, deduplicate IPs before calling `lookup_country`.
+A log with 200 events from 5 unique IPs makes exactly 5 HTTP calls.
 
 ---
 
-## Scaling Considerations
+## In-Memory State for Per-User History
 
-| Scale | Architecture Adjustments |
-|-------|--------------------------|
-| Current (1 analyst, 14 providers, ~50 IOCs/session) | No changes needed — polling approach is correct |
-| More providers added | `CONTEXT_PROVIDERS` set and `PROVIDER_CONTEXT_FIELDS` map in `row-factory.ts` scale linearly |
-| More IOCs (100+/session) | `sortCardsBySeverity` and `sortDetailRows` debouncing already handles this correctly |
-| Framework adoption | Declared out of scope in PROJECT.md — vanilla TS is preferred |
+SSH detection is stateless per upload. The detector receives all `LoginEvent` objects from
+one log file and builds per-user histories during a single in-memory pass. No cross-request
+state is needed for v1.2.
+
+```python
+# app/ssh/detector.py (sketch)
+from collections import defaultdict
+from datetime import timezone
+
+def detect(
+    events: list[LoginEvent],
+    geo_map: dict[str, str | None],   # ip → country_code | None
+    normal_hours: tuple[int, int] = (6, 22),
+) -> list[AnomalyAlert]:
+    seen_ips:        dict[str, set[str]]      = defaultdict(set)
+    seen_countries:  dict[str, set[str]]      = defaultdict(set)
+    last_event:      dict[str, LoginEvent]    = {}
+    alerts:          list[AnomalyAlert]       = []
+
+    for event in sorted(events, key=lambda e: e.timestamp):
+        user = event.username
+        cc = geo_map.get(event.source_ip)
+
+        # Rule evaluation — each emits zero or one AnomalyAlert
+        ...
+
+        seen_ips[user].add(event.source_ip)
+        if cc:
+            seen_countries[user].add(cc)
+        last_event[user] = event
+
+    return alerts
+```
+
+The `geo_map` is built by the route handler before calling `detect()`. The detector never
+makes HTTP calls and is fully testable with no network access.
+
+If a future milestone adds "upload multiple logs to build a baseline," the right approach is
+a new `SshBaselineStore` (SQLite, same threading pattern as `CacheStore`) attached to the app
+as `app.ssh_baseline_store` in `create_app()`. Do not bolt that onto `CacheStore`.
+
+---
+
+## Anomaly Detection Rules
+
+| Rule | Trigger | Severity | Notes |
+|------|---------|----------|-------|
+| `new_ip` | IP not seen before for this user in this log | low | Suppress if only one login total (everything is "new") |
+| `new_country` | Country not seen before for this user | medium | Skip if GeoIP unavailable for this IP |
+| `unusual_hours` | Login outside configurable window (default 06–22) | low | Use server-local time from log timestamp |
+| `impossible_travel` | Two logins from different countries within physically impossible timespan | high | Requires lat/lon from ipinfo.io `loc` field; 500 km/h threshold |
+
+`impossible_travel` requires the `loc` field from ipinfo.io (e.g. `"37.3382,-121.8863"`).
+Extend `geoip.py` to return a small struct `(country_code, lat, lon)` rather than just a
+country code — this costs nothing extra since the full response is already fetched.
+
+---
+
+## Blueprint Registration
+
+```python
+# app/__init__.py — inside create_app(), after existing bp/bp_api registration
+from .routes.ssh import bp_ssh
+app.register_blueprint(bp_ssh)
+```
+
+```python
+# app/routes/ssh.py
+from flask import Blueprint, current_app, render_template, request
+from app import limiter
+
+bp_ssh = Blueprint("ssh", __name__, url_prefix="/ssh")
+
+@bp_ssh.route("/", methods=["GET"])
+@limiter.limit("60 per minute")
+def upload_form():
+    return render_template("ssh/upload.html")
+
+@bp_ssh.route("/analyze", methods=["POST"])
+@limiter.limit("5 per minute")
+def analyze():
+    # validate, parse, geoip, detect, render
+    ...
+```
+
+Route names: `url_for('ssh.upload_form')`, `url_for('ssh.analyze')`.
+`bp_ssh` is NOT CSRF-exempt — file upload is a state-changing POST. The CSRF meta tag in
+`base.html` is already wired; browser forms include the token automatically via Flask-WTF.
+
+---
+
+## Template Inheritance
+
+SSH templates extend `base.html` with no changes to `base.html` itself except the nav link:
+
+```html
+{# templates/ssh/upload.html #}
+{% extends "base.html" %}
+{% block content %}
+  <section class="site-section">
+    {# File upload form — CSRF token included automatically via Flask-WTF #}
+    <form method="post" enctype="multipart/form-data" action="{{ url_for('ssh.analyze') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      ...
+    </form>
+  </section>
+{% endblock %}
+```
+
+`base.html` provides: nav chrome, CSP meta, CSRF meta, font preloads, `style.css`, `main.js`.
+The single surgical addition to `base.html` is one nav link:
+
+```html
+{# base.html — add inside <nav class="floating-settings"> #}
+<a href="{{ url_for('ssh.upload_form') }}"
+   class="nav-link nav-link--icon"
+   aria-label="SSH Analysis">
+  {{ icon("shield-check", class="nav-icon nav-icon--lg") }}
+</a>
+```
+
+Verify the icon slug exists in `app/templates/macros/icons.html` before using it. Do not
+introduce a new icon unless it is already in the Heroicon set used by the project.
+
+---
+
+## TypeScript Module
+
+```typescript
+// app/static/src/ts/modules/ssh.ts
+export function init(): void {
+  // 1. File input: validate extension + warn on size before submit
+  // 2. Alert table: copy-to-clipboard on alert rows (follow clipboard.ts pattern)
+  // 3. Alert table: severity filter (optional — pure CSS class toggle is enough for v1.2)
+}
+```
+
+Register in `main.ts`:
+```typescript
+import { init as initSsh } from "./modules/ssh";
+// in init(): initSsh();
+```
+
+SSH analysis is synchronous — parse + detect runs inside the POST handler, no background
+jobs or polling. Do not wire `ssh.ts` to the enrichment polling machinery in `enrichment.ts`.
+
+---
+
+## File Size Constraint
+
+The existing `MAX_CONTENT_LENGTH` of 512 KB applies globally and is enforced before any
+route handler runs (SEC-12). Flask has no per-route content-length override. Options:
+
+1. **Recommended for v1.2:** Keep the 512 KB limit and document it. A trimmed auth.log
+   covering 24–48 hours of typical server activity is under 512 KB. Display the limit
+   clearly on the upload form so analysts know to trim the file if needed.
+
+2. **If analysts need larger files:** Raise `MAX_CONTENT_LENGTH` globally to e.g. 2 MB.
+   This relaxes the guard for all routes, not just SSH. Document the security tradeoff
+   (POST body size limit affects the IOC paste endpoint too).
+
+Option 1 is consistent with "single-shot triage tool" scope and avoids a security regression.
+
+---
+
+## Security Posture
+
+| Concern | Mitigation |
+|---------|-----------|
+| File upload injection | Validate extension; read as text only; never execute content; no subprocess |
+| Path traversal | In-memory processing only; filename not used after content is read |
+| Large file DoS | Existing 512 KB `MAX_CONTENT_LENGTH` guard |
+| GeoIP SSRF | `validate_endpoint()` + `TIMEOUT` + byte cap reused from `http_safety`; `ipinfo.io` already in allowlist |
+| Auth.log leaking to client | Render only structured fields; `raw_line` on `AnomalyAlert` goes through `{{ var }}` autoescaping, never `\| safe` |
+| CSRF on upload | `bp_ssh` is NOT CSRF-exempt; CSRF token required on form POST |
+| XSS from log content | Jinja2 autoescaping ON for `.html` templates; all log-derived fields rendered via `{{ var }}` |
+| innerHTML in `ssh.ts` | Follow SEC-08 — `createElement` + `textContent` only, no `innerHTML` |
+
+---
+
+## Build Order (Phase Dependencies)
+
+The dependency graph is a strict DAG. Build bottom-up.
+
+```
+Phase 1 — Models + Parser (zero external dependencies)
+  app/ssh/__init__.py          (empty, package marker)
+  app/ssh/models.py            (frozen dataclasses only)
+  app/ssh/parser.py            (regex + models import)
+  tests/unit/test_ssh_parser.py
+
+Phase 2 — GeoIP Wrapper (depends on http_safety — already exists)
+  app/ssh/geoip.py             (imports validate_endpoint, TIMEOUT, MAX_RESPONSE_BYTES)
+  tests/unit/test_ssh_geoip.py (mock requests.get)
+
+Phase 3 — Detector (depends on models; geoip decoupled via geo_map parameter)
+  app/ssh/detector.py          (pure function: events + geo_map → alerts)
+  tests/unit/test_ssh_detector.py  (no network, pass geo_map dict directly)
+
+Phase 4 — Routes + Templates (depends on all ssh/ modules)
+  app/routes/ssh.py            (register bp_ssh, orchestrate phases 1-3)
+  app/templates/ssh/upload.html
+  app/templates/ssh/results.html
+  app/__init__.py              (+2 lines: import bp_ssh, register_blueprint)
+  app/templates/base.html      (+3 lines: nav link)
+  tests/unit/test_ssh_routes.py
+
+Phase 5 — TypeScript (depends on templates existing)
+  app/static/src/ts/modules/ssh.ts
+  app/static/src/ts/main.ts   (+2 lines: import + initSsh())
+  make js-dev
+```
+
+Key dependency insight: the detector accepts `geo_map: dict[str, str | None]` as a
+parameter rather than calling `geoip.lookup_country` directly. This means Phase 3
+(detector) can be built and fully tested before Phase 2 (GeoIP) is complete. The route
+handler in Phase 4 is the only place that wires them together.
+
+---
+
+## What Does Not Change
+
+The following existing components are untouched by this feature:
+
+| Component | Reason |
+|-----------|--------|
+| `app/enrichment/` (all 20+ files) | SSH does not use the enrichment pipeline |
+| `app/pipeline/` (extractor, classifier, normalizer) | SSH has its own parser |
+| `app/cache/store.py` | SSH is stateless per upload; no cache needed |
+| `app/routes/__init__.py` | `bp` and `bp_api` blueprints unchanged |
+| `app/enrichment/adapters/ip_api.py` | GeoIP reused via `http_safety` constants, not via adapter class |
+| `app/config.py` | `ipinfo.io` already in `ALLOWED_API_HOSTS`; no change required |
+| All existing templates (9 files) | SSH templates are new files in `templates/ssh/` |
+| All existing TS modules (14 files) | `ssh.ts` is additive; `main.ts` gets 2 lines |
+| Existing test suite (757 unit + 91 E2E) | No existing test should need modification |
 
 ---
 
 ## Sources
 
-- Direct source code review (all files read for this research):
-  - `app/static/src/ts/modules/enrichment.ts` (928 LOC)
-  - `app/static/src/ts/modules/cards.ts` (136 LOC)
-  - `app/static/src/ts/modules/filter.ts` (143 LOC)
-  - `app/static/src/ts/modules/graph.ts`, `export.ts`
-  - `app/static/src/ts/types/api.ts`, `types/ioc.ts`
-  - `app/static/src/ts/utils/dom.ts`
-  - `app/static/src/ts/main.ts`
-- Template review:
-  - `app/templates/results.html`
-  - `app/templates/partials/_ioc_card.html`
-  - `app/templates/partials/_enrichment_slot.html`
-  - `app/templates/partials/_verdict_dashboard.html`
-  - `app/templates/partials/_filter_bar.html`
-  - `app/templates/ioc_detail.html`
-- CSS review: `app/static/src/input.css` lines 1-100 (design tokens), 1083-1310 (enrichment slot styles)
-- Project context: `.planning/PROJECT.md` (v1.1 milestone definition)
-- No external sources consulted — this is a codebase analysis
+All findings are from direct file inspection (no training data relied upon):
 
----
-*Architecture research for: SentinelX v1.1 Results Page Redesign — TypeScript module integration*
-*Researched: 2026-03-16*
+- `app/__init__.py` — blueprint registration pattern, singleton stores, security scaffold
+- `app/config.py` — `ALLOWED_API_HOSTS` (ipinfo.io already present), `MAX_CONTENT_LENGTH`
+- `app/enrichment/http_safety.py` — `safe_request`, `validate_endpoint`, `TIMEOUT`, `MAX_RESPONSE_BYTES`
+- `app/enrichment/adapters/ip_api.py` — ipinfo.io response shape, `loc` field availability
+- `app/enrichment/adapters/base.py` — `BaseHTTPAdapter` pattern (informational, not reused in SSH)
+- `app/enrichment/models.py` — frozen dataclass pattern
+- `app/pipeline/models.py` — `IOC` frozen dataclass, confirming project-wide convention
+- `app/cache/store.py` — CacheStore key schema `(ioc_value, ioc_type, provider)`
+- `app/routes/__init__.py` — blueprint structure (`bp` + `bp_api`)
+- `app/routes/_helpers.py` — in-memory orchestrator state, `_MAX_ORCHESTRATORS` LRU pattern
+- `app/routes/api.py` — `bp_api = Blueprint("api", ..., url_prefix="/api")` pattern
+- `app/routes/analysis.py` — route handler structure, `limiter.limit` usage
+- `app/templates/base.html` — nav chrome, CSRF meta tag, `{% block content %}`
+- `app/static/src/ts/main.ts` — module init registration pattern

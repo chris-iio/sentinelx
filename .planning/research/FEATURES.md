@@ -1,299 +1,385 @@
-# Feature Research
+# Feature Landscape: SSH Login Anomaly Detection
 
-**Domain:** Threat intelligence results page — multi-source aggregation, unified presentation
-**Milestone:** v1.1 Results Page Redesign
-**Researched:** 2026-03-16
-**Confidence:** HIGH (platform patterns from official docs + direct inspection); MEDIUM (specific
-implementation approaches, comparative analysis based on public documentation)
-
----
-
-## Context: This Is a Presentation Redesign, Not a Feature Addition
-
-The app already ships 14 providers, per-IOC detail pages, export, bulk input, cache, filter bar,
-and verdict dashboard. The problem is not missing data — it is how that data is presented.
-
-Current state: 14 provider rows (verdict badge + attribution + stat text + context fields) displayed
-inside an expandable accordion per IOC card. Summary row shows worst verdict + consensus badge.
-Context providers (IP Context, DNS Records, Cert History, ThreatMiner, ASN Intel) are pinned to top
-of the expanded section. All other providers are sorted by severity descending.
-
-The problem statement: "results feel like 14 separate search results stapled together, not one
-cohesive report. Information isn't uniform across providers. Mix of verdicts, context rows, no-data
-rows feels disjointed."
-
-This research answers: what design patterns do the best threat intelligence platforms use to make
-multi-source results feel like one unified answer?
+**Domain:** SSH auth.log parsing and behavioral anomaly detection for SOC analysts
+**Milestone:** v1.2 SSH Login Anomaly Detection
+**Researched:** 2026-04-12
+**Confidence:** HIGH (auth.log formats from official docs + field inspection); HIGH (anomaly
+detection patterns from production SIEM rules + Elastic security); MEDIUM (UX workflow
+from SOC analyst guides)
 
 ---
 
-## How the Best Platforms Solve This
+## Context: What v1.2 Adds to SentinelX
 
-### VirusTotal: Separation by Information Type, Not Source
+SentinelX already ships: IOC extraction, 14 threat intel providers, verdict display, detail pages,
+cache, export, bulk input. v1.2 adds a second entry point: upload an auth.log file, get structured
+anomaly alerts with per-IP enrichment. The two features share the Flask shell and ipinfo.io adapter
+but operate as a distinct workflow with distinct routes.
 
-VirusTotal's core architectural insight is that different questions deserve different views, and
-sources should be subordinate to those views. Their tab structure for file/URL reports:
+**New capability in scope for v1.2:**
+- SSH auth.log parser (structured event extraction)
+- Per-user behavioral anomaly detector (4 rule types)
+- GeoIP lookup via existing ipinfo.io adapter (reused)
+- Upload UI + alerts table + JSON API endpoint
 
-- **Summary header** (always visible): Detection ratio ("X / Y" flagged), community score, hash,
-  timestamp, tags. This is the unified answer at a glance.
-- **Detection tab**: Partner verdict grid — all vendor results in one flat table, grouped by
-  verdict category (malicious / suspicious / clean / undetected). Sources appear as rows within
-  categories, not as the organizational unit.
-- **Details tab**: Metadata (file properties, HTTP headers, DNS records) — type-specific context
-  separated from reputation judgments.
-- **Relations tab**: Relationships and pivots — all IOC-to-IOC connections independent of which
-  source found them.
-- **Community tab**: Analyst notes and votes — separated from automated signals.
-
-Key lesson: **verdict assessment** and **contextual intelligence** and **relationships** are
-fundamentally different kinds of information and should never be mixed in the same section.
-
-Domain/IP reports in VirusTotal intentionally omit partner verdicts (because vendors don't rate IPs
-as "malicious" the same way they rate files). Instead they show pure context — passive DNS, WHOIS,
-ASN, communicating files. This distinction between IOC types is a critical design principle.
-
-### Hybrid Analysis: Severity-First, Source-Secondary
-
-Hybrid Analysis leads with a **threat score** (e.g., 66/100) and an **AV detection rate** (e.g.,
-9%) in the header — the synthesized judgment — before any source is named. Then it groups findings
-into **Malicious Indicators** / **Suspicious Indicators** / **Informative Indicators** with counts.
-Within each group, items show their source type (Static Parser, API Call, Registry Access) as an
-attribute, not the organizing principle.
-
-The MITRE ATT&CK matrix section organizes tactics/techniques without naming which analyzer found
-each — the framework is the organizing lens, not the tool.
-
-Key lesson: **group by threat signal type** (malicious / suspicious / informative / context), not
-by provider name. Provider is an attribute within a group, not a section header.
-
-### Shodan: Category-First, Drill-Down Architecture
-
-Shodan's host page opens with a **General Information block** (location, org, ISP, ASN) — a single
-unified identity section that collapses all provider outputs for that category. Then **Web
-Technologies** as a second block. Then **Open Ports** as navigable tab anchors.
-
-Each port section reveals nested detail (SSL cert, banners, service identification, vulnerability
-CVEs) via sequential drill-down. The user never sees "nginx reports X, Shodan reports Y" — they see
-a unified answer for the port with all data synthesized under one heading.
-
-Key lesson: **group by topic/category** (identity, network, reputation, behavior), not by data
-source. Multiple sources feeding the same category should appear together under that category.
-
-### IntelOwl: DataModel Synthesis
-
-IntelOwl v6.2+ introduced "DataModels" that normalize all analyzer outputs into standardized keys
-before display. Instead of showing OTX's response format next to ThreatFox's response format, both
-are mapped to `{ ip_reputation, asn, last_seen, associated_malware }` and displayed uniformly.
-
-Their "Visualizers" aggregate across multiple analyzers (e.g., "DNS Visualizer aggregates all DNS
-analyzer reports") so the display unit is the topic, not the tool.
-
-Key lesson: **normalize provider output to domain fields** before display. "Reputation" means the
-same thing whether it comes from AbuseIPDB or GreyNoise — the label should match, not the provider
-name.
-
-### URLScan.io: Context First, Security Second
-
-URLScan organizes scan results as: infrastructure (IPs/domains/technologies found) → statistics
-(counts, protocols) → enrichment (geolocation, ASN, rankings) → security verdicts (threat
-analysis, community). Context establishes what something IS before the verdict establishes whether
-it's BAD.
-
-Key lesson: **establish identity before making judgment**. Show "this IP is in US-East, owned by
-Hetzner, serving port 443 with Nginx" before "3 providers flagged this as malicious."
+**Out of scope for v1.2 (documented in PROJECT.md):**
+- Other log types (nginx, syslog, Apache)
+- Real-time log streaming
+- ML/AI models
+- SIEM integration / STIX output
+- Multi-user baselines
 
 ---
 
-## Feature Landscape
+## auth.log Format Reference
 
-### Table Stakes (Analysts Expect These)
+This section documents every format variant a parser must handle. Confidence is HIGH for
+Ubuntu/Debian (directly verified); MEDIUM for RHEL/CentOS (consistent with docs).
 
-Features that any analyst would expect from a unified threat intelligence results view.
-Missing these makes the redesign feel superficial.
+### Log File Locations by Distro
 
-| Feature | Why Expected | Complexity | Notes |
-|---------|--------------|------------|-------|
-| Verdict-first summary per IOC | Every serious TI platform leads with the judgment — analyst should know malicious/clean before reading any detail | LOW | Already exists as worst-verdict badge; needs better visual hierarchy/prominence |
-| Clear visual separation of verdict vs context providers | VirusTotal, Shodan, URLScan all separate "reputation signals" from "contextual data" — mixing them creates confusion | MEDIUM | Currently all rows in one flat list; context providers pinned to top but visually identical to verdict rows |
-| Grouped provider display by category | Hybrid Analysis, Shodan group signals by type (malicious / suspicious / informative / context) not by source name | MEDIUM | Currently: flat list sorted by severity. Needed: category sections with counts per section |
-| Provider count shown in summary ("3/9 flagged") | VT shows "X/Y engines"; HA shows AV detection rate — analysts want denominator, not just numerator | LOW | Consensus badge `[2/5]` partially does this; needs to be more prominent and readable |
-| Empty/no-data state clearly separated from clean verdict | A provider that has no record ≠ a provider that checked and found nothing | LOW | Currently both map to `no_data` label; "checked and clean" vs "no record found" are different signals |
-| Context fields readable without expanding details | Shodan shows key fields (open ports, vulns) inline on the search results card — critical context should not require expansion | MEDIUM | Currently context fields (GeoIP, ASN, ports) are hidden in expanded accordion; minimal context should always be visible |
-| IOC type badge clearly visible | Every platform distinguishes IP / domain / URL / hash — different types have different signals, the analyst must know which they're looking at | LOW | Already implemented; needs consistent prominent placement |
-| Scan date or data freshness indicator | Analysts care whether VirusTotal result is from today or 6 months ago; stale data changes the verdict meaning | LOW | `scan_date` is already in `EnrichmentResultItem`; not currently surfaced in summary row |
+| Distro | Log Path | Notes |
+|--------|----------|-------|
+| Ubuntu 22.04 and earlier | `/var/log/auth.log` | rsyslog, BSD timestamp |
+| Ubuntu 24.04+ | `/var/log/auth.log` | rsyslog RFC3339 timestamp (breaking change) |
+| Debian 10–12 | `/var/log/auth.log` | rsyslog, BSD timestamp by default; may vary |
+| RHEL / CentOS / Rocky / Alma | `/var/log/secure` | Same line format, different path |
+| Arch Linux | `/var/log/auth.log` | journald or rsyslog depending on install |
+| macOS | `/var/log/system.log` | Different host/process format |
+| systemd-only systems | `journalctl -u sshd` | No flat file; must export via `journalctl -o syslog` |
 
-### Differentiators (What Makes This Feel Like One Report)
+### Timestamp Format Variations (Critical Edge Case)
 
-Features that go beyond "list of provider results" toward "unified intelligence report."
-These are the features that make the difference between 14 results stapled together and one answer.
+This is the single most important parsing edge case. Two incompatible formats exist in the wild.
 
-| Feature | Value Proposition | Complexity | Notes |
-|---------|-------------------|------------|-------|
-| Category-grouped provider sections | Show verdict-producing providers in one section ("Reputation"), context providers in another ("Infrastructure"), zero-data providers collapsed or in a third section ("No Data") — matching Hybrid Analysis / VirusTotal pattern | MEDIUM | Requires template redesign of enrichment-details; existing CONTEXT_PROVIDERS set is the seed for this grouping |
-| Inline context summary always visible | Show 2-3 key context fields (GeoIP country, ASN org, open port count) directly in the IOC card header without requiring expansion — the "at a glance" context that establishes identity before judgment | MEDIUM | Requires context providers to complete before card renders context line; may need to wait for first context result |
-| Verdict breakdown micro-bar | Visual "3 malicious / 2 suspicious / 4 clean / 5 no data" bar within each IOC card — matches Hybrid Analysis's "Malicious/Suspicious/Informative" count approach; richer than current `[2/5]` text badge | MEDIUM | Client-side, requires count tracking already in iocVerdicts; pure CSS/DOM addition |
-| Provider category icons/labels | Distinct visual treatment for reputation providers (flag icon) vs infrastructure context (server icon) vs passive intel (clock icon) — reinforces that different rows answer different questions | LOW | CSS token + icon addition; high visual impact for low implementation cost |
-| "No data" section collapsed by default | Move all no-data providers into a collapsed section ("5 providers had no record") rather than showing them as flat rows equal to providers with actual findings | LOW | Currently no-data rows appear in the same sorted list; separating them reduces visual noise significantly |
-| Worst-verdict summary as report headline | Make the worst-verdict badge the dominant visual element in the IOC card — current badge is 12-16px text in a row; should be the first thing the eye goes to (size hierarchy matching VT's large X/Y detection ratio) | LOW | CSS change to verdict-label/verdict-badge sizing in ioc-card-header; high impact, low cost |
-| Staleness indicator on cached results | Show "data from 4h ago" on summary row when result was served from cache — matches VT's timestamp-in-summary approach; tells analyst whether to trust the verdict or re-query | LOW | `cached_at` field already exists in EnrichmentResultItem and is shown in expanded detail rows; surface in summary row |
+**BSD syslog (RFC 3164) — Ubuntu ≤ 23.10, Debian, RHEL:**
+```
+Jan 30 12:45:23 server sshd[1234]: Accepted password for user1 from 192.168.1.100 port 54321 ssh2
+```
+- No year. Parsers must infer year from current date.
+- Day is space-padded for single digits: `Jan  5` (two spaces) — regex must handle `\s+`.
+- No timezone. Local time only.
+- Year rollover edge case: a December log parsed in January must be assigned the prior year.
 
-### Anti-Features (Commonly Requested, Often Problematic)
+**RFC 3339 / ISO 8601 — Ubuntu 24.04+, systemd journal exports:**
+```
+2024-03-04T17:39:08.271714+01:00 hostname sshd[35883]: Accepted publickey for user from 192.168.1.5 port 57528 ssh2: ED25519 SHA256:xxxxxx
+```
+- Full year + timezone + microseconds present.
+- Different field order: timestamp is first, hostname is second (same as BSD).
+- CrowdSec and other log parsers had production breakage on Ubuntu 24.04 upgrade due to this change
+  (confirmed bug report: https://github.com/crowdsecurity/crowdsec/issues/4199).
 
-| Feature | Why Requested | Why Problematic | Alternative |
-|---------|---------------|-----------------|-------------|
-| Composite threat score (e.g., "74/100") | Feels like a unified answer; analysts want one number | Hides the reasoning; obscures which providers drove the score; SentinelX's core design philosophy is transparency — "never invent scores"; composite scores require calibration that doesn't exist here | Use verdict breakdown bar (malicious count / responded count) — visual but not invented |
-| Provider logo/branding in rows | Looks professional, easier to recognize at a glance | Significantly increases page weight (14 logos × number of IOCs); logos require licensing verification; textContent-only DOM rule makes inline SVG complex | Use consistent provider name abbreviations with color-coded category badges |
-| Auto-expand all IOC cards | Analyst wants everything visible immediately | 10 IOCs × 14 providers = 140 rows visible simultaneously; catastrophic for scan time and cognitive load | Expand only the highest-severity IOC by default; let analyst expand others on demand |
-| Tabs instead of accordion | VT uses tabs; tabs look modern | For a card-per-IOC layout, tabs would require tab state per card (complex JS) and break the at-a-glance comparison across IOCs; accordion lets all IOCs remain scannable simultaneously | Keep accordion; improve category sections within the accordion |
-| Inline verdict editing / analyst override | Analyst wants to mark "VT says clean but I disagree" | Annotations were removed in v7.0 for good reason — couples triage tool to case management; introduces mutable state; conflicts with cache invalidation model | Direct analysts to their TIP/SIEM for case notes; detail page already exists for deep investigation |
-| Real-time confidence scoring across providers | Weight providers by reputation (VT = high trust, unknown = low trust) | Requires maintaining a trust model that goes stale as providers change quality; creates false precision; different providers answer different questions (AbuseIPDB answers "is this reported" not "is this malicious") | Show provider category (reputation vs passive intel) as context so analyst applies their own mental weights |
-| Progressive disclosure with infinite scroll | Modern UX pattern; avoids long pages | IOC triage is a compare-all-IOCs task, not a read-one-article task; infinite scroll breaks the analyst's mental model of "I have N IOCs to triage" | Show all IOC cards, keep cards compact, use filter bar to reduce visible set |
+**Parser must detect format from the first token of the first line and apply consistently.**
+
+### sshd Message Types (All Variants)
+
+Every line the parser will encounter. Non-sshd lines (cron, sudo, pam_unix without sshd) must be
+skipped. Only lines containing `sshd[` are in scope.
+
+**Successful logins (events to track):**
+```
+Accepted password for alice from 192.168.1.10 port 54321 ssh2
+Accepted publickey for alice from 192.168.1.10 port 54321 ssh2
+Accepted publickey for alice from 192.168.1.10 port 54321 ssh2: RSA SHA256:abc123
+Accepted publickey for alice from 192.168.1.10 port 54321 ssh2: ED25519 SHA256:abc123
+Accepted keyboard-interactive/pam for alice from 192.168.1.10 port 54321 ssh2
+```
+
+**Failed logins (events to track for brute-force detection):**
+```
+Failed password for alice from 10.0.0.1 port 52772 ssh2
+Failed password for invalid user admin from 10.0.0.1 port 52772 ssh2
+Failed publickey for alice from 10.0.0.1 port 52772 ssh2
+Failed publickey for invalid user git from 10.0.0.1 port 52772 ssh2: ED25519 SHA256:abc123
+Invalid user admin from 10.0.0.1
+Illegal user admin from 10.0.0.1
+input_userauth_request: invalid user admin [preauth]
+```
+
+**Session lifecycle (parse but low priority for anomaly detection):**
+```
+Disconnected from user alice 192.168.1.10 port 54321
+Disconnected from authenticating user alice 192.168.1.10 port 54321 [preauth]
+Connection closed by 192.168.1.10 port 54321 [preauth]
+Connection reset by 192.168.1.10 port 54321 [preauth]
+pam_unix(sshd:session): session opened for user alice(uid=1000) by (uid=0)
+pam_unix(sshd:session): session closed for user alice
+```
+
+**Noise lines (skip entirely):**
+```
+Did not receive identification string from 10.0.0.1 port 55123
+error: accept: Software caused connection abort
+Maximum authentication attempts exceeded for alice from 10.0.0.1 port 22 ssh2 [preauth]
+Server listening on 0.0.0.0 port 22
+Postponed publickey for alice from 10.0.0.1 port 54321 ssh2
+```
+
+### IPv6 in auth.log
+
+sshd logs IPv6 addresses unbracketed and uncompressed in standard notation:
+```
+Accepted publickey for alice from 2001:db8:85a3::8a2e:370:7334 port 54321 ssh2
+Failed password for alice from ::1 port 54321 ssh2
+```
+
+Compressed IPv6 (using `::`) is valid and must be handled. Link-local addresses with zone IDs
+(`fe80::1%eth0`) are rare in auth.log context but can appear. The existing `IPApiAdapter` already
+declares `IOCType.IPV6` support, so the GeoIP lookup path handles IPv6 natively. The parser regex
+must use `IPORHOST` equivalent logic: match `[0-9a-fA-F:]+` for IPv6 and `[\d.]+` for IPv4,
+preferably using Python's `ipaddress` module for validation rather than regex alone.
+
+Private/loopback IPs (`127.0.0.1`, `::1`, RFC 1918 ranges) must be detected and skipped for GeoIP
+lookup — the existing `_404_hook` in `IPApiAdapter` handles 404s from ipinfo.io for private IPs,
+but callers should short-circuit before making network requests for obviously private addresses.
+
+---
+
+## Table Stakes
+
+Features a SOC analyst expects from any SSH anomaly detection tool. Missing these makes the
+tool feel incomplete or untrustworthy.
+
+| Feature | Why Expected | Complexity | Dependencies |
+|---------|--------------|------------|--------------|
+| auth.log file upload | Primary entry point — analyst uploads a log file collected from an endpoint | LOW | Flask `request.files`, `MAX_CONTENT_LENGTH` config |
+| Parse Accepted/Failed events into structured records | Raw log → `{timestamp, user, ip, event_type, auth_method, port}` | MEDIUM | Dual timestamp format handling (BSD + RFC3339) |
+| Per-IP GeoIP lookup (country, city, ASN) | Analysts need to know where login attempts came from, not just the raw IP | LOW | Reuse `IPApiAdapter` (already ships) |
+| New IP alert per user | Flag when a user logs in from an IP they've never used in the uploaded log | LOW | Requires per-user historical IP set (derived from the uploaded log itself) |
+| New country alert per user | Flag when country of login IP differs from all prior observed countries for that user in the log | MEDIUM | GeoIP lookup per IP + per-user country baseline |
+| Brute-force detection | Flag N failed logins from same IP within time window (default: 10 failures in 5 minutes) | MEDIUM | Time-windowed failure count per source IP |
+| Unusual hour login alert | Flag logins outside configurable normal window (default 06:00–22:00 local time) | LOW | Timestamp parsing + configurable window from config.ini |
+| Alerts table with sortable columns | SOC analysts triage by severity; a flat unordered list is unusable at scale | MEDIUM | Frontend table with JS sort or server-side ordering |
+| Per-alert severity level | CRITICAL / HIGH / MEDIUM / LOW — analyst must know which alerts to investigate first | LOW | Rule-specific severity assignment |
+| IP enrichment link to existing SentinelX | When an alert surfaces an IP, the analyst should be able to click to the existing enrichment detail page | LOW | Link to `/ioc/ipv4/<ip>` — already exists |
+| Parse failure summary | If 200 lines parsed and 18 failed, report that — don't silently drop bad lines | LOW | Track parse errors per line; summarize in response |
+| JSON API endpoint | `POST /ssh/analyze` returning structured JSON alongside the HTML view — enables scripting and future integrations | LOW | Flask route with `request.accept_mimetypes` or separate `/api/ssh/analyze` |
+
+---
+
+## Differentiators
+
+Features that elevate v1.2 beyond "grep for Accepted in auth.log." These are what make the tool
+genuinely useful vs a shell script.
+
+| Feature | Value Proposition | Complexity | Dependencies |
+|---------|-------------------|------------|--------------|
+| Impossible travel detection | Two logins for the same user from geographically distant locations within a time window too short for air travel (threshold: >1000 km/h implied speed) | HIGH | GeoIP for each unique IP + per-user ordered login timeline + haversine distance calculation |
+| Per-user login summary | "alice: 14 logins from 3 IPs across 2 countries, 0 anomalies" — aggregate view before anomaly drill-down | MEDIUM | Accumulate per-user stats during parse pass |
+| Configurable normal-hours window | `[ssh_detection] normal_hours_start = 6` / `normal_hours_end = 22` in config.ini — deployable without per-user learning | LOW | ConfigStore integration (already ships for API keys) |
+| Alert deduplication | If the same IP triggers 500 failed logins, emit one brute-force alert, not 500 — alert count vs line count | MEDIUM | Group-and-deduplicate step between detection and output |
+| Alert explanation fields | Each alert includes a human-readable `reason` field: "First seen IP for user alice. Previous IPs: 10.0.0.1, 10.0.0.2" — tells analyst why the alert fired | LOW | Embed context in the alert struct at detection time |
+| Attack pattern classification | After detecting brute-force, classify: did any failure-source IP later succeed? ("Brute Force Success") or only fail ("Brute Force Attempt") — high-value MITRE T1110 signal | MEDIUM | Cross-reference failed IP set against successful IP set per log |
+| Summary statistics header | Total lines parsed, successful logins, failed attempts, unique IPs, unique users, time range of log — gives analyst an orientation before diving into alerts | LOW | Accumulate during parse pass |
+| "First login" flag | When a user's very first appearance in the log is a successful login from a foreign country, flag it distinctly vs a user with 50 prior logins — no baseline in the log means no comparison is possible | MEDIUM | Detect single-occurrence users and annotate alerts accordingly |
+
+---
+
+## Anti-Features
+
+Features that are commonly requested or seem obviously useful but create more problems than they solve
+for a local, upload-based, single-analyst tool.
+
+| Anti-Feature | Why Avoid | What to Do Instead |
+|--------------|-----------|-------------------|
+| ML/AI anomaly models | Requires training data, model maintenance, false-positive tuning, Python ML dependency stack (scikit-learn, pandas) — massive surface area for a rule-based detection feature | 4 explicit rule types with configurable thresholds; explain exactly why each alert fired |
+| "Known good" IP whitelist stored across sessions | Seems useful, but introduces persistent state management complexity; whitelist goes stale; analysts forget what's in it; creates false sense of security for whitelisted IPs that later get compromised | Surface GeoIP + ASN in every alert; let analyst make the judgment call |
+| Real-time log streaming / tailing | Requires WebSocket or SSE, background thread, file handle management, log rotation awareness — architecturally complex for a batch triage tool | Upload-based batch analysis; analyst collects log from endpoint and uploads. PROJECT.md explicitly deferred this. |
+| Other log types (nginx, syslog, Apache) | Each format requires its own parser, its own anomaly rules, its own output format — scope explosion | SSH auth.log only for v1.2. Other log types deferred explicitly in PROJECT.md. |
+| SIEM / STIX / CEF export | Complex format with schema maintenance; low value for a local triage tool used by one analyst | JSON API endpoint covers the scripting case; STIX deferred in PROJECT.md |
+| Per-user baseline database (persisted across uploads) | Would enable "this IP is new for alice historically" beyond the current file — but introduces a database with grow-forever behavior, schema migration, user management | Per-log baseline only: "new in this file." Document the limitation clearly in the UI. |
+| Composite risk score per user | "alice's risk score is 73/100" — sounds useful, invites gaming and false confidence | Explicit alert list with severity per alert; follows SentinelX's "never invent scores" design principle |
+| Automatic IP blocking or firewall rules | Some tools offer to emit iptables rules — dangerous for a triage tool | Read-only. Never emit actions. Users follow up in their own tooling. |
+| Reverse DNS lookups for every IP | Seems like useful enrichment — but 1,000-line auth.log with 300 unique IPs means 300 DNS queries; adds latency, may be rate-limited | Show reverse DNS only on the detail page (already available via IPApiAdapter `hostname` field) |
 
 ---
 
 ## Feature Dependencies
 
 ```
-Category-Grouped Provider Sections
-    requires──> CONTEXT_PROVIDERS set (already exists in enrichment.ts)
-    requires──> verdict count tracking per category (iocVerdicts already tracks this)
-    requires──> template redesign of .enrichment-details container
-    enables──> "No Data" section collapsed by default (trivially add third group)
-    enables──> Provider category icons/labels (apply per group, not per row)
+File Upload
+    enables──> Auth Log Parser
 
-Inline Context Summary (always visible)
-    requires──> context provider results arrive before card renders full summary
-    requires──> IOC card template change (new .ioc-context-inline slot)
-    depends on──> enrichment.ts routing context vs verdict results differently
-    conflicts with──> showing nothing until all providers complete (current behavior)
+Auth Log Parser
+    produces──> LoginEvent list (timestamp, user, ip, event_type, auth_method)
+    produces──> ParseSummary (line count, error count, time range)
+    feeds──> All anomaly detectors
+    feeds──> Per-user login summary
 
-Verdict Breakdown Micro-Bar
-    requires──> per-verdict count tracking (iocVerdicts already has this data)
-    requires──> CSS bar component
-    enhances──> Worst-verdict summary as report headline
-    replaces──> current [flagged/responded] consensus badge (same data, better display)
+GeoIP Lookup (per unique IP)
+    requires──> Auth Log Parser (needs IP list)
+    reuses──> IPApiAdapter (already ships; ipinfo.io, zero-auth)
+    requires──> private IP short-circuit (skip 127.x, 10.x, 172.16-31.x, 192.168.x, ::1)
+    feeds──> New Country detector
+    feeds──> Impossible Travel detector
+    feeds──> Alert enrichment (country/city/ASN in every alert)
 
-Worst-Verdict as Report Headline
-    requires──> CSS hierarchy change in .ioc-card-header
-    is independent of──> grouped sections (works immediately as CSS-only change)
+New IP Alert
+    requires──> Auth Log Parser
+    requires──> per-user IP set (derived from log — no external state needed)
+    complexity: LOW — set membership check
 
-Staleness Indicator on Summary Row
-    requires──> cached_at already in EnrichmentResultItem (already exists)
-    requires──> updateSummaryRow() to surface cached_at when all results are from cache
-    is independent of──> category grouping
+New Country Alert
+    requires──> GeoIP Lookup
+    requires──> per-user country set
+    complexity: MEDIUM — GeoIP must complete before rule runs
 
-No-Data Section Collapsed by Default
-    requires──> Category-Grouped Provider Sections (no_data is a group)
-    is a low-cost win once grouping exists
+Brute-Force Detection
+    requires──> Auth Log Parser (Failed events)
+    requires──> time-windowed failure count per source IP
+    complexity: MEDIUM — sliding window or bucket-based counting
+    enhances──> Attack Pattern Classification (did any brute-force IP later succeed?)
+
+Unusual Hour Alert
+    requires──> Auth Log Parser (Accepted events)
+    requires──> ConfigStore normal_hours_start / normal_hours_end
+    complexity: LOW — hour extraction from parsed timestamp
+
+Impossible Travel Detection
+    requires──> GeoIP Lookup (lat/lon for each IP)
+    requires──> per-user ordered login timeline
+    requires──> haversine distance calculation between consecutive logins
+    requires──> speed threshold comparison (default 1000 km/h = commercial aviation)
+    complexity: HIGH — most complex rule; needs ipinfo.io to return lat/lon (it does)
+
+Alert Deduplication
+    requires──> raw alert list from all detectors
+    produces──> deduplicated alert list
+    complexity: MEDIUM — group by (user, ip, rule_type) and merge
+
+Alert Enrichment Link
+    requires──> existing /ioc/ipv4/<ip> route (already ships)
+    complexity: LOW — URL construction in template
+
+JSON API Endpoint
+    requires──> alert list (same data as HTML view)
+    complexity: LOW — return JSON from same route based on Accept header or /api/ prefix
 ```
 
-### Dependency Notes
+### Critical Dependency: GeoIP Rate Limit
 
-- **Grouping is the backbone change.** Most differentiators become simple once the three-section
-  structure (Reputation / Infrastructure Context / No Data) exists. Category icons, collapsed
-  no-data section, and section-level counts all follow from grouping.
+ipinfo.io free tier: unlimited requests (no documented rate limit on the free tier, unlike ip-api.com
+which caps at 45/min). However, a large auth.log may contain hundreds of unique IPs. Deduplicate IPs
+before lookups (one request per unique IP, not one per log line). A 10,000-line brute-force log
+might have 1 attacking IP — deduplicate first.
 
-- **Inline context summary is independent of grouping** but higher-complexity. It requires
-  enrichment.ts to write context fields into a new DOM slot in the card header (above the accordion)
-  rather than only into the expanded details container.
+### Critical Dependency: Timestamp Parsing Must Precede All Detectors
 
-- **Worst-verdict as headline is purely CSS.** No JS changes required — make the existing
-  `.verdict-label` in `.ioc-card-header` significantly larger (24-28px vs current 12-14px).
-  Highest impact-to-cost ratio of any change.
-
-- **Verdict breakdown bar is purely additive JS.** The `iocVerdicts` data structure already
-  accumulates every verdict entry. Computing counts by verdict type and rendering a bar is a
-  `updateSummaryRow()` change + CSS addition.
+Impossible travel, unusual hours, and brute-force time windows all require accurate timestamps.
+BSD format lacks year and timezone — the parser must inject the inferred year before any detector
+runs. Detector code must never do timestamp arithmetic directly on raw strings.
 
 ---
 
-## MVP Definition (v1.1)
+## MVP Definition (v1.2 Core)
 
-### Launch With (v1.1 Core)
+Minimum feature set that delivers genuine analyst value.
 
-Minimum changes that address the "14 separate results stapled together" problem.
+**Must ship:**
+- File upload (POST endpoint, `multipart/form-data`, `MAX_CONTENT_LENGTH` enforced)
+- Auth log parser (BSD + RFC3339 timestamps, 8 message types, IPv4 + IPv6)
+- GeoIP per unique IP (reuse `IPApiAdapter`, skip private ranges)
+- New IP alert (LOW severity — informational)
+- New country alert (MEDIUM severity)
+- Brute-force detection: 10 failures/5-minute window (HIGH severity)
+- Unusual hour login: outside 06:00–22:00 (MEDIUM severity, configurable)
+- Alert table with per-alert severity, user, IP, country, reason text, link to enrichment
+- Parse summary: lines parsed, events extracted, errors, time range
+- JSON API response (`Accept: application/json` or `/api/ssh/analyze`)
 
-- [ ] Worst-verdict as report headline — make verdict badge the dominant element in card header
-  (CSS sizing change, zero JS changes, highest ROI)
-- [ ] Category-grouped provider sections — Reputation section (verdict-producing providers) /
-  Infrastructure Context section (CONTEXT_PROVIDERS) / No Data section (collapsed by default)
-- [ ] Verdict breakdown micro-bar — visual count of malicious/suspicious/clean/no-data providers
-  (replaces `[2/5]` consensus text badge with visual representation)
-- [ ] No-data section collapsed by default — removes visual noise from flat provider list
-- [ ] Provider category labels — distinct label/icon for "Reputation" vs "Infrastructure" sections
+**Add in v1.2 if time allows (not blocking):**
+- Impossible travel detection (HIGH/CRITICAL severity) — high-value but depends on ipinfo.io lat/lon
+  fields being present in response; needs haversine implementation
+- Attack pattern classification (did brute-force IP later succeed?)
+- Per-user login summary header
 
-### Add After Validation (v1.1.x)
-
-Features to add once core restructure is working and tested.
-
-- [ ] Inline context summary — once grouping is stable, surface 2-3 key context fields directly
-  in card header (GeoIP country + ASN org for IPs; creation age for domains)
-- [ ] Staleness indicator in summary row — surface `cached_at` when data is not fresh
-- [ ] Scan date on summary row — show most recent scan date from verdict providers
-
-### Future Consideration (v1.2+)
-
-- [ ] Per-category expand/collapse toggle — collapse "Infrastructure" section by default for
-  clean IOCs where context adds noise
-- [ ] IOC card sort by IOC type (group all IPs together, then domains, etc.) as an alternative
-  to current severity sort — useful for bulk input with mixed IOC types
+**Defer to v1.3+:**
+- ConfigStore integration for `normal_hours_start` / `normal_hours_end` (hardcode defaults in v1.2)
+- Alert export (JSON download) — JSON API covers the scripting case
+- DNSBL lookup for source IPs (separate milestone per REQUIREMENTS.md)
 
 ---
 
-## Feature Prioritization Matrix
+## Alert Format: What Makes an Alert Actionable
 
-| Feature | User Value | Implementation Cost | Priority |
-|---------|------------|---------------------|----------|
-| Worst-verdict as report headline (CSS only) | HIGH — first thing analyst reads | LOW — CSS sizing | P1 |
-| Category-grouped provider sections | HIGH — eliminates "14 results" feel | MEDIUM — JS + template | P1 |
-| No-data section collapsed by default | HIGH — reduces noise immediately | LOW — CSS default state | P1 |
-| Verdict breakdown micro-bar | MEDIUM — richer than text badge | MEDIUM — JS count + CSS bar | P1 |
-| Provider category labels/icons | MEDIUM — reinforces information structure | LOW — CSS tokens | P2 |
-| Inline context summary (always visible) | MEDIUM — eliminates mandatory expand for context | HIGH — new DOM slot, enrichment.ts change | P2 |
-| Staleness indicator on summary row | LOW-MEDIUM — data freshness matters for verdict trust | LOW — cached_at already available | P2 |
-| Scan date on summary row | LOW — detail-level info | LOW — scan_date already available | P3 |
+Based on SOC triage workflow research, each alert must contain:
 
-**Priority key:**
-- P1: Must have for v1.1 — directly addresses the "stapled together" problem
-- P2: Should have — improves information coherence and context visibility
-- P3: Nice to have — polish
+| Field | Purpose | Example |
+|-------|---------|---------|
+| `severity` | CRITICAL / HIGH / MEDIUM / LOW | HIGH |
+| `rule` | Machine-readable rule ID | `new_country` |
+| `user` | SSH username affected | `alice` |
+| `source_ip` | IP that triggered the alert | `185.220.101.5` |
+| `country` | Country from GeoIP | `RU` |
+| `city` | City from GeoIP | `Moscow` |
+| `asn` | ASN org from GeoIP | `AS204428 (SSAB)` |
+| `timestamp` | Login event time (ISO 8601) | `2024-01-30T14:23:00` |
+| `reason` | Human-readable explanation | `First login from country RU for user alice. Prior countries: US` |
+| `enrichment_url` | Link to SentinelX detail page | `/ioc/ipv4/185.220.101.5` |
+| `auth_method` | password / publickey | `password` |
+
+What makes alerts actionable vs noisy:
+
+- **Reason field is mandatory.** "New IP for alice" with no context is noise. "New IP for alice —
+  previous IPs: 10.0.0.1, 10.0.0.2 (all US/Hetzner). New IP geolocates to RU/Moscow" is a lead.
+- **Deduplication is mandatory.** 8,114 failed login lines from one IP = one brute-force alert.
+  Without deduplication, the analyst sees 8,000 rows and learns nothing.
+- **Severity differentiation is mandatory.** If everything is HIGH, nothing is HIGH. Assign LOW to
+  "new IP from same country, same ASN as previous" and HIGH to "new IP from a sanctioned country."
+- **Enrichment link is mandatory.** The analyst's next step after seeing an alert is to check the
+  IP in threat intel — provide the one-click path to the existing SentinelX enrichment page.
+
+What creates noise that analysts ignore:
+
+- Alerting on every RFC 1918 (private) IP login — these are normal jump-box patterns
+- Alerting on logins from the same subnet as prior logins with no context
+- Impossible travel from VPN/proxy IPs (no device fingerprinting available; accept as limitation,
+  note it in the UI)
+- Alerting on the first login of a user with no baseline (flag as "no baseline" not as "anomalous")
 
 ---
 
-## Competitor Feature Analysis
+## Distro-Specific Notes for the Parser
 
-How the best platforms handle the specific problems SentinelX currently exhibits.
-
-| Problem | VirusTotal Approach | Hybrid Analysis Approach | Our Approach (v1.1) |
-|---------|---------------------|--------------------------|---------------------|
-| 14 sources feel separate | Tabs separate verdict / metadata / relations / community — verdict is the primary tab | Group by signal type (malicious / suspicious / informative), not by source | Three-section accordion: Reputation / Infrastructure Context / No Data |
-| Context vs verdict mixed | Domain/IP reports have zero vendor verdicts — pure context only; file reports have zero context in detection tab | Indicators section separates malicious / suspicious / informative rows | CONTEXT_PROVIDERS rendered in their own section, visually distinct from verdict section |
-| Verdict clarity | Large X/Y ratio in header is the dominant visual element | Threat score + AV detection rate in header before any source details | Worst-verdict badge promoted to dominant headline element in card |
-| No-data providers as noise | Not shown — VirusTotal only lists engines that returned a result | Informative indicators section separates low-signal results | No-data section collapsed by default with count shown ("5 had no record") |
-| Context fields buried | Details tab separate from detection; always shown by default | Informative indicators always visible in summary | Inline context summary (2-3 fields) always visible in card header |
+| Distro / Scenario | Parser Concern | Mitigation |
+|-------------------|---------------|------------|
+| Ubuntu 24.04 | RFC3339 timestamp with microseconds and timezone | Detect by checking if first token matches `\d{4}-\d{2}-\d{2}T` |
+| Ubuntu ≤ 23.10 / Debian / RHEL | BSD timestamp, no year, space-padded day | Parse with `strptime("%b %d %H:%M:%S")`; inject current year; handle Dec→Jan rollover |
+| RHEL / Rocky / Alma | Log in `/var/log/secure` | Parser is path-agnostic (accepts uploaded bytes); document both paths in UI |
+| systemd journal export | `journalctl -o syslog` exports BSD format; `journalctl -o json` is incompatible | Accept syslog-format output; document `journalctl -o syslog -u sshd` in UI help text |
+| Logs with hostname variations | Some hosts log FQDN (`server.internal.corp`), some log short name | Hostname is field 2 — parse it but do not use it for anomaly detection (not reliable) |
+| Mixed distro logs (forwarded syslog) | Multiple hosts' logs concatenated — different timestamps per section | Detect timestamp format per line, not per file |
+| High-verbosity sshd (LogLevel DEBUG) | Extra `debug1:`, `debug2:` lines appear before/after auth lines | These do not start with `sshd[<pid>]: Accepted/Failed` — the standard filter skips them |
+| `UseDNS yes` in sshd_config | Hostnames appear instead of IPs in log lines: `from server.example.com` | The IP field may be a hostname; use `socket.getaddrinfo()` to resolve, or skip GeoIP for hostnames |
 
 ---
 
 ## Sources
 
-- [VirusTotal Reports Documentation](https://docs.virustotal.com/docs/results-reports) — Official
-  tab structure, field names, domain/IP vs file/URL report differences (HIGH confidence)
-- [Shodan Host Page](https://www.shodan.io/host/203.185.191.41) — Live inspection of Shodan host
-  report information architecture (HIGH confidence — direct observation)
-- [IntelOwl Usage Documentation](https://intelowlproject.github.io/docs/IntelOwl/usage/) — DataModel
-  synthesis approach, Visualizer aggregation pattern (HIGH confidence — official docs)
-- [Hybrid Analysis Sample Report](https://hybrid-analysis.com/sample/b558f0b1444be5df69027315f7aad563c54a3f791cebbb96a56fce7e5176f8f5/) —
-  Live inspection of Malicious/Suspicious/Informative indicator grouping (HIGH confidence)
-- [ANY.RUN Malware Analysis Report blog](https://any.run/cybersecurity-blog/malware-analysis-report/) —
-  ANY.RUN report section structure and hierarchy (MEDIUM confidence — marketing blog)
-- [URLScan.io About](https://urlscan.io/about/) — "digestible chunks, analyst-first approach"
-  design philosophy (MEDIUM confidence — official but brief)
-- [SentinelX enrichment.ts](../app/static/src/ts/modules/enrichment.ts) — Current implementation
-  of summary row, consensus badge, context row, detail row, sort logic (HIGH confidence — source)
-- [SentinelX _ioc_card.html / _enrichment_slot.html templates](../app/templates/partials/) —
-  Current DOM structure (HIGH confidence — source)
+- [Elastic Blog: Grokking Linux Authorization Logs](https://www.elastic.co/blog/grokking-the-linux-authorization-logs)
+  — Grok patterns for all sshd message variants, IPORHOST pattern (HIGH confidence)
+- [OSSEC Log Samples: sshd](https://www.ossec.net/docs/log_samples/auth/sshd.html)
+  — Comprehensive sshd message corpus including edge cases (HIGH confidence)
+- [CrowdSec Issue #4199: Ubuntu 24.04 RFC3339 breakage](https://github.com/crowdsecurity/crowdsec/issues/4199)
+  — Production evidence of the BSD → RFC3339 breaking change (HIGH confidence)
+- [Elastic Security Rule: Successful SSH Auth from Unusual IP](https://detection.fyi/elastic/detection-rules/linux/initial_access_successful_ssh_authentication_by_unusual_ip/)
+  — Production rule logic, risk score 21, 5-day lookback window, false-positive taxonomy (HIGH confidence)
+- [WorkOS: Impossible Travel](https://workos.com/blog/impossible-travel)
+  — Speed threshold rationale (≥900 km/h = commercial aviation), VPN false-positive patterns (MEDIUM confidence)
+- [Huntress: Time Travelers Busted](https://www.huntress.com/blog/time-travelers-busted-how-to-detect-impossible-travel-)
+  — Real-world impossible travel detection implementation notes (MEDIUM confidence)
+- [Fingerprint.com: Impossible Travel Detection](https://fingerprint.com/blog/impossible-travel-detection/)
+  — Device fingerprint suppression, layered context to reduce false positives (MEDIUM confidence)
+- [rsyslog Syslog Parsing Documentation](https://www.rsyslog.com/doc/whitepapers/syslog_parsing.html)
+  — RFC 3164 vs RFC 5424 timestamp differences, partial-match handling (HIGH confidence)
+- [ipinfo.io API — IP Context Adapter](../app/enrichment/adapters/ip_api.py)
+  — Actual adapter uses ipinfo.io (not ip-api.com); returns country, city, org/ASN, hostname; handles
+  private IP 404s; supports IPv4 and IPv6 (HIGH confidence — source code)
+- [LevelBlue: SSH Brute Force Authentication Attempt](https://levelblue.com/blogs/security-essentials/stories-from-the-soc-ssh-brute-force-authentication-attempt-tactic)
+  — Real SOC triage workflow for SSH brute force, 8,114 attempts/minute observed in production (MEDIUM confidence)
 
 ---
 
-*Feature research for: SentinelX v1.1 Results Page Redesign*
-*Researched: 2026-03-16*
+*Feature research for: SentinelX v1.2 SSH Login Anomaly Detection*
+*Researched: 2026-04-12*
