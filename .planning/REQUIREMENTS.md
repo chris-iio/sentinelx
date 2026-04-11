@@ -93,13 +93,33 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (populated after roadmap creation) | | |
+| PARSE-01 | Phase 6 | Pending |
+| PARSE-02 | Phase 6 | Pending |
+| PARSE-03 | Phase 6 | Pending |
+| PARSE-04 | Phase 6 | Pending |
+| WEB-06 | Phase 6 | Pending |
+| CFG-01 | Phase 6 | Pending |
+| GEO-01 | Phase 7 | Pending |
+| GEO-02 | Phase 7 | Pending |
+| GEO-03 | Phase 7 | Pending |
+| GEO-04 | Phase 7 | Pending |
+| DETECT-01 | Phase 8 | Pending |
+| DETECT-02 | Phase 8 | Pending |
+| DETECT-03 | Phase 8 | Pending |
+| DETECT-04 | Phase 8 | Pending |
+| DETECT-05 | Phase 8 | Pending |
+| DETECT-06 | Phase 8 | Pending |
+| WEB-01 | Phase 9 | Pending |
+| WEB-02 | Phase 9 | Pending |
+| WEB-03 | Phase 9 | Pending |
+| WEB-04 | Phase 9 | Pending |
+| WEB-05 | Phase 9 | Pending |
 
 **Coverage:**
 - v1.2 requirements: 17 total
-- Mapped to phases: 0 (pending roadmap)
-- Unmapped: 17 ⚠️
+- Mapped to phases: 17
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-04-12*
-*Last updated: 2026-04-12 after v1.2 milestone initialization*
+*Last updated: 2026-04-12 — traceability populated after roadmap creation*
