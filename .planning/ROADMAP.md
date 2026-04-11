@@ -76,9 +76,9 @@ Plans:
   5. The `[ssh]` section is recognized in `~/.sentinelx/config.ini` and the normal hours window can be read from it with a default of 06:00-22:00 when absent
 **Plans**: 3 plans
 Plans:
-- [ ] 06-01-PLAN.md — SSH package skeleton with LoginEvent and ParseSummary frozen dataclasses
-- [ ] 06-02-PLAN.md — ConfigStore SSH normal-hours extension and MAX_CONTENT_LENGTH increase to 5 MB
-- [ ] 06-03-PLAN.md — SSH auth.log parser with dual-format timestamp support and TDD
+- [x] 06-01-PLAN.md — SSH package skeleton with LoginEvent and ParseSummary frozen dataclasses
+- [x] 06-02-PLAN.md — ConfigStore SSH normal-hours extension and MAX_CONTENT_LENGTH increase to 5 MB
+- [x] 06-03-PLAN.md — SSH auth.log parser with dual-format timestamp support and TDD
 **UI hint**: no
 
 ### Phase 7: GeoIP Wrapper
