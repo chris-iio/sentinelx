@@ -23,7 +23,7 @@ class Config:
 
     # Security configuration
     TRUSTED_HOSTS: list[str] = ["localhost", "127.0.0.1"]
-    MAX_CONTENT_LENGTH: int = 512 * 1024  # 512 KB — rejects oversize before route runs (SEC-12)
+    MAX_CONTENT_LENGTH: int = 5 * 1024 * 1024  # 5 MB — covers SSH auth.log uploads (SEC-12)
     WTF_CSRF_ENABLED: bool = True
 
     # SEC-19: SameSite cookie attribute for CSRF defense-in-depth

@@ -75,6 +75,13 @@ def test_analyze_groups_by_type(client):
 # ---------------------------------------------------------------------------
 
 
+def test_max_content_length_is_5mb():
+    """WEB-06: MAX_CONTENT_LENGTH must be 5 MB for SSH auth.log uploads."""
+    from app.config import Config
+
+    assert Config.MAX_CONTENT_LENGTH == 5 * 1024 * 1024
+
+
 def test_oversize_post_returns_413(client):
     """POST a 600 KB payload returns 413 (SEC-12 / MAX_CONTENT_LENGTH)."""
     large_payload = "A" * (600 * 1024)
