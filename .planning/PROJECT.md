@@ -89,22 +89,27 @@ Everything built through 9 milestones (2026-02-21 to 2026-03-14). See `.planning
 | CONTEXT_PROVIDERS set pattern | Route zero-verdict context rows through shared renderer | ✓ Good — generalized createContextRow() for all context providers |
 | path converter for IOC URLs | URL IOCs contain slashes that break standard routing | ✓ Good — `<path:ioc_value>` handles all IOC formats |
 
-## Current Milestone: v1.1 Results Page Redesign
+## Current Milestone: v1.2 SSH Login Anomaly Detection
 
-**Goal:** Make 14 providers feel like one cohesive intelligence report instead of 14 separate search results stapled together.
+**Goal:** Detect anomalous SSH login patterns (new IPs, off-hours access, impossible travel) from auth.log file uploads and present findings alongside IOC enrichment.
 
-**Target features:**
-- Uniform information architecture across all provider types (verdict, context, no-data)
-- Cohesive visual presentation that matches the value of the data
-- Results page that embodies the "meta-search engine" identity
+**Status:** Phase 6 complete — SSH domain models, auth.log parser, and config infrastructure built. Phase 7 (GeoIP wrapper) is next.
+
+**What's built so far (Phase 6):**
+- `app/ssh/models.py` — LoginEvent and ParseSummary frozen dataclasses
+- `app/ssh/parser.py` — Dual-format parser (BSD syslog + RFC3339) with year rollover, IPv4/IPv6/hostname classification
+- ConfigStore `[ssh]` section with normal-hours config ("06:00-22:00" default)
+- MAX_CONTENT_LENGTH increased to 5 MB for auth.log uploads
+- 72 new tests (15 model + 34 parser + 23 config)
 
 ## Shipped Milestones
 
 | Version | Name | Shipped | Key Feature |
 |---------|------|---------|-------------|
 | v1.0 | Foundation | 2026-03-14 | 14 providers, detail pages, cache, export, bulk input, relationship graphs |
+| v1.1 | Results Page Redesign | 2026-03-17 | CSS contracts, TS module extraction (Phases 1-2; 3-5 dropped) |
 
 See `.planning/MILESTONES.md` for full history.
 
 ---
-*Last updated: 2026-03-16 after version reset, starting v1.1 Results Page Redesign*
+*Last updated: 2026-04-12 after Phase 6 completion (v1.2 SSH Login Anomaly Detection)*
