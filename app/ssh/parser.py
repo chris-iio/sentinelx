@@ -1,0 +1,255 @@
+"""SSH auth.log parser.
+
+Converts raw auth.log content into structured LoginEvent records and a
+ParseSummary. This is the core deliverable of Phase 6 — downstream phases
+(Phase 7 GeoIP, Phase 8 detector, Phase 9 routes) all consume the output.
+
+Supported log formats:
+- BSD syslog:  "Jan 15 14:30:00 hostname sshd[PID]: Accepted <method> ..."
+- RFC 3339:    "2024-01-15T14:30:00+00:00 hostname sshd[PID]: Accepted <method> ..."
+
+Year inference:
+  BSD timestamps carry no year. This parser infers the year from the ``now``
+  parameter (defaults to ``datetime.now()``). December entries are rolled back
+  one year when the file is analyzed in January (year-rollover heuristic).
+
+Security notes:
+- T-06-06: All regexes are anchored (^) with non-greedy word groups. No nested
+  quantifiers — no catastrophic backtracking possible. Patterns compiled once.
+- T-06-07: LoginEvent.raw_line, .username, and .hostname contain
+  attacker-controlled content. Downstream renderers (Phase 9) MUST use
+  createElement + textContent, never innerHTML (SEC-08).
+- T-06-08: Large files are processed line-by-line. MAX_CONTENT_LENGTH (5 MB,
+  Plan 02) bounds input size before this parser is invoked.
+- T-06-09: Bytes streams are decoded with errors='replace' to prevent
+  UnicodeDecodeError from malformed log content.
+"""
+from __future__ import annotations
+
+import io
+import ipaddress
+import logging
+import re
+from datetime import datetime, timedelta
+from typing import IO
+
+from app.ssh.models import LoginEvent, ParseSummary
+
+logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Compiled regex patterns — module-level for performance
+# ---------------------------------------------------------------------------
+
+# BSD syslog full-line match.
+# Matches:  "Jan 15 14:30:00 hostname sshd[1234]: Accepted password for user from source port N"
+# Groups:   month, day, time, method, user, source
+_BSD_ACCEPTED_RE = re.compile(
+    r'^(?P<month>[A-Za-z]{3})\s+(?P<day>\d{1,2})\s+(?P<time>\d{2}:\d{2}:\d{2})\s+'
+    r'\S+\s+sshd\[\d+\]:\s+Accepted\s+(?P<method>\S+)\s+for\s+(?P<user>\S+)\s+'
+    r'from\s+(?P<source>\S+)\s+port\s+\d+'
+)
+
+# RFC 3339 full-line match.
+# Matches:  "2024-01-15T14:30:00+00:00 hostname sshd[1234]: Accepted password for user from source port N"
+# Groups:   ts, method, user, source
+_RFC3339_ACCEPTED_RE = re.compile(
+    r'^(?P<ts>\S+)\s+\S+\s+sshd\[\d+\]:\s+Accepted\s+(?P<method>\S+)\s+for\s+(?P<user>\S+)\s+'
+    r'from\s+(?P<source>\S+)\s+port\s+\d+'
+)
+
+# Partial-match sentinel: sshd lines that contain "Accepted " but failed full
+# extraction. Triggers a logger.warning with line number and content (D-06).
+_PARTIAL_SSH_RE = re.compile(r'sshd\[\d+\]:\s+Accepted\s+')
+
+
+# ---------------------------------------------------------------------------
+# Private helpers
+# ---------------------------------------------------------------------------
+
+
+def _classify_source(source: str) -> tuple[str | None, str | None]:
+    """Classify a source string as IP address or hostname.
+
+    Args:
+        source: The token after "from" in the log line.
+
+    Returns:
+        Tuple of (source_ip, hostname). Exactly one element is non-None.
+
+    Security note: This function does not validate or sanitise the value.
+    It is the caller's responsibility to store the result only in a frozen
+    LoginEvent and to render it with textContent (SEC-08).
+    """
+    try:
+        ipaddress.ip_address(source)
+        return source, None
+    except ValueError:
+        return None, source
+
+
+def _parse_bsd_timestamp(month: str, day: str, time_str: str, now: datetime) -> datetime:
+    """Parse a BSD syslog timestamp and infer the year from *now*.
+
+    Year-rollover heuristic: If the inferred datetime is more than 24 hours in
+    the future relative to *now*, assume the log entry is from the previous
+    calendar year (e.g. a December entry viewed in January).
+
+    Args:
+        month:    Three-letter month abbreviation, e.g. "Jan", "Dec".
+        day:      Day of month as a string, e.g. "5" or "15".
+        time_str: Time as "HH:MM:SS".
+        now:      Reference timestamp for year inference (typically datetime.now()).
+
+    Returns:
+        A naive datetime with year inferred from *now*.
+    """
+    dt = datetime.strptime(f"{now.year} {month} {day.strip()} {time_str}", "%Y %b %d %H:%M:%S")
+    if dt > now + timedelta(hours=24):
+        dt = dt.replace(year=now.year - 1)
+    return dt
+
+
+def _iter_lines(stream: IO[bytes] | IO[str]) -> list[str]:
+    """Read all lines from a bytes or text stream.
+
+    Bytes streams are decoded as UTF-8 with errors='replace' (T-06-09).
+    The trailing newline, if any, is preserved in split results but stripped
+    per-line during processing.
+
+    Returns:
+        List of raw line strings.
+    """
+    # Detect bytes vs text stream by attempting to read a byte (BytesIO) or
+    # by checking the type annotation at runtime.
+    if isinstance(stream, (io.RawIOBase, io.BufferedIOBase, io.BytesIO)):
+        raw = stream.read()
+        if isinstance(raw, (bytes, bytearray)):
+            content = raw.decode("utf-8", errors="replace")
+        else:
+            content = str(raw)
+    else:
+        content = stream.read()
+
+    # Split into lines, preserving empty trailing lines from trailing newline
+    if not content:
+        return []
+    lines = content.splitlines()
+    return lines
+
+
+# ---------------------------------------------------------------------------
+# Public interface
+# ---------------------------------------------------------------------------
+
+
+def parse_auth_log(
+    stream: IO[bytes] | IO[str],
+    *,
+    now: datetime | None = None,
+) -> tuple[list[LoginEvent], ParseSummary]:
+    """Parse an auth.log file stream into LoginEvent records.
+
+    Processes each line exactly once. BSD syslog format is tried first, then
+    RFC 3339. Lines that contain "sshd[N]: Accepted " but fail full extraction
+    generate a logger.warning (D-06). All other unrecognised lines are silently
+    counted in skipped_count (D-07).
+
+    Args:
+        stream: File-like object (bytes or text). BytesIO or StringIO in tests,
+                open file handles in production.
+        now:    Reference timestamp for BSD year inference.
+                Defaults to datetime.now() when None.
+
+    Returns:
+        Tuple of (events, summary) where summary satisfies the invariant:
+        parsed_count + skipped_count + warning_count == total_lines.
+    """
+    if now is None:
+        now = datetime.now()
+
+    lines = _iter_lines(stream)
+
+    events: list[LoginEvent] = []
+    parsed_count = 0
+    skipped_count = 0
+    warning_count = 0
+    total_lines = len(lines)
+
+    for line_number, raw_line in enumerate(lines, start=1):
+        line = raw_line.rstrip("\r\n")
+
+        # -- BSD syslog format -----------------------------------------------
+        bsd_match = _BSD_ACCEPTED_RE.match(line)
+        if bsd_match:
+            month = bsd_match.group("month")
+            day = bsd_match.group("day")
+            time_str = bsd_match.group("time")
+            method = bsd_match.group("method")
+            user = bsd_match.group("user")
+            source = bsd_match.group("source")
+            ts = _parse_bsd_timestamp(month, day, time_str, now)
+            source_ip, hostname = _classify_source(source)
+            events.append(LoginEvent(
+                username=user,
+                source_ip=source_ip,
+                hostname=hostname,
+                timestamp=ts,
+                auth_method=method,
+                line_number=line_number,
+                raw_line=line,
+            ))
+            parsed_count += 1
+            continue
+
+        # -- RFC 3339 format -------------------------------------------------
+        rfc_match = _RFC3339_ACCEPTED_RE.match(line)
+        if rfc_match:
+            ts_str = rfc_match.group("ts")
+            method = rfc_match.group("method")
+            user = rfc_match.group("user")
+            source = rfc_match.group("source")
+            try:
+                ts = datetime.fromisoformat(ts_str)
+            except ValueError:
+                # Malformed RFC 3339 timestamp — treat as partial match
+                logger.warning(
+                    "Line %d partially matched SSH pattern but failed timestamp extraction: %r",
+                    line_number,
+                    line,
+                )
+                warning_count += 1
+                continue
+            source_ip, hostname = _classify_source(source)
+            events.append(LoginEvent(
+                username=user,
+                source_ip=source_ip,
+                hostname=hostname,
+                timestamp=ts,
+                auth_method=method,
+                line_number=line_number,
+                raw_line=line,
+            ))
+            parsed_count += 1
+            continue
+
+        # -- Partial-match sentinel (D-06) ------------------------------------
+        if _PARTIAL_SSH_RE.search(line):
+            logger.warning(
+                "Line %d partially matched SSH pattern but failed extraction: %r",
+                line_number,
+                line,
+            )
+            warning_count += 1
+            continue
+
+        # -- Unrecognised line (D-07) -----------------------------------------
+        skipped_count += 1
+
+    return events, ParseSummary(
+        total_lines=total_lines,
+        parsed_count=parsed_count,
+        skipped_count=skipped_count,
+        warning_count=warning_count,
+    )
