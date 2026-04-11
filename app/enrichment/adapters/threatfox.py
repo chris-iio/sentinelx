@@ -1,13 +1,9 @@
 """ThreatFox (abuse.ch) API adapter."""
 from __future__ import annotations
 
-import logging
-
 from app.enrichment.adapters.base import BaseHTTPAdapter
 from app.enrichment.models import EnrichmentResult
 from app.pipeline.models import IOC, IOCType
-
-logger = logging.getLogger(__name__)
 
 TF_BASE = "https://threatfox-api.abuse.ch/api/v1/"
 CONFIDENCE_THRESHOLD = 75  # >=75 = malicious, <75 = suspicious (per user decision)

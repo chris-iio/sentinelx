@@ -22,15 +22,12 @@ Does NOT import any adapter-specific module.
 from __future__ import annotations
 
 import abc
-import logging
 
 import requests
 
 from app.enrichment.http_safety import safe_request
 from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.pipeline.models import IOC, IOCType
-
-logger = logging.getLogger(__name__)
 
 
 class BaseHTTPAdapter(abc.ABC):

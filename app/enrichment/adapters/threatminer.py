@@ -1,14 +1,10 @@
 """ThreatMiner passive DNS and related samples adapter."""
 from __future__ import annotations
 
-import logging
-
 from app.enrichment.adapters.base import BaseHTTPAdapter
 from app.enrichment.http_safety import safe_request
 from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.pipeline.models import IOC, IOCType
-
-logger = logging.getLogger(__name__)
 
 THREATMINER_BASE_IP = "https://api.threatminer.org/v2/host.php"
 THREATMINER_BASE_DOMAIN = "https://api.threatminer.org/v2/domain.php"

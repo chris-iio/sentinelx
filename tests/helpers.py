@@ -75,10 +75,6 @@ def make_cve_ioc(value: str = "CVE-2021-44228") -> IOC:
     return make_ioc(IOCType.CVE, value)
 
 
-def make_email_ioc(value: str = "user@evil.com") -> IOC:
-    return make_ioc(IOCType.EMAIL, value)
-
-
 # ---------------------------------------------------------------------------
 # Mock adapter session helper
 # ---------------------------------------------------------------------------

@@ -1,243 +1,221 @@
 # Project Research Summary
 
-**Project:** SentinelX v1.2 — SSH Login Anomaly Detection
-**Domain:** SSH auth.log parsing and behavioral anomaly detection integrated into an existing Flask SOC triage tool
-**Researched:** 2026-04-12
+**Project:** SentinelX v1.1 Results Page Redesign
+**Domain:** Multi-source threat intelligence aggregation UI — presentation layer refinement
+**Researched:** 2026-03-16
 **Confidence:** HIGH
 
 ## Executive Summary
 
-SentinelX v1.2 adds a second vertical to the existing Flask shell: upload an auth.log file, extract structured login events, apply four rule-based anomaly detectors, and surface prioritized alerts with GeoIP enrichment and one-click links to the existing SentinelX detail pages. The feature is architecturally additive — a new `app/ssh/` package running parallel to `app/enrichment/` with no changes to any existing enrichment code and only seven lines of modification to existing files across the entire codebase. The recommended approach uses zero new pip dependencies: all parsing, detection, and distance calculation use stdlib `re`, `datetime`, `math`, `collections`, and `ipaddress` already present in Python 3.10.
+SentinelX v1.1 is a presentation-only redesign of a working SOC triage tool. The codebase ships 14 enrichment providers, per-IOC detail pages, a full filter bar, and 848+ tests. The core problem is not missing data or features — it is that 14 provider rows displayed in a flat accordion feel like 14 separate search results stapled together rather than one unified intelligence report. Research into how VirusTotal, Hybrid Analysis, Shodan, IntelOwl, and URLScan solve this same problem yields a clear consensus: separate verdict assessment from contextual intelligence, group findings by signal type rather than by source name, and make the synthesized judgment the most visually dominant element in each card.
 
-The most important integration decision is GeoIP provider alignment. PROJECT.md references ip-api.com but the existing adapter (`app/enrichment/adapters/ip_api.py`) actually calls ipinfo.io at `https://ipinfo.io/{ip}/json`. STACK.md, FEATURES.md, and ARCHITECTURE.md all confirm this; PITFALLS.md contained residual ip-api.com references from the project doc that do not reflect the live codebase. **ipinfo.io is the correct provider.** It is already in `ALLOWED_API_HOSTS`, already in the test suite, already returns `country` and `loc` (lat/lon) fields that the impossible travel detector needs. The SSH GeoIP module calls ipinfo.io directly through `http_safety.safe_request()` without routing through `IPApiAdapter`, avoiding a coupling mismatch between enrichment pipeline types and SSH-specific data shapes.
+The recommended approach is a three-section accordion structure — Reputation (verdict-producing providers), Infrastructure Context (CONTEXT_PROVIDERS), and No Data (collapsed by default) — combined with a promoted worst-verdict headline element and a verdict breakdown micro-bar replacing the current text consensus badge. All of this is achievable without new Python routes, new TypeScript modules beyond two planned extractions (`verdict-compute.ts`, `row-factory.ts`), or any new libraries. The full native CSS toolbox (CSS Grid subgrid, `@container` queries, `@starting-style`, View Transitions API) is available at the current browser target, and the existing motion primitive system (`--card-index` stagger, `fadeSlideUp`, shimmer skeleton) is already sufficient.
 
-The key risks are: (1) auth.log timestamp format complexity — BSD syslog omits the year, single-digit days use leading spaces, and Ubuntu 24.04 switched to RFC3339, so the parser must detect format per-line and implement the standard year-rollover algorithm; (2) the existing `MAX_CONTENT_LENGTH` of 512 KB will reject real auth.log files — it must be raised to at least 5 MB; and (3) alert deduplication is table stakes — a brute-force log with 8,000 failed lines from one IP must produce one alert, not 8,000. Both timestamp handling and deduplication must be correct in Phase 1 before any anomaly detector is built.
+The key risk is the existing test surface: 91 E2E tests contain 20+ hard-coded CSS class selectors, and the TypeScript modules rely on a documented DOM attribute contract (`data-ioc-value`, `data-ioc-type`, `data-verdict` on the `.ioc-card` root element). Any template restructuring that renames CSS classes or moves these attributes will cause silent failures. The mitigation is to establish preservation contracts before touching any template and run the full E2E suite after every template change — not at the end.
 
 ## Key Findings
 
 ### Recommended Stack
 
-Zero new pip dependencies. Every capability required for v1.2 exists in the Python 3.10 stdlib or existing requirements.txt. New code is five new Python modules (`app/ssh/models.py`, `parser.py`, `detector.py`, `geoip.py`, `routes/ssh.py`), two Jinja templates, and one TypeScript module. The existing `requests` library (via `http_safety.safe_request()`) handles ipinfo.io calls. The existing Flask blueprint pattern and `werkzeug.FileStorage` handle file upload.
+The existing stack is fully sufficient. No new libraries, no npm packages, no new standalone binaries are required. TypeScript 5.8, esbuild 0.27.3, Tailwind CSS v3.4.17 standalone, and the existing `input.css` design system handle everything the redesign needs.
+
+The relevant CSS capabilities are native browser features already available at the es2022 build target: CSS Grid subgrid (97%+ support) for aligned card sections across the grid, `@container` queries (95%+ support) for card-internal layout adaptation, `@starting-style` (Chrome 117+, Firefox 129+, Safari 17.5+) for zero-JS provider row entry animations, and `document.startViewTransition()` (Baseline Oct 2025) for animated card reordering. Scroll-driven `animation-timeline: view()` is explicitly deferred — Firefox does not support it as of March 2026; use `IntersectionObserver` instead.
 
 **Core technologies:**
-- `re` (stdlib): auth.log line parsing — 3-4 named-capture-group regexes cover all OpenSSH message variants; no log-parsing library needed
-- `datetime` (stdlib): timestamp parsing for both BSD syslog (`strptime`) and ISO8601 (`fromisoformat`); year inference via the standard rollover algorithm
-- `math` (stdlib): haversine distance formula for impossible travel (`math.sin`, `math.cos`, `math.atan2`)
-- `collections.defaultdict` / `deque` (stdlib): per-user login history with `deque(maxlen=100)` to bound memory
-- `ipaddress` (stdlib): RFC1918/loopback/reserved IP filtering before GeoIP lookup
-- `requests` (existing, 2.32.5): ipinfo.io calls reusing `http_safety.safe_request()` SSRF guard
-- Flask Blueprints (existing, 3.1.1): `Blueprint("ssh", __name__, url_prefix="/ssh")` — no name collision with existing `bp` or `bp_api`
-
-**One configuration change required:** `MAX_CONTENT_LENGTH` raised from 512 KB to 5 MB in `app/config.py`. The 413 error handler already exists; update its text to mention both use cases.
-
-**What NOT to add:** python-dateutil, GeoLite2/maxminddb, pytz, pandas, scikit-learn, ip-api.com (HTTPS unavailable on free tier, verified live), any ML library, any log-parsing library.
-
-See `.planning/research/STACK.md` for full detail including verified regex patterns, dataclass definitions, and config.ini schema.
+- TypeScript 5.8: DOM manipulation, polling, card reordering — already proven across 13 modules
+- esbuild 0.27.3: compiles to single IIFE bundle; `--target=es2022` enables all needed native APIs
+- Tailwind CSS v3.4.17 standalone: utility classes; no Node.js dependency; v4 upgrade is a follow-on milestone, not this one
+- Custom CSS (`input.css`): motion primitives, design tokens, component classes — redesign extends, does not replace
 
 ### Expected Features
 
-The v1.2 feature set is a clean second entry point: upload auth.log → get structured anomaly alerts. The two workflows (IOC enrichment and SSH analysis) share the Flask shell and ipinfo.io adapter but operate independently with no shared routes, models, or state.
+Research into VirusTotal, Hybrid Analysis, Shodan, IntelOwl, and URLScan reveals consistent patterns: separate verdict providers from context providers, make the synthesized judgment visually dominant, and suppress zero-data rows as visual noise. These platforms all treat source as an attribute within a category group, not as the organizing principle.
 
-**Must have (table stakes for v1.2 MVP):**
-- File upload endpoint (`POST /ssh/analyze`, `multipart/form-data`, CSRF required, `MAX_CONTENT_LENGTH` enforced)
-- Auth log parser: BSD + RFC3339 timestamps, 8 OpenSSH message types, IPv4 + IPv6, parse error summary
-- GeoIP per unique IP via ipinfo.io (skip private ranges; deduplicate before lookup)
-- New IP alert (LOW severity — set membership check per user within this log)
-- New country alert (MEDIUM severity — requires GeoIP to complete first)
-- Brute-force detection: 10 failures/5-minute window from same IP (HIGH severity)
-- Unusual hour login: outside 06:00–22:00 server local time (MEDIUM severity, configurable)
-- Alert deduplication: one alert per (user, ip, rule_type) group — mandatory, not optional
-- Alert table: severity, user, IP, country, reason text, link to `/ioc/ipv4/<ip>`
-- Parse summary: lines parsed, events extracted, errors, time range
-- JSON API response (`Accept: application/json` or `/api/ssh/analyze`)
-- Per-alert `reason` field explaining exactly why the alert fired
+**Must have (table stakes — P1 for v1.1):**
+- Worst-verdict as report headline — make the verdict badge the dominant element in the card header (CSS-only, highest ROI of any single change)
+- Category-grouped provider sections — Reputation / Infrastructure Context / No Data structure (backbone change from which all other improvements follow)
+- No-data section collapsed by default — removes flat visual noise from zero-data provider rows
+- Verdict breakdown micro-bar — visual malicious/suspicious/clean/no-data count replaces `[2/5]` text badge
+- Provider category labels — distinct visual treatment for Reputation vs Infrastructure sections
 
-**Should have (add if time allows in v1.2):**
-- Impossible travel detection (HIGH/CRITICAL) — haversine + ipinfo.io `loc` field; 900 km/h threshold
-- Attack pattern classification: did any brute-force IP later succeed? (MITRE T1110 signal)
-- Per-user login summary header
+**Should have (differentiators — P2 for v1.1.x):**
+- Inline context summary always visible in card header — 2-3 key fields (GeoIP country, ASN org) without requiring accordion expansion
+- Staleness indicator on summary row — `cached_at` already exists in `EnrichmentResultItem`; surface it
+- Scan date on summary row — `scan_date` already in the data model; display it
 
-**Defer to v1.3+:**
-- ConfigStore UI for `normal_hours_start` / `normal_hours_end`
-- Alert JSON export download
-- DNSBL lookup for source IPs
-- Other log types (nginx, Apache, syslog)
-- Real-time log streaming
+**Defer (v1.2+):**
+- Per-category expand/collapse toggle — collapse Infrastructure for clean IOCs
+- IOC card sort by IOC type as alternative to severity sort
+- Tailwind v4 upgrade — natural follow-on cleanup milestone after v1.1 ships
 
 **Anti-features (do not implement):**
-- ML/AI anomaly models — rule-based detection is the explicit design choice
-- Persistent "known good" IP whitelist across sessions
-- Composite risk scores per user — "never invent scores" principle
-- Reverse DNS for every IP — use detail page instead
-- Any automatic firewall rule emission — read-only tool
-
-See `.planning/research/FEATURES.md` for full alert format specification, feature dependency DAG, and distro-specific parser notes.
+- Composite threat score — conflicts with SentinelX "never invent scores" design philosophy
+- Tabs per IOC card — breaks at-a-glance comparison across IOCs; accordion is correct for this use case
+- Auto-expand all cards — 140 rows simultaneously with 10 IOCs is catastrophic for cognitive load
+- Inline verdict override / annotations — removed in v7.0 for good reasons; do not reintroduce
+- Any new Python routes or TypeScript functions not driven by the visual restructuring — v1.1 is refinement only
 
 ### Architecture Approach
 
-SSH detection is a second vertical inside the existing Flask shell. It shares UI chrome, security scaffolding, and GeoIP infrastructure but does not touch the IOC enrichment pipeline at all. The design principle is: new files are additive; existing files receive only surgical additions (7 lines across 3 files). This preserves the existing 757 unit + 91 E2E test suite without modification.
+The redesign requires two TypeScript module extractions from `enrichment.ts` (currently 928 LOC) before any visual work begins. These extractions make the visual redesign isolated to `row-factory.ts` and `input.css` — without them, every row visual change requires touching an interleaved 928-LOC file where computation and DOM mutation are entangled.
 
-The detector is architected to be network-free: the route handler builds a `geo_map: dict[str, str | None]` by calling `geoip.lookup_country()` for each unique IP, then passes this dict to `detector.detect()`. The detector never makes HTTP calls. This means Phase 3 (detector) can be fully built and tested before Phase 2 (GeoIP) is complete.
+The key architectural seam is the existing `CONTEXT_PROVIDERS` set and the rendering fork in `renderEnrichmentResult`. This fork correctly separates context rows from verdict rows today; the redesign promotes this distinction into the visual structure without changing any backend data model.
 
 **Major components:**
-1. `app/ssh/models.py` — Frozen dataclasses: `LoginEvent`, `AnomalyAlert`; consistent with project-wide immutability pattern
-2. `app/ssh/parser.py` — Regex-based: auth.log bytes → `list[LoginEvent]`; handles BSD + RFC3339 formats; implements year-rollover algorithm; returns parse error summary
-3. `app/ssh/geoip.py` — Standalone `lookup_country(ip, allowed_hosts) -> GeoLocation | None`; imports only `http_safety` constants; zero enrichment pipeline coupling
-4. `app/ssh/detector.py` — Pure function `detect(events, geo_map, config) -> list[AnomalyAlert]`; builds per-user history in one in-memory pass; applies 4 rules; deduplicates
-5. `app/routes/ssh.py` — Flask Blueprint `"ssh"` at `/ssh/`; orchestrates modules 2-4; renders templates; applies rate limits
-6. `templates/ssh/upload.html` + `results.html` — Extend `base.html`; CSRF token included on upload form
-7. `app/static/src/ts/modules/ssh.ts` — File validation + alert table interactions; `createElement + textContent` only (SEC-08); no enrichment machinery
+1. `verdict-compute.ts` (NEW, ~80 LOC) — pure functions: `computeWorstVerdict`, `computeConsensus`, `computeAttribution`, `findWorstEntry`; no DOM access, no side effects; extracted from `enrichment.ts`
+2. `row-factory.ts` (NEW, ~150 LOC) — unified `createProviderRow(result, kind, statText)` with `RowKind = "verdict" | "context"` discriminant; owns `CONTEXT_PROVIDERS` set and all row-building DOM code
+3. `enrichment.ts` (MODIFIED, ~300 LOC after extraction) — polling orchestrator and state owner; calls into new modules; continues to own `iocVerdicts`, `iocResultCounts`, `allResults`, `sortTimers`
+4. `input.css` (MAJOR CSS CHANGES) — new component CSS for redesigned row, card, and summary layout; existing motion primitives preserved
+5. Templates: `_ioc_card.html`, `_enrichment_slot.html` — HTML shell changes; all `data-*` attribute contracts preserved verbatim
 
-**Existing files modified (additions only):**
-
-| File | Change |
-|------|--------|
-| `app/__init__.py` | +2 lines: import + register `bp_ssh` |
-| `app/templates/base.html` | +3 lines: SSH nav link |
-| `app/static/src/ts/main.ts` | +2 lines: import + `initSsh()` |
-
-See `.planning/research/ARCHITECTURE.md` for full data flow diagram, build order DAG, security posture table, and exact code sketches for each module.
+**Key constraints that must not change:**
+- State stays in `enrichment.ts` — new helper modules receive values as parameters; no shared state store
+- No backend changes — `rowKindFor(result.provider)` derives kind at render time using the existing `CONTEXT_PROVIDERS` set; row classification is a display concern, not a data concern
+- `createElement + textContent` only — SEC-08 hard constraint; `innerHTML` and `insertAdjacentHTML` are prohibited throughout
 
 ### Critical Pitfalls
 
-1. **Year rollover bug in BSD syslog parsing** — BSD format omits the year; naive "assume current year" assigns 2026 to December logs analyzed in January, breaking chronological ordering and triggering false impossible-travel alerts. Prevention: implement `_infer_year()` using the Logstash algorithm (if inferred date is >24h in the future, use `year - 1`); inject a fixed `now` at parse time. Write a Dec 29 – Jan 03 fixture before anything else.
+1. **CSS class rename breaks 91 E2E tests silently** — E2E page object (`tests/e2e/pages/results_page.py`) has 20+ hard-coded class selectors; failures manifest as timeout errors (looks like a network problem, not a selector mismatch). Prevention: two-class strategy — keep existing class as test anchor with no visual styles, add new class for visual redesign; or migrate page object to `data-testid` anchors before renaming any class.
 
-2. **ipinfo.io vs ip-api.com confusion** — PITFALLS.md contains residual ip-api.com references from PROJECT.md. The live adapter calls ipinfo.io. ip-api.com's free tier is HTTP-only (HTTPS returns 403, verified live). Use ipinfo.io; no allowlist changes needed; do not build an ip-api.com batch adapter.
+2. **`data-*` attribute contract broken by template restructuring** — `filter.ts`, `cards.ts`, and `enrichment.ts` all read/write `data-ioc-value`, `data-ioc-type`, `data-verdict` on the `.ioc-card` root element. Moving these to a wrapper or child element silently breaks filtering, verdict updates, and card sorting. Prevention: treat these attributes as an interface contract before any template restructuring begins.
 
-3. **auth.log format silently drops valid events** — Naive parsers miss `Accepted publickey`, `Failed password for invalid user <name>` (username position shifts), single-digit day padding (`Jan  5`), and IPv6 addresses. Use named capture groups; write an 8-variant fixture before shipping.
+3. **Scope creep converts refinement into feature work** — v1.1 is refinement-only; any change requiring new Jinja context variables, new TypeScript functions, or a growing unit test count has crossed the scope boundary. Prevention: maintain a deferred features list; anything not achievable within existing route context and TypeScript module signatures goes on the list.
 
-4. **`MAX_CONTENT_LENGTH` 512 KB rejects all real auth.log files** — A 30-day server log reaches 2-10 MB. Flask rejects uploads before the route handler runs; the existing 413 message says "paste size" which confuses analysts. Raise to 5 MB and update the error message in Phase 1.
+4. **Information density regression in pursuit of "cleaner" design** — SOC analysts scan, not browse; consumer web design patterns (whitespace, hover reveals, collapsed defaults) force more clicks per IOC and multiply across a 50-IOC triage session. Prevention: write information density acceptance criteria (IOC value fully visible, verdict label always visible, consensus count not hover-only) before touching any CSS.
 
-5. **Alert deduplication is mandatory** — A brute-force log with 8,114 failed lines from one IP must produce one alert. Implement `(username, source_ip, rule_type)` deduplication as part of the detector contract, not a post-processing step.
-
-6. **XSS from attacker-controlled usernames** — SSH scanners inject `<script>` tags as attempted usernames. These appear verbatim in auth.log. `createElement + textContent` only in `ssh.ts`; verify Jinja autoescape is active; never pass log-derived content through `innerHTML`.
-
-7. **Impossible travel timezone complexity** — BSD syslog timestamps are server local time with no timezone. Mixing them with GeoIP UTC offsets is unreliable for v1.2. Use server-local elapsed time for speed calculation; document the limitation with a UI note; defer true timezone correction.
-
-See `.planning/research/PITFALLS.md` for all 16 pitfalls with phase mappings, code-level prevention strategies, and a security mistakes table.
+5. **`innerHTML` introduced during row-factory refactoring** — SEC-08 is a hard constraint; provider names, IOC values, and `raw_stats` arrive from untrusted API responses. Prevention: `createElement + textContent` is the only permitted DOM construction pattern; run `grep -rn "innerHTML\|insertAdjacentHTML" app/static/src/ts/` as a pre-merge gate.
 
 ## Implications for Roadmap
 
-The dependency graph is a strict DAG. Parser correctness is the foundation for all detection; GeoIP must exist before country-based rules; detector must exist before routes can orchestrate it. The suggested phase structure maps directly to this DAG.
+Based on combined research, the redesign decomposes cleanly into four sequential phases. The ordering is non-negotiable: each phase creates the stable foundation the next phase requires.
 
-### Phase 1: Models, Parser, and Foundation Contracts
+### Phase 1: Foundation and Contracts
 
-**Rationale:** Parser correctness is the precondition for all anomaly detection. Year-rollover correctness and format-variant coverage must be verified before any detection logic is written. Configuration changes (MAX_CONTENT_LENGTH, blueprint registration, CSRF) block all subsequent phases if deferred.
+**Rationale:** Establish all preservation contracts before a single line of visual code changes. Pitfall research shows E2E failures, data attribute breaks, and scope drift all originate from skipping this setup. This phase has no visual output but eliminates the highest-risk failure modes upfront.
 
-**Delivers:** `app/ssh/__init__.py`, `app/ssh/models.py` (frozen dataclasses), `app/ssh/parser.py` (BSD + RFC3339, all 8 message types, year rollover, parse error summary), `tests/unit/test_ssh_parser.py` (Dec-Jan rollover fixture + all message variants), `app/config.py` MAX_CONTENT_LENGTH raised to 5 MB, Blueprint "ssh" registered at `/ssh/`.
+**Delivers:** Pre-merge checklist with CSS class preservation rules, data attribute contracts documented in code comments, information density acceptance criteria written out, CSS layer ownership rule established (component classes own all visual properties for existing elements; Tailwind utilities for new layout structures only), accessibility attribute catalog (`aria-*`, `role`, `id` per element), deferred features list initialized.
 
-**Addresses:** File upload foundation, structured event extraction, parse summary
-**Avoids:** Pitfalls 1 (year rollover), 3 (silent line drops), 4 (MAX_CONTENT_LENGTH), 7 (blueprint collision)
-**Research flag:** None — standard stdlib patterns. Skip `/gsd:research-phase`.
+**Addresses:** Pitfalls 1 (E2E class contract), 2 (data attribute contract), 4 (scope discipline), 5 (density requirements), 6 (CSS specificity), 7 (accessibility)
 
----
-
-### Phase 2: GeoIP Wrapper
-
-**Rationale:** GeoIP must exist before new-country detection or impossible travel can be implemented. Small scope (one module, one test file) but blocks country-based rules in Phase 3.
-
-**Delivers:** `app/ssh/geoip.py` (`lookup_country(ip) -> GeoLocation | None` via ipinfo.io using `http_safety` constants), IP deduplication, private IP short-circuit, `tests/unit/test_ssh_geoip.py` (mocked `requests.get`).
-
-**Uses:** Existing `http_safety.validate_endpoint`, `TIMEOUT`, `MAX_RESPONSE_BYTES` — no new imports
-**Addresses:** GeoIP per unique IP, private IP filtering
-**Avoids:** Pitfall 2 (ipinfo.io confirmed; no allowlist changes needed), Pitfall 9 (private IPs)
-**Research flag:** None — ipinfo.io integration verified against live codebase. Skip `/gsd:research-phase`.
+**Research flag:** None — standard pre-refactor discipline. Skip `/gsd:research-phase`.
 
 ---
 
-### Phase 3: Anomaly Detector
+### Phase 2: TypeScript Module Extractions
 
-**Rationale:** The detector is a pure function — no network, no Flask context. It can be fully tested with no mocking. Building it before routes isolates all rule logic to one testable unit.
+**Rationale:** Extract `verdict-compute.ts` and `row-factory.ts` from `enrichment.ts` before any visual redesign. Architecture research is unambiguous: redesigning rows while computation and rendering are interleaved means touching everything simultaneously. Extraction first isolates the visual redesign to `row-factory.ts` and `input.css` only.
 
-**Delivers:** `app/ssh/detector.py` with all four rules (new_ip, new_country, unusual_hours, impossible_travel), alert deduplication by `(username, source_ip, rule_type)`, `deque(maxlen=100)` per-user history, haversine distance for impossible travel, configurable normal-hours window, `tests/unit/test_ssh_detector.py` (all rules, deduplication, edge cases, no network).
+**Delivers:** `verdict-compute.ts` (pure computation, no DOM, ~80 LOC), `row-factory.ts` (unified `createProviderRow` with `RowKind` discriminant, ~150 LOC), `enrichment.ts` trimmed to ~300 LOC orchestrator. Zero behavioral change — existing E2E suite passes unchanged after this phase.
 
-**Implements:** Per-user in-memory history, rule-based detection, deduplication
-**Addresses:** All four anomaly rules, impossible travel (if time allows), alert deduplication
-**Avoids:** Pitfall 5 (bounded deque history), Pitfall 4 (naive datetime — document timezone limitation), Pitfall 14 (country-level only, no intra-country haversine flagging)
-**Research flag:** None — rule logic is fully specified. Skip `/gsd:research-phase`.
+**Addresses:** Architecture "Separate Computation from DOM Mutation" pattern; enables Phase 3 to be visually isolated with compiler verification
 
----
+**Test gate:** `tsc` compilation passes; all 91 E2E tests pass unchanged; all provider rows render with correct verdict CSS classes.
 
-### Phase 4: Routes and Templates
-
-**Rationale:** Routes orchestrate the three prior modules. All data shapes are now concrete. This phase carries the highest integration risk (file upload, new routes, template rendering) and is done after all underlying logic is verified.
-
-**Delivers:** `app/routes/ssh.py` (upload form GET, analyze POST, rate-limited), `templates/ssh/upload.html` (CSRF token, file size guidance, distro path hints), `templates/ssh/results.html` (alert table with severity/user/IP/country/reason/enrichment link), `app/__init__.py` (+2 lines), `app/templates/base.html` (+3 lines nav link), `tests/unit/test_ssh_routes.py`, integration upload + analyze flow tests.
-
-**Addresses:** Full MVP feature set, JSON API response, parse failure summary display, enrichment link to `/ioc/ipv4/<ip>`
-**Avoids:** Pitfall 6 (XSS — Jinja autoescape + textContent), Pitfall 11 (CSRF on upload form), Pitfall 12 (in-memory processing, no disk write), Pitfall 13 (base.html name verification before extending)
-**Research flag:** None — Flask blueprint pattern well-established in this codebase. Skip `/gsd:research-phase`.
+**Research flag:** None — mechanical extractions with compiler verification. Skip `/gsd:research-phase`.
 
 ---
 
-### Phase 5: TypeScript Module
+### Phase 3: Visual Redesign — CSS and Row Structure
 
-**Rationale:** TypeScript enhances the server-rendered templates but is not required for functional correctness. Building it last means DOM structure is stable and the module can be written against real markup.
+**Rationale:** With `row-factory.ts` extracted, all visual changes to rows are isolated to one file. CSS changes in `input.css` carry no TypeScript risk. This is the highest creative content of the milestone and the phase that directly addresses the "14 results stapled together" problem.
 
-**Delivers:** `app/static/src/ts/modules/ssh.ts` (file input validation, client-side size warning, alert table copy-to-clipboard, severity filter toggle), registered in `main.ts` (+2 lines), `make js-dev` build verified.
+**Delivers:** Category-grouped provider sections (Reputation / Infrastructure Context / No Data) in `row-factory.ts` and `input.css`, worst-verdict as headline element (CSS sizing in `.ioc-card-header`), verdict breakdown micro-bar (additive JS in `updateSummaryRow` + CSS), no-data section collapsed by default, provider category labels/icons, `@starting-style` entry animation for provider rows, `document.startViewTransition()` wrapping `doSortCards()` for animated card reorder.
 
-**Addresses:** Alert table UX, copy-to-clipboard (follows existing `clipboard.ts` pattern)
-**Avoids:** Pitfall 6 (SEC-08 textContent-only enforced), Pitfall 13 (SSH page guard: `if (!document.querySelector('.page-ssh')) return`)
-**Research flag:** None — follows established module init patterns. Skip `/gsd:research-phase`.
+**Addresses:** All P1 features from FEATURES.md; uses CSS Grid subgrid, `@container` queries, `@starting-style`, View Transitions API — all in existing stack
+
+**Avoids:** Pitfall 5 (information density), Pitfall 6 (CSS specificity — component classes own existing element properties)
+
+**Test gate:** E2E suite passes; visual inspection of all verdict states (malicious, suspicious, clean, known_good, no_data, error) and all context providers; information density acceptance criteria verified.
+
+**Research flag:** None — CSS patterns verified with HIGH confidence against MDN/caniuse. Skip `/gsd:research-phase`.
+
+---
+
+### Phase 4: HTML Template Restructuring
+
+**Rationale:** HTML shell changes come last because: (a) CSS must be finalized first so template structure reflects confirmed layout decisions, (b) template changes carry the highest risk of breaking the DOM attribute contract — doing them last minimizes time with a broken contract.
+
+**Delivers:** Updated `_ioc_card.html` and `_enrichment_slot.html` for new visual design, all `data-*` attributes preserved on `.ioc-card` root element, detail link Jinja expression preserved verbatim (`url_for('main.ioc_detail', ioc_type=ioc.type.value, ioc_value=ioc.value)`), all `aria-*` and `role` attributes preserved.
+
+**Addresses:** Pitfall 3 (detail link `<path:>` contract), Pitfall 7 (accessibility attributes)
+
+**Pre-merge gate:** Full DOM attribute contract checklist; URL IOC detail link smoke test (`/ioc/url/https://evil.com/beacon` returns 200); full E2E suite at zero failures; `grep` for `innerHTML`.
+
+**Research flag:** None — HTML restructuring follows documented contracts. Skip `/gsd:research-phase`.
+
+---
+
+### Phase 5 (conditional): Inline Context Summary
+
+**Rationale:** The inline context summary (always-visible GeoIP country + ASN org in card header) is a P2 feature architecturally independent of the P1 category grouping changes but higher-complexity. It requires `enrichment.ts` to route context provider results into a new DOM slot above the accordion rather than only into the expanded details container. Execute this phase only if Phases 3-4 deliver cleanly within scope.
+
+**Delivers:** 2-3 key context fields visible in card header without requiring accordion expansion; staleness indicator for cached results in summary row; scan date on summary row.
+
+**Addresses:** P2 features from FEATURES.md (inline context summary, staleness indicator, scan date)
+
+**Research flag:** LOW complexity, but the timing dependency needs targeted analysis before implementation. Context providers may arrive after the card's initial summary row render; confirm whether `updatePendingIndicator` handles this correctly for the new inline slot.
 
 ---
 
 ### Phase Ordering Rationale
 
-- Phase 1 must be first: parser correctness and configuration preconditions (MAX_CONTENT_LENGTH, blueprint) block all subsequent phases.
-- Phase 2 before Phases 3-4: GeoIP output shape must be concrete before the detector's `geo_map` parameter is finalized. Phase 3 can begin in parallel using mock geo_map dicts.
-- Phase 3 before Phase 4: route handler must know what `detect()` returns before it can render templates.
-- Phase 4 before Phase 5: TypeScript module targets real DOM markup; markup must be stable first.
-- The Parser → GeoIP → Detector → Routes → TypeScript order is also the natural order for incremental integration testing.
+- Phase 1 must be first: contract violations are the most expensive failure mode; establish the insurance before doing any work.
+- Phase 2 before Phase 3: the 928-LOC `enrichment.ts` monolith makes visual isolation impossible without extraction; it is the necessary precondition for the redesign.
+- Phase 3 (CSS/JS) before Phase 4 (HTML): once CSS is stable, template changes are mechanical; reversing this order means iterating HTML structure while CSS is still changing.
+- Phase 5 conditional: avoids forcing scope expansion on the core redesign; inline context summary is achievable but not required to solve the "14 results stapled together" problem.
 
 ### Research Flags
 
-Phases needing deeper research during planning:
-- **None.** All four research areas returned HIGH-confidence findings based on direct codebase inspection and verified API probes.
+Phases needing deeper targeted research during planning:
+- **Phase 5 (Inline Context Summary):** Timing dependency — context providers may complete after the card's initial summary row render; needs targeted analysis of enrichment polling flow before implementation to confirm whether enrichment.ts handles partial results correctly for the new inline DOM slot.
 
 Phases with standard patterns (skip `/gsd:research-phase`):
-- **All five phases** follow well-documented patterns: stdlib regex parsing, ipinfo.io HTTP wrapper, rule-based detection with in-memory state, Flask Blueprint registration, TypeScript module init.
-
-One implementation-time verification (not a blocker):
-- **Impossible travel `loc` field availability:** STACK.md confirms ipinfo.io returns `loc` as `"lat,lon"`. A quick integration test in Phase 2 will validate this concretely before Phase 3 commits to the haversine implementation.
+- **Phase 1:** Pre-refactor contract documentation — standard discipline; no unknowns.
+- **Phase 2:** TypeScript module extraction — mechanical with compiler verification; extraction boundaries are clear.
+- **Phase 3:** CSS patterns all verified with HIGH confidence against MDN/caniuse and the existing codebase.
+- **Phase 4:** HTML template restructuring — follows documented DOM attribute contracts.
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | Verified against running Python 3.10.12, live API probes (ip-api.com HTTPS 403 confirmed), direct source inspection of requirements.txt, config.py, ip_api.py, http_safety.py |
-| Features | HIGH | auth.log format variants from official OpenSSH docs + production incident evidence (CrowdSec #4199); anomaly rules from production Elastic SIEM rules and real SOC triage workflows |
-| Architecture | HIGH | Based entirely on direct codebase inspection of all affected files; 7-line modification footprint on existing files is mechanically verifiable |
-| Pitfalls | MEDIUM-HIGH | Critical pitfalls are verified structural facts. PITFALLS.md Pitfall 2 (ip-api.com batch) describes a scenario that does not apply — correct provider is ipinfo.io. Impossible travel timezone mitigation is a pragmatic judgment call, not a verified best practice. |
+| Stack | HIGH | Existing codebase directly inspected; CSS feature browser support verified against MDN/caniuse and Can I Use; all native API targets confirmed at the es2022 build target |
+| Features | HIGH | Primary sources: VirusTotal docs, live Shodan and Hybrid Analysis inspection, IntelOwl official docs; design recommendations have strong cross-platform consensus from five independent platforms |
+| Architecture | HIGH | Full source code review of all 13 TypeScript modules and 6 templates; extraction boundaries are mechanically verifiable with `tsc`; DOM attribute contracts directly confirmed from E2E test selectors |
+| Pitfalls | HIGH | Derived entirely from direct codebase inspection (E2E selectors, TypeScript dependency graph, CSS layer structure); not theoretical — these are structural facts about the existing system with recovery paths |
 
 **Overall confidence:** HIGH
 
 ### Gaps to Address
 
-- **PITFALLS.md ip-api.com references:** PITFALLS.md describes ip-api.com as the SSH GeoIP provider (Pitfall 2, integration risk table) with batch rate limit analysis and SSRF allowlist requirements. This is incorrect — the live adapter and all other research confirm ipinfo.io. During planning, treat all ip-api.com references in PITFALLS.md as documentation artifacts from an incorrect assumption in PROJECT.md; use STACK.md and ARCHITECTURE.md as authoritative on GeoIP provider.
+- **Inline context summary timing (Phase 5):** When a context provider result arrives via polling, the card may already have rendered its summary row with no context slot. Whether `enrichment.ts` handles writing into a new inline context slot correctly for partially-completed enrichment jobs needs verification during Phase 5 planning — not a blocker for Phases 1-4.
 
-- **Impossible travel scope decision:** Haversine + ipinfo.io `loc` field is well-specified but adds complexity to Phase 3. Research recommends implementing it as "add if time allows" rather than blocking the MVP. Confirm this scope decision during roadmap creation.
+- **Verdict micro-bar animation interaction (Phase 3):** Whether animating the bar fill (width transition as provider results accumulate) conflicts with the `sortCardsBySeverity` debounce needs a quick prototype check early in Phase 3. The fix is simple if it occurs (skip animation during active sort), but worth verifying before committing to the bar animation approach.
 
-- **`enrichment.ts` init guard:** PITFALLS.md notes that `enrichment.ts:init()` may run on SSH pages and log errors. During Phase 5, verify whether a page-presence guard already exists or needs to be added (1-line fix, must not be forgotten).
+- **Tailwind standalone scanner content glob (Phase 3-4):** If new utility classes are added in redesigned templates, confirm they are included in the Tailwind standalone scanner's content configuration. This is a known integration gotcha — utility classes added to templates not in the scanner glob silently drop from `dist/style.css`.
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- SentinelX codebase direct inspection: `app/enrichment/adapters/ip_api.py` (confirmed ipinfo.io), `app/enrichment/http_safety.py`, `app/config.py`, `app/__init__.py`, `app/routes/__init__.py`, `app/routes/api.py`, `requirements.txt`
-- Live API probe: `https://ip-api.com/json/8.8.8.8` returns HTTP 403 — confirms HTTPS unavailable on free tier
-- Python 3.10.12 stdlib verification: all required modules confirmed available
-- OpenSSH regex: all 4 message variants tested against sample lines in running Python interpreter
-- [CrowdSec Issue #4199](https://github.com/crowdsecurity/crowdsec/issues/4199) — Ubuntu 24.04 RFC3339 timestamp breaking change, production evidence
-- [Elastic: Grokking Linux Authorization Logs](https://www.elastic.co/blog/grokking-the-linux-authorization-logs) — Grok patterns for all sshd message variants
-- [OSSEC Log Samples: sshd](https://www.ossec.net/docs/log_samples/auth/sshd.html) — comprehensive sshd message corpus
+- SentinelX codebase direct inspection: `app/static/src/ts/modules/enrichment.ts` (928 LOC), `cards.ts`, `filter.ts`, `types/api.ts`, `types/ioc.ts`, `utils/dom.ts`, `main.ts`
+- SentinelX templates: `results.html`, `_ioc_card.html`, `_enrichment_slot.html`, `_verdict_dashboard.html`, `_filter_bar.html`, `ioc_detail.html`
+- SentinelX E2E test selectors: `tests/e2e/pages/results_page.py`, `test_results_page.py`, `test_extraction.py`, `test_copy_buttons.py`
+- SentinelX CSS: `app/static/src/input.css` (design tokens, keyframes, component classes)
+- [View Transition API — MDN](https://developer.mozilla.org/en-US/docs/Web/API/View_Transition_API) — API shape, browser support
+- [What's new in view transitions (2025) — Chrome Developers](https://developer.chrome.com/blog/view-transitions-in-2025) — same-document transitions, Baseline Oct 2025 confirmed
+- [VirusTotal Reports Documentation](https://docs.virustotal.com/docs/results-reports) — tab structure, domain/IP vs file/URL report information architecture
+- [IntelOwl Usage Documentation](https://intelowlproject.github.io/docs/IntelOwl/usage/) — DataModel synthesis pattern, Visualizer aggregation
+- [Hybrid Analysis Sample Report](https://hybrid-analysis.com/sample/b558f0b1444be5df69027315f7aad563c54a3f791cebbb96a56fce7e5176f8f5/) — live Malicious/Suspicious/Informative grouping inspection
+- [Shodan Host Page](https://www.shodan.io/host/203.185.191.41) — live inspection of category-first information architecture
+- [animation-timeline: view() — Can I use](https://caniuse.com/mdn-css_properties_animation-timeline_view) — 82.81% global support, Firefox flag-only as of March 2026
 
 ### Secondary (MEDIUM confidence)
-- [WorkOS: Impossible Travel](https://workos.com/blog/impossible-travel) — speed threshold rationale (900 km/h), VPN false positive patterns
-- [Elastic Security Detection Rule: SSH Authentication by Unusual IP](https://detection.fyi/elastic/detection-rules/linux/initial_access_successful_ssh_authentication_by_unusual_ip/) — production rule logic and false positive taxonomy
-- [LevelBlue: SSH Brute Force SOC workflow](https://levelblue.com/blogs/security-essentials/stories-from-the-soc-ssh-brute-force-authentication-attempt-tactic) — 8,114 attempts in production; SOC triage workflow
-- [Grafana Loki issue #692](https://github.com/grafana/loki/issues/692) — yearless syslog timestamp year=0 failure
-- [Logstash date filter issue #46](https://github.com/logstash-plugins/logstash-filter-date/issues/46) — New Year rollover algorithm
+- [Tailwind CSS v4.0 release post](https://tailwindcss.com/blog/tailwindcss-v4) — v4 CSS feature set, `@theme` config model
+- [Tailwind CSS v4 standalone CLI — GitHub Discussion #17638](https://github.com/tailwindlabs/tailwindcss/discussions/17638) — v4.1.3 standalone binary confirmed
+- [The New CSS Layout Toolbox — Medium Oct 2025](https://medium.com/@kedarbpatil07/the-new-css-layout-toolbox-subgrid-container-queries-and-more-41cf94ebf821) — subgrid 97%+ global support
+- [URLScan.io About](https://urlscan.io/about/) — "digestible chunks, analyst-first approach" design philosophy
+- [Rearrange / Animate CSS Grid Layouts with the View Transition API — Bram.us](https://www.bram.us/2023/05/09/rearrange-animate-css-grid-layouts-with-the-view-transition-api/) — grid reorder + View Transitions implementation pattern
 
 ---
-*Research completed: 2026-04-12*
+*Research completed: 2026-03-16*
 *Ready for roadmap: yes*

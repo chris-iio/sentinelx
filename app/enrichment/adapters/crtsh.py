@@ -1,14 +1,10 @@
 """crt.sh certificate transparency adapter."""
 from __future__ import annotations
 
-import logging
-
 from app.enrichment.adapters.base import BaseHTTPAdapter
 from app.enrichment.http_safety import safe_request
 from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.pipeline.models import IOC, IOCType
-
-logger = logging.getLogger(__name__)
 
 CRTSH_BASE = "https://crt.sh"
 

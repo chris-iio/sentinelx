@@ -112,7 +112,7 @@ const PROVIDER_CONTEXT_FIELDS: Record<string, ContextFieldDef[]> = {
     { key: "file_name", label: "File", type: "text" },
     { key: "source", label: "Source", type: "text" },
   ],
-  "GreyNoise Community": [
+  "GreyNoise": [
     { key: "noise", label: "Noise", type: "text" },
     { key: "riot", label: "RIOT", type: "text" },
     { key: "classification", label: "Classification", type: "text" },

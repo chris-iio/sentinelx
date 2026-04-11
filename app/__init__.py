@@ -126,7 +126,7 @@ def create_app(config_override: dict | None = None) -> Flask:
     # SEC-12: User-friendly 413 response with size limit stated
     @app.errorhandler(413)
     def request_entity_too_large(error):  # type: ignore[return]
-        return "Input too large. Maximum paste size is 512 KB.", 413
+        return "Input too large. Maximum upload size is 5 MB.", 413
 
     # SEC-21: User-friendly 429 response for rate-limited requests
     @app.errorhandler(429)

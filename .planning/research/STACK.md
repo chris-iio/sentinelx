@@ -1,251 +1,173 @@
-# Technology Stack
+# Stack Research
 
-**Project:** SentinelX v1.2 — SSH Login Anomaly Detection
-**Researched:** 2026-04-12
-**Overall confidence:** HIGH (all claims verified against running Python 3.10.12 environment and live API probes)
-
----
-
-## Context: Additive Milestone — Existing Stack Is Locked
-
-This document answers one question only: **what new libraries or configuration changes does v1.2 require?**
-
-The existing stack (Python 3.10 + Flask 3.1, requests, dataclasses, TypeScript 5.8 + esbuild, Tailwind CSS v3, SQLite, 14 provider adapters) ships unchanged.
-
-**Answer: zero new pip dependencies.** Every capability needed for SSH log parsing, anomaly detection, and GeoIP enrichment is already available in the runtime environment or the existing requirements.txt.
+**Domain:** Results page redesign — multi-source aggregation UI, CSS layout, animation
+**Milestone:** v1.1 Results Page Redesign
+**Researched:** 2026-03-16
+**Confidence:** HIGH (existing stack verified from codebase; CSS feature support verified against
+official MDN/caniuse; Tailwind v4 standalone verified from GitHub Discussions)
 
 ---
 
-## Recommended Stack Additions
+## Context: Presentation Refinement Only
 
-### New Python Modules (stdlib — already available, no install needed)
+The existing stack is locked and ships. This document answers one question: **what, if anything,
+does the v1.1 results page redesign require beyond what already exists?**
 
-| Module | Version | Purpose | Why |
-|--------|---------|---------|-----|
-| `re` | stdlib | auth.log line parsing | Regex is the correct tool for fixed-format syslog lines; no third-party log-parsing library needed |
-| `math` | stdlib | Haversine distance formula for impossible travel | `math.sin`, `math.cos`, `math.atan2` — all required operations present |
-| `datetime` | stdlib | Timestamp parsing, time-delta calculation | `datetime.datetime.strptime()` handles both syslog and ISO8601 formats; `timedelta.total_seconds()` gives the travel window |
-| `dataclasses` | stdlib (Python 3.7+) | `LoginEvent`, `GeoLocation`, `Anomaly` models | Project already uses frozen dataclasses throughout — consistent pattern |
-| `collections` | stdlib | `defaultdict` for per-user login history | In-memory `{username: [LoginEvent]}` grouping — no external data structure library needed |
-| `ipaddress` | stdlib | RFC1918 private IP filtering | `ipaddress.ip_address(ip).is_private` correctly excludes 10.x, 172.16–31.x, 192.168.x before GeoIP lookup |
-| `io` | stdlib | `BytesIO` for file stream handling | Flask's `request.files['log'].stream` is already a file-like object; no extra handling needed |
+**Existing baseline (do not re-evaluate):**
 
-### Existing Dependencies That Cover New Needs (no version changes)
+| Tool | Version | How Used |
+|------|---------|----------|
+| TypeScript | 5.8 | 13 modules, strict mode, IIFE output via esbuild |
+| esbuild | 0.27.3 | Standalone binary, `--target=es2022`, bundles to `dist/main.js` |
+| Tailwind CSS | v3.4.17 | Standalone binary (no Node.js), utility classes in templates |
+| Custom CSS | input.css (58KB) | Design tokens, keyframes, component classes |
+| Jinja2 | Flask 3.1 | Server-side templates, partials, macros |
 
-| Dependency | Version | New Use | Why No Change Needed |
-|------------|---------|---------|---------------------|
-| `requests` | 2.32.5 | GeoIP calls to ipinfo.io from SSH module | `requests.Session` + existing `safe_request()` in `http_safety.py` provides SSRF validation, timeouts, byte cap — reuse directly |
-| `Flask` | 3.1.1 | SSH Blueprint, file upload, JSON API | `werkzeug.FileStorage` (bundled with Flask) handles multipart file upload; `Blueprint` pattern already in project |
-| `dataclasses` | stdlib | New SSH-specific models | Pattern already used in `enrichment/models.py` and `pipeline/models.py` |
-
-### New Application Modules (no pip install — new .py files only)
-
-| Module | Path | Responsibility |
-|--------|------|----------------|
-| SSH models | `app/ssh/models.py` | `LoginEvent`, `GeoLocation`, `Anomaly` frozen dataclasses |
-| SSH parser | `app/ssh/parser.py` | auth.log bytes → `list[LoginEvent]` using stdlib `re` + `datetime` |
-| SSH detector | `app/ssh/detector.py` | `list[LoginEvent]` → `list[Anomaly]` using stdlib `math` + `collections` |
-| SSH GeoIP | `app/ssh/geoip.py` | `str (IP)` → `GeoLocation | None` using `requests` + ipinfo.io |
-| SSH routes | `app/routes/ssh.py` | Flask routes: upload form (`GET /ssh`), analysis (`POST /ssh/analyze`), JSON API (`GET /api/ssh/<job_id>`) |
+The CSS design system already has: `--ease-out-expo`, `--ease-out-quart`, `--duration-fast/normal/slow`,
+`fadeSlideUp`, `fadeIn`, `slideInFade`, `slideOutFade` keyframes, shimmer-line loading skeleton,
+`--card-index` stagger via CSS custom property, verdict color triples, zinc hierarchy tokens.
 
 ---
 
-## GeoIP Provider: ipinfo.io (Already Integrated)
+## Verdict: Current Stack Is Sufficient — No New Libraries Required
 
-**Use ipinfo.io. Do not use ip-api.com.**
+The redesign can achieve everything it needs through:
+1. CSS features already available in the current `input.css` pipeline (Tailwind + custom)
+2. ES2022 vanilla TypeScript (already compiled by esbuild)
+3. Native browser APIs that ship in all modern browsers
 
-The PROJECT.md mentions "ip-api.com for GeoIP" but the existing adapter (`app/enrichment/adapters/ip_api.py`) actually calls ipinfo.io (`https://ipinfo.io/{ip}/json`). This distinction matters:
-
-| | ipinfo.io | ip-api.com |
-|--|-----------|------------|
-| Free tier HTTPS | Yes (verified: `https://ipinfo.io`) | No — HTTP 403 on free tier (verified live) |
-| lat/lon for impossible travel | Yes — `loc` field: `"49.4478,11.0683"` | Yes — separate `lat`/`lon` fields |
-| Country code | Yes — `country` field | Yes — `countryCode` field |
-| Rate limit (free tier) | 50,000 req/month (~1,667/day) | 45 req/min |
-| Already in SSRF allowlist | Yes — `"ipinfo.io"` in `ALLOWED_API_HOSTS` | No — would require config change |
-| Already in test suite | Yes — `tests/test_ip_api.py` | No |
-
-**Conclusion:** ipinfo.io is correct. The `loc` field (`"lat,lon"` string) is parsed as `lat, lon = map(float, loc.split(','))` — sufficient for haversine distance. No adapter changes required.
-
-The SSH GeoIP module calls ipinfo.io **directly** (not through `IPApiAdapter`) because:
-1. `IPApiAdapter` wraps results in `EnrichmentResult` — wrong shape for SSH use
-2. SSH needs raw `(country_code, lat, lon)` tuples, not enrichment verdicts
-3. A standalone `lookup_geoip(ip, session, allowed_hosts)` function in `app/ssh/geoip.py` reuses `safe_request()` from `http_safety.py` without inheriting the provider abstraction
+No npm packages, no new standalone binaries, no new Python dependencies.
 
 ---
 
-## auth.log Format Variations
+## Recommended Stack
 
-**Use stdlib `re` only. No third-party log-parsing library needed.**
+### Core Technologies (unchanged)
 
-Two timestamp formats appear in production auth.log files:
+| Technology | Version | Purpose | Why Sufficient |
+|------------|---------|---------|---------------|
+| TypeScript | 5.8 | DOM manipulation, enrichment polling, card reordering | Already handles all dynamic behavior; 13 modules prove the architecture scales |
+| esbuild | 0.27.3 | Compiles TS to single IIFE bundle | `--target=es2022` enables all native APIs needed (View Transitions, CSS custom properties) |
+| Tailwind CSS | v3.4.17 standalone | Utility classes for layout adjustments | Generates only used classes; CSS Grid/Flexbox utilities are comprehensive |
+| Custom CSS (input.css) | — | Design tokens, component classes, keyframes | Already has motion primitives; redesign extends existing keyframes, not replaces them |
 
-### Format 1: Traditional syslog (most common — Ubuntu, Debian, RHEL, CentOS)
+### CSS Capabilities to Leverage (Already Available, No New Setup)
+
+These are native CSS features available in the current browser target (Chrome/Edge/Firefox/Safari modern).
+They require zero new tools — just new CSS rules in `input.css`.
+
+| Technique | Availability | Purpose in Redesign | Confidence |
+|-----------|-------------|---------------------|------------|
+| CSS Grid subgrid | Baseline (97%+ support) | Align card sections (header, enrichment zone, footer) across the card grid without JavaScript — headers stay level, stat rows align across cards | HIGH — Chrome 117+, Firefox 71+, Safari 16+ |
+| CSS `@container` queries | Baseline (95%+ support) | Cards adapt their internal layout based on their allocated width, not viewport — handles wide vs narrow grid slots without media query hacks | HIGH — Chrome 106+, Firefox 110+, Safari 16+ |
+| `view-transition-name` + `document.startViewTransition()` | Baseline Newly Available Oct 2025 | Animate card reordering (sort by severity) so cards glide to their new positions instead of teleporting — same-document transitions work in Chrome 111+, Firefox 133+, Safari 18+ | HIGH for same-document transitions |
+| CSS `animation-timeline: view()` (scroll-driven) | ~83% global support, Safari 26+ only | Animate cards entering the viewport — LOW PRIORITY, only suitable as progressive enhancement because Firefox does not support it as of March 2026 | MEDIUM — skip for MVP, add with `@supports` guard later |
+| `@starting-style` (entry animation) | Chrome 117+, Firefox 129+, Safari 17.5+ | Animate new detail rows appearing — triggers animation only on element insertion, not every render | HIGH — better than existing JS-managed `fadeSlideUp` for dynamically added rows |
+| CSS `color-mix()` | Baseline (95%+ support) | Derive hover/focus states from verdict color tokens without hardcoding more hex values | HIGH |
+| CSS `transition: grid-template-rows` | Modern browsers | Animate the expand/collapse of `.enrichment-details` with `grid-template-rows: 0fr` → `1fr` trick — smoother than `max-height` hacks | HIGH — known pattern, works in all modern browsers |
+
+### View Transitions for Card Sort Animation
+
+The existing `doSortCards()` in `cards.ts` re-appends DOM nodes synchronously — cards teleport to
+new positions. Wrapping this in `document.startViewTransition()` with `view-transition-name`
+CSS properties on each card produces animated FLIP-style movement:
+
+```typescript
+// In cards.ts — replace doSortCards() body with:
+if ('startViewTransition' in document) {
+  document.startViewTransition(() => doSortCards());
+} else {
+  doSortCards(); // graceful fallback — existing behavior
+}
 ```
-Jan 15 14:23:45 hostname sshd[12345]: Accepted password for alice from 192.168.1.1 port 55432 ssh2
-Jan  5 09:00:00 hostname sshd[999]: Failed password for root from 1.2.3.4 port 22345 ssh2
+
+This requires assigning `view-transition-name` values. The `--card-index` CSS custom property
+pattern already in `ui.ts` provides a template: assign names dynamically from TypeScript using
+`card.style.setProperty('view-transition-name', 'ioc-card-' + CSS.escape(iocValue))`.
+
+No new library. Zero bundle size impact. Graceful degradation is built-in — browsers without
+support just execute the DOM change without animation.
+
+**Browser support:** Chrome 111+, Edge 111+, Firefox 133+ (Baseline Oct 2025), Safari 18+.
+HIGH confidence this is safe for production use.
+
+### `@starting-style` for Provider Row Entry Animation
+
+The current `enrichment.ts` appends provider detail rows with `detailsContainer.appendChild(row)`.
+These rows appear instantly. Adding an entry animation requires either a JavaScript class-toggle
+trick or `@starting-style`, which specifies the initial painted state when an element is first
+inserted:
+
+```css
+.provider-detail-row {
+  transition: opacity 200ms var(--ease-out-quart), transform 200ms var(--ease-out-quart);
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@starting-style {
+  .provider-detail-row {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
 ```
-- Month is abbreviated English name (`Jan`–`Dec`)
-- Day is right-justified, single-digit days have leading space (`" 5"`)
-- No year — must be inferred from current year with rollover detection
-- No timezone — server local time; hour comparison is direct (no conversion)
 
-**Regex:** `r'^(?P<month>\w{3})\s+(?P<day>\d{1,2})\s+(?P<time>\d{2}:\d{2}:\d{2})\s+\S+\s+sshd\[\d+\]:\s+(?P<msg>.+)$'`
+No TypeScript changes required. The CSS handles it automatically on element insertion.
+Browser support: Chrome 117+, Firefox 129+, Safari 17.5+ — effectively all modern browsers.
 
-**Year inference:** parse with current year; if result is in the future (>24h ahead), use `year - 1`. Handles December→January log rotation correctly.
+### Grid Layout for Multi-Source Presentation
 
-### Format 2: RFC5424 / systemd journal export (modern systemd systems)
+The current `.ioc-cards-grid` uses CSS Grid (from the existing `ioc-cards-grid` class in `input.css`).
+For the redesign, the key layout technique is **subgrid** inside each card:
+
+```css
+.ioc-card {
+  display: grid;
+  grid-template-rows: auto auto 1fr; /* header / original / enrichment */
+}
+
+/* When cards are in a grid row: subgrid aligns sections across columns */
+.ioc-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+}
 ```
-2024-01-15T14:23:45.123456+00:00 hostname sshd[12345]: Accepted password for alice from 1.2.3.4 port 55432 ssh2
-```
-- Full ISO8601 with microseconds and UTC offset
-- Parse with `datetime.datetime.fromisoformat()` (Python 3.7+) — handles all offset formats
 
-**Regex:** `r'^(?P<ts>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2}))\s+\S+\s+sshd\[\d+\]:\s+(?P<msg>.+)$'`
+Subgrid lets the enrichment slot expand uniformly within a row — the "meta-search engine" feel
+where all cards in a row feel like a coherent table rather than independent boxes.
 
-### OpenSSH Message Patterns (verified against OpenSSH source)
+### Supporting Browser APIs (Already Available at es2022 Target)
 
-| Event type | Pattern | Fields |
-|-----------|---------|--------|
-| Accepted login | `Accepted (password|publickey|gssapi-with-mic|keyboard-interactive/pam) for <user> from <ip> port <N> ssh<N>` | user, ip |
-| Failed attempt | `Failed password for [invalid user] <user> from <ip> port <N> ssh<N>` | user, ip |
-| Invalid user pre-auth | `Invalid user <user> from <ip> port <N>` | user, ip |
-| Pre-auth disconnect | `(Connection closed by|Disconnected from) invalid user <user> <ip> port <N> [preauth]` | user, ip |
-
-**All four patterns verified** against running regex on real log line samples (see research session). All parse correctly with stdlib `re`.
+| API | Purpose | Notes |
+|-----|---------|-------|
+| `Intersection Observer` | Lazy-reveal card stagger animations as analyst scrolls | Already in all modern browsers; use instead of scroll-driven CSS animations (better Firefox support) |
+| `CSS.escape()` | Safe dynamic CSS selector construction | Already used in `cards.ts` — continue the pattern |
+| `document.startViewTransition()` | Card sort animation | Wrap existing `doSortCards()` call |
+| `ResizeObserver` | Detect card width changes for container query fallback | Available in all modern browsers if polyfill needed |
 
 ---
 
-## Data Structures for Per-User History
+## Tailwind CSS v4 Consideration
 
-**Use stdlib `collections.defaultdict`. No external library.**
+**Verdict: stay on Tailwind v3.4.17 for this milestone.**
 
-```python
-# In-memory only — cleared after each analysis request (no persistence needed)
-from collections import defaultdict
-history: dict[str, list[LoginEvent]] = defaultdict(list)
-```
+Tailwind v4 is available as a standalone binary (confirmed at v4.1.3 from GitHub releases).
+The v4 config model shifts from `tailwind.config.js` to `@theme {}` in CSS — a meaningful
+migration requiring changes to `input.css` and removal of `tailwind.config.js`.
 
-`LoginEvent` is a frozen dataclass:
-```python
-@dataclass(frozen=True)
-class LoginEvent:
-    username: str
-    ip: str
-    timestamp: datetime.datetime  # timezone-naive (syslog local time) or tz-aware (ISO8601)
-    event_type: str  # "accepted" | "failed" | "invalid"
-    raw_line: str    # original log line for context/debugging
-```
+**Why not v4 for v1.1:**
 
-`GeoLocation` is a frozen dataclass (result of ipinfo.io lookup):
-```python
-@dataclass(frozen=True)
-class GeoLocation:
-    country_code: str     # e.g. "DE"
-    lat: float            # from ipinfo.io 'loc' field
-    lon: float            # from ipinfo.io 'loc' field
-    city: str             # for display
-```
+1. The v3 → v4 migration is a separate task with its own regression surface — utility class
+   names changed in some cases; existing `input.css` uses `@tailwind base/components/utilities`
+   directives that v4 replaces with `@import "tailwindcss"`.
+2. The CSS features needed for the redesign (`container queries`, `subgrid`, `@starting-style`,
+   View Transitions) are all native browser features — they do not require Tailwind v4.
+3. v4 does add useful utilities (native container query variants `@sm:`, `@lg:`, `@container`
+   shorthand) but the project already has full `@container` support through custom CSS.
 
-`Anomaly` is a frozen dataclass:
-```python
-@dataclass(frozen=True)
-class Anomaly:
-    username: str
-    anomaly_type: str  # "new_ip" | "new_country" | "impossible_travel" | "unusual_hour"
-    event: LoginEvent
-    detail: str        # human-readable explanation
-    severity: str      # "high" | "medium" | "low"
-```
-
----
-
-## Datetime Handling
-
-**Use stdlib `datetime` only. No pytz or dateutil.**
-
-Python 3.10 has `zoneinfo` (stdlib since 3.9) for IANA timezone names, but it is **not needed** here:
-
-- Syslog timestamps are server local time, no timezone info — hour comparison is direct
-- ISO8601 timestamps with offset are handled by `datetime.fromisoformat()` (Python 3.7+)
-- Impossible travel time delta uses `(t2 - t1).total_seconds()` — works regardless of tz-naive vs tz-aware as long as both events are from the same log (same format)
-
-**Year inference for syslog timestamps:**
-```python
-current_year = datetime.datetime.now().year
-dt = datetime.datetime.strptime(f"{current_year} {month} {day} {time}", "%Y %b %d %H:%M:%S")
-if dt > datetime.datetime.now() + datetime.timedelta(hours=24):
-    dt = dt.replace(year=current_year - 1)
-```
-This handles the edge case where a log from December is analyzed in January.
-
----
-
-## Configurable Hour Window
-
-**Implementation: `[ssh]` section in `~/.sentinelx/config.ini` via `ConfigStore`.**
-
-The `ConfigStore` class already supports arbitrary sections via `_set_value(section, key, value)`. Add two methods:
-
-```python
-# In config_store.py — new methods (no new dependencies)
-def get_ssh_normal_hours(self) -> tuple[int, int]:
-    """Return (start_hour, end_hour) for normal hours window. Default: (6, 22)."""
-
-def set_ssh_normal_hours(self, start: int, end: int) -> None:
-    """Write normal hours window to [ssh] section."""
-```
-
-Stored as:
-```ini
-[ssh]
-normal_hours_start = 6
-normal_hours_end = 22
-```
-
-Detection logic: `if not (start <= event_hour < end): flag UNUSUAL_HOUR`. The `event_hour` comes directly from the parsed timestamp — no timezone conversion.
-
----
-
-## File Upload Configuration
-
-**One config change required: increase `MAX_CONTENT_LENGTH`.**
-
-Current value: `512 * 1024` (512 KB) — sufficient for IOC paste input.
-SSH auth.log files: typically 500 KB–5 MB for a week of busy-server logs.
-
-**Change:**
-```python
-# In app/config.py
-MAX_CONTENT_LENGTH: int = 5 * 1024 * 1024  # 5 MB — covers both paste (512KB) and SSH log uploads
-```
-
-The 413 error handler already exists and returns a user-friendly message. Update its text to mention both use cases.
-
-Flask's `werkzeug.FileStorage` (bundled with Flask 3.1, no extra install) handles `multipart/form-data` file uploads via `request.files`. The SSH route reads the uploaded file as:
-```python
-log_file = request.files.get("log_file")
-content = log_file.stream.read(5 * 1024 * 1024 + 1)  # +1 to detect oversize
-```
-
----
-
-## SSRF Allowlist: No Change Required
-
-`ipinfo.io` is already in `ALLOWED_API_HOSTS`. No new hosts needed. The SSH module does not call any new external services.
-
----
-
-## Flask Blueprint Pattern
-
-Follow the existing pattern exactly. Add SSH routes as a new module imported by `app/routes/__init__.py`:
-
-```python
-# In app/routes/__init__.py — add:
-from . import ssh  # noqa: E402, F401
-```
-
-The SSH routes attach to the existing `bp = Blueprint("main", ...)` — no new blueprint needed for the HTML routes. The JSON API endpoint attaches to `bp_api` (already CSRF-exempt).
+**Upgrade path:** Tailwind v4 is a natural follow-on for a cleanup milestone after v1.1 ships.
+The redesigned CSS will be easier to migrate than the current accumulation of v3 workarounds.
 
 ---
 
@@ -253,46 +175,89 @@ The SSH routes attach to the existing `bp = Blueprint("main", ...)` — no new b
 
 | Avoid | Why | What to Use Instead |
 |-------|-----|---------------------|
-| `python-dateutil` | Would add a dependency solely for timestamp parsing; stdlib `datetime.strptime` + `fromisoformat` handles both syslog and ISO8601 | stdlib `datetime` |
-| `GeoLite2` / `maxminddb` | Requires downloading and updating a local database (~60 MB); ipinfo.io is already integrated and works zero-config | ipinfo.io via existing `requests` + `safe_request()` |
-| `pytz` | Python 3.10 has `zoneinfo` stdlib; syslog timestamps don't have timezone info anyway | stdlib `datetime` + `zoneinfo` (if ever needed) |
-| `pandas` | No tabular analysis needed; `collections.defaultdict` + sorted list operations are sufficient | stdlib `collections` |
-| `scikit-learn` / any ML library | Out of scope per PROJECT.md: "Rule-based detection over ML" | Rule-based logic in `detector.py` |
-| Any log-parsing library (`python-syslog`, `logparser`) | auth.log format is fixed enough that 3–4 regex patterns cover all OpenSSH variants; a library adds surface area for no gain | stdlib `re` |
-| `ip-api.com` | Free tier is HTTP-only (HTTPS returns 403 — verified); would require adding new SSRF allowlist entry | ipinfo.io (already integrated, HTTPS, same data) |
-| New Flask blueprint for SSH | The existing `bp` Blueprint handles all HTML routes; only the JSON polling endpoint needs `bp_api` (already CSRF-exempt) | Existing `bp` + `bp_api` |
-| Redis / any external state store | Analysis is per-upload, synchronous, in-memory; no persistence between requests needed | In-memory `dict` within request scope |
+| Chart.js / D3.js / any data viz library | The "data visualization" need for a results page is narrow: conviction bars, engine counts. CSS-only progress bars (width: percentage; background: verdict color) cover 100% of the use case. A 100KB chart library is disproportionate. | CSS `width` percentages + custom properties |
+| Framer Motion / GSAP / Anime.js | Animation library for vanilla TS makes no sense. These target React/component frameworks. GSAP is 60KB+. | CSS `@starting-style`, View Transitions API, `transition` property |
+| Motion One (JS animation library) | Lower overhead than GSAP but still adds bundle size for capabilities CSS now handles natively. | Native CSS transitions and `@starting-style` |
+| Alpine.js / Htmx | Reactive micro-frameworks would require restructuring the existing 13-module TypeScript pattern. High migration cost, no gain for a refinement milestone. | Existing vanilla TS modules |
+| Intersection Observer polyfill | Not needed — all modern browsers support it natively. The app is desktop-only, analyst workstations run current browsers. | Native Intersection Observer |
+| CSS scroll-driven animations (`animation-timeline: view()`) as primary mechanism | Firefox does not support this as of March 2026 (available only under a flag). Safari only in v26 (beta as of research date). 82% support is not sufficient for a production feature that analysts depend on. | Intersection Observer API in TypeScript — 98%+ support, identical visual result |
+| `view-transition-class` (new 2025 feature) | Chrome 139+ only as of March 2026. Too new for production use. | Plain `view-transition-name` per element |
+| React / Vue / Svelte | Out of scope per PROJECT.md. The vanilla TS architecture handles this complexity. | Vanilla TypeScript |
 
 ---
 
-## Requirements.txt: No Changes
+## Animation Strategy Summary
 
-```
-# requirements.txt — unchanged for v1.2
-Flask==3.1.1
-Flask-Limiter==4.1.1
-Flask-WTF==1.2.2
-iocextract==1.16.1
-iocsearcher==2.7.2
-python-dotenv==1.1.0
-requests==2.32.5
-dnspython==2.8.0
-python-whois==0.9.6
-```
+The redesign has three distinct animation contexts:
 
-All SSH detection capabilities come from stdlib modules (`re`, `math`, `datetime`, `dataclasses`, `collections`, `ipaddress`, `io`) already present in Python 3.10.
+| Context | Technique | Rationale |
+|---------|-----------|-----------|
+| Card entry (page load) | Existing `--card-index` stagger + `fadeSlideUp` keyframe | Already works. Keep as-is. |
+| Provider row entry (enrichment arrives) | `@starting-style` CSS rule on `.provider-detail-row` | Zero JS change. Browser animates on element insertion automatically. |
+| Card reorder (sort by severity) | `document.startViewTransition()` wrapping `doSortCards()` | 3 lines of TypeScript. FLIP-style animation. Graceful degradation built-in. |
+| Shimmer loading skeleton | Already implemented (`shimmer-line` classes) | Keep. Appears before first provider result arrives. |
+| Expand/collapse enrichment details | `grid-template-rows: 0fr / 1fr` transition | Replace existing `max-height` approach if used; grid-rows is smoother and avoids flash. |
+
+---
+
+## Build Tool Versions to Keep
+
+| Tool | Current | Upgrade? | Reason |
+|------|---------|---------|--------|
+| esbuild | 0.27.3 | No | Current, stable. `--target=es2022` already enables View Transitions API. |
+| Tailwind CSS standalone | v3.4.17 | No (this milestone) | v4 migration is separate work. |
+| tsc | (project version) | No | TypeScript 5.8 supports all needed syntax. |
+
+---
+
+## Alternatives Considered
+
+| Recommended | Alternative | When to Use Alternative |
+|-------------|-------------|-------------------------|
+| Native `document.startViewTransition()` | GSAP FLIP plugin | Only if GSAP is already in the project and you need IE/older browser support |
+| `@starting-style` CSS | JS class-toggle + `requestAnimationFrame` trick | Only in projects that still support Firefox 128 or Safari 17.4 |
+| CSS Grid subgrid | JavaScript layout synchronization | Only if subgrid is genuinely unavailable (pre-2023 browsers) — not applicable to analyst workstations |
+| Intersection Observer for lazy stagger | `animation-timeline: view()` | Use the CSS approach once Firefox ships it without a flag (tentative: Firefox 136+, currently flag-only) |
+
+---
+
+## Version Compatibility
+
+| Feature | Chrome | Firefox | Safari | Notes |
+|---------|--------|---------|--------|-------|
+| CSS Grid subgrid | 117+ | 71+ | 16+ | Safe — all modern browsers |
+| CSS Container queries | 106+ | 110+ | 16+ | Safe — all modern browsers |
+| `@starting-style` | 117+ | 129+ | 17.5+ | Safe — all modern browsers |
+| `document.startViewTransition()` | 111+ | 133+ | 18+ | Safe — Baseline Oct 2025 |
+| `animation-timeline: view()` | 115+ | flag only | 26+ | NOT safe for MVP — use IntersectionObserver instead |
+| `color-mix()` | 111+ | 113+ | 16.2+ | Safe |
+| `CSS.escape()` | 46+ | 31+ | 8+ | Already used in codebase |
 
 ---
 
 ## Sources
 
-- SentinelX codebase (verified live): `app/enrichment/adapters/ip_api.py`, `app/enrichment/http_safety.py`, `app/enrichment/models.py`, `app/config.py`, `app/__init__.py`, `app/routes/__init__.py`, `requirements.txt` — HIGH confidence
-- Live API probe: `http://ip-api.com/json/8.8.8.8` returns HTTP 200 with `lat`/`lon`; `https://ip-api.com/json/8.8.8.8` returns HTTP 403 — confirms HTTPS unavailable on free tier — HIGH confidence
-- Python 3.10.12 runtime verification: stdlib modules `re`, `math`, `datetime`, `dataclasses`, `collections`, `ipaddress`, `zoneinfo`, `io` all available — HIGH confidence
-- regex verification: all four OpenSSH log patterns tested against real sample lines in running Python interpreter — HIGH confidence
-- `datetime.fromisoformat()` and `datetime.strptime()` timestamp parsing tested against syslog and ISO8601 formats — HIGH confidence
+- [Tailwind CSS v4 standalone CLI — GitHub Discussion #17638](https://github.com/tailwindlabs/tailwindcss/discussions/17638)
+  v4.1.3 standalone binary confirmed. v3→v4 migration model documented. MEDIUM confidence on migration scope.
+- [Tailwind CSS v4.0 release post](https://tailwindcss.com/blog/tailwindcss-v4)
+  v4 CSS feature set confirmed (`@theme`, `@container` native utilities, `starting:` variant). HIGH confidence.
+- [What's new in view transitions (2025 update) — Chrome Developers](https://developer.chrome.com/blog/view-transitions-in-2025)
+  Same-document view transitions browser support, `match-element` auto-naming, scoped transitions. HIGH confidence.
+- [View Transition API — MDN](https://developer.mozilla.org/en-US/docs/Web/API/View_Transition_API)
+  API shape, `document.startViewTransition()` method signature. HIGH confidence.
+- [animation-timeline: view() — Can I use](https://caniuse.com/mdn-css_properties_animation-timeline_view)
+  82.81% global support. Safari iOS 26+ only. Firefox flag-only as of research date. HIGH confidence on support numbers.
+- [CSS scroll-driven animations — MDN](https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Scroll-driven_animations)
+  `animation-timeline: view()` syntax and `@supports` feature detection pattern. HIGH confidence.
+- [The New CSS Layout Toolbox: subgrid, container queries — Medium Oct 2025](https://medium.com/@kedarbpatil07/the-new-css-layout-toolbox-subgrid-container-queries-and-more-41cf94ebf821)
+  Subgrid 97%+ global support confirmed. MEDIUM confidence (secondary source).
+- [Rearrange / Animate CSS Grid Layouts with the View Transition API — Bram.us](https://www.bram.us/2023/05/09/rearrange-animate-css-grid-layouts-with-the-view-transition-api/)
+  Grid reorder + View Transitions API pattern. HIGH confidence — direct implementation reference.
+- SentinelX codebase: `app/static/src/input.css`, `Makefile`, `app/static/src/ts/modules/cards.ts`,
+  `app/static/src/ts/modules/ui.ts`, `app/static/src/ts/modules/enrichment.ts`
+  Existing motion tokens, keyframes, stagger implementation, doSortCards() function. HIGH confidence.
 
 ---
 
-*Stack research for: SentinelX v1.2 SSH Login Anomaly Detection*
-*Researched: 2026-04-12*
+*Stack research for: SentinelX v1.1 Results Page Redesign*
+*Researched: 2026-03-16*

@@ -1,13 +1,9 @@
 """URLhaus URL/host/payload lookup adapter (abuse.ch)."""
 from __future__ import annotations
 
-import logging
-
 from app.enrichment.adapters.base import BaseHTTPAdapter
 from app.enrichment.models import EnrichmentResult
 from app.pipeline.models import IOC, IOCType
-
-logger = logging.getLogger(__name__)
 
 URLHAUS_BASE = "https://urlhaus-api.abuse.ch"
 

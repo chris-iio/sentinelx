@@ -3,14 +3,10 @@ from __future__ import annotations
 
 import base64
 import datetime
-import logging
-
 from app.enrichment.adapters.base import BaseHTTPAdapter
 from app.enrichment.http_safety import safe_request
 from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.pipeline.models import IOC, IOCType
-
-logger = logging.getLogger(__name__)
 
 VT_BASE = "https://www.virustotal.com/api/v3"
 

@@ -1,9 +1,9 @@
 # Dead Code Analysis Report
 
 **Project:** SentinelX
-**Date:** 2026-04-10
-**Scope:** Runtime code only (`app/`, `app/templates/`, `app/static/src/ts/`, runtime-served assets)
-**Tools Used:** `rg` cross-reference scans, Python AST symbol scan, template/route/static reference checks
+**Date:** 2026-04-12
+**Scope:** Runtime code (`app/`, `app/templates/`, `app/static/src/ts/`), tests (`tests/`), dependencies
+**Tools Used:** `ruff` (F401/F841/F811), `tsc --noEmit`, `rg` cross-reference scans, parallel subagent analysis
 
 ---
 
@@ -11,86 +11,116 @@
 
 | Category | Result | Status |
 |----------|--------|--------|
-| TypeScript exports | 0 actionable unused exports | Clean |
-| Python runtime symbols | 0 actionable dead functions/classes | Clean |
+| TypeScript exports | 0 unused exports | Clean |
+| Python runtime symbols | 0 unused functions/classes | Clean |
+| Python imports | 0 unused imports | Clean (13 removed this run) |
 | Runtime templates/partials | 0 orphaned templates | Clean |
 | Runtime static assets | 0 unreferenced served assets | Clean |
-| Report staleness | 1 stale historical claim removed | Fixed |
+| npm dependencies | 0 unused | Clean |
+| Python dependencies | 0 unused | Clean |
 
-**Verdict:** no actionable dead runtime code found in the current codebase.
+**Verdict:** No actionable dead runtime code found after cleanup.
 
 ---
 
-## Findings
+## Changes Applied (2026-04-12)
 
-### 1. Previous report was stale
+### 1. Removed unused `import logging` + `logger` from 13 adapter files
 
-The prior version of this report referenced `annotations.ts` as an active TypeScript export source. That file is no longer present in the repository, so the historical report was not a reliable current source of truth.
+Removed `import logging` and `logger = logging.getLogger(__name__)` from files that never called `logger.*`:
 
-**Action taken:** this report now reflects the current runtime surface only.
+- `app/enrichment/adapters/abuseipdb.py`
+- `app/enrichment/adapters/base.py`
+- `app/enrichment/adapters/crtsh.py`
+- `app/enrichment/adapters/greynoise.py`
+- `app/enrichment/adapters/hashlookup.py`
+- `app/enrichment/adapters/ip_api.py`
+- `app/enrichment/adapters/malwarebazaar.py`
+- `app/enrichment/adapters/otx.py`
+- `app/enrichment/adapters/shodan.py`
+- `app/enrichment/adapters/threatfox.py`
+- `app/enrichment/adapters/threatminer.py`
+- `app/enrichment/adapters/urlhaus.py`
+- `app/enrichment/adapters/virustotal.py`
+
+**Kept logger in:** `asn_cymru.py`, `dns_lookup.py`, `whois_lookup.py` (all use `logger.exception()`).
+
+### 2. Removed unused `make_email_ioc()` test helper
+
+- File: `tests/helpers.py`
+- No test file imports or calls this function (all other `make_*_ioc` helpers have callers)
+
+### 3. Removed unused `VerdictKey` type import
+
+- File: `app/static/src/ts/modules/row-factory.test.ts`
+- Imported but never used as a type annotation in the file
+
+### 4. Fixed GreyNoise provider name mismatch (bug)
+
+- File: `app/static/src/ts/modules/row-factory.ts`
+- Changed `PROVIDER_CONTEXT_FIELDS` key from `"GreyNoise Community"` to `"GreyNoise"`
+- Backend adapter (`greynoise.py`) sends `name = "GreyNoise"` — the old key never matched, so context fields (noise, riot, classification) were silently dropped
+
+**Lines removed:** ~30 (imports + helper function)
+
+---
+
+## Known Non-Removable Dead Code
+
+### Abstract method stubs (required by ABC)
+
+These methods are never called at runtime (each adapter overrides `lookup()` directly) but are required by `BaseHTTPAdapter`'s `@abc.abstractmethod` declarations. Removing them would cause `TypeError: Can't instantiate abstract class`:
+
+- `VTAdapter._build_url()` / `._parse_response()` — `virustotal.py`
+- `ThreatMinerAdapter._build_url()` / `._parse_response()` — `threatminer.py`
+- `CrtShAdapter._parse_response()` — `crtsh.py`
+
+### Test-only public API methods (intentional)
+
+These have zero production callers but are tested and part of their class's public API:
+
+- `ProviderRegistry.provider_count_for_type()` — `registry.py` (convenience wrapper)
+- `ConfigStore.all_provider_keys()` — `config_store.py` (settings iteration)
+- `CacheStore.purge_expired()` — `store.py` (built for future periodic cleanup)
+
+### Architectural scaffolding
+
+- `cards.init()` — `cards.ts` (empty no-op, consistent module init pattern)
 
 ---
 
 ## Verified Live Runtime Surface
 
-### TypeScript entrypoint and import chain are active
+### TypeScript entrypoint and import chain
 
-- [`app/static/src/ts/main.ts`](../app/static/src/ts/main.ts) imports and initializes the frontend modules.
-- Cross-reference scan of all exported TS symbols in `app/static/src/ts/**/*.ts` found no unreferenced runtime exports.
-- Type-only exports in [`app/static/src/ts/types/api.ts`](../app/static/src/ts/types/api.ts) and [`app/static/src/ts/types/ioc.ts`](../app/static/src/ts/types/ioc.ts) are consumed by runtime modules and tests.
+All 16 source files reachable from `main.ts`. Every exported function/type/constant imported by at least one consumer.
 
-### Flask routes are framework entrypoints, not dead code
+### Flask routes are framework entrypoints
 
-Naive symbol scans reported these functions as unreferenced:
+Route handlers decorated with `@bp_api.route(...)` are live despite appearing "unused" in naive symbol scans.
 
-- [`app/routes/api.py:30`](../app/routes/api.py#L30) `api_analyze`
-- [`app/routes/api.py:102`](../app/routes/api.py#L102) `api_status`
+### Templates and served assets
 
-These are live because they are registered via `@bp_api.route(...)` on the API blueprint, which is imported by [`app/routes/__init__.py`](../app/routes/__init__.py) and registered in [`app/__init__.py`](../app/__init__.py).
-
-### Templates and served assets are referenced
-
-- [`app/templates/base.html`](../app/templates/base.html) serves:
-  - `static/dist/style.css`
-  - `static/dist/main.js`
-  - `static/images/logo.svg`
-  - both font files in `app/static/fonts/`
-- Route handlers render the current template set through `render_template(...)`.
-- Partial includes under `app/templates/partials/` are referenced from `results.html` and `_ioc_card.html`.
+All templates referenced via `render_template()`, `{% include %}`, `{% extends %}`. All static assets referenced from `base.html`.
 
 ---
 
-## Safe To Keep
+## Reproduction
 
-### `Config.validate()` is live
+```bash
+# Python lint (unused imports/vars)
+.venv/bin/ruff check --select F401,F841,F811 app/ tests/
 
-- Definition: [`app/config.py:48`](../app/config.py#L48)
-- Runtime use: [`app/__init__.py:73`](../app/__init__.py#L73)
+# TypeScript type check
+npx tsc --noEmit
 
-This is not dead code. It remains a startup validation hook invoked by the app factory.
+# Cross-reference scan for unused exports
+rg "export (function|const|type|interface)" app/static/src/ts/ --no-filename | \
+  sed 's/.*export \(function\|const\|type\|interface\) //' | sed 's/[(<:].*//' | \
+  while read sym; do rg -l "$sym" app/static/src/ts/ | wc -l; done
 
-### `requires_api_key` is live production behavior
-
-- Protocol declaration: [`app/enrichment/provider.py:38`](../app/enrichment/provider.py#L38)
-- Runtime read: [`app/enrichment/orchestrator.py:97`](../app/enrichment/orchestrator.py#L97)
-
-This attribute is used in production to decide which adapters receive semaphore-based concurrency limits.
-
-### `all_provider_keys()` is test-only but intentional
-
-- Definition: [`app/enrichment/config_store.py:138`](../app/enrichment/config_store.py#L138)
-- Test use: [`tests/test_config_store.py:110`](../tests/test_config_store.py#L110)
-
-This is still not called by production code, but it is an intentional test-facing API and not dead runtime code under the selected audit scope.
-
----
-
-## Reproduction Notes
-
-The conclusions above were based on:
-
-- TS export cross-reference scan across `app/static/src/ts` and `tests`
-- Python AST scan for top-level functions/classes under `app/`, followed by repo-wide reference checks
-- Template reachability scan for `render_template(...)`, `{% include %}`, `{% extends %}`, and `url_for('static', ...)`
-
-If this report is refreshed later, Flask-decorated route handlers should continue to be treated as live entrypoints rather than dead symbols.
+# Python function usage scan
+rg "^def |^    def " app/ --no-filename | \
+  sed 's/.*def //' | sed 's/(.*//' | \
+  while read sym; do rg -l "$sym" app/ tests/ | wc -l; done
+```

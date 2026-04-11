@@ -101,3 +101,6 @@ tmp/
 .gsd/doctor-history.jsonl
 .gsd/browser-state/
 .gsd/browser-baselines/
+
+# ── GSD baseline (auto-generated) ──
+.bg-shell/

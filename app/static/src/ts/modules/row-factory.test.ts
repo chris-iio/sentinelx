@@ -22,7 +22,6 @@ import {
 } from "./row-factory";
 import type { VerdictEntry } from "./verdict-compute";
 import type { EnrichmentResultItem, EnrichmentItem } from "../types/api";
-import type { VerdictKey } from "../types/ioc";
 
 /* ------------------------------------------------------------------ */
 /*  Test helpers                                                       */

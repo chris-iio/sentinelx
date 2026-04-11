@@ -1,13 +1,9 @@
 """Shodan InternetDB API adapter."""
 from __future__ import annotations
 
-import logging
-
 from app.enrichment.adapters.base import BaseHTTPAdapter
 from app.enrichment.models import EnrichmentResult
 from app.pipeline.models import IOC, IOCType
-
-logger = logging.getLogger(__name__)
 
 SHODAN_INTERNETDB_BASE = "https://internetdb.shodan.io"
 _MALICIOUS_TAGS = frozenset({"malware", "compromised", "doublepulsar"})
