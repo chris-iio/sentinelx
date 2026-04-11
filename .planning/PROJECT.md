@@ -2,7 +2,7 @@
 
 ## What This Is
 
-A universal threat intelligence hub for SOC analysts. Paste free-form text (alerts, email headers, threat reports, raw IOCs) and the app extracts, normalizes, classifies, and enriches IOCs against 13 providers in parallel — presenting unified summary verdicts with expandable per-provider detail rows, bookmarkable per-IOC detail pages with relationship graphs, and analyst annotations (notes + tags). No opaque combined scores.
+A security analyst toolkit combining threat intelligence enrichment with SSH login anomaly detection. Paste free-form text to extract and enrich IOCs against 14 providers, or upload SSH auth.log files to detect suspicious login behavior (new IPs, new countries, impossible travel, unusual hours). Built for SOC analysts performing triage on local workstations or jump boxes.
 
 ## Core Value
 
@@ -24,7 +24,7 @@ Everything built through 9 milestones (2026-02-21 to 2026-03-14). See `.planning
 
 ### Active
 
-<!-- v1.1 Results Page Redesign — scope defined in REQUIREMENTS.md -->
+<!-- v1.2 SSH Login Anomaly Detection — scope defined in REQUIREMENTS.md -->
 
 ### Out of Scope
 
@@ -39,8 +39,11 @@ Everything built through 9 milestones (2026-02-21 to 2026-03-14). See `.planning
 - Framework adoption (React, Vue) — vanilla TS sufficient for this complexity
 - STIX/TAXII threat feed import — deferred to future milestone
 - File upload for hash extraction — deferred to future milestone
-- New providers — v1.1 is about refining presentation, not adding data sources
-- New features — v1.1 is refinement only
+- Generic SIEM / security platform — SSH detection is a focused addition, not a platform pivot
+- Other log types (Apache, nginx, syslog) — SSH auth.log only for v1.2
+- ML/AI anomaly models — simple rule-based detection only
+- Real-time log streaming / tailing — upload-based batch analysis only
+- Results page visual redesign (v1.1 Phases 3-5) — deferred, Phase 1-2 infrastructure retained
 
 ## Context
 
@@ -55,6 +58,7 @@ Everything built through 9 milestones (2026-02-21 to 2026-03-14). See `.planning
 - **Security posture:** All defenses from v1.0 maintained — CSP, CSRF, SSRF allowlist (12 HTTP hosts), host validation, automated regression guards. CSRF meta tag for client-side fetch.
 - **Build:** Makefile targets — `css`, `js`, `js-dev`, `js-watch`, `typecheck`, `build`
 - **Frontend modules:** 13 TypeScript modules (annotations.ts removed in v7.0 partial, graph.ts added in v6.0)
+- **v1.2 additions:** SSH log parser module, anomaly detector module, GeoIP via ip-api.com (reuse existing adapter), new Flask blueprint for SSH routes
 
 ## Constraints
 
@@ -88,23 +92,47 @@ Everything built through 9 milestones (2026-02-21 to 2026-03-14). See `.planning
 | SVG hub-and-spoke graph | Show IOC-provider relationships visually | ✓ Good — verdict-colored nodes, createElement (SEC-08 safe) |
 | CONTEXT_PROVIDERS set pattern | Route zero-verdict context rows through shared renderer | ✓ Good — generalized createContextRow() for all context providers |
 | path converter for IOC URLs | URL IOCs contain slashes that break standard routing | ✓ Good — `<path:ioc_value>` handles all IOC formats |
+| Flask for SSH detection | Shared UI shell, no migration cost, SSH routes are simple sync work | — Pending |
+| ip-api.com for GeoIP | Already integrated as zero-auth provider, avoids GeoLite2 download requirement | — Pending |
+| Rule-based detection over ML | Simple, explainable, no training data needed, matches "clear logic over complex modeling" | — Pending |
+| Configurable hour window | Default 6am–10pm, deployable without per-user learning period | — Pending |
 
-## Current Milestone: v1.1 Results Page Redesign
+## Current Milestone: v1.2 SSH Login Anomaly Detection
 
-**Goal:** Make 14 providers feel like one cohesive intelligence report instead of 14 separate search results stapled together.
+**Goal:** Extend SentinelX with SSH auth.log parsing and behavioral anomaly detection — upload a log file, get clear alerts for suspicious logins.
 
 **Target features:**
-- Uniform information architecture across all provider types (verdict, context, no-data)
-- Cohesive visual presentation that matches the value of the data
-- Results page that embodies the "meta-search engine" identity
+- SSH log parser extracting structured login events from auth.log
+- Per-user behavioral anomaly detection (new IP, new country, impossible travel, unusual hours)
+- GeoIP country lookup via ip-api.com (already integrated, zero-auth)
+- Configurable normal-hours window (default 6am–10pm)
+- Flask routes with shared UI shell (upload form, alerts table, JSON API)
 
 ## Shipped Milestones
 
 | Version | Name | Shipped | Key Feature |
 |---------|------|---------|-------------|
 | v1.0 | Foundation | 2026-03-14 | 14 providers, detail pages, cache, export, bulk input, relationship graphs |
+| v1.1 | Results Page Redesign (partial) | 2026-03-17 | CSS contracts catalog, enrichment.ts module extraction (Phases 1-2 only; Phases 3-5 dropped) |
 
 See `.planning/MILESTONES.md` for full history.
 
+## Evolution
+
+This document evolves at phase transitions and milestone boundaries.
+
+**After each phase transition** (via `/gsd-transition`):
+1. Requirements invalidated? → Move to Out of Scope with reason
+2. Requirements validated? → Move to Validated with phase reference
+3. New requirements emerged? → Add to Active
+4. Decisions to log? → Add to Key Decisions
+5. "What This Is" still accurate? → Update if drifted
+
+**After each milestone** (via `/gsd-complete-milestone`):
+1. Full review of all sections
+2. Core Value check — still the right priority?
+3. Audit Out of Scope — reasons still valid?
+4. Update Context with current state
+
 ---
-*Last updated: 2026-03-16 after version reset, starting v1.1 Results Page Redesign*
+*Last updated: 2026-04-12 after starting v1.2 SSH Login Anomaly Detection*
