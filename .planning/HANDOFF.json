@@ -1,0 +1,25 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-04-12T00:17:11.170Z",
+  "phase": "07",
+  "phase_name": "geoip-wrapper",
+  "phase_dir": ".planning/phases/07-geoip-wrapper",
+  "plan": 0,
+  "task": 0,
+  "total_tasks": 0,
+  "status": "paused",
+  "completed_tasks": [],
+  "remaining_tasks": [
+    {"id": 1, "name": "Phase 7: GeoIP Wrapper — discuss, plan, and execute", "status": "not_started"}
+  ],
+  "blockers": [],
+  "human_actions_pending": [],
+  "decisions": [
+    {"decision": "Phase 6 complete — all 3 plans executed, verified, code-reviewed", "rationale": "5/5 must-haves verified, 1041 tests pass, 72 new tests added", "phase": "06"},
+    {"decision": "Code review found 3 warnings (WR-01 stream type, WR-02 no validation, WR-03 Python 3.10 Z suffix)", "rationale": "WR-01 and WR-03 are real issues to address — either via /gsd-code-review-fix 06 or in later phases", "phase": "06"},
+    {"decision": "Security audit not yet run for Phase 6", "rationale": "Security enforcement enabled in config — /gsd-secure-phase 06 should be run before advancing", "phase": "06"}
+  ],
+  "uncommitted_files": [],
+  "next_action": "Run /gsd-secure-phase 06 (optional but recommended), then /gsd-discuss-phase 7 or /gsd-plan-phase 7 to start the GeoIP Wrapper phase.",
+  "context_notes": "Phase 6 delivered: app/ssh/models.py (LoginEvent + ParseSummary frozen dataclasses), app/ssh/parser.py (dual-format BSD+RFC3339 parser with year rollover), ConfigStore [ssh] section with normal-hours config, MAX_CONTENT_LENGTH bumped to 5 MB. Phase 7 will wrap ipinfo.io for GeoIP lookups on parsed login events."
+}
