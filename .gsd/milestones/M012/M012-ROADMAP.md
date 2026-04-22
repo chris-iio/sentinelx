@@ -17,7 +17,7 @@
 - [x] **S02: S02** `risk:Medium-high — current duplicate coordination between live polling and history replay is a future-change and performance seam, but the exact extraction boundary should be chosen after S01 confirms the status contract shape.` `depends:[]`
   > After this: A user sees the same enrichment cards, detail rows, progress, and verdict rendering whether results arrive live or are replayed from history, with one shared application path carrying the behavior.
 
-- [ ] **S03: Fast default proof loop and deterministic expensive lane** `risk:Medium — the codebase is already fast in build/typecheck paths, but the full verification loop is expensive enough to shape future velocity; we need a user-trustworthy split between default and slower evidence lanes.` `depends:[S01]`
+- [ ] **S03: S03** `risk:Medium — the codebase is already fast in build/typecheck paths, but the full verification loop is expensive enough to shape future velocity; we need a user-trustworthy split between default and slower evidence lanes.` `depends:[]`
   > After this: A contributor can run a clearly documented fast verification lane for touched optimization work and a separate slower lane for deeper confidence, without accidental real backoff sleeps or ambiguous proof expectations.
 
 - [ ] **S04: Persistence and helper-layer next-work decision** `risk:Medium-low — storage and helper seams look healthy today, so this slice should only advance if earlier evidence still points to contention, write amplification, or unnecessary request-path work.` `depends:[S01,S02,S03]`

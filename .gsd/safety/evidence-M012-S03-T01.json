@@ -48,5 +48,29 @@
     "exitCode": 0,
     "outputSnippet": "python3 -m pytest -q tests/e2e\n........................................................................ [ 63%]\n.........................................                                [100%]\n113 passed in 37.98s\n__GSD_RESULT__{\"command\": \"make verify-deep\", \"exitCode\": 0, \"durationMs\": 65665}\n",
     "timestamp": 1776839752170
+  },
+  {
+    "kind": "bash",
+    "toolCallId": "call_AIhDf0sSD4ZdXoPfT3oC2F3a|fc_0ed1fd309f5816880169e87479217481918efc9c69c2faea25",
+    "command": "rg -n \"^verify-fast:|^verify-deep:|^verify:|## Verification lanes|make verify-fast|make verify-deep|make verify\" Makefile README.md",
+    "exitCode": 0,
+    "outputSnippet": "Makefile:82:verify-fast:\nMakefile:89:verify-deep:\nMakefile:93:verify:\nREADME.md:5:## Verification lanes\nREADME.md:9:- `make verify-fast` is the default lane for routine changes. It runs non-E2E backend tests, Vitest, TypeScript typecheck, and the production asset build without starting the slower browser suite.\nREADME.md:10:- `make verify-deep` runs the browser-heavy pytest E2E lane in `tests/e2e`. Use it when a change touches live enrichment orchestration, mocked online flows, results-page DOM/",
+    "timestamp": 1776841849516
+  },
+  {
+    "kind": "bash",
+    "toolCallId": "call_xnAZVfsCE3J2Jy2wJTkUuMDZ|fc_0ed1fd309f5816880169e8748cc2b48191b2f5aec7cb188fb2",
+    "command": "rg -n \"verify-fast|verify-deep|verify\" Makefile README.md",
+    "exitCode": 0,
+    "outputSnippet": "README.md:9:- `make verify-fast` is the default lane for routine changes. It runs non-E2E backend tests, Vitest, TypeScript typecheck, and the production asset build without starting the slower browser suite.\nREADME.md:10:- `make verify-deep` runs the browser-heavy pytest E2E lane in `tests/e2e`. Use it when a change touches live enrichment orchestration, mocked online flows, results-page DOM/state, or any behavior that could accidentally trigger real background enrichment work.\nREADME.md:11:- `",
+    "timestamp": 1776841877854
+  },
+  {
+    "kind": "bash",
+    "toolCallId": "call_x15D44wYEjp1xvn7TOFxhDGo|fc_0ed1fd309f5816880169e874b617588191bd8f49fb230c37d2",
+    "command": "python3 - <<'PY'\nimport subprocess, time\ncmd = \"rg -n \\\"verify-fast|verify-deep|verify\\\" Makefile README.md\"\nstart = time.time()\nproc = subprocess.run(cmd, shell=True, text=True, capture_output=True)\nduration_ms = int((time.time() - start) * 1000)\nprint(proc.stdout, end='')\nprint(f\"__EXIT_CODE__={proc.returncode}\")\nprint(f\"__DURATION_MS__={duration_ms}\")\nPY",
+    "exitCode": 0,
+    "outputSnippet": "README.md:9:- `make verify-fast` is the default lane for routine changes. It runs non-E2E backend tests, Vitest, TypeScript typecheck, and the production asset build without starting the slower browser suite.\nREADME.md:10:- `make verify-deep` runs the browser-heavy pytest E2E lane in `tests/e2e`. Use it when a change touches live enrichment orchestration, mocked online flows, results-page DOM/state, or any behavior that could accidentally trigger real background enrichment work.\nREADME.md:11:- `",
+    "timestamp": 1776841910758
   }
 ]
