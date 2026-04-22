@@ -10,18 +10,18 @@ Safe, correct, and transparent IOC extraction and enrichment — never invent sc
 
 ## Current State
 
-**M011 complete (2026-04-04).** 1,012 tests passing in 2.88s. Net -1,601 lines across 28 files. Adapter docstrings trimmed (1,062 lines removed), 49 redundant tests consolidated (-431 lines), all 207 CSS classes verified referenced, orchestrator tests 0.09s (was 6.2s). Zero behavior changes.
+**M012 in progress; S01 complete (2026-04-22).** The live enrichment status path now exposes explicit terminal outcomes for unknown, evicted, and failed jobs while preserving the existing cursor-polling success contract. The analyst UI stops retrying forever on terminal failures, shows a clear banner/progress state, and the slice now has compatibility-backed verification commands for the current test layout (`tests/test_routes_helpers.py`, `tests/test_api_enrichment.py`, `tests/test_analysis_page.py`). Fresh slice verification passed: `make build`, `python3 -m pytest tests/test_routes_helpers.py tests/test_orchestrator.py -q`, `python3 -m pytest tests/test_api_enrichment.py tests/test_analysis_page.py -q`, and `npx vitest run`.
 
 ## Architecture / Key Patterns
 
 - **Backend:** Python 3.10 + Flask 3.1, iocextract + iocsearcher for extraction, requests + dnspython for HTTP/DNS
 - **Frontend:** TypeScript 5.8 + esbuild (IIFE output), Tailwind CSS standalone CLI, Inter Variable + JetBrains Mono Variable, dark-first zinc design tokens with verdict-only color accents
 - **Modules:** 19 TypeScript files (main.ts + 15 modules/ + 2 types/ + 1 utils/)
-- **Enrichment:** 15 providers (12 HTTP via requests.Session, 2 DNS via dnspython, 1 WHOIS via python-whois), per-provider semaphore concurrency, 429-aware backoff, polling cursor
+- **Enrichment:** 15 providers (12 HTTP via requests.Session, 2 DNS via dnspython, 1 WHOIS via python-whois), per-provider semaphore concurrency, 429-aware backoff, cursor polling, additive terminal status metadata
 - **Persistence:** SQLite WAL-mode stores (CacheStore for enrichment cache, HistoryStore for analysis history) at ~/.sentinelx/
 - **Security:** CSP (7 directives), CSRF, SSRF allowlist, host validation, textContent-only DOM (SEC-08)
 - **Build:** Makefile targets — `css`, `js`, `js-dev`, `js-watch`, `typecheck`, `build`
-- **Tests:** 1012 total (unit + E2E via Playwright with route-mocking)
+- **Tests:** 1,012 total at last full milestone close; current slice verification uses focused pytest + Vitest coverage plus local build proof
 - **Routes:** `app/routes/` package with shared `main` Blueprint, separate `api` Blueprint (CSRF-exempt)
 
 ## Capability Contract
@@ -41,6 +41,7 @@ See `.gsd/REQUIREMENTS.md` for the explicit capability contract, requirement sta
 - [x] M009: Codebase Reduction — BaseHTTPAdapter consolidation (12 adapters), parametrized contract tests (172 replacing 208), CSS audit (clean), frontend TS dedup (4 functions shared). Net -1,143 LOC, 947 tests, 0 failures.
 - [x] M010: Cleanup & History Page — Route duplication cleanup (_setup_orchestrator, _get_enrichment_status shared helpers), dead import/export removal, Recent Analyses relocated from home page to dedicated /history page. 1061 tests, 0 failures.
 - [x] M011: Lean & Fast — Adapter docstring trim (1,062 lines), per-adapter test consolidation (49 tests, -431 lines), dead CSS audit (207 classes verified), orchestrator test speedup (6.2s → 0.09s). Net -1,601 LOC, 1,012 tests, 0 failures.
+- [ ] M012: Optimization Audit & Next-Work Decision — S01 complete: explicit terminal enrichment states now surface through backend + analyst UI with preserved cursor polling and a stable verification surface for downstream slices.
 
 ---
-*Last updated: 2026-04-04 — M011 complete.*
+*Last updated: 2026-04-22 — M012/S01 complete.*

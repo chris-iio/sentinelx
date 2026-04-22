@@ -11,10 +11,10 @@
 
 ## Slices
 
-- [ ] **S01: S01** `risk:High — this is the live seam where provider backoff, job eviction, polling semantics, and analyst trust all converge; if we cannot surface terminal states and measure real latency here, every later optimization decision is weaker.` `depends:[]`
+- [x] **S01: S01** `risk:High — this is the live seam where provider backoff, job eviction, polling semantics, and analyst trust all converge; if we cannot surface terminal states and measure real latency here, every later optimization decision is weaker.` `depends:[]`
   > After this: An analyst can run enrichment through the existing UI and see explicit terminal states for missing/evicted/failed jobs instead of silent endless polling, with verification evidence that the live status path still preserves cursor polling, concurrency/backoff behavior, and current security boundaries.
 
-- [ ] **S02: Shared result-application path for live and history views** `risk:Medium-high — current duplicate coordination between live polling and history replay is a future-change and performance seam, but the exact extraction boundary should be chosen after S01 confirms the status contract shape.` `depends:[S01]`
+- [ ] **S02: S02** `risk:Medium-high — current duplicate coordination between live polling and history replay is a future-change and performance seam, but the exact extraction boundary should be chosen after S01 confirms the status contract shape.` `depends:[]`
   > After this: A user sees the same enrichment cards, detail rows, progress, and verdict rendering whether results arrive live or are replayed from history, with one shared application path carrying the behavior.
 
 - [ ] **S03: Fast default proof loop and deterministic expensive lane** `risk:Medium — the codebase is already fast in build/typecheck paths, but the full verification loop is expensive enough to shape future velocity; we need a user-trustworthy split between default and slower evidence lanes.` `depends:[S01]`
