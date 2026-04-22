@@ -29,7 +29,7 @@ Backend status serialization, Flask helper behavior, and frontend polling/render
   - Files: `app/routes/_helpers.py`, `app/enrichment/orchestrator.py`, `tests/test_routes_helpers.py`, `tests/test_orchestrator.py`
   - Verify: python3 -m pytest tests/test_routes_helpers.py tests/test_orchestrator.py -q
 
-- [ ] **T02: Surface terminal polling failures in the analyst UI** `est:0.75d`
+- [x] **T02: Surface terminal polling failures in the analyst UI** `est:0.75d`
   Update the enrichment UI polling flow to interpret the hardened status contract, stop silent endless polling on terminal failure, and present clear analyst-visible feedback while preserving current success-path rendering. Add or update frontend unit tests for status/error handling and any touched DOM state transitions.
   - Files: `app/static/src/ts/modules/enrichment.ts`, `app/static/src/ts/modules/results.ts`, `app/static/src/ts/modules/status.ts`, `app/static/src/ts/modules/__tests__/*.test.ts`
   - Verify: npx vitest run

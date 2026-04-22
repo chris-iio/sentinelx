@@ -168,6 +168,31 @@ function showEnrichWarning(message: string): void {
 }
 
 /**
+ * Show a terminal enrichment failure banner for analyst-visible polling failures.
+ */
+function showTerminalFailure(message: string): void {
+  const banner = document.getElementById("enrich-warning");
+  if (!banner) return;
+  banner.style.display = "block";
+  banner.textContent = message;
+}
+
+/**
+ * Finalize enrichment slot DOM once polling stops, regardless of success/failure.
+ */
+function finalizeEnrichmentSlots(): void {
+  // VIS-03 + GRP-02: Inject section headers and no-data collapse for all slots
+  document.querySelectorAll<HTMLElement>(".enrichment-slot").forEach(slot => {
+    injectSectionHeadersAndNoDataSummary(slot);
+  });
+
+  // R004: Inject "View full detail →" link into each loaded slot's details panel
+  document.querySelectorAll<HTMLElement>(".enrichment-slot--loaded").forEach(slot => {
+    injectDetailLink(slot);
+  });
+}
+
+/**
  * Mark enrichment complete: add .complete class to progress container,
  * update text, and enable the export button.
  * Source: main.js markEnrichmentComplete() (lines 590-603).
@@ -186,15 +211,44 @@ function markEnrichmentComplete(): void {
     exportBtn.removeAttribute("disabled");
   }
 
-  // VIS-03 + GRP-02: Inject section headers and no-data collapse for all slots
-  document.querySelectorAll<HTMLElement>(".enrichment-slot").forEach(slot => {
-    injectSectionHeadersAndNoDataSummary(slot);
-  });
+  finalizeEnrichmentSlots();
+}
 
-  // R004: Inject "View full detail →" link into each loaded slot's details panel
-  document.querySelectorAll<HTMLElement>(".enrichment-slot--loaded").forEach(slot => {
-    injectDetailLink(slot);
-  });
+/**
+ * Mark enrichment as terminally failed so the analyst sees a stable stop state
+ * instead of endless polling.
+ */
+function markEnrichmentTerminalFailure(message: string): void {
+  const container = document.getElementById("enrich-progress");
+  if (container) {
+    container.classList.remove("complete");
+  }
+  const text = document.getElementById("enrich-progress-text");
+  if (text) {
+    text.textContent = message;
+  }
+  const exportBtn = document.getElementById("export-btn");
+  if (exportBtn && allResults.length > 0) {
+    exportBtn.removeAttribute("disabled");
+  }
+
+  finalizeEnrichmentSlots();
+}
+
+/**
+ * Convert terminal polling payloads into analyst-visible copy.
+ */
+function getTerminalFailureMessage(data: EnrichmentStatus): string {
+  if (data.terminal_reason === "evicted") {
+    return data.error ?? "Enrichment status was evicted from memory. Please rerun the analysis.";
+  }
+  if (data.terminal_reason === "unknown") {
+    return data.error ?? "Enrichment job was not found. Please rerun the analysis.";
+  }
+  if (data.error) {
+    return "Enrichment failed: " + data.error;
+  }
+  return "Enrichment failed before completion.";
 }
 
 /**
@@ -389,12 +443,23 @@ export function init(): void {
   const intervalId: ReturnType<typeof setInterval> = setInterval(function () {
     fetch("/enrichment/status/" + jobId + "?since=" + since)
       .then(function (resp) {
-        if (!resp.ok) return null;
-        return resp.json() as Promise<EnrichmentStatus>;
+        return resp
+          .json()
+          .then(function (data) {
+            return {
+              ok: resp.ok,
+              data: data as EnrichmentStatus,
+            };
+          })
+          .catch(function () {
+            if (!resp.ok) return null;
+            throw new Error("Failed to parse enrichment status response.");
+          });
       })
-      .then(function (data) {
-        if (!data) return;
+      .then(function (payload) {
+        if (!payload) return;
 
+        const data = payload.data;
         updateProgressBar(data.done, data.total);
 
         // Render any new results not yet displayed, and check for warnings
@@ -434,6 +499,18 @@ export function init(): void {
         }
 
         since = data.next_since;
+
+        if (data.terminal) {
+          clearInterval(intervalId);
+          const terminalMessage = getTerminalFailureMessage(data);
+          showTerminalFailure(terminalMessage);
+          markEnrichmentTerminalFailure(terminalMessage);
+          return;
+        }
+
+        if (!payload.ok) {
+          return;
+        }
 
         if (data.complete) {
           clearInterval(intervalId);

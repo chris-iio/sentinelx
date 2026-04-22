@@ -112,4 +112,12 @@ export interface EnrichmentStatus {
   results: EnrichmentItem[];
   /** Cursor for the next poll — pass as ?since=N to receive only new results. */
   next_since: number;
+  /** Normalized top-level job state: running, complete, or failed. */
+  status?: "running" | "complete" | "failed";
+  /** True when the job reached a terminal failure state and polling must stop. */
+  terminal?: boolean;
+  /** Failure reason for terminal states such as unknown, evicted, or job_failed. */
+  terminal_reason?: string | null;
+  /** Human-readable terminal error message, if provided by the backend. */
+  error?: string | null;
 }
