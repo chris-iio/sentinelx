@@ -1,0 +1,18 @@
+{
+  "id": "7a06efb0-c065-4854-8c67-e4088e9c04fd",
+  "runtime": "python",
+  "purpose": "codebase metrics by subsystem",
+  "script_chars": 908,
+  "started_at": "2026-04-22T03:27:31.678Z",
+  "finished_at": "2026-04-22T03:27:31.744Z",
+  "exit_code": 0,
+  "signal": null,
+  "timed_out": false,
+  "duration_ms": 66,
+  "stdout_bytes": 990,
+  "stderr_bytes": 0,
+  "stdout_truncated": false,
+  "stderr_truncated": false,
+  "stdout_path": "/home/chris/projects/sentinelx/.gsd/exec/7a06efb0-c065-4854-8c67-e4088e9c04fd.stdout",
+  "stderr_path": "/home/chris/projects/sentinelx/.gsd/exec/7a06efb0-c065-4854-8c67-e4088e9c04fd.stderr"
+}

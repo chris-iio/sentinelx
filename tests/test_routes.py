@@ -359,12 +359,17 @@ def test_analyze_offline_unchanged(client):
 
 
 def test_enrichment_status_unknown_job(client):
-    """GET /enrichment/status/nonexistent returns 404 JSON with error key."""
-    response = client.get("/enrichment/status/nonexistentjob123")
+    """GET /enrichment/status/nonexistent returns explicit terminal JSON."""
+    response = client.get("/enrichment/status/nonexistentjob123?since=7")
     assert response.status_code == 404
     data = response.get_json()
     assert data is not None
-    assert "error" in data
+    assert data["error"] == "Enrichment job was not found."
+    assert data["status"] == "failed"
+    assert data["terminal"] is True
+    assert data["terminal_reason"] == "unknown"
+    assert data["complete"] is True
+    assert data["next_since"] == 7
 
 
 def test_enrichment_status_returns_json(client):
@@ -391,6 +396,9 @@ def test_enrichment_status_returns_json(client):
         assert data["total"] == 3
         assert data["done"] == 2
         assert data["complete"] is False
+        assert data["status"] == "running"
+        assert data["terminal"] is False
+        assert data["terminal_reason"] is None
         assert "results" in data
     finally:
         routes_module._orchestrators.pop(job_id, None)
@@ -440,6 +448,9 @@ def test_enrichment_result_serialization(client):
         assert r["ioc_type"] == "ipv4"
         assert r["detection_count"] == 5
         assert r["total_engines"] == 72
+        assert data["status"] == "complete"
+        assert data["terminal"] is False
+        assert data["terminal_reason"] is None
     finally:
         routes_module._orchestrators.pop(job_id, None)
 
@@ -481,8 +492,37 @@ def test_enrichment_error_serialization(client):
         assert r["error"] == "Timeout"
         assert r["ioc_value"] == "evil.com"
         assert r["ioc_type"] == "domain"
+        assert data["status"] == "complete"
+        assert data["terminal"] is False
+        assert data["terminal_reason"] is None
     finally:
         routes_module._orchestrators.pop(job_id, None)
+
+
+def test_enrichment_status_evicted_job_returns_terminal_payload(client):
+    """Registry-level eviction returns an explicit terminal eviction payload."""
+    import app.routes._helpers as routes_module
+
+    job_id = "evictedjob123"
+    routes_module._terminal_jobs[job_id] = routes_module._terminal_status(
+        job_id,
+        reason="evicted",
+        error="Enrichment job status was evicted from memory.",
+        since=4,
+    )
+
+    try:
+        response = client.get(f"/enrichment/status/{job_id}?since=4")
+        assert response.status_code == 404
+        data = response.get_json()
+        assert data["status"] == "failed"
+        assert data["terminal"] is True
+        assert data["terminal_reason"] == "evicted"
+        assert data["error"] == "Enrichment job status was evicted from memory."
+        assert data["complete"] is True
+        assert data["next_since"] == 4
+    finally:
+        routes_module._terminal_jobs.pop(job_id, None)
 
 
 # ---------------------------------------------------------------------------

@@ -21,8 +21,11 @@ logger = logging.getLogger(__name__)
 
 # Module-level registry mapping job_id -> EnrichmentOrchestrator instance.
 # SEC-18: Bounded OrderedDict with LRU eviction to prevent memory exhaustion.
+# M012 S01: keep short terminal tombstones so pollers can tell eviction apart
+# from a never-seen job id.
 _MAX_ORCHESTRATORS = 200
 _orchestrators: OrderedDict[str, EnrichmentOrchestrator] = OrderedDict()
+_terminal_jobs: OrderedDict[str, dict] = OrderedDict()
 _orch_lock = Lock()
 
 # Shared thread pool for enrichment jobs — caps concurrent enrichments to 4.
@@ -68,6 +71,46 @@ def _serialize_result(
         "ioc_type": r.ioc.type.value,
         "provider": r.provider,
         "error": r.error,
+    }
+
+
+def _build_status_payload(status: dict, serialized_results: list[dict]) -> dict:
+    """Normalize status responses for both live progress and terminal states.
+
+    Contract:
+    - status="running": in-flight job; complete=false, terminal=false.
+    - status="complete": successful terminal state; complete=true, terminal=false.
+    - status="failed": terminal failure; complete=true, terminal=true and
+      terminal_reason identifies why (e.g. unknown, evicted, job_failed).
+
+    Existing progress fields stay intact so cursor polling semantics do not change.
+    """
+    return {
+        "total": status["total"],
+        "done": status["done"],
+        "complete": status["complete"],
+        "results": serialized_results,
+        "next_since": status.get("next_since", len(status.get("results", []))),
+        "status": status.get("status", "complete" if status["complete"] else "running"),
+        "terminal": status.get("terminal", False),
+        "terminal_reason": status.get("terminal_reason"),
+        "error": status.get("error"),
+    }
+
+
+def _terminal_status(job_id: str, *, reason: str, error: str, since: int = 0) -> dict:
+    """Return a terminal status payload for missing/evicted/failed jobs."""
+    return {
+        "job_id": job_id,
+        "total": 0,
+        "done": 0,
+        "complete": True,
+        "results": [],
+        "next_since": since,
+        "status": "failed",
+        "terminal": True,
+        "terminal_reason": reason,
+        "error": error,
     }
 
 
@@ -135,8 +178,16 @@ def _setup_orchestrator(
 
     with _orch_lock:
         _orchestrators[job_id] = orchestrator
+        _terminal_jobs.pop(job_id, None)
         while len(_orchestrators) > _MAX_ORCHESTRATORS:
-            _orchestrators.popitem(last=False)
+            evicted_job_id, _ = _orchestrators.popitem(last=False)
+            _terminal_jobs[evicted_job_id] = _terminal_status(
+                evicted_job_id,
+                reason="evicted",
+                error="Enrichment job status was evicted from memory.",
+            )
+        while len(_terminal_jobs) > _MAX_ORCHESTRATORS:
+            _terminal_jobs.popitem(last=False)
 
     _enrichment_pool.submit(
         _run_enrichment_and_save,
@@ -150,30 +201,46 @@ def _setup_orchestrator(
 def _get_enrichment_status(job_id: str):
     """Shared status endpoint body for both HTML and API routes.
 
-    Returns a Flask JSON response tuple.
+    Returns a Flask JSON response tuple. Success responses preserve the existing
+    progress/cursor contract and add machine-readable terminal metadata. Missing
+    responses stay 404 but now expose whether the poller hit an unknown id,
+    helper-level eviction, orchestrator-level eviction, or a failed job.
     """
+    since = request.args.get("since", 0, type=int)
+
     with _orch_lock:
         orchestrator = _orchestrators.get(job_id)
+        terminal = _terminal_jobs.get(job_id)
+
     if orchestrator is None:
-        return jsonify({"error": "job not found"}), 404
+        payload = terminal or _terminal_status(
+            job_id,
+            reason="unknown",
+            error="Enrichment job was not found.",
+            since=since,
+        )
+        payload["next_since"] = since
+        return jsonify(payload), 404
 
     status = orchestrator.get_status(job_id)
     if status is None:
-        return jsonify({"error": "job not found"}), 404
+        payload = _terminal_status(
+            job_id,
+            reason="unknown",
+            error="Enrichment job was not found.",
+            since=since,
+        )
+        return jsonify(payload), 404
 
-    since = request.args.get("since", 0, type=int)
     cached_markers = orchestrator.cached_markers
-
     all_results = status["results"]
     new_results = all_results[since:]
     serialized = [
         _serialize_result(r, cached_markers) for r in new_results
     ]
 
-    return jsonify({
-        "total": status["total"],
-        "done": status["done"],
-        "complete": status["complete"],
-        "results": serialized,
-        "next_since": len(all_results),
-    })
+    status_payload = dict(status)
+    status_payload["next_since"] = since if status_payload.get("terminal") else len(all_results)
+    payload = _build_status_payload(status_payload, serialized)
+    status_code = 404 if payload["terminal"] and payload["terminal_reason"] in {"unknown", "evicted"} else 200
+    return jsonify(payload), status_code

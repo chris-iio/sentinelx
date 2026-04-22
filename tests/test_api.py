@@ -157,9 +157,14 @@ class TestApiStatus:
     """Enrichment polling via GET /api/status/<job_id>."""
 
     def test_unknown_job(self, client):
-        resp = client.get("/api/status/nonexistent")
+        resp = client.get("/api/status/nonexistent?since=2")
         assert resp.status_code == 404
-        assert "not found" in resp.get_json()["error"]
+        data = resp.get_json()
+        assert data["error"] == "Enrichment job was not found."
+        assert data["status"] == "failed"
+        assert data["terminal"] is True
+        assert data["terminal_reason"] == "unknown"
+        assert data["next_since"] == 2
 
     def test_known_job(self, client):
         """Known job returns polling progress."""
@@ -187,6 +192,9 @@ class TestApiStatus:
             assert data["total"] == 1
             assert data["done"] == 1
             assert data["complete"] is True
+            assert data["status"] == "complete"
+            assert data["terminal"] is False
+            assert data["terminal_reason"] is None
             assert len(data["results"]) == 1
             assert data["results"][0]["verdict"] == "clean"
         finally:
@@ -216,6 +224,8 @@ class TestApiStatus:
             assert len(data["results"]) == 1
             assert data["results"][0]["provider"] == "p2"
             assert data["next_since"] == 2
+            assert data["status"] == "complete"
+            assert data["terminal"] is False
         finally:
             helpers._orchestrators.pop(job_id, None)
 

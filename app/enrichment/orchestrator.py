@@ -83,6 +83,7 @@ class EnrichmentOrchestrator:
         self._max_workers = max_workers
         self._max_jobs = max_jobs
         self._jobs: OrderedDict[str, dict] = OrderedDict()
+        self._terminal_jobs: OrderedDict[str, dict] = OrderedDict()
         self._lock = Lock()
         self._cache = cache
         self._cache_ttl_seconds = cache_ttl_seconds
@@ -129,22 +130,38 @@ class EnrichmentOrchestrator:
                 "done": 0,
                 "results": [],
                 "complete": False,
+                "status": "running",
+                "terminal": False,
+                "terminal_reason": None,
+                "error": None,
             }
+            self._terminal_jobs.pop(job_id, None)
             self._evict_if_needed()
 
-        with ThreadPoolExecutor(max_workers=self._max_workers) as pool:
-            futures = {
-                pool.submit(self._do_lookup, adapter, ioc): (adapter, ioc)
-                for adapter, ioc in dispatch_pairs
-            }
-            for future in as_completed(futures):
-                result = future.result()
-                with self._lock:
-                    self._jobs[job_id]["results"].append(result)
-                    self._jobs[job_id]["done"] += 1
+        try:
+            with ThreadPoolExecutor(max_workers=self._max_workers) as pool:
+                futures = {
+                    pool.submit(self._do_lookup, adapter, ioc): (adapter, ioc)
+                    for adapter, ioc in dispatch_pairs
+                }
+                for future in as_completed(futures):
+                    result = future.result()
+                    with self._lock:
+                        self._jobs[job_id]["results"].append(result)
+                        self._jobs[job_id]["done"] += 1
+        except Exception as exc:
+            logger.exception("Enrichment job %s failed", job_id)
+            with self._lock:
+                self._jobs[job_id]["complete"] = True
+                self._jobs[job_id]["status"] = "failed"
+                self._jobs[job_id]["terminal"] = True
+                self._jobs[job_id]["terminal_reason"] = "job_failed"
+                self._jobs[job_id]["error"] = str(exc) or exc.__class__.__name__
+            return
 
         with self._lock:
             self._jobs[job_id]["complete"] = True
+            self._jobs[job_id]["status"] = "complete"
 
     def get_status(self, job_id: str) -> dict | None:
         """Return a snapshot of the job status dict, or None if not found.
@@ -157,14 +174,21 @@ class EnrichmentOrchestrator:
             job_id: The job identifier returned by enrich_all.
 
         Returns:
-            Copy of status dict with keys: total, done, results, complete.
+            Copy of status dict with keys: total, done, results, complete,
+            status, terminal, terminal_reason, error.
             The results value is a new list (snapshot), not the live reference.
-            None if job_id is not found (evicted or never created).
+            Terminal tombstones are returned for evicted jobs.
+            None if job_id is not found (never created).
         """
         with self._lock:
             job = self._jobs.get(job_id)
             if job is None:
-                return None
+                terminal = self._terminal_jobs.get(job_id)
+                if terminal is None:
+                    return None
+                copy = dict(terminal)
+                copy["results"] = list(terminal.get("results", []))
+                return copy
             copy = dict(job)
             copy["results"] = list(job["results"])
             return copy
@@ -339,7 +363,20 @@ class EnrichmentOrchestrator:
         """Evict the oldest job entry when the LRU limit is exceeded.
 
         Must be called with self._lock held.
-        Evicts one entry per call (FIFO via OrderedDict ordering).
+        Evicts one entry per call (FIFO via OrderedDict ordering) and leaves a
+        terminal tombstone so pollers can distinguish eviction from an unknown id.
         """
         while len(self._jobs) > self._max_jobs:
-            self._jobs.popitem(last=False)
+            evicted_job_id, evicted_job = self._jobs.popitem(last=False)
+            self._terminal_jobs[evicted_job_id] = {
+                "total": evicted_job["total"],
+                "done": evicted_job["done"],
+                "results": [],
+                "complete": True,
+                "status": "failed",
+                "terminal": True,
+                "terminal_reason": "evicted",
+                "error": "Enrichment job status was evicted from memory.",
+            }
+            while len(self._terminal_jobs) > self._max_jobs:
+                self._terminal_jobs.popitem(last=False)

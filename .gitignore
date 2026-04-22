@@ -104,3 +104,6 @@ tmp/
 
 # ── GSD baseline (auto-generated) ──
 .bg-shell/
+
+# ── GSD baseline (auto-generated) ──
+.mcp.json

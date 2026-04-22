@@ -206,7 +206,7 @@ class TestRetryBehavior:
 class TestJobStatusTracking:
 
     def test_job_status_tracking(self, mock_adapter):
-        """get_status(job_id) returns dict with keys: total, done, results, complete."""
+        """get_status(job_id) returns progress keys plus terminal-semantics metadata."""
         ioc = _make_ioc(IOCType.IPV4, "7.7.7.7")
         mock_adapter.lookup.return_value = _make_result(ioc)
 
@@ -219,6 +219,10 @@ class TestJobStatusTracking:
         assert "done" in status
         assert "results" in status
         assert "complete" in status
+        assert "status" in status
+        assert "terminal" in status
+        assert "terminal_reason" in status
+        assert "error" in status
 
     def test_job_status_complete_flag(self, mock_adapter):
         """After enrich_all finishes, get_status(job_id)["complete"] must be True."""
@@ -244,17 +248,29 @@ class TestJobStatusTracking:
         assert status["done"] == 3
 
     def test_get_status_unknown_job(self, mock_adapter):
-        """get_status on a non-existent job_id returns None."""
+        """get_status on a never-seen job_id returns None."""
         orchestrator = _make_orchestrator(mock_adapter)
         assert orchestrator.get_status("nonexistent") is None
+
+    def test_job_status_complete_semantics(self, mock_adapter):
+        """Completed jobs expose non-terminal terminal-semantics metadata."""
+        ioc = _make_ioc(IOCType.IPV4, "7.7.7.8")
+        mock_adapter.lookup.return_value = _make_result(ioc)
+
+        orchestrator = _make_orchestrator(mock_adapter)
+        orchestrator.enrich_all("job-status-semantics", [ioc])
+
+        status = orchestrator.get_status("job-status-semantics")
+        assert status["status"] == "complete"
+        assert status["terminal"] is False
+        assert status["terminal_reason"] is None
+        assert status["error"] is None
 
 
 class TestLRUEviction:
 
     def test_job_cleanup_lru(self, mock_adapter):
-        """After creating 101 jobs (maxsize=100), first job must be evicted.
-        get_status(first_job_id) must return None after eviction.
-        """
+        """Evicted jobs return an explicit terminal tombstone instead of disappearing."""
         ioc = _make_ioc(IOCType.IPV4, "9.9.9.9")
         mock_adapter.lookup.return_value = _make_result(ioc)
 
@@ -267,10 +283,39 @@ class TestLRUEviction:
             job_id = f"job-lru-{i}"
             orchestrator.enrich_all(job_id, [ioc])
 
-        # First job must be evicted after 6 jobs with maxsize=5
-        assert orchestrator.get_status(first_job_id) is None
-        # Most recent job must still be present
-        assert orchestrator.get_status("job-lru-5") is not None
+        # First job must expose an eviction tombstone after 6 jobs with maxsize=5
+        first_status = orchestrator.get_status(first_job_id)
+        assert first_status is not None
+        assert first_status["status"] == "failed"
+        assert first_status["terminal"] is True
+        assert first_status["terminal_reason"] == "evicted"
+        assert first_status["error"] == "Enrichment job status was evicted from memory."
+        # Most recent job must still be present as a normal completed job
+        latest_status = orchestrator.get_status("job-lru-5")
+        assert latest_status is not None
+        assert latest_status["status"] == "complete"
+
+
+class TestJobFailureSemantics:
+    """Prove unexpected worker exceptions become explicit terminal failures."""
+
+    def test_unexpected_lookup_exception_marks_job_failed(self, mock_adapter):
+        """Unhandled adapter exceptions should mark the job as failed and terminal."""
+        ioc = _make_ioc(IOCType.IPV4, "11.11.11.11")
+        mock_adapter.lookup.side_effect = RuntimeError("adapter exploded")
+
+        orchestrator = _make_orchestrator(mock_adapter)
+        orchestrator.enrich_all("job-hard-fail", [ioc])
+
+        status = orchestrator.get_status("job-hard-fail")
+        assert status is not None
+        assert status["complete"] is True
+        assert status["status"] == "failed"
+        assert status["terminal"] is True
+        assert status["terminal_reason"] == "job_failed"
+        assert status["error"] == "adapter exploded"
+        assert status["done"] == 0
+        assert status["results"] == []
 
 
 # ---------------------------------------------------------------------------

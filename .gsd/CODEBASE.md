@@ -1,9 +1,10 @@
 # Codebase Map
 
-Generated: 2026-04-11T21:54:04Z | Files: 146 | Described: 0/146
-<!-- gsd:codebase-meta {"generatedAt":"2026-04-11T21:54:04Z","fingerprint":"4f969b377741873c155207343d475ad768f5097c","fileCount":146,"truncated":false} -->
+Generated: 2026-04-22T03:36:08Z | Files: 152 | Described: 0/152
+<!-- gsd:codebase-meta {"generatedAt":"2026-04-22T03:36:08Z","fingerprint":"7dec8d59da098a2408a2fe47a2c781be95bc4161","fileCount":152,"truncated":false} -->
 
 ### (root)/
+- `.codex`
 - `.env.example`
 - `.gitignore`
 - `Makefile`
@@ -76,6 +77,11 @@ Generated: 2026-04-11T21:54:04Z | Files: 146 | Described: 0/146
 - `app/routes/history.py`
 - `app/routes/settings.py`
 
+### app/ssh/
+- `app/ssh/__init__.py`
+- `app/ssh/models.py`
+- `app/ssh/parser.py`
+
 ### app/static/src/
 - `app/static/src/input.css`
 
@@ -130,7 +136,7 @@ Generated: 2026-04-11T21:54:04Z | Files: 146 | Described: 0/146
 - `docs/plans/2026-03-04-settings-page-redesign.md`
 
 ### tests/
-- *(39 files: 39 .py)*
+- *(41 files: 41 .py)*
 
 ### tests/e2e/
 - `tests/e2e/__init__.py`
