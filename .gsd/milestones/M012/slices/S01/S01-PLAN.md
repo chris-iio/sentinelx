@@ -34,7 +34,7 @@ Backend status serialization, Flask helper behavior, and frontend polling/render
   - Files: `app/static/src/ts/modules/enrichment.ts`, `app/static/src/ts/modules/results.ts`, `app/static/src/ts/modules/status.ts`, `app/static/src/ts/modules/__tests__/*.test.ts`
   - Verify: npx vitest run
 
-- [ ] **T03: Prove live-path continuity and baseline the slice** `est:0.5d`
+- [x] **T03: Prove live-path continuity and baseline the slice** `est:0.5d`
   Run focused end-to-end verification through the existing local build and targeted tests to prove that successful enrichment still works, terminal states are visible, and the continuity constraints remain intact. Capture the evidence needed to make this slice the stable baseline for downstream UI and proof-loop slices.
   - Files: `tests/test_analysis_page.py`, `tests/test_api_enrichment.py`, `app/static/src/ts/modules/enrichment.ts`, `.gsd/milestones/M012/slices/S01/`
   - Verify: make build && python3 -m pytest tests/test_api_enrichment.py tests/test_analysis_page.py -q && npx vitest run

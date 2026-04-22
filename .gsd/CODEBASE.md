@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-04-22T03:36:08Z | Files: 152 | Described: 0/152
-<!-- gsd:codebase-meta {"generatedAt":"2026-04-22T03:36:08Z","fingerprint":"7dec8d59da098a2408a2fe47a2c781be95bc4161","fileCount":152,"truncated":false} -->
+Generated: 2026-04-22T04:00:06Z | Files: 153 | Described: 0/153
+<!-- gsd:codebase-meta {"generatedAt":"2026-04-22T04:00:06Z","fingerprint":"4c2ac565a47a58ce93654f64ac6a2c636b45b4e2","fileCount":153,"truncated":false} -->
 
 ### (root)/
 - `.codex`
@@ -91,6 +91,7 @@ Generated: 2026-04-22T03:36:08Z | Files: 152 | Described: 0/152
 ### app/static/src/ts/modules/
 - `app/static/src/ts/modules/cards.ts`
 - `app/static/src/ts/modules/clipboard.ts`
+- `app/static/src/ts/modules/enrichment.test.ts`
 - `app/static/src/ts/modules/enrichment.ts`
 - `app/static/src/ts/modules/export.ts`
 - `app/static/src/ts/modules/filter.ts`
