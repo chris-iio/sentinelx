@@ -863,8 +863,21 @@
     },
     {
       "id": "slice:M012:S03",
-      "label": "M012/S03",
+      "label": "S03: Fast default proof loop and deterministic expensive lane",
       "type": "slice",
+      "confidence": "EXTRACTED",
+      "sourceFile": "milestones/M012/slices/S03/S03-PLAN.md"
+    },
+    {
+      "id": "task:M012:S03:T01",
+      "label": "T01: Codify fast and deep verification lanes in the repo-native command surface",
+      "type": "task",
+      "confidence": "EXTRACTED"
+    },
+    {
+      "id": "task:M012:S03:T02",
+      "label": "T02: Stub online E2E orchestration so the deep lane stays deterministic",
+      "type": "task",
       "confidence": "EXTRACTED"
     }
   ],
@@ -1612,7 +1625,19 @@
       "to": "slice:M012:S03",
       "type": "contains",
       "confidence": "EXTRACTED"
+    },
+    {
+      "from": "slice:M012:S03",
+      "to": "task:M012:S03:T01",
+      "type": "contains",
+      "confidence": "EXTRACTED"
+    },
+    {
+      "from": "slice:M012:S03",
+      "to": "task:M012:S03:T02",
+      "type": "contains",
+      "confidence": "EXTRACTED"
     }
   ],
-  "builtAt": "2026-04-22T06:26:08.312Z"
+  "builtAt": "2026-04-22T07:37:07.735Z"
 }

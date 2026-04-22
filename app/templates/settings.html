@@ -124,6 +124,21 @@
                 <button type="submit" class="btn btn-secondary btn-danger-subtle" id="clear-cache-btn">Clear Cache</button>
             </form>
         </div>
+
+        <div class="settings-cache-section">
+            <h2 class="settings-cache-title">History Save Diagnostics</h2>
+            <div class="settings-cache-stats">
+                <span class="cache-stat">{{ history_save_diagnostics.attempts }} attempted saves</span>
+                <span class="cache-stat">{{ history_save_diagnostics.successes }} successful</span>
+                <span class="cache-stat">{{ history_save_diagnostics.failures }} failed</span>
+                <span class="cache-stat">{{ history_save_diagnostics.skipped }} skipped</span>
+            </div>
+            <p class="settings-info"><strong>Last outcome:</strong> {{ history_save_diagnostics.last_outcome }}</p>
+            <p class="settings-info"><strong>Last save attempt:</strong> {{ history_save_diagnostics.last_attempt_at or 'Never' }}</p>
+            <p class="settings-info"><strong>Last save success:</strong> {{ history_save_diagnostics.last_success_at or 'Never' }}</p>
+            <p class="settings-info"><strong>Last save failure:</strong> {{ history_save_diagnostics.last_failure_at or 'Never' }}</p>
+            <p class="settings-info"><strong>Last error summary:</strong> {{ history_save_diagnostics.last_error_summary or 'None' }}</p>
+        </div>
     </div>
 </div>
 {% endblock %}

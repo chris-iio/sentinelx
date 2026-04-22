@@ -8,7 +8,7 @@ Tests cover:
 - GET / works with no history (empty list)
 - History results are embedded as data-history-results attribute
 """
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -68,6 +68,16 @@ def seeded_store(history_store):
     return history_store, analysis_id, iocs, results
 
 
+@pytest.fixture(autouse=True)
+def reset_history_save_diagnostics():
+    """Reset helper diagnostics so each test observes a fresh aggregate snapshot."""
+    from app.routes._helpers import _reset_history_save_diagnostics
+
+    _reset_history_save_diagnostics()
+    yield
+    _reset_history_save_diagnostics()
+
+
 # ---------------------------------------------------------------------------
 # _run_enrichment_and_save wrapper tests
 # ---------------------------------------------------------------------------
@@ -78,7 +88,10 @@ class TestEnrichmentSaveWrapper:
 
     def test_save_called_after_enrichment(self):
         """The wrapper calls enrich_all then saves to HistoryStore."""
-        from app.routes._helpers import _run_enrichment_and_save
+        from app.routes._helpers import (
+            _run_enrichment_and_save,
+            get_history_save_diagnostics,
+        )
 
         mock_orch = MagicMock()
         mock_orch.enrich_all.return_value = None
@@ -103,9 +116,23 @@ class TestEnrichmentSaveWrapper:
         assert call_kwargs[1]["mode"] == "online"
         assert call_kwargs[1]["analysis_id"] == "test_job_id"
 
+        diagnostics = get_history_save_diagnostics()
+        assert diagnostics["attempts"] == 1
+        assert diagnostics["successes"] == 1
+        assert diagnostics["failures"] == 0
+        assert diagnostics["skipped"] == 0
+        assert diagnostics["last_outcome"] == "saved"
+        assert diagnostics["last_attempt_at"] is not None
+        assert diagnostics["last_success_at"] is not None
+        assert diagnostics["last_failure_at"] is None
+        assert diagnostics["last_error_summary"] is None
+
     def test_save_failure_does_not_break_enrichment(self):
         """If HistoryStore.save_analysis raises, enrichment still completes."""
-        from app.routes._helpers import _run_enrichment_and_save
+        from app.routes._helpers import (
+            _run_enrichment_and_save,
+            get_history_save_diagnostics,
+        )
 
         mock_orch = MagicMock()
         mock_orch.enrich_all.return_value = None
@@ -127,10 +154,22 @@ class TestEnrichmentSaveWrapper:
 
         # enrich_all was still called
         mock_orch.enrich_all.assert_called_once()
+        diagnostics = get_history_save_diagnostics()
+        assert diagnostics["attempts"] == 1
+        assert diagnostics["successes"] == 0
+        assert diagnostics["failures"] == 1
+        assert diagnostics["skipped"] == 0
+        assert diagnostics["last_outcome"] == "failed"
+        assert diagnostics["last_attempt_at"] is not None
+        assert diagnostics["last_failure_at"] is not None
+        assert diagnostics["last_error_summary"] == "Exception while saving analysis history"
 
     def test_save_skipped_when_status_none(self):
         """If orchestrator.get_status returns None, save is skipped."""
-        from app.routes._helpers import _run_enrichment_and_save
+        from app.routes._helpers import (
+            _run_enrichment_and_save,
+            get_history_save_diagnostics,
+        )
 
         mock_orch = MagicMock()
         mock_orch.enrich_all.return_value = None
@@ -144,6 +183,43 @@ class TestEnrichmentSaveWrapper:
         )
 
         mock_store.save_analysis.assert_not_called()
+        diagnostics = get_history_save_diagnostics()
+        assert diagnostics["attempts"] == 0
+        assert diagnostics["successes"] == 0
+        assert diagnostics["failures"] == 0
+        assert diagnostics["skipped"] == 1
+        assert diagnostics["last_outcome"] == "skipped"
+        assert diagnostics["last_attempt_at"] is None
+        assert diagnostics["last_error_summary"] is None
+
+    def test_history_save_diagnostics_falls_back_to_safe_defaults(self):
+        """Malformed helper state is coerced to safe aggregate defaults."""
+        from app.routes import _helpers
+
+        malformed = {
+            "attempts": "oops",
+            "successes": -1,
+            "failures": True,
+            "skipped": 3,
+            "last_outcome": "mystery",
+            "last_attempt_at": "",
+            "last_error_summary": {"raw": "payload"},
+        }
+
+        with patch.object(_helpers, "_history_save_diagnostics", malformed):
+            diagnostics = _helpers.get_history_save_diagnostics()
+
+        assert diagnostics == {
+            "attempts": 0,
+            "successes": 0,
+            "failures": 0,
+            "skipped": 3,
+            "last_outcome": "never",
+            "last_attempt_at": None,
+            "last_success_at": None,
+            "last_failure_at": None,
+            "last_error_summary": None,
+        }
 
 
 # ---------------------------------------------------------------------------

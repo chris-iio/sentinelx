@@ -39,6 +39,61 @@ def test_get_settings_page_shows_info_text(client):
     assert b"virustotal.com" in response.data
 
 
+def test_get_settings_page_shows_history_save_diagnostics(client):
+    """GET /settings renders bounded aggregate diagnostics for history saves."""
+    diagnostics = {
+        "attempts": 3,
+        "successes": 2,
+        "failures": 1,
+        "skipped": 1,
+        "last_outcome": "failed",
+        "last_attempt_at": "2026-04-22T09:00:00Z",
+        "last_success_at": "2026-04-22T08:59:00Z",
+        "last_failure_at": "2026-04-22T09:00:00Z",
+        "last_error_summary": "RuntimeError while saving analysis history",
+        "input_text": "secret analyst note",
+        "results": [{"ioc_value": "evil.com"}],
+    }
+
+    with patch("app.routes.settings.get_history_save_diagnostics", return_value=diagnostics):
+        response = client.get("/settings")
+
+    data = response.get_data(as_text=True)
+    assert response.status_code == 200
+    assert "History Save Diagnostics" in data
+    assert "3 attempted saves" in data
+    assert "2 successful" in data
+    assert "1 failed" in data
+    assert "1 skipped" in data
+    assert "RuntimeError while saving analysis history" in data
+    assert "secret analyst note" not in data
+    assert "evil.com" not in data
+
+
+def test_get_settings_page_history_save_diagnostics_defaults(client):
+    """GET /settings shows safe defaults when diagnostics have no timestamps yet."""
+    diagnostics = {
+        "attempts": 0,
+        "successes": 0,
+        "failures": 0,
+        "skipped": 0,
+        "last_outcome": "never",
+        "last_attempt_at": None,
+        "last_success_at": None,
+        "last_failure_at": None,
+        "last_error_summary": None,
+    }
+
+    with patch("app.routes.settings.get_history_save_diagnostics", return_value=diagnostics):
+        response = client.get("/settings")
+
+    data = response.get_data(as_text=True)
+    assert response.status_code == 200
+    assert "Last outcome:</strong> never" in data
+    assert data.count("Never") >= 3
+    assert "Last error summary:</strong> None" in data
+
+
 def test_get_settings_page_no_key_configured(client):
     """GET /settings when no key is configured shows empty/masked field."""
     with patch("app.routes.settings.ConfigStore") as MockStore:

@@ -10,7 +10,7 @@ Safe, correct, and transparent IOC extraction and enrichment — never invent sc
 
 ## Current State
 
-**M012 in progress; S01 and S02 complete (2026-04-22).** The live enrichment status path now exposes explicit terminal outcomes for unknown, evicted, and failed jobs while preserving the existing cursor-polling success contract. The results surface now also uses one shared live/history result-application path plus explicit `.page-results[data-results-owner]` dispatch, so history replay renders the same enrichment cards, detail rows, progress state, verdicts, detail links, export readiness, and copy-button summaries as live polling without ever leaking `/enrichment/status/history` fetches or duplicate listener wiring. Fresh slice verification passed: `npx vitest run app/static/src/ts/modules/result-application.test.ts app/static/src/ts/modules/history.test.ts app/static/src/ts/modules/enrichment.test.ts`, `python3 -m pytest tests/test_history_routes.py -q`, `npx tsc --noEmit`, and `make build`.
+**M012 in progress; S01, S02, and S03 complete (2026-04-22).** The live enrichment status path now exposes explicit terminal outcomes for unknown, evicted, and failed jobs while preserving the existing cursor-polling success contract. The results surface now also uses one shared live/history result-application path plus explicit `.page-results[data-results-owner]` dispatch, so history replay renders the same enrichment cards, detail rows, progress state, verdicts, detail links, export readiness, and copy-button summaries as live polling without ever leaking `/enrichment/status/history` fetches or duplicate listener wiring. The repo’s proof surface is now split into an explicit fast lane (`make verify-fast`) and deeper browser lane (`make verify-deep`), and mocked-online E2E flows use deterministic fake job IDs so browser failures point at the actual seam under test instead of background-thread shutdown noise. Fresh slice verification passed: `make verify-fast` (952 non-E2E backend tests, 78 Vitest tests, TypeScript, production build) and `make verify-deep` (113 E2E tests).
 
 ## Architecture / Key Patterns
 
@@ -19,8 +19,9 @@ Safe, correct, and transparent IOC extraction and enrichment — never invent sc
 - **Enrichment:** 15 providers (12 HTTP via requests.Session, 2 DNS via dnspython, 1 WHOIS via python-whois), per-provider semaphore concurrency, 429-aware backoff, cursor polling, additive terminal status metadata
 - **Persistence:** SQLite WAL-mode stores (CacheStore for enrichment cache, HistoryStore for analysis history) at ~/.sentinelx/
 - **Results rendering:** `result-application.ts` is the shared stateful apply/flush/finalize coordinator; `enrichment.ts` keeps live-only polling/cursor/terminal/debounce behavior; `history.ts` keeps history JSON parsing and synchronous replay timing
+- **Verification surface:** `make verify-fast` is the default routine proof lane, `make verify-deep` is the browser/live-results lane, and `make verify` composes both. Mocked-online E2E coverage stays deterministic by patching orchestration only inside the E2E live-server fixture and asserting rendered `data-results-owner` / `data-job-id` signals in shared helpers.
 - **Security:** CSP (7 directives), CSRF, SSRF allowlist, host validation, textContent-only DOM (SEC-08)
-- **Build:** Makefile targets — `css`, `js`, `js-dev`, `js-watch`, `typecheck`, `build`
+- **Build:** Makefile targets — `css`, `js`, `js-dev`, `js-watch`, `typecheck`, `build`, `verify-fast`, `verify-deep`, `verify`
 - **Routes:** `app/routes/` package with shared `main` Blueprint, separate `api` Blueprint (CSRF-exempt)
 
 ## Capability Contract
@@ -40,7 +41,7 @@ See `.gsd/REQUIREMENTS.md` for the explicit capability contract, requirement sta
 - [x] M009: Codebase Reduction — BaseHTTPAdapter consolidation (12 adapters), parametrized contract tests (172 replacing 208), CSS audit (clean), frontend TS dedup (4 functions shared). Net -1,143 LOC, 947 tests, 0 failures.
 - [x] M010: Cleanup & History Page — Route duplication cleanup (_setup_orchestrator, _get_enrichment_status shared helpers), dead import/export removal, Recent Analyses relocated from home page to dedicated /history page. 1061 tests, 0 failures.
 - [x] M011: Lean & Fast — Adapter docstring trim (1,062 lines), per-adapter test consolidation (49 tests, -431 lines), dead CSS audit (207 classes verified), orchestrator test speedup (6.2s → 0.09s). Net -1,601 LOC, 1,012 tests, 0 failures.
-- [ ] M012: Optimization Audit & Next-Work Decision — S01 complete: explicit terminal enrichment states surface through backend + analyst UI with preserved cursor polling and a stable verification surface. S02 complete: live polling and history replay now share one result-application path with exclusive owner dispatch and parity-backed proof.
+- [ ] M012: Optimization Audit & Next-Work Decision — S01 complete: explicit terminal enrichment states surface through backend + analyst UI with preserved cursor polling and a stable verification surface. S02 complete: live polling and history replay now share one result-application path with exclusive owner dispatch and parity-backed proof. S03 complete: the repo now has an explicit fast/default verification lane plus a deterministic mocked-online browser lane that avoids launching real enrichment work.
 
 ---
-*Last updated: 2026-04-22 — M012/S02 complete.*
+*Last updated: 2026-04-22 — M012/S03 complete.*

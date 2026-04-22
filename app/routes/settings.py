@@ -9,7 +9,7 @@ from app.enrichment.config_store import ConfigStore
 from app.enrichment.setup import PROVIDER_INFO, build_registry
 
 from . import bp
-from ._helpers import _mask_key
+from ._helpers import _mask_key, get_history_save_diagnostics
 
 
 @bp.route("/settings", methods=["GET"])
@@ -32,11 +32,13 @@ def settings_get():
     cache = current_app.cache_store
     cache_stats = cache.stats()
     cache_ttl = config_store.get_cache_ttl()
+    history_save_diagnostics = get_history_save_diagnostics()
     return render_template(
         "settings.html",
         providers=providers_with_status,
         cache_stats=cache_stats,
         cache_ttl=cache_ttl,
+        history_save_diagnostics=history_save_diagnostics,
     )
 
 

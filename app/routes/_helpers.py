@@ -8,6 +8,7 @@ import logging
 import uuid
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
 from threading import Lock
 
 from flask import current_app, jsonify, request
@@ -30,6 +31,106 @@ _orch_lock = Lock()
 
 # Shared thread pool for enrichment jobs — caps concurrent enrichments to 4.
 _enrichment_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="enrich")
+
+_HISTORY_SAVE_OUTCOMES = {"never", "saved", "failed", "skipped"}
+_HISTORY_SAVE_DIAGNOSTICS_DEFAULTS = {
+    "attempts": 0,
+    "successes": 0,
+    "failures": 0,
+    "skipped": 0,
+    "last_outcome": "never",
+    "last_attempt_at": None,
+    "last_success_at": None,
+    "last_failure_at": None,
+    "last_error_summary": None,
+}
+_history_save_diag_lock = Lock()
+_history_save_diagnostics: dict[str, object] = dict(_HISTORY_SAVE_DIAGNOSTICS_DEFAULTS)
+
+
+def _utcnow_iso() -> str:
+    """Return the current UTC timestamp in ISO-8601 Zulu form."""
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _coerce_history_save_diagnostics(raw: object) -> dict[str, object]:
+    """Return a safe diagnostics snapshot even if module state is malformed."""
+    data = raw if isinstance(raw, dict) else {}
+    diagnostics = dict(_HISTORY_SAVE_DIAGNOSTICS_DEFAULTS)
+
+    for field in ("attempts", "successes", "failures", "skipped"):
+        value = data.get(field)
+        if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+            diagnostics[field] = value
+
+    outcome = data.get("last_outcome")
+    if outcome in _HISTORY_SAVE_OUTCOMES:
+        diagnostics["last_outcome"] = outcome
+
+    for field in ("last_attempt_at", "last_success_at", "last_failure_at"):
+        value = data.get(field)
+        if isinstance(value, str) and value.strip():
+            diagnostics[field] = value
+
+    error_summary = data.get("last_error_summary")
+    if isinstance(error_summary, str) and error_summary.strip():
+        diagnostics["last_error_summary"] = error_summary.strip()[:120]
+
+    return diagnostics
+
+
+def _record_history_save_attempt() -> None:
+    """Increment bounded aggregate diagnostics before save_analysis() runs."""
+    timestamp = _utcnow_iso()
+    with _history_save_diag_lock:
+        diagnostics = _coerce_history_save_diagnostics(_history_save_diagnostics)
+        diagnostics["attempts"] += 1
+        diagnostics["last_attempt_at"] = timestamp
+        _history_save_diagnostics.clear()
+        _history_save_diagnostics.update(diagnostics)
+
+
+def _record_history_save_outcome(outcome: str, error: Exception | None = None) -> None:
+    """Record the last bounded outcome for helper-owned history persistence."""
+    if outcome not in {"saved", "failed", "skipped"}:
+        return
+
+    timestamp = _utcnow_iso()
+    with _history_save_diag_lock:
+        diagnostics = _coerce_history_save_diagnostics(_history_save_diagnostics)
+        diagnostics["last_outcome"] = outcome
+        if outcome == "saved":
+            diagnostics["successes"] += 1
+            diagnostics["last_success_at"] = timestamp
+            diagnostics["last_error_summary"] = None
+        elif outcome == "failed":
+            diagnostics["failures"] += 1
+            diagnostics["last_failure_at"] = timestamp
+            diagnostics["last_error_summary"] = (
+                f"{error.__class__.__name__} while saving analysis history"
+                if error is not None
+                else "History save failed"
+            )
+        else:
+            diagnostics["skipped"] += 1
+            diagnostics["last_error_summary"] = None
+
+        _history_save_diagnostics.clear()
+        _history_save_diagnostics.update(diagnostics)
+
+
+def get_history_save_diagnostics() -> dict[str, object]:
+    """Return a safe snapshot of helper-level history save diagnostics."""
+    with _history_save_diag_lock:
+        snapshot = dict(_history_save_diagnostics)
+    return _coerce_history_save_diagnostics(snapshot)
+
+
+def _reset_history_save_diagnostics() -> None:
+    """Reset helper-level history save diagnostics for focused tests."""
+    with _history_save_diag_lock:
+        _history_save_diagnostics.clear()
+        _history_save_diagnostics.update(_HISTORY_SAVE_DIAGNOSTICS_DEFAULTS)
 
 
 def _mask_key(key: str | None) -> str | None:
@@ -140,9 +241,11 @@ def _run_enrichment_and_save(
     try:
         status = orchestrator.get_status(job_id)
         if status is None:
+            _record_history_save_outcome("skipped")
             return
         serialized_results = [_serialize_result(r) for r in status["results"]]
         serialized_iocs = [_serialize_ioc(ioc) for ioc in iocs]
+        _record_history_save_attempt()
         history_store.save_analysis(  # type: ignore[union-attr]
             input_text=input_text,
             mode=mode,
@@ -150,7 +253,9 @@ def _run_enrichment_and_save(
             results=serialized_results,
             analysis_id=job_id,
         )
-    except Exception:
+        _record_history_save_outcome("saved")
+    except Exception as exc:
+        _record_history_save_outcome("failed", error=exc)
         logger.warning("Failed to save analysis %s to history", job_id, exc_info=True)
 
 
@@ -242,5 +347,9 @@ def _get_enrichment_status(job_id: str):
     status_payload = dict(status)
     status_payload["next_since"] = since if status_payload.get("terminal") else len(all_results)
     payload = _build_status_payload(status_payload, serialized)
-    status_code = 404 if payload["terminal"] and payload["terminal_reason"] in {"unknown", "evicted"} else 200
+    status_code = (
+        404
+        if payload["terminal"] and payload["terminal_reason"] in {"unknown", "evicted"}
+        else 200
+    )
     return jsonify(payload), status_code
