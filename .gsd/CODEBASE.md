@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-04-22T05:58:29Z | Files: 153 | Described: 0/153
-<!-- gsd:codebase-meta {"generatedAt":"2026-04-22T05:58:29Z","fingerprint":"4c2ac565a47a58ce93654f64ac6a2c636b45b4e2","fileCount":153,"truncated":false} -->
+Generated: 2026-04-22T06:04:01Z | Files: 158 | Described: 0/158
+<!-- gsd:codebase-meta {"generatedAt":"2026-04-22T06:04:01Z","fingerprint":"d7e91ee7be0412cfe64557e8dd0da9f2233d7534","fileCount":158,"truncated":false} -->
 
 ### (root)/
 - `.codex`
@@ -98,6 +98,8 @@ Generated: 2026-04-22T05:58:29Z | Files: 153 | Described: 0/153
 - `app/static/src/ts/modules/form.ts`
 - `app/static/src/ts/modules/graph.ts`
 - `app/static/src/ts/modules/history.ts`
+- `app/static/src/ts/modules/result-application.test.ts`
+- `app/static/src/ts/modules/result-application.ts`
 - `app/static/src/ts/modules/row-factory.test.ts`
 - `app/static/src/ts/modules/row-factory.ts`
 - `app/static/src/ts/modules/settings.ts`
@@ -137,7 +139,7 @@ Generated: 2026-04-22T05:58:29Z | Files: 153 | Described: 0/153
 - `docs/plans/2026-03-04-settings-page-redesign.md`
 
 ### tests/
-- *(41 files: 41 .py)*
+- *(44 files: 44 .py)*
 
 ### tests/e2e/
 - `tests/e2e/__init__.py`

@@ -1,8 +1,9 @@
 /**
  * Unit tests for enrichment.ts polling behavior.
  *
- * Covers explicit terminal failure handling from the hardened backend contract
- * and continuity of the existing success-path rendering/completion flow.
+ * Covers explicit terminal failure handling from the hardened backend contract,
+ * continuity of the existing success-path rendering/completion flow, and the
+ * exclusive live-owner guard that prevents history pages from polling.
  */
 
 import type { EnrichmentStatus } from "../types/api";
@@ -15,9 +16,9 @@ function installCssEscape(): void {
   });
 }
 
-function buildResultsDom(): void {
+function buildResultsDom(owner = "live"): void {
   document.body.innerHTML = `
-    <div class="page-results" data-job-id="job-123" data-mode="online" data-provider-counts='{"ipv4":1}'>
+    <div class="page-results" data-results-owner="${owner}" data-job-id="job-123" data-mode="online" data-provider-counts='{"ipv4":1}'>
       <div class="export-group">
         <button class="btn btn-export" id="export-btn" type="button" disabled>Export</button>
         <div class="export-dropdown" id="export-dropdown" style="display:none;">
@@ -97,6 +98,20 @@ describe("enrichment polling", () => {
     document.body.innerHTML = "";
   });
 
+  it("does not poll when the results surface is owned by history", async () => {
+    buildResultsDom("history");
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { init } = await import("./enrichment");
+    init();
+
+    await vi.advanceTimersByTimeAsync(1500);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(document.querySelector(".page-results")?.getAttribute("data-results-runtime")).toBeNull();
+  });
+
   it("surfaces terminal 404 polling failures and stops retrying", async () => {
     const fetchMock = mockFetchSequence({
       ok: false,
@@ -174,6 +189,7 @@ describe("enrichment polling", () => {
     const detailRow = document.querySelector(".provider-detail-row");
     const detailLink = document.querySelector(".detail-link");
     const verdictLabel = document.querySelector(".verdict-label");
+    const root = document.querySelector<HTMLElement>(".page-results");
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(warning?.style.display).toBe("none");
@@ -184,6 +200,9 @@ describe("enrichment polling", () => {
     expect(detailRow).not.toBeNull();
     expect(detailLink).not.toBeNull();
     expect(verdictLabel?.textContent).toBe("CLEAN");
+    expect(root?.getAttribute("data-results-runtime")).toBe("live");
+    expect(root?.getAttribute("data-results-expand-wired")).toBe("true");
+    expect(root?.getAttribute("data-results-export-wired")).toBe("true");
 
     await vi.advanceTimersByTimeAsync(1500);
     expect(fetchMock).toHaveBeenCalledTimes(1);

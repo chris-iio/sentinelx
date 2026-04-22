@@ -146,7 +146,13 @@ export function sortDetailRows(container: HTMLElement): void {
  * Parameterized with the results array — enrichment.ts and history.ts each
  * maintain their own module-private allResults array.
  */
-export function initExportButton(allResults: EnrichmentItem[]): void {
+export function initExportButton(
+  allResults: EnrichmentItem[],
+  pageResults: HTMLElement | null = document.querySelector<HTMLElement>(".page-results")
+): void {
+  if (!pageResults) return;
+  if (pageResults.getAttribute("data-results-export-wired") === "true") return;
+
   const exportBtn = document.getElementById("export-btn");
   const dropdown = document.getElementById("export-dropdown");
   if (!exportBtn || !dropdown) return;
@@ -178,4 +184,6 @@ export function initExportButton(allResults: EnrichmentItem[]): void {
       dropdown.style.display = "none";
     });
   });
+
+  pageResults.setAttribute("data-results-export-wired", "true");
 }

@@ -53,4 +53,5 @@ def history_detail(analysis_id: str):
         provider_counts="{}",
         provider_coverage={"registered": 0, "configured": 0, "needs_key": 0},
         history_results=history_results,
+        results_owner="history",
     )

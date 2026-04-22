@@ -12,6 +12,7 @@
  */
 
 import type { EnrichmentItem } from "../types/api";
+import { attr } from "../utils/dom";
 import { wireExpandToggles } from "./enrichment";
 import { initExportButton } from "./shared-rendering";
 import { createResultApplicationCoordinator } from "./result-application";
@@ -21,14 +22,45 @@ import { createResultApplicationCoordinator } from "./result-application";
 /** All replayed results — used for export functionality. */
 const allResults: EnrichmentItem[] = [];
 
+function isHistoryResultsPage(pageResults: HTMLElement): boolean {
+  const explicitOwner = attr(pageResults, "data-results-owner");
+
+  if (explicitOwner) {
+    return explicitOwner === "history";
+  }
+
+  return pageResults.hasAttribute("data-history-results");
+}
+
+function markHistoryReplayComplete(results: EnrichmentItem[]): void {
+  const container = document.getElementById("enrich-progress");
+  if (container) {
+    container.classList.add("complete");
+  }
+
+  const progressText = document.getElementById("enrich-progress-text");
+  if (progressText) {
+    progressText.textContent = "Enrichment complete";
+  }
+
+  const exportBtn = document.getElementById("export-btn");
+  if (exportBtn && results.length > 0) {
+    exportBtn.removeAttribute("disabled");
+  }
+}
+
 // ---- Public API ----
 
 export function init(): void {
   const pageResults = document.querySelector<HTMLElement>(".page-results");
-  if (!pageResults) return;
+  if (!pageResults || !isHistoryResultsPage(pageResults)) return;
 
   const historyAttr = pageResults.getAttribute("data-history-results");
-  if (!historyAttr) return;
+  if (!historyAttr) {
+    markHistoryReplayComplete([]);
+    pageResults.setAttribute("data-results-runtime", "history");
+    return;
+  }
 
   let results: EnrichmentItem[];
   try {
@@ -38,30 +70,19 @@ export function init(): void {
     return;
   }
 
-  if (!Array.isArray(results) || results.length === 0) return;
-
+  allResults.length = 0;
   const coordinator = createResultApplicationCoordinator();
 
-  for (const result of results) {
-    allResults.push(result);
-    coordinator.apply(result);
+  if (Array.isArray(results)) {
+    for (const result of results) {
+      allResults.push(result);
+      coordinator.apply(result);
+    }
   }
 
   coordinator.finalize();
-
-  const container = document.getElementById("enrich-progress");
-  if (container) {
-    container.classList.add("complete");
-  }
-  const progressText = document.getElementById("enrich-progress-text");
-  if (progressText) {
-    progressText.textContent = "Enrichment complete";
-  }
-  const exportBtn = document.getElementById("export-btn");
-  if (exportBtn) {
-    exportBtn.removeAttribute("disabled");
-  }
-
-  wireExpandToggles();
-  initExportButton(allResults);
+  wireExpandToggles(pageResults);
+  initExportButton(allResults, pageResults);
+  markHistoryReplayComplete(allResults);
+  pageResults.setAttribute("data-results-runtime", "history");
 }

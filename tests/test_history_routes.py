@@ -180,14 +180,15 @@ class TestHistoryDetailRoute:
         assert response.status_code == 200
         assert b"data-history-results" in response.data
 
-    def test_history_renders_online_mode(self, client, seeded_store):
-        """History page renders in online mode with job_id='history'."""
+    def test_history_renders_online_mode_with_history_owner(self, client, seeded_store):
+        """History page keeps online-mode DOM shape but advertises history ownership."""
         store, analysis_id, _, _ = seeded_store
         client.application.history_store = store
         response = client.get(f"/history/{analysis_id}")
         assert response.status_code == 200
         assert b'data-job-id="history"' in response.data
         assert b'data-mode="online"' in response.data
+        assert b'data-results-owner="history"' in response.data
 
     def test_history_shows_correct_ioc_count(self, client, seeded_store):
         """History page shows the correct total IOC count."""

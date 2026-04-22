@@ -94,7 +94,7 @@ Move the duplicated DOM coordination into the shared module: finding the target 
   - Files: `app/static/src/ts/modules/result-application.ts`, `app/static/src/ts/modules/enrichment.ts`, `app/static/src/ts/modules/history.ts`, `app/static/src/ts/modules/shared-rendering.ts`, `app/static/src/ts/modules/result-application.test.ts`
   - Verify: npx vitest run app/static/src/ts/modules/result-application.test.ts && npx tsc --noEmit
 
-- [ ] **T02: Make results-surface ownership exclusive and wire shared runtime hooks once** `est:0.5d`
+- [x] **T02: Make results-surface ownership exclusive and wire shared runtime hooks once** `est:0.5d`
   Fix the integration bug where history detail pages satisfy the live poller guard and can start polling `/enrichment/status/history`, then receive duplicate expand/export listener wiring. The smallest acceptable outcome is exclusive ownership; the preferred outcome is an explicit results-surface dispatcher that chooses exactly one owner for the page.
 
 Use `app/static/src/ts/main.ts` and the `.page-results` contract as the composition boundary. If the template/route layer needs an explicit owner marker to make the dispatch unambiguous, add it in `app/templates/results.html` and `app/routes/history.py` without changing the analyst-visible successful online/history behavior. Preserve S01’s terminal contract on true live pages and keep history replay additive over stored results rather than inventing a second UI surface.

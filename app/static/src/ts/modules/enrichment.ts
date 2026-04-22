@@ -21,6 +21,22 @@ const allResults: EnrichmentItem[] = [];
 
 // ---- Private helpers ----
 
+function isLiveResultsPage(pageResults: HTMLElement): boolean {
+  const explicitOwner = attr(pageResults, "data-results-owner");
+  const mode = attr(pageResults, "data-mode");
+  const jobId = attr(pageResults, "data-job-id");
+
+  if (explicitOwner) {
+    return explicitOwner === "live" && mode === "online" && Boolean(jobId);
+  }
+
+  if (pageResults.hasAttribute("data-history-results")) {
+    return false;
+  }
+
+  return mode === "online" && Boolean(jobId);
+}
+
 /**
  * Update the progress bar fill and text.
  * Source: main.js updateProgressBar() (lines 375-383).
@@ -128,9 +144,11 @@ function getTerminalFailureMessage(data: EnrichmentStatus): string {
  * .ioc-summary-row that appears in the page — including ones created after
  * init() (summary rows are built during polling/replay).
  */
-export function wireExpandToggles(): void {
-  const pageResults = document.querySelector<HTMLElement>(".page-results");
+export function wireExpandToggles(
+  pageResults: HTMLElement | null = document.querySelector<HTMLElement>(".page-results")
+): void {
   if (!pageResults) return;
+  if (pageResults.getAttribute("data-results-expand-wired") === "true") return;
 
   function handleToggle(target: HTMLElement): void {
     const summaryRow = target.closest<HTMLElement>(".ioc-summary-row");
@@ -158,20 +176,19 @@ export function wireExpandToggles(): void {
       }
     }
   });
+
+  pageResults.setAttribute("data-results-expand-wired", "true");
 }
 
 // ---- Public API ----
 
 export function init(): void {
   const pageResults = document.querySelector<HTMLElement>(".page-results");
-  if (!pageResults) return;
+  if (!pageResults || !isLiveResultsPage(pageResults)) return;
 
   const jobId = attr(pageResults, "data-job-id");
-  const mode = attr(pageResults, "data-mode");
-
-  if (!jobId || mode !== "online") return;
-
-  wireExpandToggles();
+  allResults.length = 0;
+  wireExpandToggles(pageResults);
 
   let since = 0;
   const coordinator = createResultApplicationCoordinator();
@@ -271,5 +288,6 @@ export function init(): void {
       });
   }, 750);
 
-  sharedInitExportButton(allResults);
+  pageResults.setAttribute("data-results-runtime", "live");
+  sharedInitExportButton(allResults, pageResults);
 }
