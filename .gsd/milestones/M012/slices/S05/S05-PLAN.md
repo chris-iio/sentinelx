@@ -51,7 +51,7 @@
   - Files: `.gsd/milestones/M012/M012-ROADMAP.md`, `.gsd/milestones/M012/M012-CONTEXT.md`, `.gsd/milestones/M012/slices/S01/S01-SUMMARY.md`, `.gsd/milestones/M012/slices/S02/S02-SUMMARY.md`, `.gsd/milestones/M012/slices/S03/S03-SUMMARY.md`, `.gsd/milestones/M012/slices/S04/S04-ASSESSMENT.md`
   - Verify: test -s .gsd/milestones/M012/slices/S01/S01-ASSESSMENT.md && test -s .gsd/milestones/M012/slices/S02/S02-ASSESSMENT.md && test -s .gsd/milestones/M012/slices/S03/S03-ASSESSMENT.md
 
-- [ ] **T02: Re-run the focused continuity proof and render the canonical milestone validation artifact** `est:0.5d`
+- [x] **T02: Re-run the focused continuity proof and render the canonical milestone validation artifact** `est:0.5d`
   Turn the already-shipped M012 work into a validation artifact a fresh reviewer can trust. Use `.gsd/REQUIREMENTS.md` as the proof index for continuity requirements, the `S01`–`S04` summaries plus the new `S01`–`S03` assessment files as the slice evidence spine, and fresh focused command output as the current-message proof. The canonical write path is `gsd_validate_milestone`; do not hand-write `.gsd/milestones/M012/M012-VALIDATION.md`. If any focused check fails or a continuity requirement cannot be honestly justified, do **not** force a `pass` verdict — either repair the evidence gap first or issue `needs-remediation` with a concrete remediation plan.
 
 ## Failure Modes
