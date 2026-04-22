@@ -835,6 +835,37 @@
       "label": "T03: Prove live-path continuity and baseline the slice",
       "type": "task",
       "confidence": "EXTRACTED"
+    },
+    {
+      "id": "slice:M012:S02",
+      "label": "S02: Shared result-application path for live and history views",
+      "type": "slice",
+      "confidence": "EXTRACTED",
+      "sourceFile": "milestones/M012/slices/S02/S02-PLAN.md"
+    },
+    {
+      "id": "task:M012:S02:T01",
+      "label": "T01: Extract a shared result-application coordinator for live and history rendering",
+      "type": "task",
+      "confidence": "EXTRACTED"
+    },
+    {
+      "id": "task:M012:S02:T02",
+      "label": "T02: Make results-surface ownership exclusive and wire shared runtime hooks once",
+      "type": "task",
+      "confidence": "EXTRACTED"
+    },
+    {
+      "id": "task:M012:S02:T03",
+      "label": "T03: Prove live/history parity and history non-polling with focused frontend and route tests",
+      "type": "task",
+      "confidence": "EXTRACTED"
+    },
+    {
+      "id": "slice:M012:S03",
+      "label": "M012/S03",
+      "type": "slice",
+      "confidence": "EXTRACTED"
     }
   ],
   "edges": [
@@ -1551,7 +1582,37 @@
       "to": "task:M012:S01:T03",
       "type": "contains",
       "confidence": "EXTRACTED"
+    },
+    {
+      "from": "milestone:M012",
+      "to": "slice:M012:S02",
+      "type": "contains",
+      "confidence": "EXTRACTED"
+    },
+    {
+      "from": "slice:M012:S02",
+      "to": "task:M012:S02:T01",
+      "type": "contains",
+      "confidence": "EXTRACTED"
+    },
+    {
+      "from": "slice:M012:S02",
+      "to": "task:M012:S02:T02",
+      "type": "contains",
+      "confidence": "EXTRACTED"
+    },
+    {
+      "from": "slice:M012:S02",
+      "to": "task:M012:S02:T03",
+      "type": "contains",
+      "confidence": "EXTRACTED"
+    },
+    {
+      "from": "milestone:M012",
+      "to": "slice:M012:S03",
+      "type": "contains",
+      "confidence": "EXTRACTED"
     }
   ],
-  "builtAt": "2026-04-22T04:07:42.990Z"
+  "builtAt": "2026-04-22T06:26:08.312Z"
 }

@@ -11,7 +11,7 @@ JS_OUT           := app/static/dist/main.js
 PLATFORM         := linux-x64
 ESBUILD_VERSION  := 0.27.3
 
-.PHONY: tailwind-install esbuild-install css css-watch js js-dev js-watch typecheck build
+.PHONY: tailwind-install esbuild-install css css-watch js js-dev js-watch typecheck build verify-fast verify-deep verify
 
 ## Download Tailwind standalone CLI binary
 tailwind-install:
@@ -77,3 +77,19 @@ typecheck:
 
 ## Full build (CSS + JS)
 build: css js
+
+## Fast verification lane (non-E2E pytest + frontend checks + build)
+verify-fast:
+	python3 -m pytest -q -m 'not e2e'
+	npx vitest run
+	npx tsc --noEmit
+	$(MAKE) build
+
+## Deep verification lane (browser E2E only)
+verify-deep:
+	python3 -m pytest -q tests/e2e
+
+## Full verification (fast lane + deep lane)
+verify:
+	$(MAKE) verify-fast
+	$(MAKE) verify-deep
