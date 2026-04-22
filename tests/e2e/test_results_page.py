@@ -318,12 +318,16 @@ def _navigate_online_with_mock(page: Page, index_url: str, text: str = SINGLE_IP
     """
     from tests.e2e.conftest import setup_enrichment_route_mock
 
-    # Register route mock BEFORE navigation
-    setup_enrichment_route_mock(page)
+    # Register route mock BEFORE navigation and arm the deterministic fake job id
+    expected_job_id = setup_enrichment_route_mock(page)
 
     idx = IndexPage(page, index_url.rstrip("/"))
     idx.goto()
     idx.extract_iocs(text, mode="online")
+
+    results_root = page.locator(".page-results")
+    expect(results_root).to_have_attribute("data-results-owner", "live")
+    expect(results_root).to_have_attribute("data-job-id", expected_job_id)
 
     # Wait for enrichment.ts to fire and row-factory.ts to inject the summary row
     page.wait_for_selector(".ioc-summary-row", timeout=10_000)

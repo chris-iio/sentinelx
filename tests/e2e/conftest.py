@@ -7,6 +7,7 @@ The config_store module-level CONFIG_PATH is patched to a temp directory so
 E2E tests that save API keys don't touch the real ~/.sentinelx/config.ini.
 """
 
+import itertools
 import socket
 import threading
 import time
@@ -19,7 +20,35 @@ pytest.importorskip("playwright.sync_api", reason="Playwright not installed")
 from werkzeug.serving import make_server
 
 import app.enrichment.config_store as _config_store_mod
+import app.routes.analysis as _analysis_routes
 from app import create_app
+
+_MOCKED_ONLINE_JOB_PREFIX = "e2e-mocked-online-"
+_mocked_online_job_ids: list[str] = []
+_mocked_online_job_counter = itertools.count(1)
+_mocked_online_job_lock = threading.Lock()
+
+
+def _clear_mocked_online_jobs() -> None:
+    """Drop any queued deterministic E2E job ids between tests."""
+    with _mocked_online_job_lock:
+        _mocked_online_job_ids.clear()
+
+
+def _arm_mocked_online_job() -> str:
+    """Queue the next deterministic job id consumed by the E2E-only seam."""
+    with _mocked_online_job_lock:
+        job_id = f"{_MOCKED_ONLINE_JOB_PREFIX}{next(_mocked_online_job_counter):04d}"
+        _mocked_online_job_ids.append(job_id)
+        return job_id
+
+
+def _consume_mocked_online_job() -> str | None:
+    """Return the next deterministic E2E job id, if one has been armed."""
+    with _mocked_online_job_lock:
+        if not _mocked_online_job_ids:
+            return None
+        return _mocked_online_job_ids.pop(0)
 
 
 def assert_security_headers(headers: dict) -> None:
@@ -70,6 +99,14 @@ def _isolate_config(tmp_path_factory):
     _config_store_mod.CONFIG_PATH = original
 
 
+@pytest.fixture(autouse=True)
+def _reset_mocked_online_jobs():
+    """Keep deterministic mocked-online submissions isolated to each test."""
+    _clear_mocked_online_jobs()
+    yield
+    _clear_mocked_online_jobs()
+
+
 @pytest.fixture(scope="session")
 def live_server(_isolate_config):
     """Start SentinelX on an ephemeral port for the entire E2E session.
@@ -77,6 +114,16 @@ def live_server(_isolate_config):
     Yields the base URL (e.g. ``http://127.0.0.1:54321``).
     The server shuts down automatically when the session ends.
     """
+    real_setup_orchestrator = _analysis_routes._setup_orchestrator
+
+    def _e2e_setup_orchestrator(iocs, text, mode, history_store):
+        fake_job_id = _consume_mocked_online_job()
+        if fake_job_id is not None:
+            return fake_job_id, object(), app.registry
+        return real_setup_orchestrator(iocs, text, mode, history_store)
+
+    _analysis_routes._setup_orchestrator = _e2e_setup_orchestrator
+
     port = _find_free_port()
     app = create_app({"TESTING": False, "WTF_CSRF_ENABLED": True, "RATELIMIT_ENABLED": False})
     server = make_server("127.0.0.1", port, app)
@@ -85,9 +132,11 @@ def live_server(_isolate_config):
     thread.start()
     _wait_for_server("127.0.0.1", port)
 
-    yield f"http://127.0.0.1:{port}"
-
-    server.shutdown()
+    try:
+        yield f"http://127.0.0.1:{port}"
+    finally:
+        server.shutdown()
+        _analysis_routes._setup_orchestrator = real_setup_orchestrator
 
 
 @pytest.fixture(scope="session")
@@ -150,21 +199,30 @@ MOCK_ENRICHMENT_RESPONSE_8888 = {
 }
 
 
-def setup_enrichment_route_mock(page, response_body: dict | None = None) -> None:
-    """Intercept ``**/enrichment/status/*`` and return canned enrichment JSON.
+def setup_enrichment_route_mock(page, response_body: dict | None = None) -> str:
+    """Intercept ``**/enrichment/status/*`` and arm a deterministic fake job id.
 
     Call this **before** navigating to the results page (or before submit) so that
     the Playwright route handler is registered before enrichment.ts fires its first
     ``fetch()`` poll.
 
+    The helper also queues a deterministic ``data-job-id`` for the live Flask app's
+    online results page so mocked browser tests do not submit real background
+    enrichment work while still exercising the real form POST, CSRF, security
+    headers, and HTML contract.
+
     Args:
         page: The Playwright ``Page`` instance.
         response_body: Optional dict to return as JSON. Defaults to
             :data:`MOCK_ENRICHMENT_RESPONSE_8888` (one IP, two providers, complete).
+
+    Returns:
+        The deterministic fake job id rendered into ``.page-results[data-job-id]``.
     """
     import json
 
     body = response_body if response_body is not None else MOCK_ENRICHMENT_RESPONSE_8888
+    fake_job_id = _arm_mocked_online_job()
 
     page.route(
         "**/enrichment/status/**",
@@ -174,6 +232,8 @@ def setup_enrichment_route_mock(page, response_body: dict | None = None) -> None
             body=json.dumps(body),
         ),
     )
+
+    return fake_job_id
 
 
 @pytest.fixture()

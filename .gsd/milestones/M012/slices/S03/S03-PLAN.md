@@ -31,7 +31,7 @@ Makefile targets, contributor-facing documentation, and the E2E live-server fixt
   - Files: `Makefile`, `README.md`
   - Verify: make verify-fast
 
-- [ ] **T02: Stub online E2E orchestration so the deep lane stays deterministic** `est:0.75d`
+- [x] **T02: Stub online E2E orchestration so the deep lane stays deterministic** `est:0.75d`
   Patch the E2E live-server/test helper seam so online tests that already mock `/enrichment/status/**` stop launching real background enrichment jobs, then add browser assertions proving the deterministic seam is active and run the full expensive lane without shutdown-noise ambiguity.
   - Files: `tests/e2e/conftest.py`, `tests/e2e/test_results_page.py`, `tests/e2e/test_url_e2e.py`
   - Verify: make verify-deep

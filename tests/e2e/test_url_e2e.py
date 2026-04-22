@@ -84,11 +84,16 @@ def _navigate_online_with_url_mock(page: Page, index_url: str, text: str = URL_I
     from tests.e2e.conftest import setup_enrichment_route_mock
 
     # Register route mock BEFORE navigation — URL-specific canned response
-    setup_enrichment_route_mock(page, response_body=MOCK_ENRICHMENT_RESPONSE_URL)
+    # and assert the deterministic test seam is active in the rendered DOM.
+    expected_job_id = setup_enrichment_route_mock(page, response_body=MOCK_ENRICHMENT_RESPONSE_URL)
 
     idx = IndexPage(page, index_url.rstrip("/"))
     idx.goto()
     idx.extract_iocs(text, mode="online")
+
+    results_root = page.locator(".page-results")
+    expect(results_root).to_have_attribute("data-results-owner", "live")
+    expect(results_root).to_have_attribute("data-job-id", expected_job_id)
 
     # Wait for enrichment.ts to fire and row-factory.ts to inject the summary row
     page.wait_for_selector(".ioc-summary-row", timeout=10_000)

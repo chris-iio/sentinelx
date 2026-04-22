@@ -1,0 +1,94 @@
+[
+  {
+    "kind": "bash",
+    "toolCallId": "call_i5AM5fbBTBBxggbFhYBt0PIQ|fc_05a2624637e379890169e87516683c81919bb790eaae62db94",
+    "command": "rg -n \"setup_enrichment_route_mock|_setup_orchestrator|data-job-id|enrichment/status|job_id\" tests app -S",
+    "exitCode": 1,
+    "outputSnippet": "app/enrichment/orchestrator.py:102:    def enrich_all(self, job_id: str, iocs: list[IOC]) -> None:\napp/enrichment/orchestrator.py:116:            job_id: Unique identifier for this enrichment job.\napp/enrichment/orchestrator.py:128:            self._jobs[job_id] = {\napp/enrichment/orchestrator.py:138:            self._terminal_jobs.pop(job_id, None)\napp/enrichment/orchestrator.py:150:                        self._jobs[job_id][\"results\"].append(result)\napp/enrichment/orchestrator.py:151:         ",
+    "timestamp": 1776842007190
+  },
+  {
+    "kind": "bash",
+    "toolCallId": "call_MlT4i6UhdkEuaGJGdQvZcP4w|fc_05a2624637e379890169e8778cd2ec81918160475e88cc4e08",
+    "command": "find tests/e2e -maxdepth 2 -type f | sort && printf '\\n---\\n' && find app/static -maxdepth 4 -type f | sort | rg 'enrichment|main|history'",
+    "exitCode": 1,
+    "outputSnippet": "Skipped due to queued user message.",
+    "timestamp": 1776842637599
+  },
+  {
+    "kind": "bash",
+    "toolCallId": "call_yh6Vfc32TtBxkvdXqW4SJJ48|fc_05a2624637e379890169e87793b63c8191982a38f3ad9fb178",
+    "command": "find tests/e2e -maxdepth 2 -type f | sort; printf '\\n---\\n'; find app/static -maxdepth 5 -type f | sort | rg 'enrichment|main|history|results'",
+    "exitCode": 0,
+    "outputSnippet": "tests/e2e/conftest.py\ntests/e2e/__init__.py\ntests/e2e/pages/index_page.py\ntests/e2e/pages/__init__.py\ntests/e2e/pages/results_page.py\ntests/e2e/pages/settings_page.py\ntests/e2e/__pycache__/conftest.cpython-310-pytest-9.0.2.pyc\ntests/e2e/__pycache__/__init__.cpython-310.pyc\ntests/e2e/__pycache__/test_copy_buttons.cpython-310-pytest-9.0.2.pyc\ntests/e2e/__pycache__/test_extraction.cpython-310-pytest-9.0.2.pyc\ntests/e2e/__pycache__/test_homepage.cpython-310-pytest-9.0.2.pyc\ntests/e2e/__pycache__/tes",
+    "timestamp": 1776842644353
+  },
+  {
+    "kind": "bash",
+    "toolCallId": "call_cLogIkjtnAjRT3wjTYQCUJ5f|fc_05a2624637e379890169e877d21be88191a782c3208d0aa7dd",
+    "command": "rg -n \"mode=\\\"online\\\"|select_mode\\(|api key|settings|configured\\(|mocked_enrichment|extract_iocs\\(.*online|online mode\" tests/e2e -S",
+    "exitCode": 0,
+    "outputSnippet": "tests/e2e/pages/index_page.py:25:        self.site_settings_link = page.locator(\"nav.floating-settings a[aria-label='Settings']\")\ntests/e2e/pages/index_page.py:47:    def select_mode(self, mode: str) -> None:\ntests/e2e/pages/index_page.py:64:        self.select_mode(mode)\ntests/e2e/test_extraction.py:194:    \"\"\"Submitting in online mode shows 'Online Mode' in results.\"\"\"\ntests/e2e/test_extraction.py:197:    idx.extract_iocs(IPV4_ONLY, mode=\"online\")\ntests/e2e/test_extraction.py:256:    \"\"\"Online",
+    "timestamp": 1776842707441
+  },
+  {
+    "kind": "bash",
+    "toolCallId": "call_xmjN44ZfGsdMU2s4pvOLyoPx|fc_05a2624637e379890169e877e2413c8191afbf01e08422e6e7",
+    "command": "rg -n \"save_api_key\\(|Configured|virustotal|abuseipdb|otx|dummy|test key|sk-\" tests/e2e -S",
+    "exitCode": 0,
+    "outputSnippet": "tests/e2e/test_settings.py:14:    \"virustotal\", \"malwarebazaar\", \"threatfox\", \"urlhaus\",\ntests/e2e/test_settings.py:15:    \"otx\", \"greynoise\", \"abuseipdb\",\ntests/e2e/test_settings.py:68:    sp.expand_provider(\"virustotal\")\ntests/e2e/test_settings.py:69:    sp.expect_provider_expanded(\"virustotal\")\ntests/e2e/test_settings.py:73:    sp.expect_provider_collapsed(\"virustotal\")\ntests/e2e/test_settings.py:92:        \"virustotal\": \"VirusTotal\",\ntests/e2e/test_settings.py:96:        \"otx\": \"OTX AlienVau",
+    "timestamp": 1776842723691
+  },
+  {
+    "kind": "bash",
+    "toolCallId": "call_l1Y1KQmb9FB39RiA6vLWo7sa|fc_05a2624637e379890169e877ee76888191954f8534d0dac96a",
+    "command": "rg -n \"_isolate_config|CONFIG_PATH|config.ini|save_api_key\\(|registry =|build_registry|configured.return_value|api key saved|test-key-for-e2e\" tests app -S",
+    "exitCode": 0,
+    "outputSnippet": "app/routes/_helpers.py:168:    registry = current_app.registry\napp/__init__.py:88:    from .enrichment.setup import build_registry\napp/__init__.py:92:    app.registry = build_registry(allowed_hosts=allowed_hosts, config_store=config_store)\ntests/test_api.py:21:    app.registry = MagicMock()  # type: ignore[attr-defined]\ntests/test_api.py:22:    app.registry.configured.return_value = []  # type: ignore[attr-defined]\ntests/test_api.py:34:    app.registry = MagicMock()  # type: ignore[attr-defined]",
+    "timestamp": 1776842735822
+  },
+  {
+    "kind": "bash",
+    "toolCallId": "call_ePY7XHk2JLWh5sR4VqLuVYtC|fc_05a2624637e379890169e8781f12d881918c1613bc1beded6e",
+    "command": "rg -n \"ThreadPoolExecutor|cannot schedule new futures|interpreter shutdown|atexit|shutdown\" -S .",
+    "exitCode": 0,
+    "outputSnippet": "./tests/test_orchestrator.py:4:- Parallel execution (ThreadPoolExecutor — wall-clock timing)\n./tests/e2e/conftest.py:90:    server.shutdown()\n./app/enrichment/orchestrator.py:3:Runs IOC lookups in parallel via ThreadPoolExecutor, tracks job progress in a\n./app/enrichment/orchestrator.py:27:from concurrent.futures import ThreadPoolExecutor, as_completed\n./app/enrichment/orchestrator.py:45:    \"\"\"Orchestrates parallel IOC enrichment using ThreadPoolExecutor.\n./app/enrichment/orchestrator.py:106:  ",
+    "timestamp": 1776842786338
+  },
+  {
+    "kind": "edit",
+    "toolCallId": "call_tWZ9uElCLRI975GY9asIqFv6|fc_05a2624637e379890169e8787e24788191b696626cbc6160c7",
+    "path": "tests/e2e/conftest.py",
+    "timestamp": 1776842879479
+  },
+  {
+    "kind": "edit",
+    "toolCallId": "call_Vreh1bnGFAT37iQ9py60JDX4|fc_05a2624637e379890169e87889ac9c8191adca7f57f2a07a42",
+    "path": "tests/e2e/conftest.py",
+    "timestamp": 1776842897234
+  },
+  {
+    "kind": "edit",
+    "toolCallId": "call_RRoxuXA8AEVJkZiuYgJmQbUf|fc_05a2624637e379890169e87895565c8191b25dbf12c7a0d1f5",
+    "path": "tests/e2e/conftest.py",
+    "timestamp": 1776842913777
+  },
+  {
+    "kind": "edit",
+    "toolCallId": "call_yzWVi5pWyKzXMqFLiVMBcw0T|fc_05a2624637e379890169e878a59a1c8191bdb96356b7f0dbfc",
+    "path": "tests/e2e/conftest.py",
+    "timestamp": 1776842927795
+  },
+  {
+    "kind": "edit",
+    "toolCallId": "call_niRZ6Q9G0Npg7y57JOHiGjR8|fc_05a2624637e379890169e878b684148191b8069dd442b757d8",
+    "path": "tests/e2e/test_results_page.py",
+    "timestamp": 1776842944080
+  },
+  {
+    "kind": "edit",
+    "toolCallId": "call_cI4VENXuYDFfD94OqppQKkz6|fc_05a2624637e379890169e878c6666c819188904c8873f0481f",
+    "path": "tests/e2e/test_url_e2e.py",
+    "timestamp": 1776842956926
+  }
+]
