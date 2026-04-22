@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-04-22T06:04:01Z | Files: 158 | Described: 0/158
-<!-- gsd:codebase-meta {"generatedAt":"2026-04-22T06:04:01Z","fingerprint":"d7e91ee7be0412cfe64557e8dd0da9f2233d7534","fileCount":158,"truncated":false} -->
+Generated: 2026-04-22T06:14:00Z | Files: 160 | Described: 0/160
+<!-- gsd:codebase-meta {"generatedAt":"2026-04-22T06:14:00Z","fingerprint":"62495d32c32334e12eafe5dd8fd5e5a0aeed00c7","fileCount":160,"truncated":false} -->
 
 ### (root)/
 - `.codex`
@@ -97,7 +97,9 @@ Generated: 2026-04-22T06:04:01Z | Files: 158 | Described: 0/158
 - `app/static/src/ts/modules/filter.ts`
 - `app/static/src/ts/modules/form.ts`
 - `app/static/src/ts/modules/graph.ts`
+- `app/static/src/ts/modules/history.test.ts`
 - `app/static/src/ts/modules/history.ts`
+- `app/static/src/ts/modules/main.test.ts`
 - `app/static/src/ts/modules/result-application.test.ts`
 - `app/static/src/ts/modules/result-application.ts`
 - `app/static/src/ts/modules/row-factory.test.ts`

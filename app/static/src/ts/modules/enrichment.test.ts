@@ -6,7 +6,7 @@
  * exclusive live-owner guard that prevents history pages from polling.
  */
 
-import type { EnrichmentStatus } from "../types/api";
+import type { EnrichmentItem, EnrichmentStatus } from "../types/api";
 
 function installCssEscape(): void {
   vi.stubGlobal("CSS", {
@@ -16,9 +16,58 @@ function installCssEscape(): void {
   });
 }
 
-function buildResultsDom(owner = "live"): void {
+const STREAMED_RESULTS: EnrichmentItem[] = [
+  {
+    type: "result",
+    ioc_value: "1.2.3.4",
+    ioc_type: "ipv4",
+    provider: "IP Context",
+    verdict: "no_data",
+    detection_count: 0,
+    total_engines: 0,
+    scan_date: null,
+    raw_stats: {
+      geo: "Tokyo, JP",
+      reverse: "edge.example.net",
+      flags: ["hosting"],
+    },
+  },
+  {
+    type: "result",
+    ioc_value: "1.2.3.4",
+    ioc_type: "ipv4",
+    provider: "VirusTotal",
+    verdict: "malicious",
+    detection_count: 2,
+    total_engines: 70,
+    scan_date: null,
+    raw_stats: {},
+  },
+  {
+    type: "result",
+    ioc_value: "1.2.3.4",
+    ioc_type: "ipv4",
+    provider: "GreyNoise",
+    verdict: "clean",
+    detection_count: 0,
+    total_engines: 1,
+    scan_date: null,
+    raw_stats: {
+      classification: "benign",
+    },
+  },
+  {
+    type: "error",
+    ioc_value: "1.2.3.4",
+    ioc_type: "ipv4",
+    provider: "AbuseIPDB",
+    error: "Timeout",
+  },
+];
+
+function buildResultsDom(owner = "live", providerCounts = '{"ipv4":4}'): void {
   document.body.innerHTML = `
-    <div class="page-results" data-results-owner="${owner}" data-job-id="job-123" data-mode="online" data-provider-counts='{"ipv4":1}'>
+    <div class="page-results" data-results-owner="${owner}" data-job-id="job-123" data-mode="online" data-provider-counts='${providerCounts}'>
       <div class="export-group">
         <button class="btn btn-export" id="export-btn" type="button" disabled>Export</button>
         <div class="export-dropdown" id="export-dropdown" style="display:none;">
@@ -34,7 +83,7 @@ function buildResultsDom(owner = "live"): void {
         <div class="enrich-progress-bar">
           <div class="enrich-progress-fill" id="enrich-progress-fill" style="width:0%;"></div>
         </div>
-        <span class="enrich-progress-text" id="enrich-progress-text">0/1 providers complete</span>
+        <span class="enrich-progress-text" id="enrich-progress-text">0/4 providers complete</span>
       </div>
 
       <div class="verdict-dashboard" id="verdict-dashboard">
@@ -99,7 +148,7 @@ describe("enrichment polling", () => {
   });
 
   it("does not poll when the results surface is owned by history", async () => {
-    buildResultsDom("history");
+    buildResultsDom("history", '{"ipv4":1}');
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
 
@@ -147,36 +196,52 @@ describe("enrichment polling", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("preserves the existing success-path rendering and completion flow", async () => {
-    const fetchMock = mockFetchSequence({
-      ok: true,
-      data: {
-        total: 1,
-        done: 1,
-        complete: true,
-        results: [
-          {
-            type: "result",
-            ioc_value: "1.2.3.4",
-            ioc_type: "ipv4",
-            provider: "VirusTotal",
-            verdict: "clean",
-            detection_count: 0,
-            total_engines: 95,
-            scan_date: null,
-            raw_stats: {},
-          },
-        ],
-        next_since: 1,
-        status: "complete",
-        terminal: false,
-        terminal_reason: null,
-        error: null,
+  it("preserves next_since continuity while rendering shared-path parity state across multiple polls", async () => {
+    const fetchMock = mockFetchSequence(
+      {
+        ok: true,
+        data: {
+          total: STREAMED_RESULTS.length,
+          done: 1,
+          complete: false,
+          results: [STREAMED_RESULTS[0]!],
+          next_since: 1,
+          status: "running",
+          terminal: false,
+          terminal_reason: null,
+          error: null,
+        },
       },
-    });
+      {
+        ok: true,
+        data: {
+          total: STREAMED_RESULTS.length,
+          done: STREAMED_RESULTS.length,
+          complete: true,
+          results: STREAMED_RESULTS.slice(1),
+          next_since: STREAMED_RESULTS.length,
+          status: "complete",
+          terminal: false,
+          terminal_reason: null,
+          error: null,
+        },
+      }
+    );
 
     const { init } = await import("./enrichment");
     init();
+
+    await vi.advanceTimersByTimeAsync(750);
+
+    const firstProgressText = document.getElementById("enrich-progress-text");
+    const firstContextRow = document.querySelector(".provider-context-row");
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0]?.[0] ?? "")).toContain(
+      "/enrichment/status/job-123?since=0"
+    );
+    expect(firstProgressText?.textContent).toBe(`1/${STREAMED_RESULTS.length} providers complete`);
+    expect(firstContextRow).not.toBeNull();
 
     await vi.advanceTimersByTimeAsync(750);
     await vi.advanceTimersByTimeAsync(150);
@@ -185,26 +250,38 @@ describe("enrichment polling", () => {
     const progress = document.getElementById("enrich-progress");
     const progressText = document.getElementById("enrich-progress-text");
     const exportBtn = document.getElementById("export-btn");
-    const slot = document.querySelector<HTMLElement>(".enrichment-slot");
-    const detailRow = document.querySelector(".provider-detail-row");
-    const detailLink = document.querySelector(".detail-link");
-    const verdictLabel = document.querySelector(".verdict-label");
+    const copyBtn = document.querySelector<HTMLElement>(".copy-btn");
+    const summaryRow = document.querySelector<HTMLElement>(".ioc-summary-row");
+    const detailLink = document.querySelector<HTMLAnchorElement>(".detail-link");
+    const reputationRows = document.querySelectorAll(
+      ".enrichment-section--reputation .provider-detail-row"
+    );
+    const noDataRows = document.querySelectorAll(
+      ".enrichment-section--no-data .provider-detail-row"
+    );
     const root = document.querySelector<HTMLElement>(".page-results");
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(String(fetchMock.mock.calls[1]?.[0] ?? "")).toContain(
+      "/enrichment/status/job-123?since=1"
+    );
     expect(warning?.style.display).toBe("none");
+    expect(warning?.textContent).toBe("");
     expect(progress?.classList.contains("complete")).toBe(true);
     expect(progressText?.textContent).toBe("Enrichment complete");
     expect(exportBtn?.hasAttribute("disabled")).toBe(false);
-    expect(slot?.classList.contains("enrichment-slot--loaded")).toBe(true);
-    expect(detailRow).not.toBeNull();
-    expect(detailLink).not.toBeNull();
-    expect(verdictLabel?.textContent).toBe("CLEAN");
+    expect(copyBtn?.getAttribute("data-enrichment")).toBe(
+      "VirusTotal: malicious (2/70 engines)"
+    );
+    expect(summaryRow?.textContent).toContain("MALICIOUS");
+    expect(detailLink?.getAttribute("href")).toBe("/ioc/ipv4/1.2.3.4");
+    expect(reputationRows).toHaveLength(2);
+    expect(noDataRows).toHaveLength(1);
     expect(root?.getAttribute("data-results-runtime")).toBe("live");
     expect(root?.getAttribute("data-results-expand-wired")).toBe("true");
     expect(root?.getAttribute("data-results-export-wired")).toBe("true");
 
     await vi.advanceTimersByTimeAsync(1500);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });

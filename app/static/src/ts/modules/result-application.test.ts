@@ -44,7 +44,7 @@ function buildCard(iocValue: string, iocType = "ipv4"): string {
   `;
 }
 
-function buildDom(cards: string, providerCounts = '{"ipv4":3}'): void {
+function buildDom(cards: string, providerCounts = '{"ipv4":4}'): void {
   document.body.innerHTML = `
     <div class="page-results" data-provider-counts='${providerCounts}'>
       <div class="verdict-dashboard" id="verdict-dashboard">
@@ -101,50 +101,87 @@ describe("result-application coordinator", () => {
     document.body.innerHTML = "";
   });
 
-  it("applies reputation and no-data/error rows through one shared flush path", async () => {
+  it("renders mixed context, reputation, and error rows through one shared finalize path", async () => {
     buildDom(buildCard("1.2.3.4"));
     const { createResultApplicationCoordinator } = await import("./result-application");
     const coordinator = createResultApplicationCoordinator();
 
-    coordinator.apply(
+    const parityResults: EnrichmentItem[] = [
+      resultItem({
+        provider: "IP Context",
+        verdict: "no_data",
+        detection_count: 0,
+        total_engines: 0,
+        raw_stats: {
+          geo: "Tokyo, JP",
+          reverse: "edge.example.net",
+          flags: ["hosting"],
+        },
+      }),
       resultItem({
         provider: "VirusTotal",
         verdict: "malicious",
         detection_count: 2,
         total_engines: 70,
-      })
-    );
-    coordinator.apply(
+      }),
       resultItem({
-        provider: "ThreatFox",
-        verdict: "no_data",
+        provider: "GreyNoise",
+        verdict: "clean",
         detection_count: 0,
-        total_engines: 0,
-      })
-    );
-    coordinator.apply(errorItem({ provider: "AbuseIPDB", error: "Timeout" }));
+        total_engines: 1,
+        raw_stats: {
+          classification: "benign",
+        },
+      }),
+      errorItem({ provider: "AbuseIPDB", error: "Timeout" }),
+    ];
 
-    coordinator.flush();
+    for (const result of parityResults) {
+      coordinator.apply(result);
+    }
+
+    coordinator.finalize();
     await vi.advanceTimersByTimeAsync(150);
 
     const card = document.querySelector<HTMLElement>('.ioc-card[data-ioc-value="1.2.3.4"]');
-    const summary = document.querySelector(".ioc-summary-row");
-    const repRows = document.querySelectorAll(
-      ".enrichment-section--reputation .provider-detail-row"
+    const summary = document.querySelector<HTMLElement>(".ioc-summary-row");
+    const detailLink = document.querySelector<HTMLAnchorElement>(".detail-link");
+    const repRows = Array.from(
+      document.querySelectorAll<HTMLElement>(
+        ".enrichment-section--reputation .provider-detail-row"
+      )
     );
-    const noDataRows = document.querySelectorAll(
-      ".enrichment-section--no-data .provider-detail-row"
+    const noDataRows = Array.from(
+      document.querySelectorAll<HTMLElement>(
+        ".enrichment-section--no-data .provider-detail-row"
+      )
+    );
+    const contextRows = document.querySelectorAll(
+      ".enrichment-section--context .provider-context-row"
     );
     const copyBtn = document.querySelector<HTMLElement>(".copy-btn");
+    const noDataSummary = document.querySelector<HTMLElement>(".no-data-summary-row");
+    const maliciousCount = document.querySelector('[data-verdict-count="malicious"]');
+    const noDataCount = document.querySelector('[data-verdict-count="no_data"]');
 
     expect(card?.getAttribute("data-verdict")).toBe("malicious");
     expect(summary).not.toBeNull();
     expect(summary?.textContent).toContain("MALICIOUS");
-    expect(repRows).toHaveLength(1);
-    expect(noDataRows).toHaveLength(2);
+    expect(detailLink?.getAttribute("href")).toBe("/ioc/ipv4/1.2.3.4");
+    expect(repRows.map((row) => row.querySelector(".provider-detail-name")?.textContent)).toEqual([
+      "VirusTotal",
+      "GreyNoise",
+    ]);
+    expect(noDataRows.map((row) => row.querySelector(".provider-detail-name")?.textContent)).toEqual([
+      "AbuseIPDB",
+    ]);
+    expect(contextRows).toHaveLength(1);
     expect(copyBtn?.getAttribute("data-enrichment")).toBe(
       "VirusTotal: malicious (2/70 engines)"
     );
+    expect(noDataSummary?.textContent).toBe("1 provider had no record");
+    expect(maliciousCount?.textContent).toBe("1");
+    expect(noDataCount?.textContent).toBe("0");
   });
 
   it("keeps context-only providers on the shared path without forcing summary state", async () => {

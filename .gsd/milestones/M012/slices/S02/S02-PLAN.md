@@ -140,7 +140,7 @@ Use `app/static/src/ts/main.ts` and the `.page-results` contract as the composit
   - Files: `app/static/src/ts/main.ts`, `app/static/src/ts/modules/enrichment.ts`, `app/static/src/ts/modules/history.ts`, `app/templates/results.html`, `app/routes/history.py`
   - Verify: npx tsc --noEmit && make build
 
-- [ ] **T03: Prove live/history parity and history non-polling with focused frontend and route tests** `est:0.75d`
+- [x] **T03: Prove live/history parity and history non-polling with focused frontend and route tests** `est:0.75d`
   Add the parity proof this refactor currently lacks. The slice is not done when code is deduplicated; it is done when tests prove that the same result stream drives the same visible card/slot state in both live and history flows, and that history pages never leak into the live status poller.
 
 Prefer focused automated coverage over broad manual proof. Use a new `history.test.ts` for history replay/runtime ownership assertions, extend `enrichment.test.ts` and/or `result-application.test.ts` where the shared path needs continuity assertions, and update `tests/test_history_routes.py` to pin the template/route contract the frontend relies on.

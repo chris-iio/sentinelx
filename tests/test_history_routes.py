@@ -182,13 +182,20 @@ class TestHistoryDetailRoute:
 
     def test_history_renders_online_mode_with_history_owner(self, client, seeded_store):
         """History page keeps online-mode DOM shape but advertises history ownership."""
-        store, analysis_id, _, _ = seeded_store
+        store, analysis_id, _, results = seeded_store
         client.application.history_store = store
         response = client.get(f"/history/{analysis_id}")
+        html = response.get_data(as_text=True)
+
         assert response.status_code == 200
-        assert b'data-job-id="history"' in response.data
-        assert b'data-mode="online"' in response.data
-        assert b'data-results-owner="history"' in response.data
+        assert 'data-job-id="history"' in html
+        assert 'data-mode="online"' in html
+        assert 'data-results-owner="history"' in html
+        assert 'data-provider-counts="{}"' in html
+        assert 'id="export-btn"' in html
+        assert 'id="enrich-progress"' in html
+        assert f"0/{len(results)} providers complete" in html
+        assert 'data-results-owner="live"' not in html
 
     def test_history_shows_correct_ioc_count(self, client, seeded_store):
         """History page shows the correct total IOC count."""
