@@ -1,0 +1,18 @@
+[
+  {
+    "kind": "bash",
+    "toolCallId": "call_XwRez5zlmZYBH6J7CWlATOj2|fc_0939d49fb135e7730169e904c0c1148191a50aba88fa10cbb4",
+    "command": "for f in .gsd/milestones/M012/slices/S01/S01-ASSESSMENT.md .gsd/milestones/M012/slices/S02/S02-ASSESSMENT.md .gsd/milestones/M012/slices/S03/S03-ASSESSMENT.md; do if [ -e \"$f\" ]; then echo \"EXISTS $f\"; else echo \"MISSING $f\"; fi; done",
+    "exitCode": 0,
+    "outputSnippet": "MISSING .gsd/milestones/M012/slices/S01/S01-ASSESSMENT.md\nMISSING .gsd/milestones/M012/slices/S02/S02-ASSESSMENT.md\nMISSING .gsd/milestones/M012/slices/S03/S03-ASSESSMENT.md\n",
+    "timestamp": 1776878784827
+  },
+  {
+    "kind": "bash",
+    "toolCallId": "call_nPt30vC4JZ3eLdOs81QZZPHA|fc_0939d49fb135e7730169e904cd4ac48191b5e8fbad4f17d9c0",
+    "command": "date -u +%Y-%m-%dT%H:%M:%SZ",
+    "exitCode": 0,
+    "outputSnippet": "2026-04-22T17:26:37Z\n",
+    "timestamp": 1776878797304
+  }
+]

@@ -197,3 +197,16 @@
 {"id":"33fadd36-a853-4238-9953-bb25a5f475f3","ts":"2026-04-22T09:05:55.580Z","severity":"info","message":"Pre-flight: 11 milestones queued. All have full context.","source":"notify","read":false}
 {"id":"5271b03a-008c-4555-ab88-4e6014309489","ts":"2026-04-22T09:42:44.987Z","severity":"info","message":"Committed: feat: Added bounded helper history-save diagnostics to /settings with f…","source":"notify","read":false}
 {"id":"72983a5f-fa95-4cc1-ac58-6fca146cf34c","ts":"2026-04-22T09:42:51.996Z","severity":"info","message":"Verification gate: 2/2 checks passed","source":"notify","read":false}
+{"id":"380e1e75-5649-4914-9262-7ab7f2313bb2","ts":"2026-04-22T09:47:46.908Z","severity":"info","message":"Committed: feat: Wrote the ranked S04 persistence/helper assessment and recorded t…","source":"notify","read":false}
+{"id":"a699fb4c-60bd-4335-aa18-8fb24be00c7e","ts":"2026-04-22T09:47:46.929Z","severity":"info","message":"Verification gate: 1/1 checks passed","source":"notify","read":false}
+{"id":"c3cc68fe-b41b-455b-ab9a-e9334b3dfddd","ts":"2026-04-22T10:44:56.379Z","severity":"warning","message":"Timeout recovery: steering complete-slice M012/S04 to produce Slice S04 marked [x] in .gsd/milestones/M012/M012-ROADMAP.md + summary + UAT written (attempt 1, session 1/1).","source":"notify","read":false}
+{"id":"1abdf4e0-92cc-4d66-b1b8-8f12703c5732","ts":"2026-04-22T10:44:56.383Z","severity":"warning","message":"Unit timed out for complete-slice M012/S04 (supervision may have failed). Pausing auto-mode.","source":"notify","read":false}
+{"id":"9e28a5ec-2eca-418d-9a37-c4b9268fc212","ts":"2026-04-22T10:44:57.763Z","severity":"info","message":"Auto-mode paused (Escape). Type to interact, or /gsd auto to resume.","source":"notify","read":false}
+{"id":"2529f007-3252-451d-b561-5f72ed3724d0","ts":"2026-04-22T10:46:11.518Z","severity":"info","message":"Step-mode resumed.","source":"notify","read":false}
+{"id":"70b89bc5-dee2-4419-b5b6-59b7a76aa721","ts":"2026-04-22T10:46:14.738Z","severity":"info","message":"Resume: applied 4 fix(es) to state.","source":"notify","read":false}
+{"id":"a094cbc8-1af8-4969-b2a1-ba2c297fa43a","ts":"2026-04-22T10:51:39.742Z","severity":"warning","message":"[recovery] verify-fail validate-milestone M012: existsSync false for /home/chris/projects/sentinelx/.gsd/milestones/M012/M012-VALIDATION.md","source":"workflow-logger","read":false}
+{"id":"fdbce161-5600-4cc1-8694-a0706bb011f0","ts":"2026-04-22T10:51:39.856Z","severity":"warning","message":"Artifact missing for validate-milestone M012 — retrying (attempt 1)","source":"notify","read":false}
+{"id":"a3d70987-1d9b-43b2-89a4-3437ca76ca2d","ts":"2026-04-22T11:00:44.942Z","severity":"info","message":"Step complete. Next: Plan S05: Validation evidence closure\nRun /clear, then /gsd to continue (or /gsd auto to run continuously).","source":"notify","read":false}
+{"id":"b27518f8-cf77-4710-adac-e72cdb40016e","ts":"2026-04-22T17:18:52.746Z","severity":"info","message":"Resuming paused session for M012.","source":"notify","read":false}
+{"id":"ca1cff36-8625-4880-b41b-951b677a0cf3","ts":"2026-04-22T17:18:52.748Z","severity":"info","message":"Auto-mode resumed.","source":"notify","read":false}
+{"id":"86de5027-e85c-4c11-84ac-f64811a0b750","ts":"2026-04-22T17:18:55.952Z","severity":"info","message":"Resume: applied 4 fix(es) to state.","source":"notify","read":false}
