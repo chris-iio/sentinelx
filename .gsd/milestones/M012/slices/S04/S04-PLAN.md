@@ -100,7 +100,7 @@ Add additive diagnostics around the helper-owned history save path and surface t
   - Files: `app/routes/_helpers.py`, `app/routes/settings.py`, `app/templates/settings.html`, `tests/test_history_routes.py`, `tests/test_settings.py`
   - Verify: python3 -m pytest tests/test_history_routes.py tests/test_settings.py -q && make verify-fast
 
-- [ ] **T02: Write the ranked persistence/helper keep-change assessment for M012** `est:0.5d`
+- [x] **T02: Write the ranked persistence/helper keep-change assessment for M012** `est:0.5d`
   ---
 estimated_steps: 4
 estimated_files: 2

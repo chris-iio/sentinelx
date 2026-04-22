@@ -195,3 +195,5 @@
 {"id":"9bcd9967-e93e-4299-aed6-181305883d0d","ts":"2026-04-22T09:05:55.578Z","severity":"info","message":"Auto-mode started. Will loop until milestone complete.","source":"notify","read":false}
 {"id":"5d76cb88-99c8-4df4-a644-515db21661b7","ts":"2026-04-22T09:05:55.579Z","severity":"info","message":"Dynamic routing: enabled — simple tasks may use cheaper models (ceiling: openai-codex/gpt-5.4)","source":"notify","read":false}
 {"id":"33fadd36-a853-4238-9953-bb25a5f475f3","ts":"2026-04-22T09:05:55.580Z","severity":"info","message":"Pre-flight: 11 milestones queued. All have full context.","source":"notify","read":false}
+{"id":"5271b03a-008c-4555-ab88-4e6014309489","ts":"2026-04-22T09:42:44.987Z","severity":"info","message":"Committed: feat: Added bounded helper history-save diagnostics to /settings with f…","source":"notify","read":false}
+{"id":"72983a5f-fa95-4cc1-ac58-6fca146cf34c","ts":"2026-04-22T09:42:51.996Z","severity":"info","message":"Verification gate: 2/2 checks passed","source":"notify","read":false}
