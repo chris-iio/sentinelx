@@ -33,6 +33,9 @@ python3 tools/optimization_audit.py \
   --output .gsd/milestones/M013/M013-AUDIT.md
 ```
 
+`template` mode writes the reusable blank scaffold.
+`baseline` mode writes the current M013 baseline findings, seam notes, guardrail coverage, and lightweight local measurement captures.
+
 ### Optional command captures
 
 Use `--capture-command LABEL::COMMAND` to add measured command metadata to the artifact.
@@ -69,6 +72,7 @@ The generated markdown includes:
    - persistence
    - frontend/render
 6. a stable table schema under each ranked bucket
+7. in `baseline` mode, populated ranked findings, per-seam notes, guardrail coverage, and internal temp-DB / status-snapshot measurements
 
 ## Finding schema
 

@@ -25,6 +25,8 @@ import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
+from tempfile import TemporaryDirectory
+from time import perf_counter
 
 DEFAULT_MILESTONE_ID = "M013"
 DEFAULT_OUTPUT = Path(f".gsd/milestones/{DEFAULT_MILESTONE_ID}/{DEFAULT_MILESTONE_ID}-AUDIT.md")
@@ -61,6 +63,35 @@ class CommandCapture:
     exit_code: int
     duration_ms: int
     summary: str
+
+
+@dataclass(frozen=True)
+class BaselineFinding:
+    bucket: str
+    finding: str
+    seam: str
+    evidence_kind: str
+    evidence_summary: str
+    continuity_guardrails: str
+    rerun_lanes: str
+    continuity_notes: str
+
+
+@dataclass(frozen=True)
+class SeamNote:
+    seam: str
+    boundary: str
+    current_shape: str
+    continuity_watch: str
+    baseline_call: str
+
+
+@dataclass(frozen=True)
+class GuardrailCoverage:
+    requirement_id: str
+    seam: str
+    covered_by: str
+    continuity_notes: str
 
 
 @dataclass
@@ -144,6 +175,155 @@ SEAMS: tuple[Seam, ...] = (
             "Does the finding preserve live/history parity and deterministic mocked-online proof?",
         ),
     ),
+)
+
+BASELINE_FINDINGS: tuple[BaselineFinding, ...] = (
+    BaselineFinding(
+        bucket="do now",
+        finding="Make `/enrichment/status` cursor-native end-to-end by avoiding full results-list snapshots before slicing `since`.",
+        seam="request/status",
+        evidence_kind="measurement + code-path reasoning",
+        evidence_summary=(
+            "Internal capture `status-snapshot-scaling` shows `get_status()` cost rises with total retained results. "
+            "`app/routes/_helpers.py::_get_enrichment_status()` currently calls `orchestrator.get_status()` first, and "
+            "`app/enrichment/orchestrator.py::get_status()` clones the entire `results` list before the helper slices "
+            "`results[since:]`, so every poll still pays an O(total-results) copy even when the frontend only needs the delta."
+        ),
+        continuity_guardrails="R008, R010, R018, R019, R040",
+        rerun_lanes="`make verify-fast`, `make verify-deep`",
+        continuity_notes=(
+            "Preserve `next_since`, terminal failure semantics, progress/warning banners, and analyst-visible completion "
+            "while shifting backend polling to a truly incremental read path."
+        ),
+    ),
+    BaselineFinding(
+        bucket="do next",
+        finding="Cache IOC card/slot handles inside the shared result-application coordinator before chasing deeper render changes.",
+        seam="frontend/render",
+        evidence_kind="code-path reasoning",
+        evidence_summary=(
+            "`app/static/src/ts/modules/result-application.ts` performs `findCardForIoc()` and `.querySelector('.enrichment-slot')` "
+            "per incoming result, then `updateDashboardCounts()` scans every `.ioc-card` and `sortCardsBySeverity()` reorders the whole grid "
+            "after each flush. The shared coordinator is the correct seam because both live polling and history replay depend on it."
+        ),
+        continuity_guardrails="R008, R009, R010, R019, R040",
+        rerun_lanes="`make verify-fast`, `make verify-deep`",
+        continuity_notes=(
+            "Must preserve live/history parity, textContent-only DOM construction, expand toggles, export/copy/detail-link wiring, "
+            "and deterministic mocked-online browser proof."
+        ),
+    ),
+    BaselineFinding(
+        bucket="later",
+        finding="Add dispatch/cache-hit instrumentation before considering thread-pool or semaphore rewrites.",
+        seam="runtime/provider",
+        evidence_kind="code-path reasoning",
+        evidence_summary=(
+            "`app/enrichment/orchestrator.py` already concentrates concurrency control in per-provider semaphores, keeps cache access inside "
+            "the attempt path, and releases semaphore slots before 429 backoff sleep. This baseline found no local evidence that worker count, "
+            "retry shape, or provider caps are the present bottleneck; the missing artifact is runtime visibility, not a blind concurrency rewrite."
+        ),
+        continuity_guardrails="R014, R015, R018, R020, R040",
+        rerun_lanes="`make verify-fast`, `make verify-deep`",
+        continuity_notes=(
+            "Any future runtime optimization must preserve per-provider caps, backoff semantics, cache-hit markers, and adapter-owned session reuse."
+        ),
+    ),
+    BaselineFinding(
+        bucket="leave alone",
+        finding="Keep WAL-backed cache/history stores and persistent connections unchanged until contention evidence appears.",
+        seam="persistence",
+        evidence_kind="measurement + code-path reasoning",
+        evidence_summary=(
+            "Internal temp-DB captures show low-latency cache puts/gets and history saves/loads on the current code, while `app/cache/store.py` "
+            "and `app/enrichment/history_store.py` already enable WAL, `busy_timeout`, persistent connections, and simple indexed queries. "
+            "No lock-pressure or write-amplification evidence justified churn in this baseline pass."
+        ),
+        continuity_guardrails="R022, R040",
+        rerun_lanes="`make verify-fast`",
+        continuity_notes=(
+            "If a later slice sees real writer contention, measure concurrent load first; do not trade away WAL or persistent-connection simplicity speculatively."
+        ),
+    ),
+    BaselineFinding(
+        bucket="leave alone",
+        finding="Keep per-provider backoff/session semantics as explicit baseline keep-decisions.",
+        seam="runtime/provider",
+        evidence_kind="code-path reasoning",
+        evidence_summary=(
+            "`app/enrichment/orchestrator.py` documents why semaphores exclude sleep and the current tests cover per-provider caps, 429 retry behavior, "
+            "snapshot safety, and cached-marker locking. Reopening adapter-owned `requests.Session` reuse or backoff rules now would risk validated guardrails "
+            "without evidence of live provider pain."
+        ),
+        continuity_guardrails="R014, R015, R018, R020, R040",
+        rerun_lanes="`make verify-fast`, `make verify-deep`",
+        continuity_notes=(
+            "Future work should layer measurement and observability onto the current contract rather than weakening rate-limit safety or session reuse."
+        ),
+    ),
+)
+
+BASELINE_SEAM_NOTES: tuple[SeamNote, ...] = (
+    SeamNote(
+        seam="runtime/provider",
+        boundary="`app/enrichment/orchestrator.py` plus `tests/test_orchestrator.py`.",
+        current_shape=(
+            "Dispatch fans out IOC/adaptor pairs through a thread pool, but rate-limited providers are gated by per-provider semaphores and 429 backoff sleeps happen "
+            "outside the semaphore. Cache hits short-circuit lookup work inside `_single_attempt()`, and tests already prove concurrency, retry, and snapshot invariants."
+        ),
+        continuity_watch="R014, R015, R018, R020, R040 stay attached to any change here.",
+        baseline_call=(
+            "Treat this seam as intentionally shaped for now. Add provider-mix/cache-hit instrumentation first; do not rewrite concurrency policy on aesthetics."
+        ),
+    ),
+    SeamNote(
+        seam="request/status",
+        boundary="`app/routes/_helpers.py`, `app/routes/analysis.py`, and helper/status regression coverage.",
+        current_shape=(
+            "The helper owns a bounded module-level orchestrator registry, a shared enrichment thread pool, terminal tombstones, and history-save diagnostics. The frontend's `since` cursor "
+            "contract is preserved, but the helper still asks the orchestrator for a full status snapshot before slicing incremental results."
+        ),
+        continuity_watch="R008, R010, R018, R019, R040 are the key guardrails.",
+        baseline_call=(
+            "This is the highest-confidence near-term optimization seam because it sits on every poll request and already has a clear correctness contract to preserve."
+        ),
+    ),
+    SeamNote(
+        seam="persistence",
+        boundary="`app/cache/store.py`, `app/enrichment/history_store.py`, and their focused unit suites.",
+        current_shape=(
+            "Both stores use persistent SQLite connections, WAL mode, `busy_timeout`, and simple indexed access patterns. Writes commit per operation, which is conservative but currently uncomplicated and "
+            "well-covered by tests."
+        ),
+        continuity_watch="R022 and R040 must remain explicit.",
+        baseline_call=(
+            "Keep the current store design until a later slice captures real contention, lock waits, or write-amplification evidence under concurrent load."
+        ),
+    ),
+    SeamNote(
+        seam="frontend/render",
+        boundary="`app/static/src/ts/modules/enrichment.ts`, `result-application.ts`, `row-factory.ts`, and mocked-online browser proof.",
+        current_shape=(
+            "The live polling loop runs every 750ms, batches DOM flushes with a 100ms timer, and routes both live and history application through one coordinator. The same shared path still performs repeated card/slot lookups, full dashboard recounts, and grid reorders after flushes."
+        ),
+        continuity_watch="R008, R009, R010, R019, R040 remain coupled to any render optimization.",
+        baseline_call=(
+            "Optimize this seam only after the request/status cursor cost lands, because the shared coordinator makes render work worth improving but the current proof burden is high."
+        ),
+    ),
+)
+
+BASELINE_GUARDRAIL_COVERAGE: tuple[GuardrailCoverage, ...] = (
+    GuardrailCoverage("R008", "request/status + frontend/render", "Do-now cursor work plus do-next coordinator caching", "Keep polling continuity, export/copy/detail-link behavior, and progress visibility intact."),
+    GuardrailCoverage("R009", "frontend/render", "Do-next coordinator/render work", "Preserve textContent-only DOM construction, CSP/CSRF assumptions, and host-validation-adjacent safety expectations."),
+    GuardrailCoverage("R010", "request/status + frontend/render", "Do-now cursor work plus do-next render work", "Any shipped optimization must reduce or at least not worsen polling/render churn."),
+    GuardrailCoverage("R014", "runtime/provider", "Later instrumentation and leave-alone keep-decision", "Per-provider concurrency remains part of the baseline contract until evidence says otherwise."),
+    GuardrailCoverage("R015", "runtime/provider", "Later instrumentation and leave-alone keep-decision", "429 backoff stays protected; future changes must prove they do not regress quota safety."),
+    GuardrailCoverage("R018", "runtime/provider + request/status", "Do-now cursor work plus runtime keep-decision", "Snapshot correctness, semaphore scope, and cached-marker locking remain non-negotiable."),
+    GuardrailCoverage("R019", "request/status + frontend/render", "Do-now cursor work plus do-next coordinator caching", "Keep `since`/`next_since` incremental polling semantics end-to-end."),
+    GuardrailCoverage("R020", "runtime/provider", "Later instrumentation and leave-alone keep-decision", "Persistent adapter-owned sessions stay justified until measured evidence argues otherwise."),
+    GuardrailCoverage("R022", "persistence", "Leave-alone WAL store decision", "WAL and persistent connection behavior stay explicit keep-decisions pending contention evidence."),
+    GuardrailCoverage("R040", "all seams", "Every ranked finding", "Each future slice must rerun the listed proof lanes before claiming an optimization is safe."),
 )
 
 
@@ -250,7 +430,7 @@ def run_capture_command(spec: str, repo_root: Path, timeout_seconds: int) -> Com
             duration_ms=duration_ms,
             summary=summarize_output(completed.stdout, completed.stderr),
         )
-    except subprocess.TimeoutExpired as exc:
+    except subprocess.TimeoutExpired:
         finished = datetime.now(timezone.utc)
         duration_ms = int((finished - started).total_seconds() * 1000)
         return CommandCapture(
@@ -270,6 +450,158 @@ def run_capture_command(spec: str, repo_root: Path, timeout_seconds: int) -> Com
             duration_ms=duration_ms,
             summary=f"Failed to launch command: {exc}",
         )
+
+
+def run_internal_capture(label: str, command: str, measure: callable) -> CommandCapture:
+    started = datetime.now(timezone.utc)
+    try:
+        summary = measure()
+        finished = datetime.now(timezone.utc)
+        duration_ms = int((finished - started).total_seconds() * 1000)
+        return CommandCapture(
+            label=label,
+            command=command,
+            exit_code=0,
+            duration_ms=duration_ms,
+            summary=summary,
+        )
+    except Exception as exc:  # pragma: no cover - defensive audit failure path
+        finished = datetime.now(timezone.utc)
+        duration_ms = int((finished - started).total_seconds() * 1000)
+        return CommandCapture(
+            label=label,
+            command=command,
+            exit_code=1,
+            duration_ms=duration_ms,
+            summary=f"Internal measurement failed: {exc.__class__.__name__}: {exc}",
+        )
+
+
+def measure_status_snapshot_scaling() -> str:
+    from app.enrichment.orchestrator import EnrichmentOrchestrator
+
+    orchestrator = EnrichmentOrchestrator(adapters=[])
+    iterations = 400
+
+    def elapsed_ms(result_count: int) -> float:
+        with orchestrator._lock:
+            orchestrator._jobs["bench"] = {
+                "total": result_count,
+                "done": result_count,
+                "results": list(range(result_count)),
+                "complete": True,
+                "status": "complete",
+                "terminal": False,
+                "terminal_reason": None,
+                "error": None,
+            }
+        start = perf_counter()
+        for _ in range(iterations):
+            orchestrator.get_status("bench")
+        return (perf_counter() - start) * 1000
+
+    small_count = 200
+    large_count = 5000
+    small_ms = elapsed_ms(small_count)
+    large_ms = elapsed_ms(large_count)
+    ratio = large_ms / small_ms if small_ms > 0 else 0.0
+    return (
+        f"{iterations} `get_status()` calls: {small_count} results {small_ms:.2f}ms vs "
+        f"{large_count} results {large_ms:.2f}ms ({ratio:.1f}x slower), confirming the current per-poll full-list snapshot cost before `since` slicing."
+    )
+
+
+def measure_cache_store_tempdb() -> str:
+    from app.cache.store import CacheStore
+
+    with TemporaryDirectory() as tmp_dir:
+        store = CacheStore(db_path=Path(tmp_dir) / "cache.db")
+        count = 250
+
+        start = perf_counter()
+        for i in range(count):
+            store.put(
+                f"198.51.100.{i}",
+                "ipv4",
+                "VirusTotal",
+                {
+                    "provider": "VirusTotal",
+                    "verdict": "clean",
+                    "detection_count": 0,
+                    "total_engines": 90,
+                    "scan_date": None,
+                    "raw_stats": {},
+                },
+            )
+        put_ms = (perf_counter() - start) * 1000
+
+        start = perf_counter()
+        hits = 0
+        for i in range(count):
+            row = store.get(f"198.51.100.{i}", "ipv4", "VirusTotal", ttl_seconds=3600)
+            hits += 1 if row is not None else 0
+        get_ms = (perf_counter() - start) * 1000
+
+        stats = store.stats()
+    return (
+        f"Temp WAL cache DB: {count} puts in {put_ms:.2f}ms, {count} TTL reads in {get_ms:.2f}ms, "
+        f"{hits} hits, {stats['total_entries']} retained rows."
+    )
+
+
+def measure_history_store_tempdb() -> str:
+    from app.enrichment.history_store import HistoryStore
+
+    with TemporaryDirectory() as tmp_dir:
+        store = HistoryStore(db_path=Path(tmp_dir) / "history.db")
+        count = 180
+
+        start = perf_counter()
+        analysis_ids = []
+        for i in range(count):
+            analysis_ids.append(
+                store.save_analysis(
+                    input_text=f"ioc {i}",
+                    mode="online",
+                    iocs=[{"type": "ipv4", "value": f"203.0.113.{i}", "raw_match": f"203.0.113.{i}"}],
+                    results=[{"type": "result", "verdict": "clean"}],
+                )
+            )
+        save_ms = (perf_counter() - start) * 1000
+
+        start = perf_counter()
+        recent = store.list_recent(limit=20)
+        recent_ms = (perf_counter() - start) * 1000
+
+        start = perf_counter()
+        loaded = store.load_analysis(analysis_ids[-1])
+        load_ms = (perf_counter() - start) * 1000
+
+    loaded_count = loaded["total_count"] if isinstance(loaded, dict) else 0
+    return (
+        f"Temp WAL history DB: {count} saves in {save_ms:.2f}ms, list_recent(20) in {recent_ms:.2f}ms, "
+        f"single load in {load_ms:.2f}ms, latest total_count={loaded_count}, recent rows={len(recent)}."
+    )
+
+
+def collect_baseline_captures() -> list[CommandCapture]:
+    return [
+        run_internal_capture(
+            label="status-snapshot-scaling",
+            command="internal benchmark: EnrichmentOrchestrator.get_status() snapshot scaling",
+            measure=measure_status_snapshot_scaling,
+        ),
+        run_internal_capture(
+            label="cache-store-tempdb",
+            command="internal benchmark: CacheStore temp WAL put/get loop",
+            measure=measure_cache_store_tempdb,
+        ),
+        run_internal_capture(
+            label="history-store-tempdb",
+            command="internal benchmark: HistoryStore temp WAL save/list/load loop",
+            measure=measure_history_store_tempdb,
+        ),
+    ]
 
 
 def bucket_table_placeholder(bucket: str) -> str:
@@ -346,6 +678,68 @@ def render_seams_section() -> str:
     return "\n".join(lines).rstrip()
 
 
+def render_findings_table(findings: list[BaselineFinding]) -> str:
+    lines = [
+        "| Finding | Seam | Evidence kind | Evidence summary | Continuity guardrails | Rerun lanes | Continuity notes |",
+        "| --- | --- | --- | --- | --- | --- | --- |",
+    ]
+    for finding in findings:
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    finding.finding,
+                    finding.seam,
+                    finding.evidence_kind,
+                    finding.evidence_summary,
+                    finding.continuity_guardrails,
+                    finding.rerun_lanes,
+                    finding.continuity_notes,
+                ]
+            )
+            + " |"
+        )
+    return "\n".join(lines)
+
+
+def render_baseline_ranked_findings() -> str:
+    lines: list[str] = []
+    for bucket in FINDING_BUCKETS:
+        lines.append(f"### {bucket}")
+        lines.append("")
+        bucket_findings = [finding for finding in BASELINE_FINDINGS if finding.bucket == bucket]
+        lines.append(render_findings_table(bucket_findings))
+        lines.append("")
+    return "\n".join(lines).rstrip()
+
+
+def render_baseline_seam_notes() -> str:
+    lines = ["## Per-seam baseline notes", ""]
+    for note in BASELINE_SEAM_NOTES:
+        lines.append(f"### {note.seam}")
+        lines.append("")
+        lines.append(f"- Boundary: {note.boundary}")
+        lines.append(f"- Current shape: {note.current_shape}")
+        lines.append(f"- Continuity watch: {note.continuity_watch}")
+        lines.append(f"- Baseline call: {note.baseline_call}")
+        lines.append("")
+    return "\n".join(lines).rstrip()
+
+
+def render_baseline_guardrail_coverage() -> str:
+    lines = [
+        "## Continuity guardrail coverage",
+        "",
+        "| Requirement | Primary seam(s) in this baseline | Covered by | Continuity notes |",
+        "| --- | --- | --- | --- |",
+    ]
+    for entry in BASELINE_GUARDRAIL_COVERAGE:
+        lines.append(
+            f"| {entry.requirement_id} | {entry.seam} | {entry.covered_by} | {entry.continuity_notes} |"
+        )
+    return "\n".join(lines)
+
+
 def render_document(document: AuditDocument) -> str:
     command_surface = "\n".join(
         [
@@ -413,25 +807,50 @@ def render_document(document: AuditDocument) -> str:
         "- **Rerun lanes** — at minimum one of `make verify-fast`, `make verify-deep`, or `make verify`.",
         "- **Continuity notes** — state what behavior must remain true after the future change ships, or why the seam should stay untouched.",
         "",
-        "## Ranked findings",
-        "",
     ]
 
-    for bucket in FINDING_BUCKETS:
-        lines.append(f"### {bucket}")
+    if document.mode == "baseline":
+        lines.extend(
+            [
+                "## Baseline stance",
+                "",
+                "- Highest-confidence near-term work: make the status path truly incremental so the backend no longer snapshots every retained result on each poll.",
+                "- Highest-confidence explicit keep-decision: leave the WAL-backed cache/history stores and the provider backoff/session contract alone until measured contention or provider pain shows up.",
+                "- Frontend work remains important, but it should follow the status-path fix because the shared coordinator has a broader proof burden and depends on the same poll contract.",
+                "",
+                "## Ranked findings",
+                "",
+                render_baseline_ranked_findings(),
+                "",
+                render_baseline_seam_notes(),
+                "",
+                render_baseline_guardrail_coverage(),
+                "",
+                "## Audit notes",
+                "",
+                "- This baseline intentionally makes keep-decisions explicit; `leave alone` rows are part of the evidence set, not filler.",
+                "- Re-run this command after each optimization slice so later artifacts can compare the ranked buckets instead of restating assumptions.",
+                "- Add explicit `--capture-command` entries when a downstream slice can attach fresh end-to-end timings or verification output to one of these rows.",
+            ]
+        )
+    else:
+        lines.append("## Ranked findings")
         lines.append("")
-        lines.append(bucket_table_placeholder(bucket))
-        lines.append("")
+        for bucket in FINDING_BUCKETS:
+            lines.append(f"### {bucket}")
+            lines.append("")
+            lines.append(bucket_table_placeholder(bucket))
+            lines.append("")
 
-    lines.extend(
-        [
-            "## Audit notes",
-            "",
-            "- Replace placeholder rows during the real baseline pass rather than appending free-form notes below the tables.",
-            "- Add `--capture-command LABEL::COMMAND` entries whenever a claim can be supported by timing or command output.",
-            "- If a seam cannot be measured directly, explain the exact control flow, persistence pattern, or DOM/render path that makes the keep/change decision credible.",
-        ]
-    )
+        lines.extend(
+            [
+                "## Audit notes",
+                "",
+                "- Replace placeholder rows during the real baseline pass rather than appending free-form notes below the tables.",
+                "- Add `--capture-command LABEL::COMMAND` entries whenever a claim can be supported by timing or command output.",
+                "- If a seam cannot be measured directly, explain the exact control flow, persistence pattern, or DOM/render path that makes the keep/change decision credible.",
+            ]
+        )
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -440,10 +859,17 @@ def main() -> int:
     repo_root = Path(args.repo_root).resolve()
     output_path = Path(args.output)
 
-    captures = [
+    repo_root_str = str(repo_root)
+    if repo_root_str not in sys.path:
+        sys.path.insert(0, repo_root_str)
+
+    captures: list[CommandCapture] = []
+    if args.mode == "baseline":
+        captures.extend(collect_baseline_captures())
+    captures.extend(
         run_capture_command(spec, repo_root=repo_root, timeout_seconds=args.timeout_seconds)
         for spec in args.capture_command
-    ]
+    )
 
     document = AuditDocument(
         milestone_id=args.milestone_id,

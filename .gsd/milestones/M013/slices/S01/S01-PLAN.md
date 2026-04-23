@@ -31,7 +31,7 @@ Keep the workflow SentinelX-first but lightly reusable: the command surface shou
   - Files: `Makefile`, `tools/optimization_audit.py`, `README.md`, `.gsd/milestones/M013/`
   - Verify: python3 tools/optimization_audit.py --help
 
-- [ ] **T02: Run the baseline full-stack audit and publish the first ranked findings** `est:0.75d`
+- [x] **T02: Run the baseline full-stack audit and publish the first ranked findings** `est:0.75d`
   Use the checked-in workflow to run the first full SentinelX optimization pass across the main seams already identified by research: orchestrator/provider dispatch, Flask helper/request flow, WAL-backed cache/history stores, and frontend polling/render coordination. Capture timings where practical; where direct timing is awkward, write the explicit code-path reasoning that justifies the ranking.
 
 Publish the first durable ranked findings artifact in the milestone directory. The artifact must make keep decisions explicit, not implicit, and it must show how the table-stakes continuity requirements stay guarded while the pass identifies true do-now work.

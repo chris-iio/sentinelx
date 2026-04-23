@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-04-23T08:06:22Z | Files: 160 | Described: 0/160
-<!-- gsd:codebase-meta {"generatedAt":"2026-04-23T08:06:22Z","fingerprint":"62495d32c32334e12eafe5dd8fd5e5a0aeed00c7","fileCount":160,"truncated":false} -->
+Generated: 2026-04-23T08:34:33Z | Files: 163 | Described: 0/163
+<!-- gsd:codebase-meta {"generatedAt":"2026-04-23T08:34:33Z","fingerprint":"348d8e4c5f0e829472c9b2760fab365c519960f3","fileCount":163,"truncated":false} -->
 
 ### (root)/
 - `.codex`
@@ -135,13 +135,16 @@ Generated: 2026-04-23T08:06:22Z | Files: 160 | Described: 0/160
 - `app/templates/partials/_ioc_card.html`
 - `app/templates/partials/_verdict_dashboard.html`
 
+### docs/
+- `docs/optimization-audit.md`
+
 ### docs/plans/
 - `docs/plans/2026-03-02-universal-threat-intel-hub-design.md`
 - `docs/plans/2026-03-02-universal-threat-intel-hub.md`
 - `docs/plans/2026-03-04-settings-page-redesign.md`
 
 ### tests/
-- *(44 files: 44 .py)*
+- *(45 files: 45 .py)*
 
 ### tests/e2e/
 - `tests/e2e/__init__.py`
@@ -162,4 +165,5 @@ Generated: 2026-04-23T08:06:22Z | Files: 160 | Described: 0/160
 - `tests/e2e/pages/settings_page.py`
 
 ### tools/
+- `tools/optimization_audit.py`
 - `tools/security_check.py`

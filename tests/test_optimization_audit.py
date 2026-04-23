@@ -36,6 +36,22 @@ def test_template_mode_writes_ranked_artifact(tmp_path):
     assert "R040" in content
 
 
+def test_baseline_mode_writes_ranked_findings_and_notes(tmp_path):
+    output_path = tmp_path / "audit.md"
+
+    result = run_audit("--mode", "baseline", "--output", str(output_path))
+
+    assert result.returncode == 0, result.stderr
+    content = output_path.read_text(encoding="utf-8")
+    assert "## Baseline stance" in content
+    assert "## Per-seam baseline notes" in content
+    assert "## Continuity guardrail coverage" in content
+    assert "status-snapshot-scaling" in content
+    assert "Make `/enrichment/status` cursor-native end-to-end" in content
+    assert "Keep WAL-backed cache/history stores and persistent connections unchanged" in content
+    assert "_Fill during the do now pass_" not in content
+
+
 def test_capture_command_records_measurement_metadata(tmp_path):
     output_path = tmp_path / "audit.md"
 
