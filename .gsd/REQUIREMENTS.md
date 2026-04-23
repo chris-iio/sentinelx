@@ -208,10 +208,10 @@ This file is the explicit capability and coverage contract for the project.
 - Description: Every adapter must store a `requests.Session` as `self._session` (created in `__init__`) and use it for all HTTP calls. No bare `requests.get()` or ephemeral per-call `requests.Session()`.
 - Why it matters: New TCP+TLS handshake on every `lookup()` call adds 50–150ms per provider per IOC. For a 20-IOC batch across 14 providers, this is 1–4 seconds of pure connection overhead per job.
 - Source: execution (audit)
-- Primary owning slice: M004/S02
+- Primary owning slice: M012/S01
 - Supporting slices: none
 - Validation: S02/T02: All 12 adapters have self._session = requests.Session() in __init__. 7 API-key adapters moved auth headers to session-level. grep -rn 'requests\.get\|requests\.post' adapters/*.py returns 0 code hits. grep -rl 'self._session' adapters/*.py returns 12. All 12 test files mock adapter._session directly. 839 unit tests pass.
-- Notes: Session must be thread-safe — only `get()` calls, no header mutation between calls
+- Notes: Persistent HTTP session continuity is preserved during runtime-boundary work in S01.
 
 ### R021 — The ip-api.com adapter must be replaced or switched to an HTTPS endpoint. The `IP_API_BASE` constant must not use `http://`.
 - Class: compliance/security
@@ -230,10 +230,10 @@ This file is the explicit capability and coverage contract for the project.
 - Description: `CacheStore.__init__` must enable WAL mode (`PRAGMA journal_mode=WAL`) and keep a persistent connection. A `purge_expired(ttl_seconds)` method must exist that deletes entries older than the TTL.
 - Why it matters: New connection per operation creates 200+ open/close cycles per enrichment batch and serializes concurrent readers behind writers (no WAL). Without purge, expired entries accumulate indefinitely, degrading `stats()` and scan performance over time.
 - Source: execution (audit)
-- Primary owning slice: M004/S02
-- Supporting slices: none
+- Primary owning slice: M012/S04
+- Supporting slices: M012/S01
 - Validation: S02/T04: CacheStore.__init__ executes PRAGMA journal_mode=WAL (L51 of store.py) and keeps persistent self._conn. purge_expired(ttl_seconds) method exists at L155 and deletes entries older than TTL, returning row count. 34/34 cache+config tests pass. All 944 tests pass.
-- Notes: WAL mode persists in the DB file; test fixtures must use temp files
+- Notes: WAL-mode cache behavior is intentionally left unchanged unless S04 evidence disproves the current design; S01 only protects continuity while touching the live boundary.
 
 ### R023 — `findCopyButtonForIoc()` must use an attribute selector (O(1)); `updateDashboardCounts()` must be called once per poll tick outside the result render loop; `applyFilter()` must be debounced (≥ 100ms); `verdictSeverityIndex()` must use a pre-built Map; graph layout must pre-build an index Map before the edge loop.
 - Class: quality-attribute
@@ -267,6 +267,361 @@ This file is the explicit capability and coverage contract for the project.
 - Supporting slices: none
 - Validation: S04/T03: CSP header expanded to 7 directives (default-src, script-src, style-src, connect-src, img-src, font-src, object-src 'none') — confirmed via grep and live HTTP response test. SECRET_KEY startup warning implemented — confirmed fires at WARNING level when env var unset, silent when set. Rate limiter exception: kept as memory:// because the `limits` library has no filesystem backend (only Redis/Memcached/MongoDB); adding external services inappropriate for single-process local tool (D037/D038). 944 tests pass.
 - Notes: Rate limiter persistent backend sub-requirement is documented as infeasible without external infrastructure. If Redis is ever added for other features, rate limiter can piggyback. See D037/D038.
+
+### R026 — A shared safe_request() function in http_safety.py handles SSRF validation, HTTP GET/POST with safety controls, pre-raise_for_status hooks, and the full exception handler chain with correct ordering (D035).
+- Class: quality-attribute
+- Status: validated
+- Description: A shared safe_request() function in http_safety.py handles SSRF validation, HTTP GET/POST with safety controls, pre-raise_for_status hooks, and the full exception handler chain with correct ordering (D035).
+- Why it matters: 12 adapters duplicate identical ~25-line HTTP + exception blocks.
+- Source: execution
+- Primary owning slice: M007/S01
+- Supporting slices: none
+- Validation: validated
+- Notes: M005 claimed completion but the code never materialized. Reattempted in M007.
+
+### R027 — All 12 HTTP-based adapters call safe_request() instead of inlining validate_endpoint + session.get/post + safety controls + exception handling.
+- Class: quality-attribute
+- Status: validated
+- Description: All 12 HTTP-based adapters call safe_request() instead of inlining validate_endpoint + session.get/post + safety controls + exception handling.
+- Why it matters: Achieves the LOC reduction and consistency target.
+- Source: execution
+- Primary owning slice: M007/S01
+- Supporting slices: none
+- Validation: validated
+- Notes: Reattempted in M007.
+
+### R028 — build_registry() runs once in create_app() and is stored on the app object.
+- Class: quality-attribute
+- Status: validated
+- Description: build_registry() runs once in create_app() and is stored on the app object.
+- Why it matters: Eliminates per-request registry construction.
+- Source: execution
+- Primary owning slice: M005/S03
+- Supporting slices: none
+- Validation: validated
+- Notes: ConfigStore caching makes this fast.
+
+### R029 — The analyze() function is split into _extract_iocs(), _launch_enrichment(), _build_template_context().
+- Class: quality-attribute
+- Status: validated
+- Description: The analyze() function is split into _extract_iocs(), _launch_enrichment(), _build_template_context().
+- Why it matters: Readability and testability.
+- Source: execution
+- Primary owning slice: M005/S03
+- Supporting slices: none
+- Validation: validated
+- Notes: Coordinator is ~20 lines.
+
+### R030 — Every analysis run persisted to SQLite. Analysts can revisit past analyses.
+- Class: core-capability
+- Status: validated
+- Description: Every analysis run persisted to SQLite. Analysts can revisit past analyses.
+- Why it matters: Every competitive tool saves past lookups.
+- Source: user
+- Primary owning slice: M006/S01
+- Supporting slices: none
+- Validation: validated
+- Notes: Reuses existing SQLite WAL-mode DB pattern.
+
+### R031 — Home page displays recent analyses with timestamp, IOC count, and top verdict.
+- Class: primary-user-loop
+- Status: validated
+- Description: Home page displays recent analyses with timestamp, IOC count, and top verdict.
+- Why it matters: Quick access to past work.
+- Source: user
+- Primary owning slice: M006/S01
+- Supporting slices: M006/S04
+- Validation: validated
+- Notes: Lightweight list, not a dashboard.
+
+### R032 — WhoisAdapter queries WHOIS data for domains — registrar, creation date, expiry date, name servers.
+- Class: core-capability
+- Status: validated
+- Description: WhoisAdapter queries WHOIS data for domains — registrar, creation date, expiry date, name servers.
+- Why it matters: WHOIS data is table-stakes for domain investigation.
+- Source: user
+- Primary owning slice: M006/S02
+- Supporting slices: none
+- Validation: validated
+- Notes: python-whois library, direct WHOIS protocol.
+
+### R033 — URL IOCs extracted, enriched, displayed with filter pills, and accessible on detail page.
+- Class: core-capability
+- Status: validated
+- Description: URL IOCs extracted, enriched, displayed with filter pills, and accessible on detail page.
+- Why it matters: URLs are a primary IOC type.
+- Source: user
+- Primary owning slice: M006/S03
+- Supporting slices: none
+- Validation: validated
+- Notes: 8 E2E Playwright tests verify the full path.
+
+### R035 — POST /api/analyze accepts text input and returns extracted IOCs with enrichment results programmatically.
+- Class: integration
+- Status: validated
+- Description: POST /api/analyze accepts text input and returns extracted IOCs with enrichment results programmatically.
+- Why it matters: Enables scripting, SOAR webhooks, and CI/CD integration without browser access.
+- Source: user
+- Primary owning slice: M008/S02
+- Supporting slices: none
+- Validation: validated
+- Notes: Also includes GET /api/status/<job_id> for online mode enrichment polling.
+
+### R036 — A shared safe_request() function in http_safety.py handles SSRF validation, HTTP GET/POST with safety controls, pre-raise_for_status hooks, and the full exception handler chain with correct ordering.
+- Class: quality-attribute
+- Status: validated
+- Description: A shared safe_request() function in http_safety.py handles SSRF validation, HTTP GET/POST with safety controls, pre-raise_for_status hooks, and the full exception handler chain with correct ordering.
+- Why it matters: 12 adapters duplicate identical ~25-line HTTP + exception blocks.
+- Source: execution
+- Primary owning slice: M007/S01
+- Supporting slices: none
+- Validation: validated
+- Notes: All 12 adapters migrated; 1057 tests pass.
+
+### R037 — Adapter module and class docstrings no longer repeat SEC-04/05/06/16 safety control descriptions. Security control docs live once in http_safety.py.
+- Class: quality-attribute
+- Status: validated
+- Description: Adapter module and class docstrings no longer repeat SEC-04/05/06/16 safety control descriptions. Security control docs live once in http_safety.py.
+- Why it matters: ~1,354 lines of docstrings across 15 adapters, 40-46% of each file.
+- Source: execution
+- Primary owning slice: M007/S02
+- Supporting slices: none
+- Validation: validated
+- Notes: Adapter-specific docs preserved.
+
+### R038 — Dead CSS classes removed from input.css. consensus-badge CSS removed.
+- Class: quality-attribute
+- Status: validated
+- Description: Dead CSS classes removed from input.css. consensus-badge CSS removed.
+- Why it matters: consensus-badge was dead for 5 milestones.
+- Source: execution
+- Primary owning slice: M007/S02
+- Supporting slices: none
+- Validation: validated
+- Notes: Stale chevron-toggle comment also removed.
+
+### R039 — Adapter test files use make_mock_response, make_ipv4_ioc, and other shared factories from tests/helpers.py.
+- Class: quality-attribute
+- Status: validated
+- Description: Adapter test files use make_mock_response, make_ipv4_ioc, and other shared factories from tests/helpers.py.
+- Why it matters: 23 of 33 test files inlined their own mock setup.
+- Source: execution
+- Primary owning slice: M007/S03
+- Supporting slices: none
+- Validation: validated
+- Notes: All 12 adapter test files migrated.
+
+### R040 — Every existing test passes after M007 refactoring.
+- Class: continuity
+- Status: validated
+- Description: Every existing test passes after M007 refactoring.
+- Why it matters: Pure cleanup milestone — test suite is the safety net.
+- Source: inferred
+- Primary owning slice: M012/S03
+- Supporting slices: M012/S01, M012/S02, M012/S04
+- Validation: `Makefile` lines 82-95 define `verify-fast` (non-E2E pytest + Vitest + `npx tsc --noEmit` + `make build`), `verify-deep` (pytest `tests/e2e`), and composite `verify`. `README.md` documents when to use each lane. Fresh M012 closeout evidence on 2026-04-23: `python3 -m pytest tests/test_orchestrator.py tests/test_api.py tests/test_routes.py tests/test_http_safety.py tests/test_adapter_contract.py -q` → `266 passed in 0.96s`; `python3 -m pytest tests/test_cache_store.py tests/test_history_store.py tests/test_history_routes.py tests/test_settings.py -q` → `73 passed in 1.75s`; `make verify-fast` → `955 passed, 113 deselected`, Vitest `78 passed`, clean `npx tsc --noEmit`, and successful production build with only the pre-existing non-blocking Browserslist warning.
+- Notes: Existing test coverage remains the safety net; S03 owns the proof-loop/verification-lane work while all slices rely on targeted continuity checks.
+
+### R041 — A BaseHTTPAdapter abstract base class in `app/enrichment/adapters/base.py` absorbs the shared adapter skeleton: `__init__` (session setup, allowed_hosts, optional api_key), `supported_types` guard, `is_configured`, and the `safe_request()` dispatch + result-check boilerplate. Each HTTP adapter subclass defines only metadata constants and override methods for URL construction, pre-raise hooks, and response parsing.
+- Class: quality-attribute
+- Status: validated
+- Description: A BaseHTTPAdapter abstract base class in `app/enrichment/adapters/base.py` absorbs the shared adapter skeleton: `__init__` (session setup, allowed_hosts, optional api_key), `supported_types` guard, `is_configured`, and the `safe_request()` dispatch + result-check boilerplate. Each HTTP adapter subclass defines only metadata constants and override methods for URL construction, pre-raise hooks, and response parsing.
+- Why it matters: 12 HTTP adapters repeat ~60% identical structural code. The base class eliminates this duplication at the source.
+- Source: inferred
+- Primary owning slice: M009/S01
+- Supporting slices: M009/S02
+- Validation: BaseHTTPAdapter exists in app/enrichment/adapters/base.py with full template-method skeleton. 12 HTTP adapters subclass it. 21 base class tests + 947 full suite tests pass. Verified by grep: 13 files contain 'class.*BaseHTTPAdapter' (12 adapters + 1 base definition).
+- Notes: The Provider protocol remains the structural contract; BaseHTTPAdapter is an implementation convenience.
+
+### R042 — All 12 HTTP-based adapters (abuseipdb, crtsh, greynoise, hashlookup, ip_api, malwarebazaar, otx, shodan, threatfox, threatminer, urlhaus, virustotal) subclass BaseHTTPAdapter. Each defines only provider-specific metadata, URL construction, and response parsing.
+- Class: quality-attribute
+- Status: validated
+- Description: All 12 HTTP-based adapters (abuseipdb, crtsh, greynoise, hashlookup, ip_api, malwarebazaar, otx, shodan, threatfox, threatminer, urlhaus, virustotal) subclass BaseHTTPAdapter. Each defines only provider-specific metadata, URL construction, and response parsing.
+- Why it matters: Completes the consolidation — half-migrated is worse than not migrated.
+- Source: inferred
+- Primary owning slice: M009/S02
+- Supporting slices: M009/S01
+- Validation: All 12 HTTP adapters (abuseipdb, crtsh, greynoise, hashlookup, ip_api, malwarebazaar, otx, shodan, threatfox, threatminer, urlhaus, virustotal) subclass BaseHTTPAdapter. Verified by grep: 12 non-base adapter files contain 'class.*BaseHTTPAdapter'. 983 tests pass.
+- Notes: ThreatMiner (multi-endpoint) and VT (complex response parsing) are the most complex migrations.
+
+### R043 — The 3 non-HTTP adapters (dns_lookup via dnspython, asn_cymru via dnspython, whois_lookup via python-whois) are not forced into BaseHTTPAdapter. They remain standalone implementations.
+- Class: constraint
+- Status: validated
+- Description: The 3 non-HTTP adapters (dns_lookup via dnspython, asn_cymru via dnspython, whois_lookup via python-whois) are not forced into BaseHTTPAdapter. They remain standalone implementations.
+- Why it matters: Forcing non-HTTP adapters into an HTTP base class would be a bad abstraction.
+- Source: inferred
+- Primary owning slice: M009/S02
+- Supporting slices: none
+- Validation: grep -c 'BaseHTTPAdapter' on dns_lookup.py, asn_cymru.py, whois_lookup.py all return 0. These three non-HTTP adapters remain standalone implementations.
+- Notes: These adapters still satisfy the Provider protocol.
+
+### R044 — A shared parametrized test module covers protocol conformance, unsupported-type rejection, timeout handling, connection/SSL errors, allowed_hosts enforcement, and is_configured behavior for all 15 adapters. Tests are written once and run against every adapter.
+- Class: quality-attribute
+- Status: validated
+- Description: A shared parametrized test module covers protocol conformance, unsupported-type rejection, timeout handling, connection/SSL errors, allowed_hosts enforcement, and is_configured behavior for all 15 adapters. Tests are written once and run against every adapter.
+- Why it matters: 15 adapter test files independently test identical shared-contract behavior — pure duplication.
+- Source: inferred
+- Primary owning slice: M009/S03
+- Supporting slices: none
+- Validation: 172 parametrized tests in test_adapter_contract.py cover all 15 adapters across 12 contract dimensions. All pass.
+- Notes: Non-HTTP adapters have different error surfaces (no timeout/SSL) — parametrize accordingly.
+
+### R045 — After shared contract tests are extracted, each adapter test file retains only verdict logic tests, response parsing tests, and any provider-specific edge cases.
+- Class: quality-attribute
+- Status: validated
+- Description: After shared contract tests are extracted, each adapter test file retains only verdict logic tests, response parsing tests, and any provider-specific edge cases.
+- Why it matters: Reduces test maintenance burden and makes adapter-specific behavior visible.
+- Source: inferred
+- Primary owning slice: M009/S03
+- Supporting slices: none
+- Validation: All 15 per-adapter test files contain only verdict/parsing/provider-specific tests. 208 contract tests removed, zero contract patterns remain.
+- Notes: Test count may decrease as duplicate tests are removed.
+
+### R046 — Dead CSS rules identified by cross-referencing selectors against templates and TypeScript are removed from input.css.
+- Class: quality-attribute
+- Status: validated
+- Description: Dead CSS rules identified by cross-referencing selectors against templates and TypeScript are removed from input.css.
+- Why it matters: 8 milestones of UI rework likely left orphaned selectors. Dead CSS is noise.
+- Source: inferred
+- Primary owning slice: M009/S04
+- Supporting slices: none
+- Validation: CSS audit sampled 10/10 selectors — all referenced. No dead CSS found.
+- Notes: Audit must account for dynamically-constructed class names in JS.
+
+### R047 — Functions duplicated between enrichment.ts and history.ts (injectDetailLink, initExportButton, sortDetailRows) are extracted into a shared module. Both files import from it.
+- Class: quality-attribute
+- Status: validated
+- Description: Functions duplicated between enrichment.ts and history.ts (injectDetailLink, initExportButton, sortDetailRows) are extracted into a shared module. Both files import from it.
+- Why it matters: M006 duplicated these functions because of closure dependencies. Where dependencies can be parameterized, extract; where they can't, leave.
+- Source: inferred
+- Primary owning slice: M009/S04
+- Supporting slices: none
+- Validation: 4 functions extracted to shared-rendering.ts; zero private copies remain in enrichment.ts/history.ts; 84-line net reduction; make typecheck && make js pass.
+- Notes: Per KNOWLEDGE.md, check if functions read module-private state before extracting.
+
+### R048 — Every existing test passes after all refactoring. No functional behavior changes — same HTTP calls, same verdicts, same error handling, same DOM output.
+- Class: continuity
+- Status: validated
+- Description: Every existing test passes after all refactoring. No functional behavior changes — same HTTP calls, same verdicts, same error handling, same DOM output.
+- Why it matters: This is a pure reduction milestone. The test suite is the safety net.
+- Source: inferred
+- Primary owning slice: M009/all
+- Supporting slices: none
+- Validation: 947 tests pass, 0 failures. Count decreased from 1,075 to 947 only from consolidation (208 duplicates removed, 172 parametrized replacements added). Zero behavior changes — same verdicts, same HTTP calls, same error handling.
+- Notes: Test count will decrease as duplicate contract tests are consolidated.
+
+### R049 — The milestone produces a measurable net reduction in lines of code across both app/ and tests/ directories.
+- Class: quality-attribute
+- Status: validated
+- Description: The milestone produces a measurable net reduction in lines of code across both app/ and tests/ directories.
+- Why it matters: The explicit goal is reducing the codebase.
+- Source: user
+- Primary owning slice: M009/all
+- Supporting slices: none
+- Validation: Net -1,143 LOC across 38 files (1,669 added, 2,812 deleted). Reduction in both app/ (adapter consolidation -112 LOC, TS dedup -84 LOC) and tests/ (contract test consolidation, bulk of remaining reduction).
+- Notes: Measure before and after with `find app tests -name '*.py' -o -name '*.ts' -o -name '*.css' | xargs wc -l`.
+
+### R050 — The ~20-line orchestrator creation block (ConfigStore, cache TTL, EnrichmentOrchestrator init, _orchestrators registration, _enrichment_pool.submit) is extracted into a single helper in _helpers.py. Both analysis.py and api.py call it.
+- Class: quality-attribute
+- Status: validated
+- Description: The ~20-line orchestrator creation block (ConfigStore, cache TTL, EnrichmentOrchestrator init, _orchestrators registration, _enrichment_pool.submit) is extracted into a single helper in _helpers.py. Both analysis.py and api.py call it.
+- Why it matters: Identical logic in two files means every change must be applied twice. Extraction eliminates this maintenance burden and prevents drift.
+- Source: execution
+- Primary owning slice: M010/S01
+- Supporting slices: none
+- Validation: S01: _setup_orchestrator() in _helpers.py; zero inline EnrichmentOrchestrator( in analysis.py/api.py. 1061 tests pass.
+
+### R051 — The enrichment polling logic exists identically in enrichment.py (HTML blueprint) and api.py (API blueprint). Consolidated to a single implementation.
+- Class: quality-attribute
+- Status: validated
+- Description: The enrichment polling logic exists identically in enrichment.py (HTML blueprint) and api.py (API blueprint). Consolidated to a single implementation.
+- Source: execution
+- Primary owning slice: M010/S01
+- Supporting slices: none
+- Validation: S01: _get_enrichment_status() in _helpers.py; enrichment.py and api.py delegate as one-liners. 1061 tests pass.
+
+### R052 — Unused `json` import in api.py, unused `ResultDisplay` export in shared-rendering.ts, and any other dead imports/exports discovered during audit are removed.
+- Class: quality-attribute
+- Status: validated
+- Description: Unused `json` import in api.py, unused `ResultDisplay` export in shared-rendering.ts, and any other dead imports/exports discovered during audit are removed.
+- Source: execution
+- Primary owning slice: M010/S01
+- Supporting slices: none
+- Validation: S01: No uuid/json/ConfigStore imports in cleaned modules; export keyword removed from ResultDisplay. make typecheck passes.
+
+### R053 — The Recent Analyses collapsible section, its CSS (~130 lines), its JS toggle handler in ui.ts, and the list_recent() call in the index route are all removed from the home page.
+- Class: core-capability
+- Status: validated
+- Description: The Recent Analyses collapsible section, its CSS (~130 lines), its JS toggle handler in ui.ts, and the list_recent() call in the index route are all removed from the home page.
+- Source: user
+- Primary owning slice: M010/S02
+- Supporting slices: none
+- Validation: S02: No 'Recent Analyses' in index.html; no list_recent call in analysis.py; no initRecentAnalysesToggle in ui.ts. GET / returns paste form only.
+
+### R054 — A new /history route renders a page listing recent analyses. Each entry links to /history/<analysis_id> for the full detail view. Accessible from nav.
+- Class: core-capability
+- Status: validated
+- Description: A new /history route renders a page listing recent analyses. Each entry links to /history/<analysis_id> for the full detail view. Accessible from nav.
+- Source: user
+- Primary owning slice: M010/S02
+- Supporting slices: none
+- Validation: S02: history_list() route in history.py; history.html template; clock nav icon in base.html; links to /history/<id> detail pages. GET /history returns 200.
+
+### R055 — All 1060 tests pass after all refactoring. No user-visible behavior changes — same responses, same UI, same enrichment flow.
+- Class: continuity
+- Status: validated
+- Description: All 1060 tests pass after all refactoring. No user-visible behavior changes — same responses, same UI, same enrichment flow.
+- Source: inferred
+- Primary owning slice: M010/all
+- Supporting slices: none
+- Validation: 1061 tests passed (up from 1060 baseline — 1 error-propagation test added, 0 removed). Zero behavior changes confirmed.
+
+### R056 — Each adapter's module and class docstrings are reduced to a one-liner purpose sentence plus genuinely non-obvious gotchas. API endpoint URLs, HTTP status code tables, verdict priority lists, and parameter walkthroughs are removed — the code and tests prove those.
+- Class: quality-attribute
+- Status: validated
+- Description: Each adapter's module and class docstrings are reduced to a one-liner purpose sentence plus genuinely non-obvious gotchas. API endpoint URLs, HTTP status code tables, verdict priority lists, and parameter walkthroughs are removed — the code and tests prove those.
+- Why it matters: Adapter docstrings are 42% of adapter code (1,176 of 2,816 lines). Trimming to essentials makes files navigable and removes maintenance burden of keeping prose in sync with code.
+- Source: user
+- Primary owning slice: M011/S01
+- Validation: 15 non-base adapter files trimmed to 1,597 lines (down from 2,659). One-liner module+class docstrings. Only _normalise_datetime retains a method docstring. All 1,012 tests pass unchanged.
+
+### R057 — Per-adapter test files that assert individual fields (test_raw_stats_has_asn_key, test_raw_stats_asn_value, test_detection_count_always_zero, etc.) are consolidated into single response-shape tests that assert the full result object in one test.
+- Class: quality-attribute
+- Status: validated
+- Description: Per-adapter test files that assert individual fields (test_raw_stats_has_asn_key, test_raw_stats_asn_value, test_detection_count_always_zero, etc.) are consolidated into single response-shape tests that assert the full result object in one test.
+- Why it matters: ~72 granular one-assertion tests across 7 adapter test files produce ~400-600 lines of boilerplate. Consolidation reduces test count without losing coverage — the same assertions exist, just grouped.
+- Source: user
+- Primary owning slice: M011/S02
+- Validation: 49 standalone per-field tests removed across 8 adapter test files + test_provider_protocol.py. Assertions folded into response-shape tests with descriptive messages. Net -431 lines. 899 unit tests pass.
+
+### R058 — Cross-reference every CSS class in input.css against all templates (.html) and TypeScript files (.ts). Remove classes with zero references. Rebuild dist/style.css and verify visually.
+- Class: quality-attribute
+- Status: validated
+- Description: Cross-reference every CSS class in input.css against all templates (.html) and TypeScript files (.ts). Remove classes with zero references. Rebuild dist/style.css and verify visually.
+- Why it matters: 2,006 lines of CSS accumulated over 10 milestones. Dead rules bloat the stylesheet and confuse future editors.
+- Source: user
+- Primary owning slice: M011/S03
+- Validation: CSS audit verified all 207 classes in input.css are referenced. 3 dynamic classes confirmed via string concatenation in row-factory.ts:336, row-factory.ts:309/416, cards.ts:60. Zero dead CSS found.
+
+### R059 — The 7 orchestrator tests that use time.sleep-based timing (accounting for ~6.2s of 9s unit suite) are rewritten to use threading Events/barriers or tighter mocks so they complete in <1s total.
+- Class: quality-attribute
+- Status: validated
+- Description: The 7 orchestrator tests that use time.sleep-based timing (accounting for ~6.2s of 9s unit suite) are rewritten to use threading Events/barriers or tighter mocks so they complete in <1s total.
+- Why it matters: 6s of 9s unit test time comes from 7 tests. Faster tests mean faster feedback loops during development.
+- Source: user
+- Primary owning slice: M011/S03
+- Validation: 7 orchestrator tests rewritten with threading.Barrier/Event primitives. Suite runs in 0.09s (target <1s, was 6.2s). 27 orchestrator tests pass.
+
+### R060 — All tests pass after all refactoring. Test count may decrease from consolidation but zero coverage regression. No behavior changes.
+- Class: continuity
+- Status: validated
+- Description: All tests pass after all refactoring. Test count may decrease from consolidation but zero coverage regression. No behavior changes.
+- Why it matters: Refactoring must not break anything.
+- Source: inferred
+- Primary owning slice: M011/all
+- Supporting slices: none
+- Validation: unmapped
+- Notes: Test count expected to decrease (granular tests consolidated). Coverage same or better.
 
 ## Deferred
 
@@ -304,16 +659,50 @@ This file is the explicit capability and coverage contract for the project.
 | R017 | quality-attribute | validated | M003/S04 | none | S04 applied summaryTimers debounce map in enrichment.ts: declaration + debouncedUpdateSummaryRow() wrapper + replaced direct updateSummaryRow() call. grep -c 'summaryTimers' enrichment.ts → 4. make typecheck → exit 0. bundle 26,783 bytes ≤ 30KB. 828 unit tests + 99 E2E tests all passing. |
 | R018 | quality-attribute | validated | M012/S01 | none | S01 fixed all three concurrency invariants: (1) semaphore released before time.sleep() backoff via _single_attempt() + explicit sem.acquire()/release() in _do_lookup(); (2) get_status() returns list() snapshot not live reference; (3) _cached_markers reads/writes protected by _lock. Three dedicated unit tests prove each invariant independently. All 944 tests passing. |
 | R019 | quality-attribute | validated | M012/S01 | none | S02/T01: enrichment_status() reads ?since= param (default 0), returns results[since:] and next_since: len(results). enrichment.ts replaced rendered dedup map with since counter — polls with ?since=${since}, updates since=data.next_since. 4 new unit tests (since=2 returns slice, since=0 full, no param full, since=99 empty) + E2E mock includes next_since. 6/6 enrichment_status tests pass. grep -c 'rendered' enrichment.ts returns 0. |
-| R020 | quality-attribute | validated | M004/S02 | none | S02/T02: All 12 adapters have self._session = requests.Session() in __init__. 7 API-key adapters moved auth headers to session-level. grep -rn 'requests\.get\|requests\.post' adapters/*.py returns 0 code hits. grep -rl 'self._session' adapters/*.py returns 12. All 12 test files mock adapter._session directly. 839 unit tests pass. |
+| R020 | quality-attribute | validated | M012/S01 | none | S02/T02: All 12 adapters have self._session = requests.Session() in __init__. 7 API-key adapters moved auth headers to session-level. grep -rn 'requests\.get\|requests\.post' adapters/*.py returns 0 code hits. grep -rl 'self._session' adapters/*.py returns 12. All 12 test files mock adapter._session directly. 839 unit tests pass. |
 | R021 | compliance/security | validated | M004/S02 | none | S02/T03: ip_api.py rewritten for https://ipinfo.io/{ip}/json. IPINFO_BASE uses https://. grep 'http://' ip_api.py returns 0. ALLOWED_API_HOSTS: ipinfo.io added, ip-api.com removed. 404-based private IP handling. _parse_response() maps ipinfo.io fields (country→country_code, org→ASN+ISP, hostname→reverse). 50/50 test_ip_api.py tests pass with ipinfo.io fixtures. |
-| R022 | quality-attribute | validated | M004/S02 | none | S02/T04: CacheStore.__init__ executes PRAGMA journal_mode=WAL (L51 of store.py) and keeps persistent self._conn. purge_expired(ttl_seconds) method exists at L155 and deletes entries older than TTL, returning row count. 34/34 cache+config tests pass. All 944 tests pass. |
+| R022 | quality-attribute | validated | M012/S04 | M012/S01 | S02/T04: CacheStore.__init__ executes PRAGMA journal_mode=WAL (L51 of store.py) and keeps persistent self._conn. purge_expired(ttl_seconds) method exists at L155 and deletes entries older than TTL, returning row count. 34/34 cache+config tests pass. All 944 tests pass. |
 | R023 | quality-attribute | validated | M004/S03 | none | S03 applied all 5 R023 patterns: (1) findCopyButtonForIoc() uses querySelector attribute selector with CSS.escape() — grep confirms no querySelectorAll copy-btn. (2) updateDashboardCounts() + sortCardsBySeverity() moved outside per-result loop, called once per poll tick guarded by results.length > 0. (3) applyFilter() debounced at 100ms on search input with clearTimeout/setTimeout pattern — click handlers remain synchronous. (4) verdictSeverityIndex() uses SEVERITY_MAP (ReadonlyMap built at module load) — no indexOf in ioc.ts. (5) graph.ts builds nodeIndexMap before edge loop, replaces .find()/.indexOf() with Map.get(). npx tsc --noEmit clean. 105 E2E tests pass. 944 total tests pass. |
 | R024 | quality-attribute | validated | M004/S04 | none | S04/T02: `tsconfig.json` has `"incremental": true` in compilerOptions — confirmed via grep. `tailwind.config.js` safelist includes `ioc-type-badge--email` and `filter-pill--email` — confirmed via grep. `npx tsc --noEmit` exits 0 (clean). 944 tests pass. |
 | R025 | compliance/security | validated | M004/S04 | none | S04/T03: CSP header expanded to 7 directives (default-src, script-src, style-src, connect-src, img-src, font-src, object-src 'none') — confirmed via grep and live HTTP response test. SECRET_KEY startup warning implemented — confirmed fires at WARNING level when env var unset, silent when set. Rate limiter exception: kept as memory:// because the `limits` library has no filesystem backend (only Redis/Memcached/MongoDB); adding external services inappropriate for single-process local tool (D037/D038). 944 tests pass. |
+| R026 | quality-attribute | validated | M007/S01 | none | validated |
+| R027 | quality-attribute | validated | M007/S01 | none | validated |
+| R028 | quality-attribute | validated | M005/S03 | none | validated |
+| R029 | quality-attribute | validated | M005/S03 | none | validated |
+| R030 | core-capability | validated | M006/S01 | none | validated |
+| R031 | primary-user-loop | validated | M006/S01 | M006/S04 | validated |
+| R032 | core-capability | validated | M006/S02 | none | validated |
+| R033 | core-capability | validated | M006/S03 | none | validated |
+| R035 | integration | validated | M008/S02 | none | validated |
+| R036 | quality-attribute | validated | M007/S01 | none | validated |
+| R037 | quality-attribute | validated | M007/S02 | none | validated |
+| R038 | quality-attribute | validated | M007/S02 | none | validated |
+| R039 | quality-attribute | validated | M007/S03 | none | validated |
+| R040 | continuity | validated | M012/S03 | M012/S01, M012/S02, M012/S04 | `Makefile` lines 82-95 define `verify-fast` (non-E2E pytest + Vitest + `npx tsc --noEmit` + `make build`), `verify-deep` (pytest `tests/e2e`), and composite `verify`. `README.md` documents when to use each lane. Fresh M012 closeout evidence on 2026-04-23: `python3 -m pytest tests/test_orchestrator.py tests/test_api.py tests/test_routes.py tests/test_http_safety.py tests/test_adapter_contract.py -q` → `266 passed in 0.96s`; `python3 -m pytest tests/test_cache_store.py tests/test_history_store.py tests/test_history_routes.py tests/test_settings.py -q` → `73 passed in 1.75s`; `make verify-fast` → `955 passed, 113 deselected`, Vitest `78 passed`, clean `npx tsc --noEmit`, and successful production build with only the pre-existing non-blocking Browserslist warning. |
+| R041 | quality-attribute | validated | M009/S01 | M009/S02 | BaseHTTPAdapter exists in app/enrichment/adapters/base.py with full template-method skeleton. 12 HTTP adapters subclass it. 21 base class tests + 947 full suite tests pass. Verified by grep: 13 files contain 'class.*BaseHTTPAdapter' (12 adapters + 1 base definition). |
+| R042 | quality-attribute | validated | M009/S02 | M009/S01 | All 12 HTTP adapters (abuseipdb, crtsh, greynoise, hashlookup, ip_api, malwarebazaar, otx, shodan, threatfox, threatminer, urlhaus, virustotal) subclass BaseHTTPAdapter. Verified by grep: 12 non-base adapter files contain 'class.*BaseHTTPAdapter'. 983 tests pass. |
+| R043 | constraint | validated | M009/S02 | none | grep -c 'BaseHTTPAdapter' on dns_lookup.py, asn_cymru.py, whois_lookup.py all return 0. These three non-HTTP adapters remain standalone implementations. |
+| R044 | quality-attribute | validated | M009/S03 | none | 172 parametrized tests in test_adapter_contract.py cover all 15 adapters across 12 contract dimensions. All pass. |
+| R045 | quality-attribute | validated | M009/S03 | none | All 15 per-adapter test files contain only verdict/parsing/provider-specific tests. 208 contract tests removed, zero contract patterns remain. |
+| R046 | quality-attribute | validated | M009/S04 | none | CSS audit sampled 10/10 selectors — all referenced. No dead CSS found. |
+| R047 | quality-attribute | validated | M009/S04 | none | 4 functions extracted to shared-rendering.ts; zero private copies remain in enrichment.ts/history.ts; 84-line net reduction; make typecheck && make js pass. |
+| R048 | continuity | validated | M009/all | none | 947 tests pass, 0 failures. Count decreased from 1,075 to 947 only from consolidation (208 duplicates removed, 172 parametrized replacements added). Zero behavior changes — same verdicts, same HTTP calls, same error handling. |
+| R049 | quality-attribute | validated | M009/all | none | Net -1,143 LOC across 38 files (1,669 added, 2,812 deleted). Reduction in both app/ (adapter consolidation -112 LOC, TS dedup -84 LOC) and tests/ (contract test consolidation, bulk of remaining reduction). |
+| R050 | quality-attribute | validated | M010/S01 | none | S01: _setup_orchestrator() in _helpers.py; zero inline EnrichmentOrchestrator( in analysis.py/api.py. 1061 tests pass. |
+| R051 | quality-attribute | validated | M010/S01 | none | S01: _get_enrichment_status() in _helpers.py; enrichment.py and api.py delegate as one-liners. 1061 tests pass. |
+| R052 | quality-attribute | validated | M010/S01 | none | S01: No uuid/json/ConfigStore imports in cleaned modules; export keyword removed from ResultDisplay. make typecheck passes. |
+| R053 | core-capability | validated | M010/S02 | none | S02: No 'Recent Analyses' in index.html; no list_recent call in analysis.py; no initRecentAnalysesToggle in ui.ts. GET / returns paste form only. |
+| R054 | core-capability | validated | M010/S02 | none | S02: history_list() route in history.py; history.html template; clock nav icon in base.html; links to /history/<id> detail pages. GET /history returns 200. |
+| R055 | continuity | validated | M010/all | none | 1061 tests passed (up from 1060 baseline — 1 error-propagation test added, 0 removed). Zero behavior changes confirmed. |
+| R056 | quality-attribute | validated | M011/S01 | none | 15 non-base adapter files trimmed to 1,597 lines (down from 2,659). One-liner module+class docstrings. Only _normalise_datetime retains a method docstring. All 1,012 tests pass unchanged. |
+| R057 | quality-attribute | validated | M011/S02 | none | 49 standalone per-field tests removed across 8 adapter test files + test_provider_protocol.py. Assertions folded into response-shape tests with descriptive messages. Net -431 lines. 899 unit tests pass. |
+| R058 | quality-attribute | validated | M011/S03 | none | CSS audit verified all 207 classes in input.css are referenced. 3 dynamic classes confirmed via string concatenation in row-factory.ts:336, row-factory.ts:309/416, cards.ts:60. Zero dead CSS found. |
+| R059 | quality-attribute | validated | M011/S03 | none | 7 orchestrator tests rewritten with threading.Barrier/Event primitives. Suite runs in 0.09s (target <1s, was 6.2s). 27 orchestrator tests pass. |
+| R060 | continuity | validated | M011/all | none | unmapped |
 
 ## Coverage Summary
 
 - Active requirements: 0
 - Mapped to slices: 0
-- Validated: 24 (R001, R002, R003, R004, R005, R006, R007, R008, R009, R010, R011, R012, R014, R015, R016, R017, R018, R019, R020, R021, R022, R023, R024, R025)
+- Validated: 58 (R001, R002, R003, R004, R005, R006, R007, R008, R009, R010, R011, R012, R014, R015, R016, R017, R018, R019, R020, R021, R022, R023, R024, R025, R026, R027, R028, R029, R030, R031, R032, R033, R035, R036, R037, R038, R039, R040, R041, R042, R043, R044, R045, R046, R047, R048, R049, R050, R051, R052, R053, R054, R055, R056, R057, R058, R059, R060)
 - Unmapped active requirements: 0

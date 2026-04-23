@@ -23,7 +23,7 @@
 - [x] **S04: S04** `risk:Medium-low — storage and helper seams look healthy today, so this slice should only advance if earlier evidence still points to contention, write amplification, or unnecessary request-path work.` `depends:[]`
   > After this: The milestone closes with a ranked, evidence-backed decision on whether cache/history/helper-path changes are warranted now, later, or should be left alone, with any shipped quick win proven against the real stack boundary it touches.
 
-- [ ] **S05: S05** `risk:Medium — the code work is largely done, but missing proof for continuity requirements and milestone-closeout artifacts can still hide a real regression or leave future work acting on an incomplete optimization decision record.` `depends:[]`
+- [x] **S05: S05** `risk:Medium — the code work is largely done, but missing proof for continuity requirements and milestone-closeout artifacts can still hide a real regression or leave future work acting on an incomplete optimization decision record.` `depends:[]`
   > After this: After this: M012 has explicit proof or justified re-scope for every claimed continuity requirement, slice-level assessment coverage is complete or formally omitted with rationale, and the S04 persistence/helper findings are tied into the milestone closeout so validation can pass.
 
 ## Boundary Map

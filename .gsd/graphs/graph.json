@@ -9,8 +9,8 @@
       "sourceFile": "STATE.md"
     },
     {
-      "id": "concept:phase:validating-milestone",
-      "label": "Phase: validating-milestone",
+      "id": "concept:phase:blocked",
+      "label": "Phase: blocked",
       "type": "concept",
       "confidence": "EXTRACTED",
       "sourceFile": "STATE.md"
@@ -898,6 +898,25 @@
       "label": "T02: Write the ranked persistence/helper keep-change assessment for M012",
       "type": "task",
       "confidence": "EXTRACTED"
+    },
+    {
+      "id": "slice:M012:S05",
+      "label": "S05: Validation evidence closure",
+      "type": "slice",
+      "confidence": "EXTRACTED",
+      "sourceFile": "milestones/M012/slices/S05/S05-PLAN.md"
+    },
+    {
+      "id": "task:M012:S05:T01",
+      "label": "T01: Create the missing slice assessment artifacts for S01–S03",
+      "type": "task",
+      "confidence": "EXTRACTED"
+    },
+    {
+      "id": "task:M012:S05:T02",
+      "label": "T02: Re-run the focused continuity proof and render the canonical milestone validation artifact",
+      "type": "task",
+      "confidence": "EXTRACTED"
     }
   ],
   "edges": [
@@ -1674,7 +1693,25 @@
       "to": "task:M012:S04:T02",
       "type": "contains",
       "confidence": "EXTRACTED"
+    },
+    {
+      "from": "milestone:M012",
+      "to": "slice:M012:S05",
+      "type": "contains",
+      "confidence": "EXTRACTED"
+    },
+    {
+      "from": "slice:M012:S05",
+      "to": "task:M012:S05:T01",
+      "type": "contains",
+      "confidence": "EXTRACTED"
+    },
+    {
+      "from": "slice:M012:S05",
+      "to": "task:M012:S05:T02",
+      "type": "contains",
+      "confidence": "EXTRACTED"
     }
   ],
-  "builtAt": "2026-04-22T10:44:57.834Z"
+  "builtAt": "2026-04-22T17:38:35.352Z"
 }
