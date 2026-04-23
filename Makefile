@@ -10,8 +10,11 @@ JS_ENTRY         := app/static/src/ts/main.ts
 JS_OUT           := app/static/dist/main.js
 PLATFORM         := linux-x64
 ESBUILD_VERSION  := 0.27.3
+AUDIT_RUNNER     := python3 tools/optimization_audit.py
+AUDIT_OUTPUT     := .gsd/milestones/M013/M013-AUDIT.md
+AUDIT_TEMPLATE   := .gsd/milestones/M013/M013-AUDIT-TEMPLATE.md
 
-.PHONY: tailwind-install esbuild-install css css-watch js js-dev js-watch typecheck build verify-fast verify-deep verify
+.PHONY: tailwind-install esbuild-install css css-watch js js-dev js-watch typecheck build verify-fast verify-deep verify audit-m013-template audit-m013
 
 ## Download Tailwind standalone CLI binary
 tailwind-install:
@@ -93,3 +96,13 @@ verify-deep:
 verify:
 	$(MAKE) verify-fast
 	$(MAKE) verify-deep
+
+## Write the reusable M013 audit template scaffold
+
+audit-m013-template:
+	$(AUDIT_RUNNER) --mode template --output $(AUDIT_TEMPLATE)
+
+## Write the current M013 audit artifact scaffold/baseline
+
+audit-m013:
+	$(AUDIT_RUNNER) --mode baseline --output $(AUDIT_OUTPUT)

@@ -45,7 +45,8 @@ htmlcov/
 bandit-report.json
 
 # Build tools (downloaded binaries)
-tools/
+tools/*
+!tools/*.py
 
 # Node.js (not used — Tailwind standalone CLI only)
 node_modules/

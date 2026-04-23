@@ -16,3 +16,15 @@ SentinelX exposes three repo-native verification commands so contributors can ch
 - Escalate to `make verify-deep` (or just run `make verify`) whenever you change live enrichment behavior, browser flows, result rendering, polling/status handling, or deterministic mocked E2E coverage.
 - If you need the unambiguous full repo proof command, run `make verify`.
 
+## Optimization audit workflow
+
+M013 adds a checked-in SentinelX-first audit runner so later optimization work can produce durable, ranked findings instead of ad hoc notes.
+
+- `python3 tools/optimization_audit.py --help` shows the available modes and options.
+- `make audit-m013-template` writes the milestone-local scaffold at `.gsd/milestones/M013/M013-AUDIT-TEMPLATE.md`.
+- `make audit-m013` writes the working audit artifact at `.gsd/milestones/M013/M013-AUDIT.md`.
+- Every finding must be backed by measurement when practical; otherwise it must cite explicit code-path reasoning.
+- Every finding must land in one of `do now`, `do next`, `later`, or `leave alone`.
+
+See `docs/optimization-audit.md` for the full artifact contract, ranking vocabulary, and command-capture format.
+
