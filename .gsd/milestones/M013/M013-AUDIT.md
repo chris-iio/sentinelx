@@ -1,7 +1,7 @@
 # M013 Optimization Audit — SentinelX
 
 - Mode: `baseline`
-- Generated at: `2026-04-23 08:55:33 UTC`
+- Generated at: `2026-04-23 08:56:51 UTC`
 - Repo root: `/home/chris/projects/sentinelx`
 - Output path: `.gsd/milestones/M013/M013-AUDIT.md`
 
@@ -48,9 +48,9 @@
 
 | Capture | Command | Exit | Duration (ms) | Summary |
 | --- | --- | ---: | ---: | --- |
-| status-snapshot-scaling | `internal benchmark: EnrichmentOrchestrator.get_status() snapshot scaling` | 0 | 114 | 400 `get_status()` calls: 200 results 0.14ms vs 5000 results 1.52ms (10.7x slower), confirming the current per-poll full-list snapshot cost before `since` slicing. |
-| cache-store-tempdb | `internal benchmark: CacheStore temp WAL put/get loop` | 0 | 32 | Temp WAL cache DB: 250 puts in 8.76ms, 250 TTL reads in 1.09ms, 250 hits, 250 retained rows. |
-| history-store-tempdb | `internal benchmark: HistoryStore temp WAL save/list/load loop` | 0 | 17 | Temp WAL history DB: 180 saves in 4.14ms, list_recent(20) in 0.09ms, single load in 0.03ms, latest total_count=1, recent rows=20. |
+| status-snapshot-scaling | `internal benchmark: EnrichmentOrchestrator.get_status() snapshot scaling` | 0 | 98 | 400 `get_status()` calls: 200 results 0.14ms vs 5000 results 1.25ms (8.7x slower), confirming the current per-poll full-list snapshot cost before `since` slicing. |
+| cache-store-tempdb | `internal benchmark: CacheStore temp WAL put/get loop` | 0 | 19 | Temp WAL cache DB: 250 puts in 3.14ms, 250 TTL reads in 1.10ms, 250 hits, 250 retained rows. |
+| history-store-tempdb | `internal benchmark: HistoryStore temp WAL save/list/load loop` | 0 | 17 | Temp WAL history DB: 180 saves in 3.41ms, list_recent(20) in 0.04ms, single load in 0.02ms, latest total_count=1, recent rows=20. |
 
 ## Seam checklist
 
