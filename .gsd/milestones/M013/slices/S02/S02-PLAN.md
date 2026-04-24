@@ -69,7 +69,7 @@
   - Files: `app/enrichment/orchestrator.py`, `tests/test_orchestrator.py`, `app/enrichment/setup.py`, `app/__init__.py`
   - Verify: pytest tests/test_orchestrator.py -q
 
-- [ ] **T02: Capture runtime/provider evidence in the audit workflow** `est:0.5d`
+- [x] **T02: Capture runtime/provider evidence in the audit workflow** `est:0.5d`
   Extend the audit workflow so S02 can capture deterministic runtime/provider evidence from the orchestrator and carry it into the durable ranked artifact. Keep the measurement synthetic/local and based only on tracked code paths — no live provider keys, no `.gsd` fixtures, and no dependency on hidden temp-state beyond task-local temporary files.
 
 ## Failure Modes

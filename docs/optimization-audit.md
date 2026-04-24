@@ -34,7 +34,7 @@ python3 tools/optimization_audit.py \
 ```
 
 `template` mode writes the reusable blank scaffold.
-`baseline` mode writes the current M013 baseline findings, seam notes, guardrail coverage, and lightweight local measurement captures.
+`baseline` mode writes the current M013 baseline findings, seam notes, guardrail coverage, and lightweight local measurement captures, including a synthetic runtime/provider diagnostics pass sourced from the orchestrator.
 
 ### Optional command captures
 
@@ -73,7 +73,7 @@ The generated markdown includes:
    - persistence
    - frontend/render
 7. a stable table schema under each ranked bucket
-8. in `baseline` mode, populated ranked findings, per-seam notes, guardrail coverage, and internal temp-DB / status-snapshot measurements
+8. in `baseline` mode, populated ranked findings, per-seam notes, guardrail coverage, and internal temp-DB / status-snapshot / runtime-provider measurements
 
 ## Finding schema
 
@@ -113,3 +113,4 @@ Explicit keep-decisions for seams that are already intentionally shaped and do n
 4. Compare the updated ranked rows, rerun lanes, and continuity notes in place instead of creating disconnected one-off notes.
 5. Add command captures whenever a claim can be anchored to measured output.
 6. Keep `leave alone` rows current. They are part of the audit proof, not filler.
+7. For the runtime/provider seam specifically, use the synthetic `runtime-provider-diagnostics` capture to separate a narrow cache-hit/dispatch ship target from explicit backoff/session keep-decisions.

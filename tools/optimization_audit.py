@@ -27,6 +27,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from time import perf_counter
+from unittest.mock import patch
 
 DEFAULT_MILESTONE_ID = "M013"
 DEFAULT_OUTPUT = Path(f".gsd/milestones/{DEFAULT_MILESTONE_ID}/{DEFAULT_MILESTONE_ID}-AUDIT.md")
@@ -34,6 +35,29 @@ DEFAULT_TEMPLATE_OUTPUT = Path(
     f".gsd/milestones/{DEFAULT_MILESTONE_ID}/{DEFAULT_MILESTONE_ID}-AUDIT-TEMPLATE.md"
 )
 FINDING_BUCKETS = ("do now", "do next", "later", "leave alone")
+RUNTIME_PROVIDER_DIAGNOSTIC_FIELDS = (
+    "dispatch_count",
+    "attempt_count",
+    "cache_hits",
+    "cache_misses",
+    "retry_count",
+    "rate_limit_retry_count",
+    "error_count",
+    "latency_total_seconds",
+    "latency_max_seconds",
+    "providers",
+)
+RUNTIME_PROVIDER_PROVIDER_FIELDS = (
+    "dispatch_count",
+    "attempt_count",
+    "cache_hits",
+    "cache_misses",
+    "retry_count",
+    "rate_limit_retry_count",
+    "error_count",
+    "latency_total_seconds",
+    "latency_max_seconds",
+)
 
 
 @dataclass(frozen=True)
@@ -214,19 +238,18 @@ BASELINE_FINDINGS: tuple[BaselineFinding, ...] = (
         ),
     ),
     BaselineFinding(
-        bucket="later",
-        finding="Add dispatch/cache-hit instrumentation before considering thread-pool or semaphore rewrites.",
+        bucket="do next",
+        finding="If the runtime/provider seam changes at all, limit it to a cache-hit-heavy dispatch reduction before touching semaphores.",
         seam="runtime/provider",
-        evidence_kind="code-path reasoning",
+        evidence_kind="measurement + code-path reasoning",
         evidence_summary=(
-            "`app/enrichment/orchestrator.py` already concentrates concurrency control in per-provider semaphores, keeps cache access inside "
-            "the attempt path, and releases semaphore slots before 429 backoff sleep. This baseline found no local evidence that worker count, "
-            "retry shape, or provider caps are the present bottleneck; the missing artifact is runtime visibility, not a blind concurrency rewrite."
+            "Internal capture `runtime-provider-diagnostics` reports provider mix CacheAlpha:2d/0e, RateLimitBeta:2d/1e; dispatch=4, attempts=5, cache-hit ratio 1/5 (20%), retries=1 (429=1), and latency total=2.25s max=1.00s. "
+            "The capture proves the new diagnostics surface can quantify provider mix and retry cost locally, so the only justified ship target is skipping known-cache work before the worker/semaphore path rather than reopening concurrency policy."
         ),
         continuity_guardrails="R014, R015, R018, R020, R040",
         rerun_lanes="`make verify-fast`, `make verify-deep`",
         continuity_notes=(
-            "Any future runtime optimization must preserve per-provider caps, backoff semantics, cache-hit markers, and adapter-owned session reuse."
+            "Preserve per-provider caps, cache-hit markers, retry/backoff semantics, and adapter-owned session reuse; any shipped change must stay narrower than a thread-pool or session-policy rewrite."
         ),
     ),
     BaselineFinding(
@@ -247,18 +270,17 @@ BASELINE_FINDINGS: tuple[BaselineFinding, ...] = (
     ),
     BaselineFinding(
         bucket="leave alone",
-        finding="Keep per-provider backoff/session semantics as explicit baseline keep-decisions.",
+        finding="Keep per-provider backoff/session semantics as explicit measured keep-decisions.",
         seam="runtime/provider",
-        evidence_kind="code-path reasoning",
+        evidence_kind="measurement + code-path reasoning",
         evidence_summary=(
-            "`app/enrichment/orchestrator.py` documents why semaphores exclude sleep and the current tests cover per-provider caps, 429 retry behavior, "
-            "snapshot safety, and cached-marker locking. Reopening adapter-owned `requests.Session` reuse or backoff rules now would risk validated guardrails "
-            "without evidence of live provider pain."
+            "The same `runtime-provider-diagnostics` capture surfaces retry/rate-limit cost and provider error tallies without widening analyst-visible status, and `tests/test_orchestrator.py` still proves semaphores exclude backoff sleep, cached markers stay locked, and diagnostics snapshots stay stable. "
+            "That combination makes measurement the additive change while keeping adapter-owned sessions and backoff rules on explicit keep-decision footing until a later slice shows real provider pain."
         ),
         continuity_guardrails="R014, R015, R018, R020, R040",
         rerun_lanes="`make verify-fast`, `make verify-deep`",
         continuity_notes=(
-            "Future work should layer measurement and observability onto the current contract rather than weakening rate-limit safety or session reuse."
+            "Future work should consume the measured diagnostics surface first and only revisit the contract if live evidence shows meaningful provider pain beyond cache-hit-heavy dispatch overhead."
         ),
     ),
 )
@@ -273,7 +295,7 @@ BASELINE_SEAM_NOTES: tuple[SeamNote, ...] = (
         ),
         continuity_watch="R014, R015, R018, R020, R040 stay attached to any change here.",
         baseline_call=(
-            "Treat this seam as intentionally shaped for now. Add provider-mix/cache-hit instrumentation first; do not rewrite concurrency policy on aesthetics."
+            "Use the new `runtime-provider-diagnostics` capture to decide whether a cache-hit-heavy dispatch reduction is worth shipping; do not rewrite concurrency policy, backoff scope, or session ownership on aesthetics."
         ),
     ),
     SeamNote(
@@ -317,11 +339,11 @@ BASELINE_GUARDRAIL_COVERAGE: tuple[GuardrailCoverage, ...] = (
     GuardrailCoverage("R008", "request/status + frontend/render", "Do-now cursor work plus do-next coordinator caching", "Keep polling continuity, export/copy/detail-link behavior, and progress visibility intact."),
     GuardrailCoverage("R009", "frontend/render", "Do-next coordinator/render work", "Preserve textContent-only DOM construction, CSP/CSRF assumptions, and host-validation-adjacent safety expectations."),
     GuardrailCoverage("R010", "request/status + frontend/render", "Do-now cursor work plus do-next render work", "Any shipped optimization must reduce or at least not worsen polling/render churn."),
-    GuardrailCoverage("R014", "runtime/provider", "Later instrumentation and leave-alone keep-decision", "Per-provider concurrency remains part of the baseline contract until evidence says otherwise."),
-    GuardrailCoverage("R015", "runtime/provider", "Later instrumentation and leave-alone keep-decision", "429 backoff stays protected; future changes must prove they do not regress quota safety."),
-    GuardrailCoverage("R018", "runtime/provider + request/status", "Do-now cursor work plus runtime keep-decision", "Snapshot correctness, semaphore scope, and cached-marker locking remain non-negotiable."),
+    GuardrailCoverage("R014", "runtime/provider", "Measured runtime/provider ship target plus explicit keep-decision", "Per-provider concurrency remains part of the contract unless a narrow cache-hit optimization proves safe."),
+    GuardrailCoverage("R015", "runtime/provider", "Measured runtime/provider ship target plus explicit keep-decision", "429 backoff stays protected; future changes must prove they do not regress quota safety."),
+    GuardrailCoverage("R018", "runtime/provider + request/status", "Do-now cursor work plus measured runtime/provider evidence", "Snapshot correctness, semaphore scope, and cached-marker locking remain non-negotiable."),
     GuardrailCoverage("R019", "request/status + frontend/render", "Do-now cursor work plus do-next coordinator caching", "Keep `since`/`next_since` incremental polling semantics end-to-end."),
-    GuardrailCoverage("R020", "runtime/provider", "Later instrumentation and leave-alone keep-decision", "Persistent adapter-owned sessions stay justified until measured evidence argues otherwise."),
+    GuardrailCoverage("R020", "runtime/provider", "Measured runtime/provider ship target plus explicit keep-decision", "Persistent adapter-owned sessions stay justified until measured evidence argues otherwise."),
     GuardrailCoverage("R022", "persistence", "Leave-alone WAL store decision", "WAL and persistent connection behavior stay explicit keep-decisions pending contention evidence."),
     GuardrailCoverage("R040", "all seams", "Every ranked finding", "Each future slice must rerun the listed proof lanes before claiming an optimization is safe."),
 )
@@ -477,6 +499,206 @@ def run_internal_capture(label: str, command: str, measure: callable) -> Command
         )
 
 
+def _require_non_negative_int(metrics: object, field: str, *, context: str) -> int:
+    if not isinstance(metrics, dict):
+        raise ValueError(f"Runtime/provider capture failed: {context} metrics are not a dict.")
+    value = metrics.get(field)
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        raise ValueError(
+            f"Runtime/provider capture failed: {context} field '{field}' must be a non-negative integer."
+        )
+    return value
+
+
+def _require_non_negative_float(metrics: object, field: str, *, context: str) -> float:
+    if not isinstance(metrics, dict):
+        raise ValueError(f"Runtime/provider capture failed: {context} metrics are not a dict.")
+    value = metrics.get(field)
+    if not isinstance(value, (int, float)) or value < 0:
+        raise ValueError(
+            f"Runtime/provider capture failed: {context} field '{field}' must be a non-negative number."
+        )
+    return float(value)
+
+
+def _render_runtime_provider_mix(providers: object) -> str:
+    if not isinstance(providers, dict) or not providers:
+        raise ValueError("Runtime/provider capture failed: provider diagnostics are empty.")
+
+    entries: list[str] = []
+    for provider_name, provider_metrics in sorted(providers.items()):
+        missing = [
+            field for field in RUNTIME_PROVIDER_PROVIDER_FIELDS
+            if not isinstance(provider_metrics, dict) or field not in provider_metrics
+        ]
+        if missing:
+            raise ValueError(
+                "Runtime/provider capture failed: provider "
+                f"'{provider_name}' is missing fields: {', '.join(missing)}"
+            )
+        dispatch_count = _require_non_negative_int(
+            provider_metrics,
+            "dispatch_count",
+            context=f"provider '{provider_name}'",
+        )
+        error_count = _require_non_negative_int(
+            provider_metrics,
+            "error_count",
+            context=f"provider '{provider_name}'",
+        )
+        entries.append(f"{provider_name}:{dispatch_count}d/{error_count}e")
+    return ", ".join(entries)
+
+
+def summarize_runtime_provider_diagnostics(diagnostics: object) -> str:
+    if not isinstance(diagnostics, dict):
+        raise ValueError("Runtime/provider capture failed: diagnostics snapshot is not a dict.")
+
+    missing = [field for field in RUNTIME_PROVIDER_DIAGNOSTIC_FIELDS if field not in diagnostics]
+    if missing:
+        raise ValueError(
+            "Runtime/provider capture failed: missing diagnostics fields: "
+            + ", ".join(missing)
+        )
+
+    provider_mix = _render_runtime_provider_mix(diagnostics.get("providers"))
+    dispatch_count = _require_non_negative_int(
+        diagnostics,
+        "dispatch_count",
+        context="job",
+    )
+    attempt_count = _require_non_negative_int(
+        diagnostics,
+        "attempt_count",
+        context="job",
+    )
+    cache_hits = _require_non_negative_int(diagnostics, "cache_hits", context="job")
+    cache_misses = _require_non_negative_int(diagnostics, "cache_misses", context="job")
+    retry_count = _require_non_negative_int(diagnostics, "retry_count", context="job")
+    rate_limit_retry_count = _require_non_negative_int(
+        diagnostics,
+        "rate_limit_retry_count",
+        context="job",
+    )
+    error_count = _require_non_negative_int(diagnostics, "error_count", context="job")
+    latency_total_seconds = _require_non_negative_float(
+        diagnostics,
+        "latency_total_seconds",
+        context="job",
+    )
+    latency_max_seconds = _require_non_negative_float(
+        diagnostics,
+        "latency_max_seconds",
+        context="job",
+    )
+
+    cache_total = cache_hits + cache_misses
+    cache_hit_ratio = (cache_hits / cache_total * 100.0) if cache_total else 0.0
+    return (
+        f"provider mix {provider_mix}; dispatch={dispatch_count}; attempts={attempt_count}; "
+        f"cache-hit ratio {cache_hits}/{cache_total} ({cache_hit_ratio:.0f}%); "
+        f"retries={retry_count} (429={rate_limit_retry_count}); errors={error_count}; "
+        f"latency total={latency_total_seconds:.2f}s max={latency_max_seconds:.2f}s."
+    )
+
+
+def measure_runtime_provider_diagnostics() -> str:
+    from app.enrichment.models import EnrichmentError, EnrichmentResult
+    from app.enrichment.orchestrator import EnrichmentOrchestrator
+    from app.pipeline.models import IOC, IOCType
+
+    class SyntheticCache:
+        def __init__(self) -> None:
+            self._rows = {
+                ("198.51.100.10", "ipv4", "CacheAlpha"): {
+                    "provider": "CacheAlpha",
+                    "verdict": "clean",
+                    "detection_count": 0,
+                    "total_engines": 12,
+                    "scan_date": None,
+                    "raw_stats": {},
+                    "cached_at": "2026-04-24T00:00:00Z",
+                }
+            }
+
+        def get(self, value: str, type_: str, provider: str, ttl_seconds: int) -> dict | None:
+            row = self._rows.get((value, type_, provider))
+            return dict(row) if row is not None else None
+
+        def put(self, value: str, type_: str, provider: str, payload: dict) -> None:
+            self._rows[(value, type_, provider)] = {
+                **payload,
+                "cached_at": "2026-04-24T00:00:00Z",
+            }
+
+    class ScriptedAdapter:
+        supported_types = {IOCType.IPV4}
+
+        def __init__(self, name: str, requires_api_key: bool, outcomes: dict[str, list[object]]) -> None:
+            self.name = name
+            self.requires_api_key = requires_api_key
+            self._outcomes = {ioc_value: list(result_list) for ioc_value, result_list in outcomes.items()}
+
+        def lookup(self, ioc: IOC) -> EnrichmentResult | EnrichmentError:
+            queue = self._outcomes[ioc.value]
+            return queue.pop(0)
+
+    def make_ioc(value: str) -> IOC:
+        return IOC(type=IOCType.IPV4, value=value, raw_match=value)
+
+    def make_result(ioc: IOC, provider: str) -> EnrichmentResult:
+        return EnrichmentResult(
+            ioc=ioc,
+            provider=provider,
+            verdict="clean",
+            detection_count=0,
+            total_engines=12,
+            scan_date=None,
+            raw_stats={},
+        )
+
+    def make_error(ioc: IOC, provider: str, message: str) -> EnrichmentError:
+        return EnrichmentError(ioc=ioc, provider=provider, error=message)
+
+    cache_hit_ioc = make_ioc("198.51.100.10")
+    retry_ioc = make_ioc("198.51.100.11")
+    cache_adapter = ScriptedAdapter(
+        name="CacheAlpha",
+        requires_api_key=False,
+        outcomes={retry_ioc.value: [make_result(retry_ioc, "CacheAlpha")]},
+    )
+    rate_adapter = ScriptedAdapter(
+        name="RateLimitBeta",
+        requires_api_key=True,
+        outcomes={
+            cache_hit_ioc.value: [make_result(cache_hit_ioc, "RateLimitBeta")],
+            retry_ioc.value: [
+                make_error(retry_ioc, "RateLimitBeta", "HTTP 429"),
+                make_result(retry_ioc, "RateLimitBeta"),
+            ],
+        },
+    )
+
+    orchestrator = EnrichmentOrchestrator(
+        adapters=[cache_adapter, rate_adapter],
+        max_workers=1,
+        cache=SyntheticCache(),
+        provider_concurrency={"RateLimitBeta": 1},
+    )
+
+    with patch(
+        "app.enrichment.orchestrator.time.perf_counter",
+        side_effect=[0.0, 0.25, 1.0, 1.5, 2.0, 2.25, 3.0, 4.0, 5.0, 5.25],
+    ), patch("app.enrichment.orchestrator.time.sleep"), patch(
+        "app.enrichment.orchestrator.random.uniform",
+        return_value=0.0,
+    ):
+        orchestrator.enrich_all("runtime-provider-audit", [cache_hit_ioc, retry_ioc])
+
+    diagnostics = orchestrator.get_diagnostics("runtime-provider-audit")
+    return summarize_runtime_provider_diagnostics(diagnostics)
+
+
 def measure_status_snapshot_scaling() -> str:
     from app.enrichment.orchestrator import EnrichmentOrchestrator
 
@@ -586,6 +808,11 @@ def measure_history_store_tempdb() -> str:
 
 def collect_baseline_captures() -> list[CommandCapture]:
     return [
+        run_internal_capture(
+            label="runtime-provider-diagnostics",
+            command="internal benchmark: EnrichmentOrchestrator synthetic runtime/provider diagnostics",
+            measure=measure_runtime_provider_diagnostics,
+        ),
         run_internal_capture(
             label="status-snapshot-scaling",
             command="internal benchmark: EnrichmentOrchestrator.get_status() snapshot scaling",
@@ -832,6 +1059,7 @@ def render_document(document: AuditDocument) -> str:
                 "## Baseline stance",
                 "",
                 "- Highest-confidence near-term work: make the status path truly incremental so the backend no longer snapshots every retained result on each poll.",
+                "- The runtime/provider seam now has a deterministic local capture; if it changes at all, the only justified ship target is a narrow cache-hit-heavy dispatch reduction ahead of the worker/semaphore path.",
                 "- Highest-confidence explicit keep-decision: leave the WAL-backed cache/history stores and the provider backoff/session contract alone until measured contention or provider pain shows up.",
                 "- Frontend work remains important, but it should follow the status-path fix because the shared coordinator has a broader proof burden and depends on the same poll contract.",
                 "",
