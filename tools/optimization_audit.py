@@ -238,18 +238,18 @@ BASELINE_FINDINGS: tuple[BaselineFinding, ...] = (
         ),
     ),
     BaselineFinding(
-        bucket="do next",
-        finding="If the runtime/provider seam changes at all, limit it to a cache-hit-heavy dispatch reduction before touching semaphores.",
+        bucket="leave alone",
+        finding="Keep the runtime/provider dispatch path unchanged until diagnostics show a materially cache-hit-heavy workload.",
         seam="runtime/provider",
         evidence_kind="measurement + code-path reasoning",
         evidence_summary=(
             "Internal capture `runtime-provider-diagnostics` reports provider mix CacheAlpha:2d/0e, RateLimitBeta:2d/1e; dispatch=4, attempts=5, cache-hit ratio 1/5 (20%), retries=1 (429=1), and latency total=2.25s max=1.00s. "
-            "The capture proves the new diagnostics surface can quantify provider mix and retry cost locally, so the only justified ship target is skipping known-cache work before the worker/semaphore path rather than reopening concurrency policy."
+            "The orchestrator already short-circuits cache hits inside `_single_attempt()`, so moving that check ahead of thread-pool/semaphore scheduling would only shave bounded dispatch overhead and this measurement does not show a large enough cache-hit-heavy mix to justify churn."
         ),
         continuity_guardrails="R014, R015, R018, R020, R040",
         rerun_lanes="`make verify-fast`, `make verify-deep`",
         continuity_notes=(
-            "Preserve per-provider caps, cache-hit markers, retry/backoff semantics, and adapter-owned session reuse; any shipped change must stay narrower than a thread-pool or session-policy rewrite."
+            "Preserve per-provider caps, cache-hit markers, retry/backoff semantics, and adapter-owned session reuse; only revisit pre-dispatch short-circuiting if a future capture shows cache hits dominating enough to outweigh the regression surface."
         ),
     ),
     BaselineFinding(
@@ -295,7 +295,7 @@ BASELINE_SEAM_NOTES: tuple[SeamNote, ...] = (
         ),
         continuity_watch="R014, R015, R018, R020, R040 stay attached to any change here.",
         baseline_call=(
-            "Use the new `runtime-provider-diagnostics` capture to decide whether a cache-hit-heavy dispatch reduction is worth shipping; do not rewrite concurrency policy, backoff scope, or session ownership on aesthetics."
+            "The deterministic `runtime-provider-diagnostics` capture now points to a keep-decision: current cache hits do not dominate enough to justify moving work ahead of the worker/semaphore path, so do not rewrite concurrency policy, backoff scope, or session ownership on aesthetics."
         ),
     ),
     SeamNote(
@@ -339,11 +339,11 @@ BASELINE_GUARDRAIL_COVERAGE: tuple[GuardrailCoverage, ...] = (
     GuardrailCoverage("R008", "request/status + frontend/render", "Do-now cursor work plus do-next coordinator caching", "Keep polling continuity, export/copy/detail-link behavior, and progress visibility intact."),
     GuardrailCoverage("R009", "frontend/render", "Do-next coordinator/render work", "Preserve textContent-only DOM construction, CSP/CSRF assumptions, and host-validation-adjacent safety expectations."),
     GuardrailCoverage("R010", "request/status + frontend/render", "Do-now cursor work plus do-next render work", "Any shipped optimization must reduce or at least not worsen polling/render churn."),
-    GuardrailCoverage("R014", "runtime/provider", "Measured runtime/provider ship target plus explicit keep-decision", "Per-provider concurrency remains part of the contract unless a narrow cache-hit optimization proves safe."),
-    GuardrailCoverage("R015", "runtime/provider", "Measured runtime/provider ship target plus explicit keep-decision", "429 backoff stays protected; future changes must prove they do not regress quota safety."),
+    GuardrailCoverage("R014", "runtime/provider", "Measured runtime/provider keep-decision", "Per-provider concurrency remains part of the contract unless a future cache-hit-heavy capture proves that a narrower pre-dispatch optimization is worth the regression surface."),
+    GuardrailCoverage("R015", "runtime/provider", "Measured runtime/provider keep-decision", "429 backoff stays protected; future changes must prove they do not regress quota safety."),
     GuardrailCoverage("R018", "runtime/provider + request/status", "Do-now cursor work plus measured runtime/provider evidence", "Snapshot correctness, semaphore scope, and cached-marker locking remain non-negotiable."),
     GuardrailCoverage("R019", "request/status + frontend/render", "Do-now cursor work plus do-next coordinator caching", "Keep `since`/`next_since` incremental polling semantics end-to-end."),
-    GuardrailCoverage("R020", "runtime/provider", "Measured runtime/provider ship target plus explicit keep-decision", "Persistent adapter-owned sessions stay justified until measured evidence argues otherwise."),
+    GuardrailCoverage("R020", "runtime/provider", "Measured runtime/provider keep-decision", "Persistent adapter-owned sessions stay justified until measured evidence argues otherwise."),
     GuardrailCoverage("R022", "persistence", "Leave-alone WAL store decision", "WAL and persistent connection behavior stay explicit keep-decisions pending contention evidence."),
     GuardrailCoverage("R040", "all seams", "Every ranked finding", "Each future slice must rerun the listed proof lanes before claiming an optimization is safe."),
 )
@@ -1059,7 +1059,7 @@ def render_document(document: AuditDocument) -> str:
                 "## Baseline stance",
                 "",
                 "- Highest-confidence near-term work: make the status path truly incremental so the backend no longer snapshots every retained result on each poll.",
-                "- The runtime/provider seam now has a deterministic local capture; if it changes at all, the only justified ship target is a narrow cache-hit-heavy dispatch reduction ahead of the worker/semaphore path.",
+                "- The runtime/provider seam is now an explicit keep-decision: the deterministic local capture only showed a 1/5 cache-hit ratio, so no measured win justified pre-dispatch short-circuit churn ahead of the worker/semaphore path.",
                 "- Highest-confidence explicit keep-decision: leave the WAL-backed cache/history stores and the provider backoff/session contract alone until measured contention or provider pain shows up.",
                 "- Frontend work remains important, but it should follow the status-path fix because the shared coordinator has a broader proof burden and depends on the same poll contract.",
                 "",

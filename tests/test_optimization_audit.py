@@ -66,7 +66,9 @@ def test_baseline_mode_writes_ranked_findings_and_notes(tmp_path):
     assert "runtime-provider-diagnostics" in content
     assert "provider mix CacheAlpha:2d/0e, RateLimitBeta:2d/1e" in content
     assert "cache-hit ratio 1/5 (20%)" in content
-    assert "limit it to a cache-hit-heavy dispatch reduction before touching semaphores" in content
+    assert "Keep the runtime/provider dispatch path unchanged until diagnostics show a materially cache-hit-heavy workload." in content
+    assert "The runtime/provider seam is now an explicit keep-decision" in content
+    assert "limit it to a cache-hit-heavy dispatch reduction before touching semaphores" not in content
     assert "Keep per-provider backoff/session semantics as explicit measured keep-decisions" in content
     assert "Make `/enrichment/status` cursor-native end-to-end" in content
     assert "Keep WAL-backed cache/history stores and persistent connections unchanged" in content

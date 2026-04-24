@@ -1,0 +1,112 @@
+[
+  {
+    "kind": "bash",
+    "toolCallId": "call_bd4gzxRRYbQh4WgPYZnwMYHn|fc_053706f1afffd5730169ead5e5d8b88191b37d04bb7cff35ff",
+    "command": "rg -n \"def (_build_dispatch_diagnostics|_do_lookup|_single_attempt|get_diagnostics|get_status|enrich_all|_record_|_cache|retry|Semaphore|dispatch_pairs)\" app/enrichment/orchestrator.py tools/optimization_audit.py tests/test_orchestrator.py tests/test_optimization_audit.py",
+    "exitCode": 0,
+    "outputSnippet": "app/enrichment/orchestrator.py:208:    def enrich_all(self, job_id: str, iocs: list[IOC]) -> None:\napp/enrichment/orchestrator.py:274:    def get_status(self, job_id: str) -> dict | None:\napp/enrichment/orchestrator.py:300:    def get_diagnostics(self, job_id: str) -> dict[str, Any] | None:\napp/enrichment/orchestrator.py:333:    def _build_dispatch_diagnostics(\napp/enrichment/orchestrator.py:348:    def _record_cache(self, job_id: str, provider_name: str, *, hit: bool) -> None:\napp/enrichment/or",
+    "timestamp": 1776997862452
+  },
+  {
+    "kind": "bash",
+    "toolCallId": "call_C8CmUkqDEzBv6zySjA4hjWb1|fc_053706f1afffd5730169ead5f3e3c081918d6dc467705b567d",
+    "command": "rg -n \"diagnostic|cache hit|cached_markers|snapshot|unsupported|malformed|rate_limit|retry_count|dispatch_count|get_diagnostics|all-cache-hit|zero-auth|concurrent status\" tests/test_orchestrator.py",
+    "exitCode": 0,
+    "outputSnippet": "11:- Per-provider semaphore (M003 S01: VT capped at ≤4, zero-auth runs freely)\n345:    def test_multi_adapter_skips_unsupported_type(self):\n353:        orchestrator.enrich_all(\"job-skip-unsupported\", [ioc])\n355:        status = orchestrator.get_status(\"job-skip-unsupported\")\n688:    def test_rate_limit_string_without_429_triggers_backoff(self):\n802:    \"\"\"Prove that get_status() returns a snapshot of results, not the live list.\"\"\"\n804:    def test_get_status_returns_list_snapshot(self):\n817:    ",
+    "timestamp": 1776997876543
+  },
+  {
+    "kind": "bash",
+    "toolCallId": "call_zQMtR1NRxGjtVCbdke0eWsPy|fc_053706f1afffd5730169ead606db0c81919bc505df24682b38",
+    "command": "rg -n \"BASELINE_FINDINGS|BaselineFinding|render_baseline|Ranked findings|do next|leave alone\" tools/optimization_audit.py",
+    "exitCode": 0,
+    "outputSnippet": "37:FINDING_BUCKETS = (\"do now\", \"do next\", \"later\", \"leave alone\")\n93:class BaselineFinding:\n204:BASELINE_FINDINGS: tuple[BaselineFinding, ...] = (\n205:    BaselineFinding(\n223:    BaselineFinding(\n224:        bucket=\"do next\",\n240:    BaselineFinding(\n241:        bucket=\"do next\",\n255:    BaselineFinding(\n256:        bucket=\"leave alone\",\n271:    BaselineFinding(\n272:        bucket=\"leave alone\",\n837:        \"do next\": \"List the guardrails that stay relevant after the current high-confidence fi",
+    "timestamp": 1776997896057
+  },
+  {
+    "kind": "edit",
+    "toolCallId": "call_VVs1L7JaXopTE9kSnFB0mam0|fc_053706f1afffd5730169ead632944c8191bcb89c4bb0b0717e",
+    "path": "tools/optimization_audit.py",
+    "timestamp": 1776997951605
+  },
+  {
+    "kind": "edit",
+    "toolCallId": "call_lYRWZJw0l0BlyW38IdYi18dH|fc_053706f1afffd5730169ead64180e8819183448f4831ffc898",
+    "path": "tools/optimization_audit.py",
+    "timestamp": 1776997956378
+  },
+  {
+    "kind": "edit",
+    "toolCallId": "call_xgRuFlC8DpHJ9n6h9Y1Hnwqj|fc_053706f1afffd5730169ead646e8e081918e8add310278e9c3",
+    "path": "tools/optimization_audit.py",
+    "timestamp": 1776997965686
+  },
+  {
+    "kind": "edit",
+    "toolCallId": "call_uwXnWOXlaGcJP78LOgaIsJkC|fc_053706f1afffd5730169ead64fb3548191a0714047a2b6f72d",
+    "path": "tools/optimization_audit.py",
+    "timestamp": 1776997976495
+  },
+  {
+    "kind": "edit",
+    "toolCallId": "call_v1IDAztFn9mLim9JOZRjr6eG|fc_053706f1afffd5730169ead65dcd18819189818c0bbcf9824c",
+    "path": "tests/test_optimization_audit.py",
+    "timestamp": 1776997986400
+  },
+  {
+    "kind": "bash",
+    "toolCallId": "call_KTENeLgyivOk9mGZt9UcqCZ0|fc_053706f1afffd5730169ead6692820819182f9308f8d9f73eb",
+    "command": "pytest tests/test_orchestrator.py tests/test_http_safety.py tests/test_base_adapter.py tests/test_optimization_audit.py -q",
+    "exitCode": 0,
+    "outputSnippet": "........................................................................ [ 97%]\n..                                                                       [100%]\n74 passed in 0.59s\n",
+    "timestamp": 1776997993689
+  },
+  {
+    "kind": "bash",
+    "toolCallId": "call_9N02Fm9tzTIKQZddgSVkoje8|fc_053706f1afffd5730169ead66eb570819184ae03e745755438",
+    "command": "python3 tools/optimization_audit.py --mode baseline --output .gsd/milestones/M013/M013-AUDIT.md",
+    "exitCode": 0,
+    "outputSnippet": "Rate limit (429) from RateLimitBeta for 198.51.100.11 — backoff attempt 1, sleeping 15.0s\n",
+    "timestamp": 1776997999300
+  },
+  {
+    "kind": "bash",
+    "toolCallId": "call_2ICi7V98tMIGYa8eim6PJYzA|fc_053706f1afffd5730169ead68eec8481918e4d2e22b2af82c9",
+    "command": "python3 - <<'PY'\nimport subprocess, time, sys\ncmd = [\"pytest\", \"tests/test_orchestrator.py\", \"tests/test_http_safety.py\", \"tests/test_base_adapter.py\", \"tests/test_optimization_audit.py\", \"-q\"]\nstart = time.perf_counter()\ncompleted = subprocess.run(cmd)\nduration_ms = int((time.perf_counter() - start) * 1000)\nprint(f\"__RESULT__ exit={completed.returncode} duration_ms={duration_ms}\")\nsys.exit(completed.returncode)\nPY",
+    "exitCode": 0,
+    "outputSnippet": "........................................................................ [ 97%]\n..                                                                       [100%]\n74 passed in 0.65s\n__RESULT__ exit=0 duration_ms=923\n",
+    "timestamp": 1776998034451
+  },
+  {
+    "kind": "bash",
+    "toolCallId": "call_PNDn0DTLDw9lGdetRMWltqgU|fc_053706f1afffd5730169ead69904f081918f2a676b5ce53796",
+    "command": "python3 - <<'PY'\nimport subprocess, time, sys\ncmd = [\"python3\", \"tools/optimization_audit.py\", \"--mode\", \"baseline\", \"--output\", \".gsd/milestones/M013/M013-AUDIT.md\"]\nstart = time.perf_counter()\ncompleted = subprocess.run(cmd)\nduration_ms = int((time.perf_counter() - start) * 1000)\nprint(f\"__RESULT__ exit={completed.returncode} duration_ms={duration_ms}\")\nsys.exit(completed.returncode)\nPY",
+    "exitCode": 0,
+    "outputSnippet": "Rate limit (429) from RateLimitBeta for 198.51.100.11 — backoff attempt 1, sleeping 15.0s\n__RESULT__ exit=0 duration_ms=184\n",
+    "timestamp": 1776998043942
+  },
+  {
+    "kind": "bash",
+    "toolCallId": "call_FqH8bseAvUZohVOnyMaRJmit|fc_053706f1afffd5730169ead6a6d5e48191aa6128bacae15364",
+    "command": "python3 - <<'PY'\nimport subprocess, time, sys\ncmd = [\"make\", \"verify-fast\"]\nstart = time.perf_counter()\ncompleted = subprocess.run(cmd)\nduration_ms = int((time.perf_counter() - start) * 1000)\nprint(f\"__RESULT__ exit={completed.returncode} duration_ms={duration_ms}\")\nsys.exit(completed.returncode)\nPY",
+    "exitCode": 0,
+    "outputSnippet": "python3 -m pytest -q -m 'not e2e'\n........................................................................ [  7%]\n........................................................................ [ 14%]\n........................................................................ [ 22%]\n........................................................................ [ 29%]\n........................................................................ [ 37%]\n..................................................................",
+    "timestamp": 1776998056065
+  },
+  {
+    "kind": "bash",
+    "toolCallId": "call_zRgVqwd4MD0tfnz6iEer5w5V|fc_053706f1afffd5730169eada72be04819188b80bb42f61e8b4",
+    "command": "python3 - <<'PY'\nimport subprocess, time, sys\ncmd = [\"make\", \"verify-deep\"]\nstart = time.perf_counter()\ncompleted = subprocess.run(cmd)\nduration_ms = int((time.perf_counter() - start) * 1000)\nprint(f\"__RESULT__ exit={completed.returncode} duration_ms={duration_ms}\")\nsys.exit(completed.returncode)\nPY",
+    "exitCode": 1,
+    "outputSnippet": "Skipped due to queued user message.",
+    "timestamp": 1776999028391
+  },
+  {
+    "kind": "bash",
+    "toolCallId": "call_JZKhCBUBU9yZ4eDCFGvZ2IlA|fc_053706f1afffd5730169eada7ac5208191a277b156ca19163f",
+    "command": "python3 - <<'PY'\nimport subprocess, time, sys\ncmd = [\"make\", \"verify-deep\"]\nstart = time.perf_counter()\ncompleted = subprocess.run(cmd)\nduration_ms = int((time.perf_counter() - start) * 1000)\nprint(f\"__RESULT__ exit={completed.returncode} duration_ms={duration_ms}\")\nsys.exit(completed.returncode)\nPY",
+    "exitCode": 0,
+    "outputSnippet": "python3 -m pytest -q tests/e2e\n........................................................................ [ 63%]\n.........................................                                [100%]\n113 passed in 38.71s\n__RESULT__ exit=0 duration_ms=39431\n",
+    "timestamp": 1776999036762
+  }
+]

@@ -106,7 +106,7 @@
   - Files: `tools/optimization_audit.py`, `tests/test_optimization_audit.py`, `.gsd/milestones/M013/M013-AUDIT.md`, `docs/optimization-audit.md`
   - Verify: pytest tests/test_optimization_audit.py -q && python3 tools/optimization_audit.py --mode baseline --output .gsd/milestones/M013/M013-AUDIT.md
 
-- [ ] **T03: Ship the measured runtime fix or codify the keep-decision and rerun proof** `est:0.75d`
+- [x] **T03: Ship the measured runtime fix or codify the keep-decision and rerun proof** `est:0.75d`
   Use the T02 measurements to decide whether this slice should ship a narrow runtime/provider code change or refresh the audit with an explicit keep-decision. The only acceptable code-path optimization is a cache-hit-heavy dispatch reduction that avoids scheduling needless work before the thread-pool/semaphore path while preserving cached-marker output, retry/backoff behavior, provider concurrency, and adapter-owned session reuse. If the measurements do not show a meaningful win, do not reopen concurrency/session policy; instead refresh the audit so the leave-alone stance is explicit and durable.
 
 ## Failure Modes
