@@ -128,11 +128,18 @@ def test_each_provider_has_signup_link(page: Page, live_server: str) -> None:
 
 
 def test_cache_section_visible(page: Page, live_server: str) -> None:
-    """Cache section is visible on settings page."""
+    """Cache settings and history-save diagnostics are both visible on settings page."""
     sp = SettingsPage(page, live_server)
     sp.goto()
-    cache_section = page.locator(".settings-cache-section")
-    expect(cache_section).to_be_visible()
+
+    expect(sp.cache_section).to_be_visible()
+    expect(sp.cache_section.get_by_role("heading", name="Cache")).to_be_visible()
+    expect(sp.history_diagnostics_section).to_be_visible()
+    expect(
+        sp.history_diagnostics_section.get_by_role(
+            "heading", name="History Save Diagnostics"
+        )
+    ).to_be_visible()
 
 
 # -- Status Indicators --

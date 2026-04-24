@@ -48,6 +48,24 @@ class SettingsPage:
         """Return the signup link element for a provider."""
         return self.provider_section(provider_id).locator("a[target='_blank']")
 
+    # ---- Cache / diagnostics ----
+
+    @property
+    def cache_section(self) -> Locator:
+        """Return the cache settings section by its heading."""
+        return self.page.locator(
+            ".settings-cache-section",
+            has=self.page.get_by_role("heading", name="Cache"),
+        )
+
+    @property
+    def history_diagnostics_section(self) -> Locator:
+        """Return the history save diagnostics section by its heading."""
+        return self.page.locator(
+            ".settings-cache-section",
+            has=self.page.get_by_role("heading", name="History Save Diagnostics"),
+        )
+
     # ---- Accordion ----
 
     def accordion_header(self, provider_id: str) -> Locator:

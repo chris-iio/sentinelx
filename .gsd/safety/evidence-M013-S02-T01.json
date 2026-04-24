@@ -1,0 +1,108 @@
+[
+  {
+    "kind": "bash",
+    "toolCallId": "call_BUmkHP8kuvOBQ6IjtcGCmLfV|fc_0f94be751648ad0b0169eac4ec940c8191aacd47ace50c0888",
+    "command": "rg -n \"get_diagnostics|diagnostics|optimization_audit|EnrichmentOrchestrator\\(\" app tests tools -g '!**/.gsd/**'",
+    "exitCode": 0,
+    "outputSnippet": "tests/test_orchestrator.py:54:    return EnrichmentOrchestrator(adapters=[adapter], max_workers=max_workers)\ntests/test_orchestrator.py:279:        orchestrator = EnrichmentOrchestrator(adapters=[mock_adapter], max_workers=1, max_jobs=5)\ntests/test_orchestrator.py:336:        orchestrator = EnrichmentOrchestrator(adapters=[adapter_a, adapter_b], max_workers=4)\ntests/test_orchestrator.py:352:        orchestrator = EnrichmentOrchestrator(adapters=[adapter_a], max_workers=4)\ntests/test_orchestrator",
+    "timestamp": 1776993519201
+  },
+  {
+    "kind": "write",
+    "toolCallId": "call_i9i4oWBlK9lygCfMIT78sGtZ|fc_0f94be751648ad0b0169eac53e0ffc8191be905b5abcdda575",
+    "path": "app/enrichment/orchestrator.py",
+    "timestamp": 1776993714254
+  },
+  {
+    "kind": "bash",
+    "toolCallId": "call_KUg9l4FDqpV1RTovtSRiEV3q|fc_0f94be751648ad0b0169eac5b80fa4819185fc5c20bcfd7f5a",
+    "command": "tail -n 40 tests/test_orchestrator.py",
+    "exitCode": 0,
+    "outputSnippet": "    \"\"\"Prove that _cached_markers reads and writes are protected by _lock.\"\"\"\n\n    def test_cached_markers_write_protected_by_lock(self):\n        \"\"\"Concurrent cache hits must not corrupt _cached_markers.\n\n        Submits 8 IOCs concurrently to an adapter with a mock cache that always\n        returns hits. After completion, cached_markers must contain exactly 8 entries\n        (no missing entries, no KeyError).\n        \"\"\"\n        iocs = [_make_ioc(IOCType.IPV4, f\"10.0.0.{i}\") for i in range(8)]",
+    "timestamp": 1776993720686
+  },
+  {
+    "kind": "edit",
+    "toolCallId": "call_1qwMSE6Op96ThWWKcbhl0fRf|fc_0f94be751648ad0b0169eac5d5d1948191b3697d58aacec159",
+    "path": "app/enrichment/orchestrator.py",
+    "timestamp": 1776993753323
+  },
+  {
+    "kind": "edit",
+    "toolCallId": "call_nPz0WeRybjofIQCLjot4TABM|fc_0f94be751648ad0b0169eac5fadf588191b1fa0f4037300718",
+    "path": "tests/test_orchestrator.py",
+    "timestamp": 1776993825888
+  },
+  {
+    "kind": "bash",
+    "toolCallId": "call_RJLBagZ2pWNK5izoRsxjWgW0|fc_0f94be751648ad0b0169eac625f140819199b17c23459a3ffc",
+    "command": "pytest tests/test_orchestrator.py -q",
+    "exitCode": 0,
+    "outputSnippet": ".................................                                        [100%]\n33 passed in 0.16s\n",
+    "timestamp": 1776993830603
+  },
+  {
+    "kind": "bash",
+    "toolCallId": "call_krAdixj75dhjwZAmrvRhFGiY|fc_0f94be751648ad0b0169eac632fdec81919d4be2d300545aa5",
+    "command": "if [ -f .gsd/milestones/M013/M013-AUDIT.md ]; then echo exists; else echo missing; fi",
+    "exitCode": 0,
+    "outputSnippet": "exists\n",
+    "timestamp": 1776993843485
+  },
+  {
+    "kind": "bash",
+    "toolCallId": "call_xpcGsa2exkrvkxJx6TsMU1zC|fc_056770ad8f5d6a4f0169ead240a9c881919d81e5b65e2820b5",
+    "command": "pytest tests/test_orchestrator.py -q",
+    "exitCode": 0,
+    "outputSnippet": ".................................                                        [100%]\n33 passed in 0.10s\n",
+    "timestamp": 1776996929052
+  },
+  {
+    "kind": "bash",
+    "toolCallId": "call_wDlhOZPBjY988GsCbORyoLqF|fc_056770ad8f5d6a4f0169ead25b4acc8191bbd57b978d081670",
+    "command": "python3 - <<'PY'\nimport subprocess, time, shlex\ncmd = 'pytest tests/test_orchestrator.py -q'\nstart = time.perf_counter()\nproc = subprocess.run(cmd, shell=True, text=True, capture_output=True)\nduration_ms = round((time.perf_counter() - start) * 1000)\nprint(proc.stdout, end='')\nif proc.stderr:\n    print(proc.stderr, end='')\nprint(f'__RESULT__ exit={proc.returncode} duration_ms={duration_ms} command={cmd}')\nPY",
+    "exitCode": 0,
+    "outputSnippet": ".................................                                        [100%]\n33 passed in 0.09s\n__RESULT__ exit=0 duration_ms=373 command=pytest tests/test_orchestrator.py -q\n",
+    "timestamp": 1776996957257
+  },
+  {
+    "kind": "bash",
+    "toolCallId": "call_6aaW38ANfzhAvMw70heHIfhG|fc_056770ad8f5d6a4f0169ead25f5f6c819199c1fa992867f741",
+    "command": "python3 - <<'PY'\nimport subprocess, time\ncmd = 'pytest tests/test_optimization_audit.py -q'\nstart = time.perf_counter()\nproc = subprocess.run(cmd, shell=True, text=True, capture_output=True)\nduration_ms = round((time.perf_counter() - start) * 1000)\nprint(proc.stdout, end='')\nif proc.stderr:\n    print(proc.stderr, end='')\nprint(f'__RESULT__ exit={proc.returncode} duration_ms={duration_ms} command={cmd}')\nPY",
+    "exitCode": 0,
+    "outputSnippet": "...                                                                      [100%]\n3 passed in 0.40s\n__RESULT__ exit=0 duration_ms=659 command=pytest tests/test_optimization_audit.py -q\n",
+    "timestamp": 1776996962107
+  },
+  {
+    "kind": "bash",
+    "toolCallId": "call_m6yXFMGSklN1siEYbyWuBtwu|fc_056770ad8f5d6a4f0169ead26538a081919c0ada53b24edbba",
+    "command": "python3 - <<'PY'\nimport subprocess, time\ncmd = 'pytest tests/test_http_safety.py tests/test_base_adapter.py -q'\nstart = time.perf_counter()\nproc = subprocess.run(cmd, shell=True, text=True, capture_output=True)\nduration_ms = round((time.perf_counter() - start) * 1000)\nprint(proc.stdout, end='')\nif proc.stderr:\n    print(proc.stderr, end='')\nprint(f'__RESULT__ exit={proc.returncode} duration_ms={duration_ms} command={cmd}')\nPY",
+    "exitCode": 0,
+    "outputSnippet": "...................................                                      [100%]\n35 passed in 0.10s\n__RESULT__ exit=0 duration_ms=362 command=pytest tests/test_http_safety.py tests/test_base_adapter.py -q\n",
+    "timestamp": 1776996968168
+  },
+  {
+    "kind": "bash",
+    "toolCallId": "call_Nktf78OnXHZktLTWazg4TiGs|fc_056770ad8f5d6a4f0169ead26aa2848191b30290b82f0461ff",
+    "command": "python3 - <<'PY'\nimport subprocess, time\ncmd = 'python3 tools/optimization_audit.py --mode baseline --output .gsd/milestones/M013/M013-AUDIT.md'\nstart = time.perf_counter()\nproc = subprocess.run(cmd, shell=True, text=True, capture_output=True)\nduration_ms = round((time.perf_counter() - start) * 1000)\nprint(proc.stdout, end='')\nif proc.stderr:\n    print(proc.stderr, end='')\nprint(f'__RESULT__ exit={proc.returncode} duration_ms={duration_ms} command={cmd}')\nPY",
+    "exitCode": 0,
+    "outputSnippet": "__RESULT__ exit=0 duration_ms=199 command=python3 tools/optimization_audit.py --mode baseline --output .gsd/milestones/M013/M013-AUDIT.md\n",
+    "timestamp": 1776996973758
+  },
+  {
+    "kind": "bash",
+    "toolCallId": "call_At9Psqi2J0xtjUXi0YjNHXh0|fc_056770ad8f5d6a4f0169ead27598848191bec9336255392fc9",
+    "command": "python3 - <<'PY'\nimport subprocess, time\ncmd = 'make verify-fast'\nstart = time.perf_counter()\nproc = subprocess.run(cmd, shell=True, text=True, capture_output=True)\nduration_ms = round((time.perf_counter() - start) * 1000)\nprint(proc.stdout, end='')\nif proc.stderr:\n    print(proc.stderr, end='')\nprint(f'__RESULT__ exit={proc.returncode} duration_ms={duration_ms} command={cmd}')\nPY",
+    "exitCode": 0,
+    "outputSnippet": "python3 -m pytest -q -m 'not e2e'\n........................................................................ [  7%]\n........................................................................ [ 14%]\n........................................................................ [ 22%]\n........................................................................ [ 29%]\n........................................................................ [ 37%]\n..................................................................",
+    "timestamp": 1776996982697
+  },
+  {
+    "kind": "bash",
+    "toolCallId": "call_K08faMCuOv28ZZbQz8z67ILS|fc_056770ad8f5d6a4f0169ead28239ec8191a2275e3b023f38ac",
+    "command": "python3 - <<'PY'\nimport subprocess, time\ncmd = 'make verify-deep'\nstart = time.perf_counter()\nproc = subprocess.run(cmd, shell=True, text=True, capture_output=True)\nduration_ms = round((time.perf_counter() - start) * 1000)\nprint(proc.stdout, end='')\nif proc.stderr:\n    print(proc.stderr, end='')\nprint(f'__RESULT__ exit={proc.returncode} duration_ms={duration_ms} command={cmd}')\nPY",
+    "exitCode": 0,
+    "outputSnippet": "python3 -m pytest -q tests/e2e\n........................................................................ [ 63%]\n.........................................                                [100%]\n113 passed in 40.62s\n__RESULT__ exit=0 duration_ms=41108 command=make verify-deep\n",
+    "timestamp": 1776997000230
+  }
+]

@@ -65,14 +65,15 @@ The generated markdown includes:
 1. the workflow contract
 2. the repo-native command surface
 3. verification-lane rerun guidance (`make verify-fast`, `make verify-deep`, `make verify`)
-4. continuity guardrails for R008, R009, R010, R014, R015, R018, R019, R020, R022, and R040
-5. seam prompts for:
+4. a verified rerun checklist that makes deterministic mocked-online browser proof explicit for live-stack changes
+5. continuity guardrails for R008, R009, R010, R014, R015, R018, R019, R020, R022, and R040
+6. seam prompts for:
    - runtime/provider
    - request/status
    - persistence
    - frontend/render
-6. a stable table schema under each ranked bucket
-7. in `baseline` mode, populated ranked findings, per-seam notes, guardrail coverage, and internal temp-DB / status-snapshot measurements
+7. a stable table schema under each ranked bucket
+8. in `baseline` mode, populated ranked findings, per-seam notes, guardrail coverage, and internal temp-DB / status-snapshot measurements
 
 ## Finding schema
 
@@ -106,7 +107,9 @@ Explicit keep-decisions for seams that are already intentionally shaped and do n
 
 ## Recommended downstream usage
 
-- Update the ranked tables in place instead of creating disconnected one-off notes.
-- Add command captures whenever a claim can be anchored to measured output.
-- If a later slice changes live enrichment orchestration, polling/status behavior, or results-page DOM/state, include `make verify-deep` in that finding’s rerun lanes.
-- Keep `leave alone` rows current. They are part of the audit proof, not filler.
+1. Refresh `.gsd/milestones/M013/M013-AUDIT.md` from the runner so the ranked buckets stay current.
+2. Re-run `make verify-fast` for every shipped optimization and record the fresh evidence in the task summary or as an audit capture.
+3. Re-run `make verify-deep` whenever the change touches live enrichment orchestration, polling/status behavior, shared result application, or analyst-visible DOM/state; deterministic mocked-online browser proof is part of the contract for those seams.
+4. Compare the updated ranked rows, rerun lanes, and continuity notes in place instead of creating disconnected one-off notes.
+5. Add command captures whenever a claim can be anchored to measured output.
+6. Keep `leave alone` rows current. They are part of the audit proof, not filler.

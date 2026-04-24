@@ -32,6 +32,8 @@ def test_template_mode_writes_ranked_artifact(tmp_path):
     assert "### leave alone" in content
     assert "make verify-fast" in content
     assert "make verify-deep" in content
+    assert "## Verified rerun checklist" in content
+    assert "Deterministic mocked-online browser proof" in content
     assert "R008" in content
     assert "R040" in content
 
@@ -44,6 +46,8 @@ def test_baseline_mode_writes_ranked_findings_and_notes(tmp_path):
     assert result.returncode == 0, result.stderr
     content = output_path.read_text(encoding="utf-8")
     assert "## Baseline stance" in content
+    assert "## Verified rerun checklist" in content
+    assert "mocked-online browser seam still passes end-to-end" in content
     assert "## Per-seam baseline notes" in content
     assert "## Continuity guardrail coverage" in content
     assert "status-snapshot-scaling" in content

@@ -11,10 +11,10 @@
 
 ## Slices
 
-- [ ] **S01: S01** `risk:High — if M013 does not first produce a repeatable, evidence-backed audit loop, later slices can devolve into optimization theater and cannot truthfully justify changes to concurrency, WAL persistence, polling, or rendering seams.` `depends:[]`
+- [x] **S01: S01** `risk:High — if M013 does not first produce a repeatable, evidence-backed audit loop, later slices can devolve into optimization theater and cannot truthfully justify changes to concurrency, WAL persistence, polling, or rendering seams.` `depends:[]`
   > After this: After this: A contributor can run a checked-in SentinelX-first optimization-audit workflow and get a durable ranked artifact with do now / do next / later / leave alone buckets, baseline evidence, and explicit continuity notes for runtime, persistence, request flow, and frontend seams.
 
-- [ ] **S02: Runtime/provider seam shipped fixes** `risk:High — orchestrator dispatch, retry/backoff, session reuse, and cache interaction are the highest-leverage runtime seams but already encode correctness-critical behavior, so any change must be evidence-backed and narrowly shipped.` `depends:[S01]`
+- [ ] **S02: S02** `risk:High — orchestrator dispatch, retry/backoff, session reuse, and cache interaction are the highest-leverage runtime seams but already encode correctness-critical behavior, so any change must be evidence-backed and narrowly shipped.` `depends:[]`
   > After this: After this: An analyst can run enrichment through the existing UI with the same concurrency/backoff/cache guarantees and either lower measured runtime overhead or a justified leave-alone decision recorded in the ranked audit.
 
 - [ ] **S03: Request-flow and persistence seam shipped fixes** `risk:Medium-high — Flask helper/state ownership and WAL-backed stores sit on correctness-heavy seams where unnecessary work may exist, but regressions would directly threaten polling continuity, history durability, and cache behavior.` `depends:[S01,S02]`

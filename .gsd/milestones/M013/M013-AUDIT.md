@@ -1,7 +1,7 @@
 # M013 Optimization Audit — SentinelX
 
 - Mode: `baseline`
-- Generated at: `2026-04-23 08:56:51 UTC`
+- Generated at: `2026-04-24 02:16:13 UTC`
 - Repo root: `/home/chris/projects/sentinelx`
 - Output path: `.gsd/milestones/M013/M013-AUDIT.md`
 
@@ -29,6 +29,15 @@
 | verify-deep | `make verify-deep` | Required whenever a change touches live enrichment orchestration, polling/status flow, results-page DOM/state, or mocked-online browser seams. |
 | verify | `make verify` | Full pre-handoff lane when downstream slices need the unambiguous repo-wide proof command. |
 
+## Verified rerun checklist
+
+| Step | Proof surface | Command | Required when | Expected durable evidence |
+| --- | --- | --- | --- | --- |
+| 1 | Workflow runner + ranked artifact refresh | `python3 tools/optimization_audit.py --mode baseline --output .gsd/milestones/M013/M013-AUDIT.md` | Every optimization slice before handoff. | Updated M013 audit artifact with current ranked buckets, seam notes, and continuity guardrails. |
+| 2 | Fast local regression lane | `make verify-fast` | Every shipped optimization, including keep-decisions that changed code or build/test plumbing. | Fresh command capture or task summary evidence proving unit/integration/frontend/build checks stayed green. |
+| 3 | Deterministic mocked-online browser proof | `make verify-deep` | Any change touching live enrichment orchestration, polling/status flow, shared result application, or analyst-visible DOM/state. | Fresh command capture or task summary evidence proving the mocked-online browser seam still passes end-to-end. |
+| 4 | Final comparison + continuity note refresh | compare the updated ranked row(s), rerun lanes, and continuity notes in `.gsd/milestones/M013/M013-AUDIT.md` | Every optimization slice after verification completes. | The artifact records whether the change shipped, moved buckets, stayed deferred, or remained an explicit leave-alone decision. |
+
 ## Continuity guardrails
 
 | Requirement | Continuity guardrail |
@@ -48,9 +57,9 @@
 
 | Capture | Command | Exit | Duration (ms) | Summary |
 | --- | --- | ---: | ---: | --- |
-| status-snapshot-scaling | `internal benchmark: EnrichmentOrchestrator.get_status() snapshot scaling` | 0 | 98 | 400 `get_status()` calls: 200 results 0.14ms vs 5000 results 1.25ms (8.7x slower), confirming the current per-poll full-list snapshot cost before `since` slicing. |
-| cache-store-tempdb | `internal benchmark: CacheStore temp WAL put/get loop` | 0 | 19 | Temp WAL cache DB: 250 puts in 3.14ms, 250 TTL reads in 1.10ms, 250 hits, 250 retained rows. |
-| history-store-tempdb | `internal benchmark: HistoryStore temp WAL save/list/load loop` | 0 | 17 | Temp WAL history DB: 180 saves in 3.41ms, list_recent(20) in 0.04ms, single load in 0.02ms, latest total_count=1, recent rows=20. |
+| status-snapshot-scaling | `internal benchmark: EnrichmentOrchestrator.get_status() snapshot scaling` | 0 | 103 | 400 `get_status()` calls: 200 results 0.38ms vs 5000 results 1.71ms (4.5x slower), confirming the current per-poll full-list snapshot cost before `since` slicing. |
+| cache-store-tempdb | `internal benchmark: CacheStore temp WAL put/get loop` | 0 | 28 | Temp WAL cache DB: 250 puts in 10.15ms, 250 TTL reads in 1.49ms, 250 hits, 250 retained rows. |
+| history-store-tempdb | `internal benchmark: HistoryStore temp WAL save/list/load loop` | 0 | 19 | Temp WAL history DB: 180 saves in 3.96ms, list_recent(20) in 0.06ms, single load in 0.03ms, latest total_count=1, recent rows=20. |
 
 ## Seam checklist
 

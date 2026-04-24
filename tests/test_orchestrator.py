@@ -873,3 +873,193 @@ class TestCachedMarkersLock:
         for ioc in iocs:
             key = f"{ioc.value}|VirusTotal"
             assert key in markers, f"Missing cached_markers entry for {key}"
+
+
+class TestJobDiagnostics:
+    """Prove orchestrator-owned runtime/provider diagnostics stay bounded and safe."""
+
+    def test_diagnostics_track_cache_hits_misses_and_unknown_provider_bucket(self):
+        """Blank adapter names should fall into a bounded unknown bucket."""
+        ioc_hit = _make_ioc(IOCType.IPV4, "198.51.100.10")
+        ioc_miss = _make_ioc(IOCType.IPV4, "198.51.100.11")
+
+        adapter = _make_keyed_adapter("   ", supported_types={IOCType.IPV4})
+        adapter.lookup.side_effect = lambda ioc: _make_result(ioc, provider="FallbackProvider")
+
+        cache_mock = MagicMock()
+        cache_mock.get.side_effect = lambda value, type_, provider, ttl: (
+            {
+                "provider": "FallbackProvider",
+                "verdict": "clean",
+                "detection_count": 0,
+                "total_engines": 10,
+                "cached_at": "2024-01-01T00:00:00",
+            }
+            if value == ioc_hit.value and provider == "unknown"
+            else None
+        )
+
+        orchestrator = EnrichmentOrchestrator(
+            adapters=[adapter],
+            max_workers=2,
+            cache=cache_mock,
+            provider_concurrency={"unknown": 1},
+        )
+        orchestrator.enrich_all("job-diagnostics-cache", [ioc_hit, ioc_miss])
+
+        diagnostics = orchestrator.get_diagnostics("job-diagnostics-cache")
+        assert diagnostics is not None
+        assert diagnostics["dispatch_count"] == 2
+        assert diagnostics["attempt_count"] == 2
+        assert diagnostics["cache_hits"] == 1
+        assert diagnostics["cache_misses"] == 1
+        assert diagnostics["retry_count"] == 0
+        assert diagnostics["rate_limit_retry_count"] == 0
+        assert diagnostics["error_count"] == 0
+        assert "unknown" in diagnostics["providers"]
+        assert "unknown" in orchestrator._semaphores
+
+        unknown_provider = diagnostics["providers"]["unknown"]
+        assert unknown_provider["dispatch_count"] == 2
+        assert unknown_provider["attempt_count"] == 2
+        assert unknown_provider["cache_hits"] == 1
+        assert unknown_provider["cache_misses"] == 1
+        assert unknown_provider["error_count"] == 0
+
+    def test_diagnostics_track_rate_limit_retry_error_and_latency_aggregates(self):
+        """429 retries should increment retry counters without changing retry flow."""
+        ioc = _make_ioc(IOCType.IPV4, "203.0.113.10")
+        adapter = _make_vt_adapter()
+        adapter.lookup.side_effect = [
+            _make_error(ioc, msg="HTTP 429", provider="VirusTotal"),
+            _make_result(ioc, provider="VirusTotal"),
+        ]
+
+        orchestrator = _make_orchestrator(adapter)
+        with patch(
+            "app.enrichment.orchestrator.time.perf_counter",
+            side_effect=[10.0, 10.5, 20.0, 21.25],
+        ), patch("app.enrichment.orchestrator.time.sleep"):
+            orchestrator.enrich_all("job-diagnostics-429", [ioc])
+
+        diagnostics = orchestrator.get_diagnostics("job-diagnostics-429")
+        assert diagnostics is not None
+        assert diagnostics["dispatch_count"] == 1
+        assert diagnostics["attempt_count"] == 2
+        assert diagnostics["retry_count"] == 1
+        assert diagnostics["rate_limit_retry_count"] == 1
+        assert diagnostics["error_count"] == 1
+        assert diagnostics["latency_total_seconds"] == pytest.approx(1.75)
+        assert diagnostics["latency_max_seconds"] == pytest.approx(1.25)
+
+        vt_provider = diagnostics["providers"]["VirusTotal"]
+        assert vt_provider["dispatch_count"] == 1
+        assert vt_provider["attempt_count"] == 2
+        assert vt_provider["retry_count"] == 1
+        assert vt_provider["rate_limit_retry_count"] == 1
+        assert vt_provider["error_count"] == 1
+        assert vt_provider["latency_total_seconds"] == pytest.approx(1.75)
+        assert vt_provider["latency_max_seconds"] == pytest.approx(1.25)
+
+    def test_get_diagnostics_returns_stable_snapshot_while_workers_update(self):
+        """Mutating a returned diagnostics snapshot must not affect the live job state."""
+        iocs = [
+            _make_ioc(IOCType.IPV4, "192.0.2.20"),
+            _make_ioc(IOCType.IPV4, "192.0.2.21"),
+        ]
+        adapter = _make_public_adapter("VirusTotal", supported_types={IOCType.IPV4})
+
+        started = 0
+        started_lock = threading.Lock()
+        all_started = threading.Event()
+        release_lookup = threading.Event()
+
+        def blocking_lookup(ioc):
+            nonlocal started
+            with started_lock:
+                started += 1
+                if started == len(iocs):
+                    all_started.set()
+            release_lookup.wait(timeout=2)
+            return _make_result(ioc, provider="VirusTotal")
+
+        adapter.lookup.side_effect = blocking_lookup
+        orchestrator = _make_orchestrator(adapter, max_workers=2)
+
+        worker = threading.Thread(
+            target=orchestrator.enrich_all,
+            args=("job-live-diagnostics", iocs),
+        )
+        worker.start()
+        assert all_started.wait(timeout=2), "Workers did not start in time"
+
+        live_snapshot = orchestrator.get_diagnostics("job-live-diagnostics")
+        assert live_snapshot is not None
+        assert live_snapshot["dispatch_count"] == 2
+        assert live_snapshot["attempt_count"] == 0
+
+        live_snapshot["dispatch_count"] = 999
+        live_snapshot["providers"]["VirusTotal"]["dispatch_count"] = 999
+
+        release_lookup.set()
+        worker.join(timeout=2)
+        assert not worker.is_alive(), "enrich_all thread did not finish"
+
+        final_snapshot = orchestrator.get_diagnostics("job-live-diagnostics")
+        assert final_snapshot is not None
+        assert final_snapshot["dispatch_count"] == 2
+        assert final_snapshot["attempt_count"] == 2
+        assert final_snapshot["providers"]["VirusTotal"]["dispatch_count"] == 2
+        assert final_snapshot["providers"]["VirusTotal"]["attempt_count"] == 2
+
+    def test_get_diagnostics_falls_back_to_safe_defaults_for_malformed_state(self, mock_adapter):
+        """Malformed internal diagnostics should coerce to bounded safe defaults."""
+        orchestrator = _make_orchestrator(mock_adapter)
+        with orchestrator._lock:
+            orchestrator._jobs["job-malformed-diagnostics"] = {
+                "_diagnostics": {
+                    "dispatch_count": "oops",
+                    "cache_hits": -1,
+                    "providers": {
+                        "   ": {"cache_hits": 2, "latency_max_seconds": 0.75},
+                        "VirusTotal": "broken",
+                    },
+                }
+            }
+
+        diagnostics = orchestrator.get_diagnostics("job-malformed-diagnostics")
+        assert diagnostics == {
+            "dispatch_count": 0,
+            "attempt_count": 0,
+            "cache_hits": 0,
+            "cache_misses": 0,
+            "retry_count": 0,
+            "rate_limit_retry_count": 0,
+            "error_count": 0,
+            "latency_total_seconds": 0.0,
+            "latency_max_seconds": 0.0,
+            "providers": {
+                "unknown": {
+                    "dispatch_count": 0,
+                    "attempt_count": 0,
+                    "cache_hits": 2,
+                    "cache_misses": 0,
+                    "retry_count": 0,
+                    "rate_limit_retry_count": 0,
+                    "error_count": 0,
+                    "latency_total_seconds": 0.0,
+                    "latency_max_seconds": 0.75,
+                },
+                "VirusTotal": {
+                    "dispatch_count": 0,
+                    "attempt_count": 0,
+                    "cache_hits": 0,
+                    "cache_misses": 0,
+                    "retry_count": 0,
+                    "rate_limit_retry_count": 0,
+                    "error_count": 0,
+                    "latency_total_seconds": 0.0,
+                    "latency_max_seconds": 0.0,
+                },
+            },
+        }

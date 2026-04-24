@@ -656,6 +656,19 @@ def render_lanes_section() -> str:
     return "\n".join(lines)
 
 
+def render_rerun_checklist_section() -> str:
+    return "\n".join(
+        [
+            "| Step | Proof surface | Command | Required when | Expected durable evidence |",
+            "| --- | --- | --- | --- | --- |",
+            "| 1 | Workflow runner + ranked artifact refresh | `python3 tools/optimization_audit.py --mode baseline --output .gsd/milestones/M013/M013-AUDIT.md` | Every optimization slice before handoff. | Updated M013 audit artifact with current ranked buckets, seam notes, and continuity guardrails. |",
+            "| 2 | Fast local regression lane | `make verify-fast` | Every shipped optimization, including keep-decisions that changed code or build/test plumbing. | Fresh command capture or task summary evidence proving unit/integration/frontend/build checks stayed green. |",
+            "| 3 | Deterministic mocked-online browser proof | `make verify-deep` | Any change touching live enrichment orchestration, polling/status flow, shared result application, or analyst-visible DOM/state. | Fresh command capture or task summary evidence proving the mocked-online browser seam still passes end-to-end. |",
+            "| 4 | Final comparison + continuity note refresh | compare the updated ranked row(s), rerun lanes, and continuity notes in `.gsd/milestones/M013/M013-AUDIT.md` | Every optimization slice after verification completes. | The artifact records whether the change shipped, moved buckets, stayed deferred, or remained an explicit leave-alone decision. |",
+        ]
+    )
+
+
 def render_guardrails_section() -> str:
     lines = [
         "| Requirement | Continuity guardrail |",
@@ -782,6 +795,10 @@ def render_document(document: AuditDocument) -> str:
         "## Verification lanes",
         "",
         render_lanes_section(),
+        "",
+        "## Verified rerun checklist",
+        "",
+        render_rerun_checklist_section(),
         "",
         "## Continuity guardrails",
         "",

@@ -31,3 +31,15 @@
 {"id":"707c1100-1f29-42b2-a8bc-851fc7e101a4","ts":"2026-04-23T08:56:51.549Z","severity":"warning","message":"[safety] file-change: tests/test_optimization_audit.py — Modified but not in task plan's expected output","source":"notify","read":false}
 {"id":"ace2e8d0-9dc6-496e-a87f-43ca1b8e9987","ts":"2026-04-23T11:01:04.152Z","severity":"warning","message":"Unit timed out for execute-task M013/S01/T03 (supervision may have failed). Pausing auto-mode.","source":"notify","read":false}
 {"id":"27a360c9-b676-457b-af26-76d6739d6766","ts":"2026-04-23T11:01:05.280Z","severity":"info","message":"Auto-mode paused (Escape). Type to interact, or /gsd auto to resume.","source":"notify","read":false}
+{"id":"66b49509-0317-4c32-8902-b1c0139ded4c","ts":"2026-04-23T11:01:05.355Z","severity":"info","message":"Committed: chore: auto-commit after execute-task","source":"notify","read":false}
+{"id":"06640347-1890-4fbe-ab62-e4f658ab647a","ts":"2026-04-23T11:01:05.375Z","severity":"warning","message":"Timeout recovery: steering execute-task M013/S01/T03 to finish durable output (attempt 1, session 1/1).","source":"notify","read":false}
+{"id":"502148f5-ea8f-4b77-b350-2e58c958e96e","ts":"2026-04-24T00:57:42.599Z","severity":"info","message":"Resuming paused session for M013.","source":"notify","read":false}
+{"id":"f4d831b0-1478-4459-ae7c-a84fd799f1bf","ts":"2026-04-24T00:57:42.604Z","severity":"info","message":"Auto-mode resumed.","source":"notify","read":false}
+{"id":"cf2456f0-aba3-4457-90f2-d3a311260aa7","ts":"2026-04-24T00:57:45.978Z","severity":"info","message":"Resume: applied 5 fix(es) to state.","source":"notify","read":false}
+{"id":"da5d1d51-6457-4a04-8ba5-df250142e9ee","ts":"2026-04-24T00:58:51.193Z","severity":"info","message":"Auto-mode started. Will loop until milestone complete.","source":"notify","read":false}
+{"id":"70a23ea4-1d0a-4c63-a3f1-09ba7d1a4268","ts":"2026-04-24T00:58:51.194Z","severity":"info","message":"Dynamic routing: enabled — simple tasks may use cheaper models (ceiling: openai-codex/gpt-5.4)","source":"notify","read":false}
+{"id":"cff6eafb-cd9f-439c-a176-2e2f6f6231dc","ts":"2026-04-24T00:58:51.195Z","severity":"info","message":"Pre-flight: 12 milestones queued. All have full context.","source":"notify","read":false}
+{"id":"0d87e187-18ad-472a-8a90-4a76e0dbf4b3","ts":"2026-04-24T02:15:06.220Z","severity":"info","message":"Auto-mode started. Will loop until milestone complete.","source":"notify","read":false}
+{"id":"d7d73da3-7948-4ffe-8446-e522f4664d13","ts":"2026-04-24T02:15:06.222Z","severity":"info","message":"Dynamic routing: enabled — simple tasks may use cheaper models (ceiling: openai-codex/gpt-5.4)","source":"notify","read":false}
+{"id":"d32514ad-9e2d-47f6-9ae6-4ab7697f2b9c","ts":"2026-04-24T02:15:06.223Z","severity":"info","message":"Pre-flight: 12 milestones queued. All have full context.","source":"notify","read":false}
+{"id":"4e42e103-68dd-4654-b091-31c6467836b8","ts":"2026-04-24T02:15:06.906Z","severity":"info","message":"Pre-dispatch: pre-dispatch: created gsd snapshot after 77m of uncommitted changes","source":"notify","read":false}
