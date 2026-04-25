@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T01",
+  "unitId": "M014/S01/T01",
+  "timestamp": 1777106800628,
+  "passed": true,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "pytest tests/test_runtime_state_boundary.py -q",
+      "exitCode": 0,
+      "durationMs": 311,
+      "verdict": "pass"
+    },
+    {
+      "command": "python3 tools/runtime_state_boundary.py classify .gsd/milestones/M014/M014-ROADMAP.md .gsd/state-manifest.json .gsd/audit/events.jsonl .planning/STATE.md .bg-shell/manifest.json",
+      "exitCode": 0,
+      "durationMs": 27,
+      "verdict": "pass"
+    }
+  ]
+}

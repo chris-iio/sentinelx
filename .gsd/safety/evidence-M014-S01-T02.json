@@ -1,0 +1,10 @@
+[
+  {
+    "kind": "bash",
+    "toolCallId": "call_pVpNIQhezCRl8qw0pFGy2PNz|fc_0ad42310ff41def30169ec8841fee48191ab48aaee87d89396",
+    "command": "pwd && printf '\\n---\\n' && rg --files -g '.gitignore' -g 'Makefile' -g 'README.md' -g 'docs/runtime-state-boundary.md' -g 'tools/runtime_state_boundary.py' -g 'tests/test_runtime_state_boundary.py' . && printf '\\n---\\n' && git status --short --ignored .gsd .planning .bg-shell",
+    "exitCode": 0,
+    "outputSnippet": "/home/chris/projects/sentinelx\n\n---\n./Makefile\n./tests/test_runtime_state_boundary.py\n./.gitignore\n./docs/runtime-state-boundary.md\n./README.md\n./tools/runtime_state_boundary.py\n\n---\n M .gsd/audit/events.jsonl\n M .gsd/notifications.jsonl\n?? .gsd/completed-units-M001.json\n?? .gsd/completed-units-M002.json\n?? .gsd/completed-units-M003.json\n?? .gsd/completed-units-M004.json\n?? .gsd/completed-units-M008.json\n?? .gsd/event-log.jsonl\n?? .gsd/milestones/M014/slices/S01/tasks/T01-VERIFY.json\n?? .gsd/saf",
+    "timestamp": 1777109057477
+  }
+]

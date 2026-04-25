@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-04-25T08:38:13Z | Files: 163 | Described: 0/163
-<!-- gsd:codebase-meta {"generatedAt":"2026-04-25T08:38:13Z","fingerprint":"348d8e4c5f0e829472c9b2760fab365c519960f3","fileCount":163,"truncated":false} -->
+Generated: 2026-04-25T09:23:42Z | Files: 166 | Described: 0/166
+<!-- gsd:codebase-meta {"generatedAt":"2026-04-25T09:23:42Z","fingerprint":"8f09c7227960fc0e82f6116b685ab500bff37e0d","fileCount":166,"truncated":false} -->
 
 ### (root)/
 - `.codex`
@@ -137,6 +137,7 @@ Generated: 2026-04-25T08:38:13Z | Files: 163 | Described: 0/163
 
 ### docs/
 - `docs/optimization-audit.md`
+- `docs/runtime-state-boundary.md`
 
 ### docs/plans/
 - `docs/plans/2026-03-02-universal-threat-intel-hub-design.md`
@@ -144,7 +145,7 @@ Generated: 2026-04-25T08:38:13Z | Files: 163 | Described: 0/163
 - `docs/plans/2026-03-04-settings-page-redesign.md`
 
 ### tests/
-- *(45 files: 45 .py)*
+- *(46 files: 46 .py)*
 
 ### tests/e2e/
 - `tests/e2e/__init__.py`
@@ -166,4 +167,5 @@ Generated: 2026-04-25T08:38:13Z | Files: 163 | Described: 0/163
 
 ### tools/
 - `tools/optimization_audit.py`
+- `tools/runtime_state_boundary.py`
 - `tools/security_check.py`

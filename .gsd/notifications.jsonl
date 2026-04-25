@@ -1,0 +1,7 @@
+{"id":"77e1848f-8b31-4c89-a964-8d8a3d884542","ts":"2026-04-25T08:46:40.610Z","severity":"info","message":"Committed: docs: Added a checked-in runtime-state boundary classifier with audit C…","source":"notify","read":false}
+{"id":"30ae78e4-8d52-4b44-ae7a-4424701e7c0a","ts":"2026-04-25T08:46:40.971Z","severity":"info","message":"Verification gate: 2/2 checks passed","source":"notify","read":false}
+{"id":"f7773cf7-669b-4b07-8760-a220de878510","ts":"2026-04-25T09:23:48.288Z","severity":"info","message":"Pre-dispatch: pre-dispatch: created gsd snapshot after 37m of uncommitted changes","source":"notify","read":false}
+{"id":"0c6c4731-743e-4b1e-b179-7c74526fc54c","ts":"2026-04-25T09:57:26.900Z","severity":"warning","message":"Stalled tool detected: a tool has been in-flight for 33min. Treating as hung — attempting idle recovery.","source":"notify","read":false}
+{"id":"4ab3cd4d-0fb5-4046-a515-fd1fe7e1bc8b","ts":"2026-04-25T09:57:27.589Z","severity":"info","message":"Recovery attempt 2 for execute-task M014/S01/T02. Waiting 1s before retry.","source":"notify","read":false}
+{"id":"9cbaf4e2-0fdc-4cfd-8af3-969617a57f3c","ts":"2026-04-25T09:57:27.591Z","severity":"warning","message":"Unit timed out for execute-task M014/S01/T02 (supervision may have failed). Pausing auto-mode.","source":"notify","read":false}
+{"id":"fe1f54fe-7bc9-48bc-885f-c9944aae598f","ts":"2026-04-25T09:57:28.859Z","severity":"info","message":"Auto-mode paused (Escape). Type to interact, or /gsd auto to resume.","source":"notify","read":false}
