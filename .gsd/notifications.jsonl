@@ -20,3 +20,5 @@
 {"id":"700c0cca-4165-471f-ada6-ba2b6b8457ea","ts":"2026-04-25T06:26:36.921Z","severity":"info","message":"Auto-mode started. Will loop until milestone complete.","source":"notify","read":false}
 {"id":"3eae6f8e-af9a-499f-b864-c47b06d7b1e9","ts":"2026-04-25T06:26:36.922Z","severity":"info","message":"Dynamic routing: enabled — simple tasks may use cheaper models (ceiling: openai-codex/gpt-5.4)","source":"notify","read":false}
 {"id":"1c8a762a-b529-4be0-9da0-1e664fb1750b","ts":"2026-04-25T06:26:36.924Z","severity":"info","message":"Pre-flight: 12 milestones queued. All have full context.","source":"notify","read":false}
+{"id":"91e1c841-8497-4400-b64d-18984eb4a0e2","ts":"2026-04-25T06:28:46.231Z","severity":"info","message":"Committed: feat: Confirmed the helper and API status routes already use the orches…","source":"notify","read":false}
+{"id":"dac843e3-e5c5-4e85-8778-905eae776486","ts":"2026-04-25T06:28:47.037Z","severity":"info","message":"Verification gate: 1/1 checks passed","source":"notify","read":false}

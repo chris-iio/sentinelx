@@ -115,6 +115,16 @@ class TestThreadSafety:
         assert s["total_entries"] == 100
 
 
+class TestSqliteConfig:
+    def test_uses_wal_mode_and_busy_timeout(self, cache: CacheStore) -> None:
+        """CacheStore keeps WAL mode and busy_timeout enabled on the live connection."""
+        journal_mode = cache._conn.execute("PRAGMA journal_mode").fetchone()[0]
+        busy_timeout = cache._conn.execute("PRAGMA busy_timeout").fetchone()[0]
+
+        assert str(journal_mode).lower() == "wal"
+        assert busy_timeout == 5000
+
+
 class TestGetCachedAt:
     def test_get_returns_cached_at(self, cache: CacheStore) -> None:
         """get() result includes a 'cached_at' key with ISO timestamp."""

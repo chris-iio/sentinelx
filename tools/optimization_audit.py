@@ -203,21 +203,20 @@ SEAMS: tuple[Seam, ...] = (
 
 BASELINE_FINDINGS: tuple[BaselineFinding, ...] = (
     BaselineFinding(
-        bucket="do now",
-        finding="Make `/enrichment/status` cursor-native end-to-end by avoiding full results-list snapshots before slicing `since`.",
+        bucket="leave alone",
+        finding="Keep `/enrichment/status` and `/api/status` on the orchestrator-owned incremental snapshot path; the request/status hot-path fix is shipped.",
         seam="request/status",
         evidence_kind="measurement + code-path reasoning",
         evidence_summary=(
-            "Internal capture `status-snapshot-scaling` shows `get_status()` cost rises with total retained results. "
-            "`app/routes/_helpers.py::_get_enrichment_status()` currently calls `orchestrator.get_status()` first, and "
-            "`app/enrichment/orchestrator.py::get_status()` clones the entire `results` list before the helper slices "
-            "`results[since:]`, so every poll still pays an O(total-results) copy even when the frontend only needs the delta."
+            "Internal capture `status-snapshot-scaling` now compares the retained-list full snapshot with the shipped delta accessor: "
+            "`get_status()` still scales with total retained results, while `get_incremental_status(since=4990)` returns only the tail and preserves `next_since`. "
+            "`app/routes/_helpers.py::_get_enrichment_status()` now calls `orchestrator.get_incremental_status()` and serializes only the returned tail plus aligned `cached_markers`, while helper-owned terminal tombstones and history-save diagnostics stay intact."
         ),
         continuity_guardrails="R008, R010, R018, R019, R040",
         rerun_lanes="`make verify-fast`, `make verify-deep`",
         continuity_notes=(
-            "Preserve `next_since`, terminal failure semantics, progress/warning banners, and analyst-visible completion "
-            "while shifting backend polling to a truly incremental read path."
+            "Preserve `done`/`total`/`complete`, `next_since`, tail-only `cached_at` markers, terminal failure semantics, and aggregate history-save diagnostics; "
+            "do not fall back to full results snapshots on the poll path without fresh evidence."
         ),
     ),
     BaselineFinding(
@@ -303,11 +302,11 @@ BASELINE_SEAM_NOTES: tuple[SeamNote, ...] = (
         boundary="`app/routes/_helpers.py`, `app/routes/analysis.py`, and helper/status regression coverage.",
         current_shape=(
             "The helper owns a bounded module-level orchestrator registry, a shared enrichment thread pool, terminal tombstones, and history-save diagnostics. The frontend's `since` cursor "
-            "contract is preserved, but the helper still asks the orchestrator for a full status snapshot before slicing incremental results."
+            "contract is preserved on the shipped path because `_get_enrichment_status()` now asks the orchestrator for an incremental snapshot and only serializes the returned tail."
         ),
         continuity_watch="R008, R010, R018, R019, R040 are the key guardrails.",
         baseline_call=(
-            "This is the highest-confidence near-term optimization seam because it sits on every poll request and already has a clear correctness contract to preserve."
+            "The hot-path fix is now shipped: keep polling on the orchestrator-owned incremental snapshot path and leave helper-owned terminal tombstones plus history-save diagnostics truthful."
         ),
     ),
     SeamNote(
@@ -330,19 +329,19 @@ BASELINE_SEAM_NOTES: tuple[SeamNote, ...] = (
         ),
         continuity_watch="R008, R009, R010, R019, R040 remain coupled to any render optimization.",
         baseline_call=(
-            "Optimize this seam only after the request/status cursor cost lands, because the shared coordinator makes render work worth improving but the current proof burden is high."
+            "Optimize this seam after the shipped request/status delta path, because the shared coordinator still makes render work worth improving but carries the broader proof burden."
         ),
     ),
 )
 
 BASELINE_GUARDRAIL_COVERAGE: tuple[GuardrailCoverage, ...] = (
-    GuardrailCoverage("R008", "request/status + frontend/render", "Do-now cursor work plus do-next coordinator caching", "Keep polling continuity, export/copy/detail-link behavior, and progress visibility intact."),
+    GuardrailCoverage("R008", "request/status + frontend/render", "Shipped request/status delta path plus do-next coordinator caching", "Keep polling continuity, export/copy/detail-link behavior, and progress visibility intact."),
     GuardrailCoverage("R009", "frontend/render", "Do-next coordinator/render work", "Preserve textContent-only DOM construction, CSP/CSRF assumptions, and host-validation-adjacent safety expectations."),
-    GuardrailCoverage("R010", "request/status + frontend/render", "Do-now cursor work plus do-next render work", "Any shipped optimization must reduce or at least not worsen polling/render churn."),
+    GuardrailCoverage("R010", "request/status + frontend/render", "Shipped request/status delta path plus do-next render work", "Any shipped optimization must reduce or at least not worsen polling/render churn."),
     GuardrailCoverage("R014", "runtime/provider", "Measured runtime/provider keep-decision", "Per-provider concurrency remains part of the contract unless a future cache-hit-heavy capture proves that a narrower pre-dispatch optimization is worth the regression surface."),
     GuardrailCoverage("R015", "runtime/provider", "Measured runtime/provider keep-decision", "429 backoff stays protected; future changes must prove they do not regress quota safety."),
-    GuardrailCoverage("R018", "runtime/provider + request/status", "Do-now cursor work plus measured runtime/provider evidence", "Snapshot correctness, semaphore scope, and cached-marker locking remain non-negotiable."),
-    GuardrailCoverage("R019", "request/status + frontend/render", "Do-now cursor work plus do-next coordinator caching", "Keep `since`/`next_since` incremental polling semantics end-to-end."),
+    GuardrailCoverage("R018", "runtime/provider + request/status", "Shipped request/status delta path plus measured runtime/provider evidence", "Snapshot correctness, semaphore scope, and cached-marker locking remain non-negotiable."),
+    GuardrailCoverage("R019", "request/status + frontend/render", "Shipped request/status delta path plus do-next coordinator caching", "Keep `since`/`next_since` incremental polling semantics end-to-end."),
     GuardrailCoverage("R020", "runtime/provider", "Measured runtime/provider keep-decision", "Persistent adapter-owned sessions stay justified until measured evidence argues otherwise."),
     GuardrailCoverage("R022", "persistence", "Leave-alone WAL store decision", "WAL and persistent connection behavior stay explicit keep-decisions pending contention evidence."),
     GuardrailCoverage("R040", "all seams", "Every ranked finding", "Each future slice must rerun the listed proof lanes before claiming an optimization is safe."),
@@ -704,32 +703,52 @@ def measure_status_snapshot_scaling() -> str:
 
     orchestrator = EnrichmentOrchestrator(adapters=[])
     iterations = 400
+    retained_results = 5000
+    tail_count = 10
+    since = retained_results - tail_count
 
-    def elapsed_ms(result_count: int) -> float:
-        with orchestrator._lock:
-            orchestrator._jobs["bench"] = {
-                "total": result_count,
-                "done": result_count,
-                "results": list(range(result_count)),
-                "complete": True,
-                "status": "complete",
-                "terminal": False,
-                "terminal_reason": None,
-                "error": None,
-            }
-        start = perf_counter()
-        for _ in range(iterations):
-            orchestrator.get_status("bench")
-        return (perf_counter() - start) * 1000
+    with orchestrator._lock:
+        orchestrator._jobs["bench"] = {
+            "total": retained_results,
+            "done": retained_results,
+            "results": list(range(retained_results)),
+            "complete": True,
+            "status": "complete",
+            "terminal": False,
+            "terminal_reason": None,
+            "error": None,
+        }
 
-    small_count = 200
-    large_count = 5000
-    small_ms = elapsed_ms(small_count)
-    large_ms = elapsed_ms(large_count)
-    ratio = large_ms / small_ms if small_ms > 0 else 0.0
+    start = perf_counter()
+    for _ in range(iterations):
+        full_snapshot = orchestrator.get_status("bench")
+    full_ms = (perf_counter() - start) * 1000
+
+    start = perf_counter()
+    for _ in range(iterations):
+        incremental_snapshot = orchestrator.get_incremental_status("bench", since=since)
+    incremental_ms = (perf_counter() - start) * 1000
+
+    returned_rows = (
+        len(incremental_snapshot["results"])
+        if isinstance(incremental_snapshot, dict)
+        else 0
+    )
+    next_since = (
+        incremental_snapshot.get("next_since")
+        if isinstance(incremental_snapshot, dict)
+        else None
+    )
+    speedup = full_ms / incremental_ms if incremental_ms > 0 else 0.0
+    retained_count = (
+        len(full_snapshot["results"])
+        if isinstance(full_snapshot, dict)
+        else retained_results
+    )
     return (
-        f"{iterations} `get_status()` calls: {small_count} results {small_ms:.2f}ms vs "
-        f"{large_count} results {large_ms:.2f}ms ({ratio:.1f}x slower), confirming the current per-poll full-list snapshot cost before `since` slicing."
+        f"{iterations} polls at {retained_count} retained results: `get_status()` {full_ms:.2f}ms vs "
+        f"`get_incremental_status(since={since})` {incremental_ms:.2f}ms ({speedup:.1f}x faster) while returning "
+        f"{returned_rows} tail rows with next_since={next_since}."
     )
 
 
@@ -1058,10 +1077,11 @@ def render_document(document: AuditDocument) -> str:
             [
                 "## Baseline stance",
                 "",
-                "- Highest-confidence near-term work: make the status path truly incremental so the backend no longer snapshots every retained result on each poll.",
+                "- Highest-confidence shipped fix: the status path now uses the orchestrator-owned incremental snapshot API, so the backend no longer snapshots every retained result on each poll.",
+                "- The request/status seam is now an explicit shipped keep-decision: keep `_get_enrichment_status()` on `get_incremental_status()` while the helper continues to own terminal tombstones and aggregate history-save diagnostics.",
                 "- The runtime/provider seam is now an explicit keep-decision: the deterministic local capture only showed a 1/5 cache-hit ratio, so no measured win justified pre-dispatch short-circuit churn ahead of the worker/semaphore path.",
-                "- Highest-confidence explicit keep-decision: leave the WAL-backed cache/history stores and the provider backoff/session contract alone until measured contention or provider pain shows up.",
-                "- Frontend work remains important, but it should follow the status-path fix because the shared coordinator has a broader proof burden and depends on the same poll contract.",
+                "- Highest-confidence explicit persistence keep-decision: leave the WAL-backed cache/history stores and the provider backoff/session contract alone until measured contention or provider pain shows up.",
+                "- Frontend work remains important, but it should now follow the shipped status-path fix because the shared coordinator still has the broader proof burden and depends on the same poll contract.",
                 "",
                 "## Ranked findings",
                 "",

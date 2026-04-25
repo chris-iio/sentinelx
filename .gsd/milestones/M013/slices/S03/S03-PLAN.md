@@ -122,7 +122,7 @@
   - Files: `app/routes/_helpers.py`, `tests/test_routes.py`, `tests/test_api.py`, `app/routes/api.py`, `app/routes/enrichment.py`, `app/static/src/ts/types/api.ts`
   - Verify: pytest tests/test_routes.py tests/test_api.py -q
 
-- [ ] **T03: Refresh audit evidence and persistence keep-decisions on the final code path** `est:0.75d`
+- [x] **T03: Refresh audit evidence and persistence keep-decisions on the final code path** `est:0.75d`
   Update the durable optimization artifact so S03 records the shipped request/status fix and keeps WAL-backed cache/history persistence on explicit evidence-based footing unless new contention proof appears during execution. This task should prefer audit/test refresh over speculative store rewrites: only modify `app/cache/store.py` or `app/enrichment/history_store.py` if a focused measurement or failing test proves a real persistence problem.
 
 ## Failure Modes

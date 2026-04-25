@@ -70,8 +70,12 @@ def test_baseline_mode_writes_ranked_findings_and_notes(tmp_path):
     assert "The runtime/provider seam is now an explicit keep-decision" in content
     assert "limit it to a cache-hit-heavy dispatch reduction before touching semaphores" not in content
     assert "Keep per-provider backoff/session semantics as explicit measured keep-decisions" in content
-    assert "Make `/enrichment/status` cursor-native end-to-end" in content
+    assert "Highest-confidence shipped fix" in content
+    assert "request/status seam is now an explicit shipped keep-decision" in content
+    assert "Keep `/enrichment/status` and `/api/status` on the orchestrator-owned incremental snapshot path" in content
     assert "Keep WAL-backed cache/history stores and persistent connections unchanged" in content
+    assert "get_incremental_status(since=4990)" in content
+    assert "Make `/enrichment/status` cursor-native end-to-end" not in content
     assert "_Fill during the do now pass_" not in content
 
 

@@ -283,3 +283,11 @@ class TestDBCreation:
         # Verify it works by saving
         row_id = store.save_analysis("test", "online", [], [])
         assert store.load_analysis(row_id) is not None
+
+    def test_uses_wal_mode_and_busy_timeout(self, store: HistoryStore) -> None:
+        """HistoryStore keeps WAL mode and busy_timeout enabled on the live connection."""
+        journal_mode = store._conn.execute("PRAGMA journal_mode").fetchone()[0]
+        busy_timeout = store._conn.execute("PRAGMA busy_timeout").fetchone()[0]
+
+        assert str(journal_mode).lower() == "wal"
+        assert busy_timeout == 5000

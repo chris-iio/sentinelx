@@ -1,7 +1,7 @@
 # M013 Optimization Audit — SentinelX
 
 - Mode: `baseline`
-- Generated at: `2026-04-24 02:53:20 UTC`
+- Generated at: `2026-04-25 06:33:09 UTC`
 - Repo root: `/home/chris/projects/sentinelx`
 - Output path: `.gsd/milestones/M013/M013-AUDIT.md`
 
@@ -57,10 +57,10 @@
 
 | Capture | Command | Exit | Duration (ms) | Summary |
 | --- | --- | ---: | ---: | --- |
-| runtime-provider-diagnostics | `internal benchmark: EnrichmentOrchestrator synthetic runtime/provider diagnostics` | 0 | 71 | provider mix CacheAlpha:2d/0e, RateLimitBeta:2d/1e; dispatch=4; attempts=5; cache-hit ratio 1/5 (20%); retries=1 (429=1); errors=1; latency total=2.25s max=1.00s. |
-| status-snapshot-scaling | `internal benchmark: EnrichmentOrchestrator.get_status() snapshot scaling` | 0 | 1 | 400 `get_status()` calls: 200 results 0.28ms vs 5000 results 1.44ms (5.1x slower), confirming the current per-poll full-list snapshot cost before `since` slicing. |
-| cache-store-tempdb | `internal benchmark: CacheStore temp WAL put/get loop` | 0 | 19 | Temp WAL cache DB: 250 puts in 5.02ms, 250 TTL reads in 1.08ms, 250 hits, 250 retained rows. |
-| history-store-tempdb | `internal benchmark: HistoryStore temp WAL save/list/load loop` | 0 | 18 | Temp WAL history DB: 180 saves in 4.93ms, list_recent(20) in 0.07ms, single load in 0.04ms, latest total_count=1, recent rows=20. |
+| runtime-provider-diagnostics | `internal benchmark: EnrichmentOrchestrator synthetic runtime/provider diagnostics` | 0 | 63 | provider mix CacheAlpha:2d/0e, RateLimitBeta:2d/1e; dispatch=4; attempts=5; cache-hit ratio 1/5 (20%); retries=1 (429=1); errors=1; latency total=2.25s max=1.00s. |
+| status-snapshot-scaling | `internal benchmark: EnrichmentOrchestrator.get_status() snapshot scaling` | 0 | 1 | 400 polls at 5000 retained results: `get_status()` 1.41ms vs `get_incremental_status(since=4990)` 0.46ms (3.1x faster) while returning 10 tail rows with next_since=5000. |
+| cache-store-tempdb | `internal benchmark: CacheStore temp WAL put/get loop` | 0 | 24 | Temp WAL cache DB: 250 puts in 3.36ms, 250 TTL reads in 1.13ms, 250 hits, 250 retained rows. |
+| history-store-tempdb | `internal benchmark: HistoryStore temp WAL save/list/load loop` | 0 | 22 | Temp WAL history DB: 180 saves in 2.72ms, list_recent(20) in 0.04ms, single load in 0.02ms, latest total_count=1, recent rows=20. |
 
 ## Seam checklist
 
@@ -102,10 +102,11 @@ Use the same table shape in every bucket. Required fields per row:
 
 ## Baseline stance
 
-- Highest-confidence near-term work: make the status path truly incremental so the backend no longer snapshots every retained result on each poll.
+- Highest-confidence shipped fix: the status path now uses the orchestrator-owned incremental snapshot API, so the backend no longer snapshots every retained result on each poll.
+- The request/status seam is now an explicit shipped keep-decision: keep `_get_enrichment_status()` on `get_incremental_status()` while the helper continues to own terminal tombstones and aggregate history-save diagnostics.
 - The runtime/provider seam is now an explicit keep-decision: the deterministic local capture only showed a 1/5 cache-hit ratio, so no measured win justified pre-dispatch short-circuit churn ahead of the worker/semaphore path.
-- Highest-confidence explicit keep-decision: leave the WAL-backed cache/history stores and the provider backoff/session contract alone until measured contention or provider pain shows up.
-- Frontend work remains important, but it should follow the status-path fix because the shared coordinator has a broader proof burden and depends on the same poll contract.
+- Highest-confidence explicit persistence keep-decision: leave the WAL-backed cache/history stores and the provider backoff/session contract alone until measured contention or provider pain shows up.
+- Frontend work remains important, but it should now follow the shipped status-path fix because the shared coordinator still has the broader proof burden and depends on the same poll contract.
 
 ## Ranked findings
 
@@ -113,7 +114,6 @@ Use the same table shape in every bucket. Required fields per row:
 
 | Finding | Seam | Evidence kind | Evidence summary | Continuity guardrails | Rerun lanes | Continuity notes |
 | --- | --- | --- | --- | --- | --- | --- |
-| Make `/enrichment/status` cursor-native end-to-end by avoiding full results-list snapshots before slicing `since`. | request/status | measurement + code-path reasoning | Internal capture `status-snapshot-scaling` shows `get_status()` cost rises with total retained results. `app/routes/_helpers.py::_get_enrichment_status()` currently calls `orchestrator.get_status()` first, and `app/enrichment/orchestrator.py::get_status()` clones the entire `results` list before the helper slices `results[since:]`, so every poll still pays an O(total-results) copy even when the frontend only needs the delta. | R008, R010, R018, R019, R040 | `make verify-fast`, `make verify-deep` | Preserve `next_since`, terminal failure semantics, progress/warning banners, and analyst-visible completion while shifting backend polling to a truly incremental read path. |
 
 ### do next
 
@@ -130,6 +130,7 @@ Use the same table shape in every bucket. Required fields per row:
 
 | Finding | Seam | Evidence kind | Evidence summary | Continuity guardrails | Rerun lanes | Continuity notes |
 | --- | --- | --- | --- | --- | --- | --- |
+| Keep `/enrichment/status` and `/api/status` on the orchestrator-owned incremental snapshot path; the request/status hot-path fix is shipped. | request/status | measurement + code-path reasoning | Internal capture `status-snapshot-scaling` now compares the retained-list full snapshot with the shipped delta accessor: `get_status()` still scales with total retained results, while `get_incremental_status(since=4990)` returns only the tail and preserves `next_since`. `app/routes/_helpers.py::_get_enrichment_status()` now calls `orchestrator.get_incremental_status()` and serializes only the returned tail plus aligned `cached_markers`, while helper-owned terminal tombstones and history-save diagnostics stay intact. | R008, R010, R018, R019, R040 | `make verify-fast`, `make verify-deep` | Preserve `done`/`total`/`complete`, `next_since`, tail-only `cached_at` markers, terminal failure semantics, and aggregate history-save diagnostics; do not fall back to full results snapshots on the poll path without fresh evidence. |
 | Keep the runtime/provider dispatch path unchanged until diagnostics show a materially cache-hit-heavy workload. | runtime/provider | measurement + code-path reasoning | Internal capture `runtime-provider-diagnostics` reports provider mix CacheAlpha:2d/0e, RateLimitBeta:2d/1e; dispatch=4, attempts=5, cache-hit ratio 1/5 (20%), retries=1 (429=1), and latency total=2.25s max=1.00s. The orchestrator already short-circuits cache hits inside `_single_attempt()`, so moving that check ahead of thread-pool/semaphore scheduling would only shave bounded dispatch overhead and this measurement does not show a large enough cache-hit-heavy mix to justify churn. | R014, R015, R018, R020, R040 | `make verify-fast`, `make verify-deep` | Preserve per-provider caps, cache-hit markers, retry/backoff semantics, and adapter-owned session reuse; only revisit pre-dispatch short-circuiting if a future capture shows cache hits dominating enough to outweigh the regression surface. |
 | Keep WAL-backed cache/history stores and persistent connections unchanged until contention evidence appears. | persistence | measurement + code-path reasoning | Internal temp-DB captures show low-latency cache puts/gets and history saves/loads on the current code, while `app/cache/store.py` and `app/enrichment/history_store.py` already enable WAL, `busy_timeout`, persistent connections, and simple indexed queries. No lock-pressure or write-amplification evidence justified churn in this baseline pass. | R022, R040 | `make verify-fast` | If a later slice sees real writer contention, measure concurrent load first; do not trade away WAL or persistent-connection simplicity speculatively. |
 | Keep per-provider backoff/session semantics as explicit measured keep-decisions. | runtime/provider | measurement + code-path reasoning | The same `runtime-provider-diagnostics` capture surfaces retry/rate-limit cost and provider error tallies without widening analyst-visible status, and `tests/test_orchestrator.py` still proves semaphores exclude backoff sleep, cached markers stay locked, and diagnostics snapshots stay stable. That combination makes measurement the additive change while keeping adapter-owned sessions and backoff rules on explicit keep-decision footing until a later slice shows real provider pain. | R014, R015, R018, R020, R040 | `make verify-fast`, `make verify-deep` | Future work should consume the measured diagnostics surface first and only revisit the contract if live evidence shows meaningful provider pain beyond cache-hit-heavy dispatch overhead. |
@@ -146,9 +147,9 @@ Use the same table shape in every bucket. Required fields per row:
 ### request/status
 
 - Boundary: `app/routes/_helpers.py`, `app/routes/analysis.py`, and helper/status regression coverage.
-- Current shape: The helper owns a bounded module-level orchestrator registry, a shared enrichment thread pool, terminal tombstones, and history-save diagnostics. The frontend's `since` cursor contract is preserved, but the helper still asks the orchestrator for a full status snapshot before slicing incremental results.
+- Current shape: The helper owns a bounded module-level orchestrator registry, a shared enrichment thread pool, terminal tombstones, and history-save diagnostics. The frontend's `since` cursor contract is preserved on the shipped path because `_get_enrichment_status()` now asks the orchestrator for an incremental snapshot and only serializes the returned tail.
 - Continuity watch: R008, R010, R018, R019, R040 are the key guardrails.
-- Baseline call: This is the highest-confidence near-term optimization seam because it sits on every poll request and already has a clear correctness contract to preserve.
+- Baseline call: The hot-path fix is now shipped: keep polling on the orchestrator-owned incremental snapshot path and leave helper-owned terminal tombstones plus history-save diagnostics truthful.
 
 ### persistence
 
@@ -162,19 +163,19 @@ Use the same table shape in every bucket. Required fields per row:
 - Boundary: `app/static/src/ts/modules/enrichment.ts`, `result-application.ts`, `row-factory.ts`, and mocked-online browser proof.
 - Current shape: The live polling loop runs every 750ms, batches DOM flushes with a 100ms timer, and routes both live and history application through one coordinator. The same shared path still performs repeated card/slot lookups, full dashboard recounts, and grid reorders after flushes.
 - Continuity watch: R008, R009, R010, R019, R040 remain coupled to any render optimization.
-- Baseline call: Optimize this seam only after the request/status cursor cost lands, because the shared coordinator makes render work worth improving but the current proof burden is high.
+- Baseline call: Optimize this seam after the shipped request/status delta path, because the shared coordinator still makes render work worth improving but carries the broader proof burden.
 
 ## Continuity guardrail coverage
 
 | Requirement | Primary seam(s) in this baseline | Covered by | Continuity notes |
 | --- | --- | --- | --- |
-| R008 | request/status + frontend/render | Do-now cursor work plus do-next coordinator caching | Keep polling continuity, export/copy/detail-link behavior, and progress visibility intact. |
+| R008 | request/status + frontend/render | Shipped request/status delta path plus do-next coordinator caching | Keep polling continuity, export/copy/detail-link behavior, and progress visibility intact. |
 | R009 | frontend/render | Do-next coordinator/render work | Preserve textContent-only DOM construction, CSP/CSRF assumptions, and host-validation-adjacent safety expectations. |
-| R010 | request/status + frontend/render | Do-now cursor work plus do-next render work | Any shipped optimization must reduce or at least not worsen polling/render churn. |
+| R010 | request/status + frontend/render | Shipped request/status delta path plus do-next render work | Any shipped optimization must reduce or at least not worsen polling/render churn. |
 | R014 | runtime/provider | Measured runtime/provider keep-decision | Per-provider concurrency remains part of the contract unless a future cache-hit-heavy capture proves that a narrower pre-dispatch optimization is worth the regression surface. |
 | R015 | runtime/provider | Measured runtime/provider keep-decision | 429 backoff stays protected; future changes must prove they do not regress quota safety. |
-| R018 | runtime/provider + request/status | Do-now cursor work plus measured runtime/provider evidence | Snapshot correctness, semaphore scope, and cached-marker locking remain non-negotiable. |
-| R019 | request/status + frontend/render | Do-now cursor work plus do-next coordinator caching | Keep `since`/`next_since` incremental polling semantics end-to-end. |
+| R018 | runtime/provider + request/status | Shipped request/status delta path plus measured runtime/provider evidence | Snapshot correctness, semaphore scope, and cached-marker locking remain non-negotiable. |
+| R019 | request/status + frontend/render | Shipped request/status delta path plus do-next coordinator caching | Keep `since`/`next_since` incremental polling semantics end-to-end. |
 | R020 | runtime/provider | Measured runtime/provider keep-decision | Persistent adapter-owned sessions stay justified until measured evidence argues otherwise. |
 | R022 | persistence | Leave-alone WAL store decision | WAL and persistent connection behavior stay explicit keep-decisions pending contention evidence. |
 | R040 | all seams | Every ranked finding | Each future slice must rerun the listed proof lanes before claiming an optimization is safe. |
