@@ -84,7 +84,7 @@
   - Files: `app/static/src/ts/modules/result-application.ts`, `app/static/src/ts/modules/cards.ts`, `app/static/src/ts/types/ioc.ts`, `app/static/src/ts/modules/result-application.test.ts`, `app/static/src/ts/modules/enrichment.test.ts`, `app/static/src/ts/modules/history.test.ts`, `app/static/src/ts/modules/main.test.ts`, `app/static/src/ts/modules/row-factory.test.ts`
   - Verify: npx vitest run app/static/src/ts/modules/result-application.test.ts app/static/src/ts/modules/enrichment.test.ts app/static/src/ts/modules/history.test.ts app/static/src/ts/modules/main.test.ts app/static/src/ts/modules/row-factory.test.ts
 
-- [ ] **T02: Refresh the audit runner and pinned wording for the shipped frontend/render fix** `est:0.5d`
+- [x] **T02: Refresh the audit runner and pinned wording for the shipped frontend/render fix** `est:0.5d`
   Update the generated-audit source of truth so M013 stops describing frontend coordinator caching as queued work and instead truthfully records what S04 ships now versus what still remains deferred. Keep the artifact generated from `tools/optimization_audit.py`; do not hand-edit `.gsd/milestones/M013/M013-AUDIT.md`.
 
 ## Failure Modes

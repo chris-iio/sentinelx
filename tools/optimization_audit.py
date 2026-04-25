@@ -221,18 +221,19 @@ BASELINE_FINDINGS: tuple[BaselineFinding, ...] = (
     ),
     BaselineFinding(
         bucket="do next",
-        finding="Cache IOC card/slot handles inside the shared result-application coordinator before chasing deeper render changes.",
+        finding="If future frontend work is warranted, target flush-wide dashboard recounts and severity reorders instead of reopening the shipped coordinator-local handle cache.",
         seam="frontend/render",
         evidence_kind="code-path reasoning",
         evidence_summary=(
-            "`app/static/src/ts/modules/result-application.ts` performs `findCardForIoc()` and `.querySelector('.enrichment-slot')` "
-            "per incoming result, then `updateDashboardCounts()` scans every `.ioc-card` and `sortCardsBySeverity()` reorders the whole grid "
-            "after each flush. The shared coordinator is the correct seam because both live polling and history replay depend on it."
+            "`app/static/src/ts/modules/result-application.ts` now caches each IOC's card, enrichment slot, section handles, copy button, and provider-count total "
+            "inside `createResultApplicationCoordinator()`, so `apply()`, `flush()`, and `finalize()` reuse stable DOM references instead of repeating `findCardForIoc()` "
+            "and `.querySelector('.enrichment-slot')` work. The remaining shared render cost still sits in `updateDashboardCounts()` scanning every `.ioc-card` "
+            "and `sortCardsBySeverity()` reordering the whole grid after each flush, so broader follow-up should stay explicit and measurement-led."
         ),
         continuity_guardrails="R008, R009, R010, R019, R040",
         rerun_lanes="`make verify-fast`, `make verify-deep`",
         continuity_notes=(
-            "Must preserve live/history parity, textContent-only DOM construction, expand toggles, export/copy/detail-link wiring, "
+            "If a later pass narrows flush-wide render work, preserve live/history parity, textContent-only DOM construction, expand toggles, export/copy/detail-link wiring, "
             "and deterministic mocked-online browser proof."
         ),
     ),
@@ -325,23 +326,23 @@ BASELINE_SEAM_NOTES: tuple[SeamNote, ...] = (
         seam="frontend/render",
         boundary="`app/static/src/ts/modules/enrichment.ts`, `result-application.ts`, `row-factory.ts`, and mocked-online browser proof.",
         current_shape=(
-            "The live polling loop runs every 750ms, batches DOM flushes with a 100ms timer, and routes both live and history application through one coordinator. The same shared path still performs repeated card/slot lookups, full dashboard recounts, and grid reorders after flushes."
+            "The live polling loop runs every 750ms, batches DOM flushes with a 100ms timer, and routes both live and history application through one coordinator. That shared path now caches stable card/slot/section handles per IOC, but each flush still recounts `.ioc-card`s and reorders the whole grid."
         ),
         continuity_watch="R008, R009, R010, R019, R040 remain coupled to any render optimization.",
         baseline_call=(
-            "Optimize this seam after the shipped request/status delta path, because the shared coordinator still makes render work worth improving but carries the broader proof burden."
+            "The shipped coordinator-local cache retired repeated card/slot lookups; any later frontend pass should focus on measuring and narrowing flush-wide dashboard recounts/reorders without disturbing the broader proof surface."
         ),
     ),
 )
 
 BASELINE_GUARDRAIL_COVERAGE: tuple[GuardrailCoverage, ...] = (
-    GuardrailCoverage("R008", "request/status + frontend/render", "Shipped request/status delta path plus do-next coordinator caching", "Keep polling continuity, export/copy/detail-link behavior, and progress visibility intact."),
-    GuardrailCoverage("R009", "frontend/render", "Do-next coordinator/render work", "Preserve textContent-only DOM construction, CSP/CSRF assumptions, and host-validation-adjacent safety expectations."),
-    GuardrailCoverage("R010", "request/status + frontend/render", "Shipped request/status delta path plus do-next render work", "Any shipped optimization must reduce or at least not worsen polling/render churn."),
+    GuardrailCoverage("R008", "request/status + frontend/render", "Shipped request/status delta path plus do-next flush-wide render follow-up", "Keep polling continuity, export/copy/detail-link behavior, and progress visibility intact."),
+    GuardrailCoverage("R009", "frontend/render", "Do-next flush-wide frontend/render work", "Preserve textContent-only DOM construction, CSP/CSRF assumptions, and host-validation-adjacent safety expectations."),
+    GuardrailCoverage("R010", "request/status + frontend/render", "Shipped request/status delta path plus do-next flush-wide render follow-up", "Any shipped optimization must reduce or at least not worsen polling/render churn."),
     GuardrailCoverage("R014", "runtime/provider", "Measured runtime/provider keep-decision", "Per-provider concurrency remains part of the contract unless a future cache-hit-heavy capture proves that a narrower pre-dispatch optimization is worth the regression surface."),
     GuardrailCoverage("R015", "runtime/provider", "Measured runtime/provider keep-decision", "429 backoff stays protected; future changes must prove they do not regress quota safety."),
     GuardrailCoverage("R018", "runtime/provider + request/status", "Shipped request/status delta path plus measured runtime/provider evidence", "Snapshot correctness, semaphore scope, and cached-marker locking remain non-negotiable."),
-    GuardrailCoverage("R019", "request/status + frontend/render", "Shipped request/status delta path plus do-next coordinator caching", "Keep `since`/`next_since` incremental polling semantics end-to-end."),
+    GuardrailCoverage("R019", "request/status + frontend/render", "Shipped request/status delta path plus do-next flush-wide render follow-up", "Keep `since`/`next_since` incremental polling semantics end-to-end."),
     GuardrailCoverage("R020", "runtime/provider", "Measured runtime/provider keep-decision", "Persistent adapter-owned sessions stay justified until measured evidence argues otherwise."),
     GuardrailCoverage("R022", "persistence", "Leave-alone WAL store decision", "WAL and persistent connection behavior stay explicit keep-decisions pending contention evidence."),
     GuardrailCoverage("R040", "all seams", "Every ranked finding", "Each future slice must rerun the listed proof lanes before claiming an optimization is safe."),
@@ -1081,7 +1082,8 @@ def render_document(document: AuditDocument) -> str:
                 "- The request/status seam is now an explicit shipped keep-decision: keep `_get_enrichment_status()` on `get_incremental_status()` while the helper continues to own terminal tombstones and aggregate history-save diagnostics.",
                 "- The runtime/provider seam is now an explicit keep-decision: the deterministic local capture only showed a 1/5 cache-hit ratio, so no measured win justified pre-dispatch short-circuit churn ahead of the worker/semaphore path.",
                 "- Highest-confidence explicit persistence keep-decision: leave the WAL-backed cache/history stores and the provider backoff/session contract alone until measured contention or provider pain shows up.",
-                "- Frontend work remains important, but it should now follow the shipped status-path fix because the shared coordinator still has the broader proof burden and depends on the same poll contract.",
+                "- Highest-confidence shipped frontend/render fix: the shared coordinator now caches stable per-IOC DOM handles and provider-count metadata, so live/history result application no longer repeats whole-document card/slot lookups on every result.",
+                "- Frontend/render follow-up remains explicit but deferred: if another pass is warranted, measure and narrow flush-wide `updateDashboardCounts()` recounts and `sortCardsBySeverity()` reorders before changing the live/history DOM contract.",
                 "",
                 "## Ranked findings",
                 "",

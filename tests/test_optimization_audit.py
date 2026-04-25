@@ -76,6 +76,14 @@ def test_baseline_mode_writes_ranked_findings_and_notes(tmp_path):
     assert "Keep WAL-backed cache/history stores and persistent connections unchanged" in content
     assert "get_incremental_status(since=4990)" in content
     assert "Make `/enrichment/status` cursor-native end-to-end" not in content
+    assert "Highest-confidence shipped frontend/render fix" in content
+    assert "coordinator now caches stable per-IOC DOM handles and provider-count metadata" in content
+    assert "Frontend work remains important, but it should now follow the shipped status-path fix" not in content
+    assert "flush-wide `updateDashboardCounts()` recounts and `sortCardsBySeverity()` reorders" in content
+    assert "If future frontend work is warranted, target flush-wide dashboard recounts and severity reorders instead of reopening the shipped coordinator-local handle cache." in content
+    assert "The shipped coordinator-local cache retired repeated card/slot lookups" in content
+    assert "Cache IOC card/slot handles inside the shared result-application coordinator before chasing deeper render changes." not in content
+    assert "Shipped request/status delta path plus do-next flush-wide render follow-up" in content
     assert "_Fill during the do now pass_" not in content
 
 

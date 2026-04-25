@@ -1,7 +1,7 @@
 # M013 Optimization Audit — SentinelX
 
 - Mode: `baseline`
-- Generated at: `2026-04-25 06:36:56 UTC`
+- Generated at: `2026-04-25 07:08:21 UTC`
 - Repo root: `/home/chris/projects/sentinelx`
 - Output path: `.gsd/milestones/M013/M013-AUDIT.md`
 
@@ -57,10 +57,10 @@
 
 | Capture | Command | Exit | Duration (ms) | Summary |
 | --- | --- | ---: | ---: | --- |
-| runtime-provider-diagnostics | `internal benchmark: EnrichmentOrchestrator synthetic runtime/provider diagnostics` | 0 | 76 | provider mix CacheAlpha:2d/0e, RateLimitBeta:2d/1e; dispatch=4; attempts=5; cache-hit ratio 1/5 (20%); retries=1 (429=1); errors=1; latency total=2.25s max=1.00s. |
-| status-snapshot-scaling | `internal benchmark: EnrichmentOrchestrator.get_status() snapshot scaling` | 0 | 2 | 400 polls at 5000 retained results: `get_status()` 1.92ms vs `get_incremental_status(since=4990)` 0.64ms (3.0x faster) while returning 10 tail rows with next_since=5000. |
-| cache-store-tempdb | `internal benchmark: CacheStore temp WAL put/get loop` | 0 | 17 | Temp WAL cache DB: 250 puts in 3.86ms, 250 TTL reads in 1.00ms, 250 hits, 250 retained rows. |
-| history-store-tempdb | `internal benchmark: HistoryStore temp WAL save/list/load loop` | 0 | 15 | Temp WAL history DB: 180 saves in 2.96ms, list_recent(20) in 0.04ms, single load in 0.02ms, latest total_count=1, recent rows=20. |
+| runtime-provider-diagnostics | `internal benchmark: EnrichmentOrchestrator synthetic runtime/provider diagnostics` | 0 | 63 | provider mix CacheAlpha:2d/0e, RateLimitBeta:2d/1e; dispatch=4; attempts=5; cache-hit ratio 1/5 (20%); retries=1 (429=1); errors=1; latency total=2.25s max=1.00s. |
+| status-snapshot-scaling | `internal benchmark: EnrichmentOrchestrator.get_status() snapshot scaling` | 0 | 2 | 400 polls at 5000 retained results: `get_status()` 1.48ms vs `get_incremental_status(since=4990)` 0.58ms (2.6x faster) while returning 10 tail rows with next_since=5000. |
+| cache-store-tempdb | `internal benchmark: CacheStore temp WAL put/get loop` | 0 | 18 | Temp WAL cache DB: 250 puts in 4.33ms, 250 TTL reads in 1.07ms, 250 hits, 250 retained rows. |
+| history-store-tempdb | `internal benchmark: HistoryStore temp WAL save/list/load loop` | 0 | 17 | Temp WAL history DB: 180 saves in 2.78ms, list_recent(20) in 0.04ms, single load in 0.02ms, latest total_count=1, recent rows=20. |
 
 ## Seam checklist
 
@@ -106,7 +106,8 @@ Use the same table shape in every bucket. Required fields per row:
 - The request/status seam is now an explicit shipped keep-decision: keep `_get_enrichment_status()` on `get_incremental_status()` while the helper continues to own terminal tombstones and aggregate history-save diagnostics.
 - The runtime/provider seam is now an explicit keep-decision: the deterministic local capture only showed a 1/5 cache-hit ratio, so no measured win justified pre-dispatch short-circuit churn ahead of the worker/semaphore path.
 - Highest-confidence explicit persistence keep-decision: leave the WAL-backed cache/history stores and the provider backoff/session contract alone until measured contention or provider pain shows up.
-- Frontend work remains important, but it should now follow the shipped status-path fix because the shared coordinator still has the broader proof burden and depends on the same poll contract.
+- Highest-confidence shipped frontend/render fix: the shared coordinator now caches stable per-IOC DOM handles and provider-count metadata, so live/history result application no longer repeats whole-document card/slot lookups on every result.
+- Frontend/render follow-up remains explicit but deferred: if another pass is warranted, measure and narrow flush-wide `updateDashboardCounts()` recounts and `sortCardsBySeverity()` reorders before changing the live/history DOM contract.
 
 ## Ranked findings
 
@@ -119,7 +120,7 @@ Use the same table shape in every bucket. Required fields per row:
 
 | Finding | Seam | Evidence kind | Evidence summary | Continuity guardrails | Rerun lanes | Continuity notes |
 | --- | --- | --- | --- | --- | --- | --- |
-| Cache IOC card/slot handles inside the shared result-application coordinator before chasing deeper render changes. | frontend/render | code-path reasoning | `app/static/src/ts/modules/result-application.ts` performs `findCardForIoc()` and `.querySelector('.enrichment-slot')` per incoming result, then `updateDashboardCounts()` scans every `.ioc-card` and `sortCardsBySeverity()` reorders the whole grid after each flush. The shared coordinator is the correct seam because both live polling and history replay depend on it. | R008, R009, R010, R019, R040 | `make verify-fast`, `make verify-deep` | Must preserve live/history parity, textContent-only DOM construction, expand toggles, export/copy/detail-link wiring, and deterministic mocked-online browser proof. |
+| If future frontend work is warranted, target flush-wide dashboard recounts and severity reorders instead of reopening the shipped coordinator-local handle cache. | frontend/render | code-path reasoning | `app/static/src/ts/modules/result-application.ts` now caches each IOC's card, enrichment slot, section handles, copy button, and provider-count total inside `createResultApplicationCoordinator()`, so `apply()`, `flush()`, and `finalize()` reuse stable DOM references instead of repeating `findCardForIoc()` and `.querySelector('.enrichment-slot')` work. The remaining shared render cost still sits in `updateDashboardCounts()` scanning every `.ioc-card` and `sortCardsBySeverity()` reordering the whole grid after each flush, so broader follow-up should stay explicit and measurement-led. | R008, R009, R010, R019, R040 | `make verify-fast`, `make verify-deep` | If a later pass narrows flush-wide render work, preserve live/history parity, textContent-only DOM construction, expand toggles, export/copy/detail-link wiring, and deterministic mocked-online browser proof. |
 
 ### later
 
@@ -161,21 +162,21 @@ Use the same table shape in every bucket. Required fields per row:
 ### frontend/render
 
 - Boundary: `app/static/src/ts/modules/enrichment.ts`, `result-application.ts`, `row-factory.ts`, and mocked-online browser proof.
-- Current shape: The live polling loop runs every 750ms, batches DOM flushes with a 100ms timer, and routes both live and history application through one coordinator. The same shared path still performs repeated card/slot lookups, full dashboard recounts, and grid reorders after flushes.
+- Current shape: The live polling loop runs every 750ms, batches DOM flushes with a 100ms timer, and routes both live and history application through one coordinator. That shared path now caches stable card/slot/section handles per IOC, but each flush still recounts `.ioc-card`s and reorders the whole grid.
 - Continuity watch: R008, R009, R010, R019, R040 remain coupled to any render optimization.
-- Baseline call: Optimize this seam after the shipped request/status delta path, because the shared coordinator still makes render work worth improving but carries the broader proof burden.
+- Baseline call: The shipped coordinator-local cache retired repeated card/slot lookups; any later frontend pass should focus on measuring and narrowing flush-wide dashboard recounts/reorders without disturbing the broader proof surface.
 
 ## Continuity guardrail coverage
 
 | Requirement | Primary seam(s) in this baseline | Covered by | Continuity notes |
 | --- | --- | --- | --- |
-| R008 | request/status + frontend/render | Shipped request/status delta path plus do-next coordinator caching | Keep polling continuity, export/copy/detail-link behavior, and progress visibility intact. |
-| R009 | frontend/render | Do-next coordinator/render work | Preserve textContent-only DOM construction, CSP/CSRF assumptions, and host-validation-adjacent safety expectations. |
-| R010 | request/status + frontend/render | Shipped request/status delta path plus do-next render work | Any shipped optimization must reduce or at least not worsen polling/render churn. |
+| R008 | request/status + frontend/render | Shipped request/status delta path plus do-next flush-wide render follow-up | Keep polling continuity, export/copy/detail-link behavior, and progress visibility intact. |
+| R009 | frontend/render | Do-next flush-wide frontend/render work | Preserve textContent-only DOM construction, CSP/CSRF assumptions, and host-validation-adjacent safety expectations. |
+| R010 | request/status + frontend/render | Shipped request/status delta path plus do-next flush-wide render follow-up | Any shipped optimization must reduce or at least not worsen polling/render churn. |
 | R014 | runtime/provider | Measured runtime/provider keep-decision | Per-provider concurrency remains part of the contract unless a future cache-hit-heavy capture proves that a narrower pre-dispatch optimization is worth the regression surface. |
 | R015 | runtime/provider | Measured runtime/provider keep-decision | 429 backoff stays protected; future changes must prove they do not regress quota safety. |
 | R018 | runtime/provider + request/status | Shipped request/status delta path plus measured runtime/provider evidence | Snapshot correctness, semaphore scope, and cached-marker locking remain non-negotiable. |
-| R019 | request/status + frontend/render | Shipped request/status delta path plus do-next coordinator caching | Keep `since`/`next_since` incremental polling semantics end-to-end. |
+| R019 | request/status + frontend/render | Shipped request/status delta path plus do-next flush-wide render follow-up | Keep `since`/`next_since` incremental polling semantics end-to-end. |
 | R020 | runtime/provider | Measured runtime/provider keep-decision | Persistent adapter-owned sessions stay justified until measured evidence argues otherwise. |
 | R022 | persistence | Leave-alone WAL store decision | WAL and persistent connection behavior stay explicit keep-decisions pending contention evidence. |
 | R040 | all seams | Every ranked finding | Each future slice must rerun the listed proof lanes before claiming an optimization is safe. |
