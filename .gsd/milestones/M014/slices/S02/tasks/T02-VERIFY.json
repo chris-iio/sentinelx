@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T02",
+  "unitId": "M014/S02/T02",
+  "timestamp": 1777115606777,
+  "passed": true,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "python3 -m pytest -q tests/test_runtime_state_repair_git.py",
+      "exitCode": 0,
+      "durationMs": 479,
+      "verdict": "pass"
+    },
+    {
+      "command": "make repair-runtime-state",
+      "exitCode": 0,
+      "durationMs": 233,
+      "verdict": "pass"
+    },
+    {
+      "command": "make verify-runtime-boundary",
+      "exitCode": 0,
+      "durationMs": 955,
+      "verdict": "pass"
+    }
+  ]
+}

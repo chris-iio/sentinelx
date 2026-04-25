@@ -15,10 +15,10 @@
 - [x] **S01: S01** `risk:High — if the durable/runtime boundary stays fuzzy, every later repair or dev-process change risks either breaking git workflows again or touching durable planning artifacts unsafely.` `depends:[]`
   > After this: After this: transient `.gsd` and adjacent repo-local runtime files are behaviorally separated from durable planning artifacts, and the stash/pop blocker class is either prevented by default or surfaced by explicit repo checks.
 
-- [ ] **S02: S02** `risk:High — cleanup logic is easy to get wrong, and an unsafe repair command would be more damaging than the current manual friction.` `depends:[]`
+- [x] **S02: S02** `risk:High — cleanup logic is easy to get wrong, and an unsafe repair command would be more damaging than the current manual friction.` `depends:[]`
   > After this: After this: there is one supported repo-native recovery entrypoint that detects and repairs transient-state/git-workflow issues without silently touching durable milestone artifacts.
 
-- [ ] **S03: Supported local dev process loop** `risk:Medium — local process management is narrower than the boundary/cleanup work, but hidden assumptions in current ad hoc startup habits could still invalidate downstream closure if not retired here.` `depends:[S01,S02]`
+- [ ] **S03: S03** `risk:Medium — local process management is narrower than the boundary/cleanup work, but hidden assumptions in current ad hoc startup habits could still invalidate downstream closure if not retired here.` `depends:[]`
   > After this: After this: SentinelX has one supported local dev-process path, and a crashed local server can be detected and restarted through the supported workflow instead of manual archaeology.
 
 - [ ] **S04: Verification, review, and refactor closure** `risk:Medium — the individual pieces may work in isolation but still compose badly; the final review/refactor pass is also easy to skip unless it is first-class scope.` `depends:[S01,S02,S03]`

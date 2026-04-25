@@ -87,6 +87,31 @@ def _build_incremental_snapshot_orchestrator(
     return mock_orch
 
 
+# ---------- GET /api/health ----------
+
+
+class TestApiHealth:
+    """Local liveness/readiness contract for the dev-server manager."""
+
+    def test_health_returns_fixed_secret_free_json(self, client):
+        resp = client.get("/api/health")
+
+        assert resp.status_code == 200
+        assert resp.is_json is True
+        assert resp.get_json() == {
+            "service": "sentinelx",
+            "status": "ok",
+            "ready": True,
+        }
+
+    def test_health_does_not_touch_provider_configuration(self, client):
+        resp = client.get("/api/health")
+
+        assert resp.status_code == 200
+        client.application.registry.configured.assert_not_called()
+        client.application.registry.all.assert_not_called()
+
+
 # ---------- POST /api/analyze — validation ----------
 
 

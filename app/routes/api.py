@@ -4,6 +4,7 @@ Provides JSON endpoints for IOC extraction and enrichment polling.
 CSRF-exempt (stateless JSON API) but rate-limited.
 
 Routes:
+    GET  /api/health — local liveness/readiness probe with fixed JSON contract
     POST /api/analyze  — extract IOCs from text, optionally launch enrichment
     GET  /api/status/<job_id> — poll enrichment progress (same as HTML endpoint)
 """
@@ -22,7 +23,20 @@ from ._helpers import (
 
 bp_api = Blueprint("api", __name__, url_prefix="/api")
 
+HEALTH_PAYLOAD = {
+    "service": "sentinelx",
+    "status": "ok",
+    "ready": True,
+}
+
 _VALID_MODES = {"offline", "online"}
+
+
+@bp_api.route("/health", methods=["GET"])
+@limiter.limit("240 per minute")
+def api_health():
+    """Return a fixed, secret-free health contract for local probes."""
+    return jsonify(HEALTH_PAYLOAD), 200
 
 
 @bp_api.route("/analyze", methods=["POST"])

@@ -4,17 +4,6 @@ This file is the explicit capability and coverage contract for the project.
 
 ## Active
 
-### R063 — SentinelX has one supported local recovery entrypoint for runtime-state cleanup and repair.
-- Class: operability
-- Status: active
-- Description: SentinelX has one supported local recovery entrypoint for runtime-state cleanup and repair.
-- Why it matters: Recovery should not depend on ad hoc git/process surgery spread across terminal history and background alerts.
-- Source: user
-- Primary owning slice: M014/S02
-- Supporting slices: M014/S01, M014/S04
-- Validation: mapped
-- Notes: This should detect and repair repo-local workflow blockers conservatively, preferring non-destructive cleanup or quarantine for transient state.
-
 ### R064 — SentinelX has one supported local dev-process path with cheap crash recovery.
 - Class: operability
 - Status: active
@@ -691,6 +680,17 @@ This file is the explicit capability and coverage contract for the project.
 - Validation: Validated in M014/S01 by the checked-in classifier/audit seam in `tools/runtime_state_boundary.py`, focused classifier+Git regression tests, and the supported `make verify-runtime-boundary` lane. The repo now distinguishes durable `.gsd/milestones/**` and canonical ledgers from transient `.gsd`/`.bg-shell` runtime state, while `.planning/**` remains explicit `manual-review` instead of being auto-cleaned.
 - Notes: Durable milestone/context/summary artifacts stay protected; runtime/session debris is classified and managed separately.
 
+### R063 — SentinelX has one supported local recovery entrypoint for runtime-state cleanup and repair.
+- Class: operability
+- Status: validated
+- Description: SentinelX has one supported local recovery entrypoint for runtime-state cleanup and repair.
+- Why it matters: Recovery should not depend on ad hoc git/process surgery spread across terminal history and background alerts.
+- Source: user
+- Primary owning slice: M014/S02
+- Supporting slices: M014/S01, M014/S04
+- Validation: Validated in M014/S02 by shipping `tools/runtime_state_repair.py` plus `make repair-runtime-state` as the single repo-native recovery entrypoint. Fresh proof on 2026-04-25: `python3 -m pytest -q tests/test_runtime_state_repair.py` (7 passed), `python3 -m pytest -q tests/test_runtime_state_repair_git.py` (3 passed), `make repair-runtime-state` (apply-mode no-op on live repo with 0 actionable repairs, 237 visible `.planning/**` manual-review findings, 0 failures), `make verify-runtime-boundary` (focused boundary/Git lanes green; live audit clean of tracked/unignored/conflicting/unknown blockers), and `python3 tools/runtime_state_repair.py --format json` (machine-readable repair summary/report contract).
+- Notes: S02 validates the supported recovery entrypoint while intentionally leaving `.planning/**` as visible manual-review backlog rather than auto-cleaning it.
+
 ## Deferred
 
 ### R013 — Update the input/home page to match the new design language.
@@ -801,7 +801,7 @@ This file is the explicit capability and coverage contract for the project.
 | R060 | continuity | validated | M011/all | none | unmapped |
 | R061 | continuity | validated | M014/S01 | M014/S02, M014/S04 | Validated in M014/S01 by passing `make verify-runtime-boundary` after the verifier was narrowed to fail on blocker classes only. Focused temp-repo Git fixtures prove tracked transient `.gsd/audit/events.jsonl` conflicts are surfaced as `tracked-transient`, ignored/untracked `.gsd/state-manifest.json` and `.gsd/event-log.jsonl` no longer wedge checkout flows, and the live repo audit reports zero blocker-class findings. |
 | R062 | constraint | validated | M014/S01 | M014/S02 | Validated in M014/S01 by the checked-in classifier/audit seam in `tools/runtime_state_boundary.py`, focused classifier+Git regression tests, and the supported `make verify-runtime-boundary` lane. The repo now distinguishes durable `.gsd/milestones/**` and canonical ledgers from transient `.gsd`/`.bg-shell` runtime state, while `.planning/**` remains explicit `manual-review` instead of being auto-cleaned. |
-| R063 | operability | active | M014/S02 | M014/S01, M014/S04 | mapped |
+| R063 | operability | validated | M014/S02 | M014/S01, M014/S04 | Validated in M014/S02 by shipping `tools/runtime_state_repair.py` plus `make repair-runtime-state` as the single repo-native recovery entrypoint. Fresh proof on 2026-04-25: `python3 -m pytest -q tests/test_runtime_state_repair.py` (7 passed), `python3 -m pytest -q tests/test_runtime_state_repair_git.py` (3 passed), `make repair-runtime-state` (apply-mode no-op on live repo with 0 actionable repairs, 237 visible `.planning/**` manual-review findings, 0 failures), `make verify-runtime-boundary` (focused boundary/Git lanes green; live audit clean of tracked/unignored/conflicting/unknown blockers), and `python3 tools/runtime_state_repair.py --format json` (machine-readable repair summary/report contract). |
 | R064 | operability | active | M014/S03 | M014/S02, M014/S04 | mapped |
 | R065 | continuity | active | M014/S04 | M014/S01, M014/S02, M014/S03 | mapped |
 | R066 | operability | deferred | none | none | unmapped |
@@ -811,7 +811,7 @@ This file is the explicit capability and coverage contract for the project.
 
 ## Coverage Summary
 
-- Active requirements: 4
-- Mapped to slices: 4
-- Validated: 60 (R001, R002, R003, R004, R005, R006, R007, R008, R009, R010, R011, R012, R014, R015, R016, R017, R018, R019, R020, R021, R022, R023, R024, R025, R026, R027, R028, R029, R030, R031, R032, R033, R035, R036, R037, R038, R039, R040, R041, R042, R043, R044, R045, R046, R047, R048, R049, R050, R051, R052, R053, R054, R055, R056, R057, R058, R059, R060, R061, R062)
+- Active requirements: 3
+- Mapped to slices: 3
+- Validated: 61 (R001, R002, R003, R004, R005, R006, R007, R008, R009, R010, R011, R012, R014, R015, R016, R017, R018, R019, R020, R021, R022, R023, R024, R025, R026, R027, R028, R029, R030, R031, R032, R033, R035, R036, R037, R038, R039, R040, R041, R042, R043, R044, R045, R046, R047, R048, R049, R050, R051, R052, R053, R054, R055, R056, R057, R058, R059, R060, R061, R062, R063)
 - Unmapped active requirements: 0
