@@ -9,8 +9,8 @@
       "sourceFile": "STATE.md"
     },
     {
-      "id": "concept:phase:planning",
-      "label": "Phase: planning",
+      "id": "concept:phase:validating-milestone",
+      "label": "Phase: validating-milestone",
       "type": "concept",
       "confidence": "EXTRACTED",
       "sourceFile": "STATE.md"
@@ -997,6 +997,31 @@
     {
       "id": "task:M013:S03:T03",
       "label": "T03: Refresh audit evidence and persistence keep-decisions on the final code path",
+      "type": "task",
+      "confidence": "EXTRACTED"
+    },
+    {
+      "id": "slice:M013:S04",
+      "label": "S04: Frontend polling/render shipped fixes and final rerun",
+      "type": "slice",
+      "confidence": "EXTRACTED",
+      "sourceFile": "milestones/M013/slices/S04/S04-PLAN.md"
+    },
+    {
+      "id": "task:M013:S04:T01",
+      "label": "T01: Cache stable IOC DOM handles inside the shared result-application coordinator",
+      "type": "task",
+      "confidence": "EXTRACTED"
+    },
+    {
+      "id": "task:M013:S04:T02",
+      "label": "T02: Refresh the audit runner and pinned wording for the shipped frontend/render fix",
+      "type": "task",
+      "confidence": "EXTRACTED"
+    },
+    {
+      "id": "task:M013:S04:T03",
+      "label": "T03: Run the final milestone-close rerun and fix any proof regressions on the verified state",
       "type": "task",
       "confidence": "EXTRACTED"
     },
@@ -2155,6 +2180,30 @@
       "confidence": "EXTRACTED"
     },
     {
+      "from": "milestone:M013",
+      "to": "slice:M013:S04",
+      "type": "contains",
+      "confidence": "EXTRACTED"
+    },
+    {
+      "from": "slice:M013:S04",
+      "to": "task:M013:S04:T01",
+      "type": "contains",
+      "confidence": "EXTRACTED"
+    },
+    {
+      "from": "slice:M013:S04",
+      "to": "task:M013:S04:T02",
+      "type": "contains",
+      "confidence": "EXTRACTED"
+    },
+    {
+      "from": "slice:M013:S04",
+      "to": "task:M013:S04:T03",
+      "type": "contains",
+      "confidence": "EXTRACTED"
+    },
+    {
       "from": "milestone:M012",
       "to": "decision:M012:1",
       "type": "relates_to",
@@ -2371,5 +2420,5 @@
       "confidence": "EXTRACTED"
     }
   ],
-  "builtAt": "2026-04-25T06:41:28.627Z"
+  "builtAt": "2026-04-25T07:18:25.520Z"
 }
