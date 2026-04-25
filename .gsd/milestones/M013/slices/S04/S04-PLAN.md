@@ -122,7 +122,7 @@
   - Files: `tools/optimization_audit.py`, `tests/test_optimization_audit.py`, `.gsd/milestones/M013/M013-AUDIT.md`
   - Verify: pytest tests/test_optimization_audit.py -q && python3 tools/optimization_audit.py --mode baseline --output .gsd/milestones/M013/M013-AUDIT.md
 
-- [ ] **T03: Run the final milestone-close rerun and fix any proof regressions on the verified state** `est:0.5d`
+- [x] **T03: Run the final milestone-close rerun and fix any proof regressions on the verified state** `est:0.5d`
   Finish M013 with fresh evidence, not inherited claims. Run the focused browser lane plus the final audit command that captures `make verify-fast` and `make verify-deep`, and only make the smallest regression fixes needed to keep the audited final state green. This task is allowed to touch source or tests only when the rerun exposes a real regression from T01/T02.
 
 ## Failure Modes

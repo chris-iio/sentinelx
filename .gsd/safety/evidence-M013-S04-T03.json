@@ -1,0 +1,18 @@
+[
+  {
+    "kind": "bash",
+    "toolCallId": "call_xwkxzbkm9GvOQgPqdSK4BPqI|fc_0e1439685bcf27dd0169ec690338948191a1e122de0280ed6c",
+    "command": "rg -n \"verify-fast|verify-deep|frontend/render|Generated at|Measurement captures\" .gsd/milestones/M013/M013-AUDIT.md",
+    "exitCode": 0,
+    "outputSnippet": "4:- Generated at: `2026-04-25 07:10:50 UTC`\n28:| verify-fast | `make verify-fast` | Default rerun lane for backend/frontend logic, build/test plumbing, and any finding that does not change mocked-online browser behavior. |\n29:| verify-deep | `make verify-deep` | Required whenever a change touches live enrichment orchestration, polling/status flow, results-page DOM/state, or mocked-online browser seams. |\n37:| 2 | Fast local regression lane | `make verify-fast` | Every shipped optimization, inclu",
+    "timestamp": 1777101058464
+  },
+  {
+    "kind": "bash",
+    "toolCallId": "call_YccOTnRVVwtdv7rvIOz3Zup0|fc_0e1439685bcf27dd0169ec6912153c81918db720838e8e3d21",
+    "command": "python3 - <<'PY'\nimport os, time\nfor path in ['.gsd/milestones/M013/M013-AUDIT.md']:\n    st=os.stat(path)\n    print(f'{path}\\t{int(st.st_mtime)}\\t{time.strftime(\"%Y-%m-%d %H:%M:%S\", time.localtime(st.st_mtime))}')\nPY",
+    "exitCode": 0,
+    "outputSnippet": ".gsd/milestones/M013/M013-AUDIT.md\t1777101050\t2026-04-25 16:10:50\n",
+    "timestamp": 1777101074399
+  }
+]
