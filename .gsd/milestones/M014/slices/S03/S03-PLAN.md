@@ -114,7 +114,7 @@ no.
   - Verify: `python3 -m pytest -q tests/test_dev_server.py tests/test_dev_server_process.py`
 `python3 tools/dev_server.py --help`
 
-- [ ] **T03: Expose the supported Makefile workflow and continuity proof** `est:0.5d`
+- [x] **T03: Expose the supported Makefile workflow and continuity proof** `est:0.5d`
   Make the lifecycle manager the supported operator path and prove it composes with the existing boundary and fast verification lanes. This task closes the slice by turning the direct CLI into the documented repo-native workflow contributors are supposed to use.
 
 ## Failure Modes

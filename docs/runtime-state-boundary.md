@@ -11,7 +11,7 @@ repair commands each guess their own glob set.
   - Representative examples: `.gsd/milestones/**`, `.gsd/CODEBASE.md`, `.gsd/DECISIONS.md`, `.gsd/KNOWLEDGE.md`, `.gsd/REQUIREMENTS.md`, `.gsd/audits/**`.
 - `transient`
   - Repo-local runtime state, manifests, logs, locks, quarantine trees, and background-process surfaces that should be ignored and, when currently tracked or unignored, surfaced for repair.
-  - Representative examples: `.gsd/audit/**`, `.gsd/state-manifest.json`, `.gsd/notifications.jsonl`, `.gsd/event-log.jsonl`, `.gsd/gsd.db*`, `.gsd/activity/**`, `.gsd/runtime/**`, `.bg-shell/**`.
+  - Representative examples: `.gsd/audit/**`, `.gsd/state-manifest.json`, `.gsd/notifications.jsonl`, `.gsd/event-log.jsonl`, `.gsd/gsd.db*`, `.gsd/activity/**`, `.gsd/runtime/**`, `.gsd/runtime/dev-server/**`, `.bg-shell/**`.
 - `manual-review`
   - Mixed or legacy workflow paths that must fail closed until a later slice gives them a migration plan.
   - Representative examples: `.planning/**` and any unclassified path under the supported boundary roots.
@@ -25,6 +25,24 @@ may still need to inspect or migrate. Blanket ignore/deindex/cleanup would be fa
 The classifier therefore treats `.planning/**` as `manual-review` on purpose. The audit and repair
 commands will surface those paths explicitly, but they will not silently promote them into the
 transient set.
+
+## Supported dev-server workflow boundary
+
+The supported SentinelX local-server loop is `make dev-server-start`, `make dev-server-status`,
+`make dev-server-restart`, and `make dev-server-stop`. Those Make targets are thin wrappers over
+`tools/dev_server.py`, which remains the single implementation source of truth for the managed
+child process, health probe, restart count, and failure metadata.
+
+The manager-owned runtime subtree is `.gsd/runtime/dev-server/**`. That subtree is transient by
+policy: it is intentionally ignored, path-and-metadata only, and safe to inspect through
+`make dev-server-status` or `python3 tools/dev_server.py status --format json`. Contributors
+should not treat `status.json`, managed log paths, or recorded PID metadata as checked-in workflow
+artifacts, and they should not manually clean or rewrite those files during routine recovery.
+
+`.bg-shell/**` remains generic harness/process state, not the supported SentinelX server lifecycle
+surface. `.planning/**` remains `manual-review` legacy workflow state, not a runtime recovery
+surface. Keeping those distinctions explicit prevents later slices from widening the boundary until
+policy changes have been reviewed.
 
 ## CLI contract
 
@@ -112,7 +130,9 @@ Expected visibility properties:
   transient files, quarantining unignored transient files, and exposing `make repair-runtime-state`
   plus `make verify-runtime-boundary` as the supported repo-native loop.
 - **S03** should reuse the same classes and issue codes when it hardens the supported dev-process
-  loop, so the runtime boundary does not drift between cleanup and startup paths.
+  loop, exposes `make dev-server-start|status|restart|stop`, and keeps the manager-owned
+  `.gsd/runtime/dev-server/**` subtree explicit so the runtime boundary does not drift between
+  cleanup and startup paths.
 
 ## Non-goals
 

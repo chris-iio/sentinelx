@@ -1,7 +1,14 @@
 #!/usr/bin/env python3
 """Repo-native lifecycle manager for SentinelX's local dev server.
 
-This module owns the supported direct CLI for local development:
+This module owns the checked-in implementation for the supported local development
+workflow. Contributors should normally use the repo-native Make wrappers:
+- make dev-server-start
+- make dev-server-status
+- make dev-server-restart
+- make dev-server-stop
+
+The direct CLI remains the single implementation source of truth:
 - start
 - status
 - restart
@@ -1049,7 +1056,10 @@ def build_child_parser() -> argparse.ArgumentParser:
 def build_parser() -> argparse.ArgumentParser:
     """Build the CLI parser for the supported helper surface."""
     parser = argparse.ArgumentParser(
-        description="Manage SentinelX's repo-native local dev-server lifecycle."
+        description=(
+            "Manage SentinelX's repo-native local dev-server lifecycle "
+            "(wrapped by make dev-server-start|status|restart|stop)."
+        )
     )
     parser.add_argument(
         "--repo-root",

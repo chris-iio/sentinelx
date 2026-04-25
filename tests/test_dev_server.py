@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import socket
 import sys
 import threading
@@ -389,3 +390,51 @@ def test_start_rejects_non_local_host_before_launch(tmp_path: Path, capsys: pyte
     assert exit_code == 1
     assert payload["status"] == "crashed"
     assert "Host must stay local" in payload["last_failure_reason"]
+
+
+def test_makefile_exposes_supported_dev_server_targets_as_thin_cli_wrappers():
+    makefile = Path("Makefile").read_text(encoding="utf-8")
+    expected_recipes = {
+        "dev-server-start": "$(DEV_SERVER) start --format text",
+        "dev-server-status": "$(DEV_SERVER) status --format text",
+        "dev-server-restart": "$(DEV_SERVER) restart --format text",
+        "dev-server-stop": "$(DEV_SERVER) stop --format text",
+    }
+
+    for target, recipe in expected_recipes.items():
+        pattern = rf"^{re.escape(target)}:\n\t{re.escape(recipe)}$"
+        assert re.search(pattern, makefile, re.MULTILINE), f"missing wrapper for {target}"
+
+    assert "python run.py" not in makefile
+
+
+def test_readme_documents_the_supported_dev_server_loop_and_transient_runtime_state():
+    readme = Path("README.md").read_text(encoding="utf-8")
+
+    for command in (
+        "make dev-server-start",
+        "make dev-server-status",
+        "make dev-server-restart",
+        "make dev-server-stop",
+    ):
+        assert command in readme
+
+    assert "GET /api/health" in readme
+    assert "python3 tools/dev_server.py status --format json" in readme
+    assert ".gsd/runtime/dev-server/**" in readme
+    assert "manager owns `.gsd/runtime/dev-server/**` as transient repo-local state" in readme
+    assert "do not manually edit or clean up" in readme
+    assert "python run.py" not in readme
+
+
+
+def test_runtime_boundary_doc_keeps_dev_server_state_separate_from_bg_shell_and_planning():
+    content = Path("docs/runtime-state-boundary.md").read_text(encoding="utf-8")
+
+    assert ".gsd/runtime/dev-server/**" in content
+    assert "make dev-server-start" in content
+    assert "make dev-server-status" in content
+    assert "tools/dev_server.py" in content
+    assert ".bg-shell/**" in content
+    assert ".planning/**" in content
+    assert "should not manually clean or rewrite those files" in content

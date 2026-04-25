@@ -10,11 +10,12 @@ JS_ENTRY         := app/static/src/ts/main.ts
 JS_OUT           := app/static/dist/main.js
 PLATFORM         := linux-x64
 ESBUILD_VERSION  := 0.27.3
+DEV_SERVER       := python3 tools/dev_server.py
 AUDIT_RUNNER     := python3 tools/optimization_audit.py
 AUDIT_OUTPUT     := .gsd/milestones/M013/M013-AUDIT.md
 AUDIT_TEMPLATE   := .gsd/milestones/M013/M013-AUDIT-TEMPLATE.md
 
-.PHONY: tailwind-install esbuild-install css css-watch js js-dev js-watch typecheck build repair-runtime-state verify-runtime-boundary verify-fast verify-deep verify audit-m013-template audit-m013
+.PHONY: tailwind-install esbuild-install css css-watch js js-dev js-watch typecheck build dev-server-start dev-server-status dev-server-restart dev-server-stop repair-runtime-state verify-runtime-boundary verify-fast verify-deep verify audit-m013-template audit-m013
 
 ## Download Tailwind standalone CLI binary
 tailwind-install:
@@ -80,6 +81,22 @@ typecheck:
 
 ## Full build (CSS + JS)
 build: css js
+
+## Supported local dev-server start loop (wrapper over tools/dev_server.py)
+dev-server-start:
+	$(DEV_SERVER) start --format text
+
+## Supported local dev-server inspection loop (wrapper over tools/dev_server.py)
+dev-server-status:
+	$(DEV_SERVER) status --format text
+
+## Supported local dev-server restart loop (wrapper over tools/dev_server.py)
+dev-server-restart:
+	$(DEV_SERVER) restart --format text
+
+## Supported local dev-server shutdown loop (wrapper over tools/dev_server.py)
+dev-server-stop:
+	$(DEV_SERVER) stop --format text
 
 ## Runtime-state repair lane (mutates supported transient findings, then re-audits blockers)
 repair-runtime-state:
