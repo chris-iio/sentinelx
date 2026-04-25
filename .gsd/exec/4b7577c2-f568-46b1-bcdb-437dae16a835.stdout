@@ -1,0 +1,14 @@
+suspect tracked .planning files: 13
+.planning/.continue-here.md
+.planning/.next-call-count
+.planning/HANDOFF.json
+.planning/STATE.md
+.planning/STATE.md.bak-2026-03-12T16-21-23
+.planning/milestones/v1.0-phases/01-foundation-and-offline-pipeline/.continue-here.md
+.planning/milestones/v1.1-phases/06-foundation-tailwind-alpine-cards/.continue-here.md
+.planning/milestones/v1.2-phases/12-shared-component-elevation/.continue-here.md
+.planning/milestones/v3.0-phases/21-simple-module-extraction/.continue-here.md
+.planning/milestones/v3.0-phases/22-enrichment-module-and-entry-point/.continue-here.md
+.planning/milestones/v4.0-phases/03-free-key-providers/.continue-here.md
+.planning/milestones/v6.0-phases/04-deep-analysis-view/.continue-here.md
+.planning/milestones/v7.0-abandoned/phases/02-asn-intelligence/.continue-here.md

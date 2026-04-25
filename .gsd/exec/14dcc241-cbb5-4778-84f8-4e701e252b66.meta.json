@@ -1,0 +1,18 @@
+{
+  "id": "14dcc241-cbb5-4778-84f8-4e701e252b66",
+  "runtime": "python",
+  "purpose": "classify repo-local workflow state paths for M014 S01",
+  "script_chars": 1136,
+  "started_at": "2026-04-25T08:28:49.520Z",
+  "finished_at": "2026-04-25T08:28:49.548Z",
+  "exit_code": 0,
+  "signal": null,
+  "timed_out": false,
+  "duration_ms": 28,
+  "stdout_bytes": 962,
+  "stderr_bytes": 0,
+  "stdout_truncated": false,
+  "stderr_truncated": false,
+  "stdout_path": "/home/chris/projects/sentinelx/.gsd/exec/14dcc241-cbb5-4778-84f8-4e701e252b66.stdout",
+  "stderr_path": "/home/chris/projects/sentinelx/.gsd/exec/14dcc241-cbb5-4778-84f8-4e701e252b66.stderr"
+}

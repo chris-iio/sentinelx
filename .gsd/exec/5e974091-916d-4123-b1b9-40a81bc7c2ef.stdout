@@ -1,0 +1,21 @@
+suspect tracked non-milestone .gsd paths: 20
+.gsd/audit/events.jsonl
+.gsd/exec/7a06efb0-c065-4854-8c67-e4088e9c04fd.meta.json
+.gsd/exec/7a06efb0-c065-4854-8c67-e4088e9c04fd.stderr
+.gsd/exec/7a06efb0-c065-4854-8c67-e4088e9c04fd.stdout
+.gsd/exec/ae94e43b-ae81-4c50-8b54-b66d6dc75860.meta.json
+.gsd/exec/ae94e43b-ae81-4c50-8b54-b66d6dc75860.stderr
+.gsd/exec/ae94e43b-ae81-4c50-8b54-b66d6dc75860.stdout
+.gsd/exec/d4474717-8e00-4abd-a29e-cbe90d63d74e.meta.json
+.gsd/exec/d4474717-8e00-4abd-a29e-cbe90d63d74e.stderr
+.gsd/exec/d4474717-8e00-4abd-a29e-cbe90d63d74e.stdout
+.gsd/graphs/graph.json
+.gsd/notifications.jsonl
+.gsd/reports/M001-2026-04-22T01-11-24.html
+.gsd/reports/M002-2026-04-22T01-11-25.html
+.gsd/reports/M003-2026-04-22T01-11-26.html
+.gsd/reports/M004-2026-04-22T01-11-27.html
+.gsd/reports/M008-2026-04-22T01-14-50.html
+.gsd/reports/index.html
+.gsd/reports/reports.json
+.gsd/safety/evidence-M013-S01-T03.json

@@ -2,6 +2,74 @@
 
 This file is the explicit capability and coverage contract for the project.
 
+## Active
+
+### R061 — Runtime state does not block normal Git workflows.
+- Class: continuity
+- Status: active
+- Description: Runtime state does not block normal Git workflows.
+- Why it matters: Local workflow hardening is not real if transient machine state can still wedge ordinary git operations like stash/pop.
+- Source: user
+- Primary owning slice: M014/S01
+- Supporting slices: M014/S02, M014/S04
+- Validation: mapped
+- Notes: Covers the stash/pop conflict class caused by transient local state files participating in normal repo operations. The outcome must be behavioral, not just documented.
+
+### R062 — Durable planning artifacts and transient machine state have an explicit repo boundary.
+- Class: constraint
+- Status: active
+- Description: Durable planning artifacts and transient machine state have an explicit repo boundary.
+- Why it matters: Without a hard boundary between durable and transient state, recovery tooling becomes unsafe and git behavior stays unpredictable.
+- Source: inferred
+- Primary owning slice: M014/S01
+- Supporting slices: M014/S02
+- Validation: mapped
+- Notes: Durable milestone/context/summary artifacts stay protected; runtime/session debris is classified and managed separately.
+
+### R063 — SentinelX has one supported local recovery entrypoint for runtime-state cleanup and repair.
+- Class: operability
+- Status: active
+- Description: SentinelX has one supported local recovery entrypoint for runtime-state cleanup and repair.
+- Why it matters: Recovery should not depend on ad hoc git/process surgery spread across terminal history and background alerts.
+- Source: user
+- Primary owning slice: M014/S02
+- Supporting slices: M014/S01, M014/S04
+- Validation: mapped
+- Notes: This should detect and repair repo-local workflow blockers conservatively, preferring non-destructive cleanup or quarantine for transient state.
+
+### R064 — SentinelX has one supported local dev-process path with cheap crash recovery.
+- Class: operability
+- Status: active
+- Description: SentinelX has one supported local dev-process path with cheap crash recovery.
+- Why it matters: Local service ownership and restart behavior need a stable contract or the workflow remains fragile even after cleanup tooling exists.
+- Source: user
+- Primary owning slice: M014/S03
+- Supporting slices: M014/S02, M014/S04
+- Validation: mapped
+- Notes: A crashed local server should be detectable and restartable through the supported workflow without manual archaeology.
+
+### R065 — Workflow hardening preserves existing SentinelX verification and app behavior.
+- Class: continuity
+- Status: active
+- Description: Workflow hardening preserves existing SentinelX verification and app behavior.
+- Why it matters: A safer local workflow that regresses the actual product or its verification contract is not a net improvement.
+- Source: inferred
+- Primary owning slice: M014/S04
+- Supporting slices: M014/S01, M014/S02, M014/S03
+- Validation: mapped
+- Notes: The milestone is about developer-workflow hardening, not analyst-facing product regression. Existing verification lanes must still pass on the final state.
+
+### R069 — M014 ends with an explicit code review/refactor pass over the changed workflow seams.
+- Class: quality-attribute
+- Status: active
+- Description: M014 ends with an explicit code review/refactor pass over the changed workflow seams.
+- Why it matters: Workflow hardening should close with cleanup and simplification, not just a pile of fixes that happen to pass once.
+- Source: user
+- Primary owning slice: M014/S04
+- Supporting slices: M014/S01, M014/S02, M014/S03
+- Validation: mapped
+- Notes: The final slice should review, simplify, and tighten the new boundary/recovery/process surfaces after they are assembled and re-verified.
+
 ## Validated
 
 ### R001 — IOC results render in a single-column, full-width layout replacing the current 2-column card grid. Each IOC gets the full page width for data presentation.
@@ -636,6 +704,38 @@ This file is the explicit capability and coverage contract for the project.
 - Validation: unmapped
 - Notes: Deferred — input page is minimal and functional; not worth disrupting M003 scope
 
+### R066 — Automatic self-healing of transient runtime state at session start is deferred.
+- Class: operability
+- Status: deferred
+- Description: Automatic self-healing of transient runtime state at session start is deferred.
+- Why it matters: Auto-healing is attractive, but it becomes dangerous if the durable/runtime boundary is not proven first.
+- Source: inferred
+- Supporting slices: none
+- Validation: unmapped
+- Notes: Useful later, but M014 should first make cleanup rules explicit and trustworthy before making them implicit and automatic.
+
+### R067 — Upstream GSD engine changes outside this repo to relocate or redesign runtime-state ownership are deferred.
+- Class: constraint
+- Status: deferred
+- Description: Upstream GSD engine changes outside this repo to relocate or redesign runtime-state ownership are deferred.
+- Why it matters: Repo-local hardening is lower-regret and directly shippable here; upstream engine work can follow later if still justified.
+- Source: inferred
+- Supporting slices: none
+- Validation: unmapped
+- Notes: M014 should solve the problem at the repo boundary first rather than assuming immediate changes to tooling outside the SentinelX repository.
+
+## Out of Scope
+
+### R068 — M014 does not add a new analyst-facing SentinelX product capability.
+- Class: anti-feature
+- Status: out-of-scope
+- Description: M014 does not add a new analyst-facing SentinelX product capability.
+- Why it matters: This prevents scope confusion and keeps the milestone focused on reliability of the developer/operator loop.
+- Source: user
+- Supporting slices: none
+- Validation: n/a
+- Notes: This milestone is reserved for local workflow hardening and recovery, not feature expansion for analysts.
+
 ## Traceability
 
 | ID | Class | Status | Primary owner | Supporting | Proof |
@@ -699,10 +799,19 @@ This file is the explicit capability and coverage contract for the project.
 | R058 | quality-attribute | validated | M011/S03 | none | CSS audit verified all 207 classes in input.css are referenced. 3 dynamic classes confirmed via string concatenation in row-factory.ts:336, row-factory.ts:309/416, cards.ts:60. Zero dead CSS found. |
 | R059 | quality-attribute | validated | M011/S03 | none | 7 orchestrator tests rewritten with threading.Barrier/Event primitives. Suite runs in 0.09s (target <1s, was 6.2s). 27 orchestrator tests pass. |
 | R060 | continuity | validated | M011/all | none | unmapped |
+| R061 | continuity | active | M014/S01 | M014/S02, M014/S04 | mapped |
+| R062 | constraint | active | M014/S01 | M014/S02 | mapped |
+| R063 | operability | active | M014/S02 | M014/S01, M014/S04 | mapped |
+| R064 | operability | active | M014/S03 | M014/S02, M014/S04 | mapped |
+| R065 | continuity | active | M014/S04 | M014/S01, M014/S02, M014/S03 | mapped |
+| R066 | operability | deferred | none | none | unmapped |
+| R067 | constraint | deferred | none | none | unmapped |
+| R068 | anti-feature | out-of-scope | none | none | n/a |
+| R069 | quality-attribute | active | M014/S04 | M014/S01, M014/S02, M014/S03 | mapped |
 
 ## Coverage Summary
 
-- Active requirements: 0
-- Mapped to slices: 0
+- Active requirements: 6
+- Mapped to slices: 6
 - Validated: 58 (R001, R002, R003, R004, R005, R006, R007, R008, R009, R010, R011, R012, R014, R015, R016, R017, R018, R019, R020, R021, R022, R023, R024, R025, R026, R027, R028, R029, R030, R031, R032, R033, R035, R036, R037, R038, R039, R040, R041, R042, R043, R044, R045, R046, R047, R048, R049, R050, R051, R052, R053, R054, R055, R056, R057, R058, R059, R060)
 - Unmapped active requirements: 0
