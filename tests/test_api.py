@@ -37,6 +37,56 @@ def client_with_csrf():
         yield c
 
 
+def _build_incremental_snapshot_orchestrator(
+    results,
+    *,
+    total=None,
+    done=None,
+    complete=True,
+    status=None,
+    terminal=False,
+    terminal_reason=None,
+    error=None,
+    cached_markers=None,
+):
+    """Return a mock orchestrator exposing only the incremental polling API."""
+    full_results = list(results)
+    marker_map = dict(cached_markers or {})
+    mock_orch = MagicMock(spec_set=["get_incremental_status", "get_status"])
+
+    def _get_incremental_status(_job_id, since=0):
+        tail_results = list(full_results[since:])
+        tail_markers = {}
+        for result in tail_results:
+            ioc = getattr(result, "ioc", None)
+            provider = getattr(result, "provider", None)
+            ioc_value = getattr(ioc, "value", None)
+            if not ioc_value or not provider:
+                continue
+            cache_key = f"{ioc_value}|{provider}"
+            cached_at = marker_map.get(cache_key)
+            if cached_at:
+                tail_markers[cache_key] = cached_at
+        return {
+            "total": len(full_results) if total is None else total,
+            "done": len(full_results) if done is None else done,
+            "complete": complete,
+            "results": tail_results,
+            "next_since": since if terminal else len(full_results),
+            "status": status or ("failed" if terminal else "complete" if complete else "running"),
+            "terminal": terminal,
+            "terminal_reason": terminal_reason,
+            "error": error,
+            "cached_markers": tail_markers,
+        }
+
+    mock_orch.get_incremental_status.side_effect = _get_incremental_status
+    mock_orch.get_status.side_effect = AssertionError(
+        "_get_enrichment_status should use get_incremental_status() for polling"
+    )
+    return mock_orch
+
+
 # ---------- POST /api/analyze — validation ----------
 
 
@@ -170,18 +220,17 @@ class TestApiStatus:
         """Known job returns polling progress."""
         import app.routes._helpers as helpers
 
-        mock_orch = MagicMock()
         ioc = make_ipv4_ioc()
         result = EnrichmentResult(
-            ioc=ioc, provider="test", verdict="clean",
-            detection_count=0, total_engines=10, scan_date=None,
+            ioc=ioc,
+            provider="test",
+            verdict="clean",
+            detection_count=0,
+            total_engines=10,
+            scan_date=None,
             raw_stats={},
         )
-        mock_orch.get_status.return_value = {
-            "total": 1, "done": 1, "complete": True,
-            "results": [result],
-        }
-        mock_orch.cached_markers = {}
+        mock_orch = _build_incremental_snapshot_orchestrator([result])
 
         job_id = "test_job_123"
         helpers._orchestrators[job_id] = mock_orch
@@ -197,6 +246,8 @@ class TestApiStatus:
             assert data["terminal_reason"] is None
             assert len(data["results"]) == 1
             assert data["results"][0]["verdict"] == "clean"
+            mock_orch.get_incremental_status.assert_called_once_with(job_id, since=0)
+            mock_orch.get_status.assert_not_called()
         finally:
             helpers._orchestrators.pop(job_id, None)
 
@@ -204,28 +255,175 @@ class TestApiStatus:
         """?since= cursor filters results."""
         import app.routes._helpers as helpers
 
-        mock_orch = MagicMock()
         ioc = make_ipv4_ioc()
         results = [
-            EnrichmentResult(ioc=ioc, provider="p1", verdict="clean", detection_count=0, total_engines=10, scan_date=None, raw_stats={}),
-            EnrichmentResult(ioc=ioc, provider="p2", verdict="malicious", detection_count=5, total_engines=10, scan_date=None, raw_stats={}),
+            EnrichmentResult(
+                ioc=ioc,
+                provider="p1",
+                verdict="clean",
+                detection_count=0,
+                total_engines=10,
+                scan_date=None,
+                raw_stats={},
+            ),
+            EnrichmentResult(
+                ioc=ioc,
+                provider="p2",
+                verdict="malicious",
+                detection_count=5,
+                total_engines=10,
+                scan_date=None,
+                raw_stats={},
+            ),
         ]
-        mock_orch.get_status.return_value = {
-            "total": 2, "done": 2, "complete": True,
-            "results": results,
-        }
-        mock_orch.cached_markers = {}
+        mock_orch = _build_incremental_snapshot_orchestrator(results)
 
         job_id = "cursor_test"
         helpers._orchestrators[job_id] = mock_orch
         try:
             resp = client.get(f"/api/status/{job_id}?since=1")
+            assert resp.status_code == 200
             data = resp.get_json()
             assert len(data["results"]) == 1
             assert data["results"][0]["provider"] == "p2"
             assert data["next_since"] == 2
             assert data["status"] == "complete"
             assert data["terminal"] is False
+            mock_orch.get_incremental_status.assert_called_once_with(job_id, since=1)
+            mock_orch.get_status.assert_not_called()
+        finally:
+            helpers._orchestrators.pop(job_id, None)
+
+    def test_cached_delta_rows_preserve_cached_at(self, client):
+        """Cached results keep cached_at on the API polling surface."""
+        import app.routes._helpers as helpers
+
+        fresh_result = EnrichmentResult(
+            ioc=make_ipv4_ioc("1.1.1.1"),
+            provider="fresh",
+            verdict="clean",
+            detection_count=0,
+            total_engines=5,
+            scan_date=None,
+            raw_stats={},
+        )
+        cached_ioc = make_ipv4_ioc("2.2.2.2")
+        cached_result = EnrichmentResult(
+            ioc=cached_ioc,
+            provider="cached",
+            verdict="clean",
+            detection_count=0,
+            total_engines=5,
+            scan_date=None,
+            raw_stats={},
+        )
+        cache_key = f"{cached_ioc.value}|{cached_result.provider}"
+        mock_orch = _build_incremental_snapshot_orchestrator(
+            [fresh_result, cached_result],
+            cached_markers={cache_key: "2026-04-25T00:00:00Z"},
+        )
+
+        job_id = "cached_delta_job"
+        helpers._orchestrators[job_id] = mock_orch
+        try:
+            resp = client.get(f"/api/status/{job_id}")
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert "cached_at" not in data["results"][0]
+            assert data["results"][1]["cached_at"] == "2026-04-25T00:00:00Z"
+        finally:
+            helpers._orchestrators.pop(job_id, None)
+
+    def test_negative_since_exact_length_and_empty_tail_preserve_cursor(self, client):
+        """Negative, exact-length, and beyond-range since values preserve polling cursor semantics."""
+        import app.routes._helpers as helpers
+
+        ioc = make_ipv4_ioc()
+        results = [
+            EnrichmentResult(
+                ioc=ioc,
+                provider="p1",
+                verdict="clean",
+                detection_count=0,
+                total_engines=10,
+                scan_date=None,
+                raw_stats={},
+            ),
+            EnrichmentResult(
+                ioc=ioc,
+                provider="p2",
+                verdict="malicious",
+                detection_count=1,
+                total_engines=10,
+                scan_date=None,
+                raw_stats={},
+            ),
+        ]
+        mock_orch = _build_incremental_snapshot_orchestrator(results)
+
+        job_id = "cursor_edges"
+        helpers._orchestrators[job_id] = mock_orch
+        try:
+            negative = client.get(f"/api/status/{job_id}?since=-1")
+            assert negative.status_code == 200
+            negative_data = negative.get_json()
+            assert len(negative_data["results"]) == 1
+            assert negative_data["results"][0]["provider"] == "p2"
+            assert negative_data["next_since"] == 2
+
+            exact = client.get(f"/api/status/{job_id}?since=2")
+            assert exact.status_code == 200
+            exact_data = exact.get_json()
+            assert exact_data["results"] == []
+            assert exact_data["next_since"] == 2
+
+            empty = client.get(f"/api/status/{job_id}?since=99")
+            assert empty.status_code == 200
+            empty_data = empty.get_json()
+            assert empty_data["results"] == []
+            assert empty_data["next_since"] == 2
+        finally:
+            helpers._orchestrators.pop(job_id, None)
+
+    def test_api_and_html_status_routes_stay_in_parity(self, client):
+        """The API and HTML polling wrappers expose identical payloads for the same job."""
+        import app.routes._helpers as helpers
+
+        ioc = make_ipv4_ioc()
+        cached_result = EnrichmentResult(
+            ioc=ioc,
+            provider="p2",
+            verdict="clean",
+            detection_count=0,
+            total_engines=10,
+            scan_date=None,
+            raw_stats={},
+        )
+        cache_key = f"{ioc.value}|{cached_result.provider}"
+        mock_orch = _build_incremental_snapshot_orchestrator(
+            [
+                EnrichmentResult(
+                    ioc=ioc,
+                    provider="p1",
+                    verdict="clean",
+                    detection_count=0,
+                    total_engines=10,
+                    scan_date=None,
+                    raw_stats={},
+                ),
+                cached_result,
+            ],
+            cached_markers={cache_key: "2026-04-25T00:00:00Z"},
+        )
+
+        job_id = "parity_job"
+        helpers._orchestrators[job_id] = mock_orch
+        try:
+            api_resp = client.get(f"/api/status/{job_id}?since=1")
+            html_resp = client.get(f"/enrichment/status/{job_id}?since=1")
+            assert api_resp.status_code == 200
+            assert html_resp.status_code == 200
+            assert api_resp.get_json() == html_resp.get_json()
         finally:
             helpers._orchestrators.pop(job_id, None)
 

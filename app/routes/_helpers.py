@@ -327,7 +327,7 @@ def _get_enrichment_status(job_id: str):
         payload["next_since"] = since
         return jsonify(payload), 404
 
-    status = orchestrator.get_status(job_id)
+    status = orchestrator.get_incremental_status(job_id, since=since)
     if status is None:
         payload = _terminal_status(
             job_id,
@@ -337,16 +337,11 @@ def _get_enrichment_status(job_id: str):
         )
         return jsonify(payload), 404
 
-    cached_markers = orchestrator.cached_markers
-    all_results = status["results"]
-    new_results = all_results[since:]
     serialized = [
-        _serialize_result(r, cached_markers) for r in new_results
+        _serialize_result(r, status.get("cached_markers")) for r in status["results"]
     ]
 
-    status_payload = dict(status)
-    status_payload["next_since"] = since if status_payload.get("terminal") else len(all_results)
-    payload = _build_status_payload(status_payload, serialized)
+    payload = _build_status_payload(status, serialized)
     status_code = (
         404
         if payload["terminal"] and payload["terminal_reason"] in {"unknown", "evicted"}

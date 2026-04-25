@@ -84,7 +84,7 @@
   - Files: `app/enrichment/orchestrator.py`, `tests/test_orchestrator.py`, `app/routes/_helpers.py`, `tools/optimization_audit.py`
   - Verify: pytest tests/test_orchestrator.py -q
 
-- [ ] **T02: Adopt the incremental snapshot in helper status routes without changing the public contract** `est:0.75d`
+- [x] **T02: Adopt the incremental snapshot in helper status routes without changing the public contract** `est:0.75d`
   Move the hot request path to the new orchestrator accessor while keeping the analyst-visible payload contract stable for both HTML and API pollers. This task owns `_get_enrichment_status()` plus the route/API assertions that prove `results`, `next_since`, `terminal_reason`, and `cached_at` still behave the same from the frontend’s perspective. Preserve helper-owned terminal tombstones and do not widen history-save diagnostics or settings output.
 
 ## Failure Modes

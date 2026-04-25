@@ -10,6 +10,8 @@ Tests cover:
 """
 from unittest.mock import MagicMock, patch
 
+from tests.helpers import make_ipv4_ioc
+
 
 # ---------------------------------------------------------------------------
 # Functional tests
@@ -358,6 +360,56 @@ def test_analyze_offline_unchanged(client):
 # ---------------------------------------------------------------------------
 
 
+def _build_incremental_snapshot_orchestrator(
+    results,
+    *,
+    total=None,
+    done=None,
+    complete=True,
+    status=None,
+    terminal=False,
+    terminal_reason=None,
+    error=None,
+    cached_markers=None,
+):
+    """Return a mock orchestrator exposing only the incremental polling API."""
+    full_results = list(results)
+    marker_map = dict(cached_markers or {})
+    mock_orch = MagicMock(spec_set=["get_incremental_status", "get_status"])
+
+    def _get_incremental_status(_job_id, since=0):
+        tail_results = list(full_results[since:])
+        tail_markers = {}
+        for result in tail_results:
+            ioc = getattr(result, "ioc", None)
+            provider = getattr(result, "provider", None)
+            ioc_value = getattr(ioc, "value", None)
+            if not ioc_value or not provider:
+                continue
+            cache_key = f"{ioc_value}|{provider}"
+            cached_at = marker_map.get(cache_key)
+            if cached_at:
+                tail_markers[cache_key] = cached_at
+        return {
+            "total": len(full_results) if total is None else total,
+            "done": len(full_results) if done is None else done,
+            "complete": complete,
+            "results": tail_results,
+            "next_since": since if terminal else len(full_results),
+            "status": status or ("failed" if terminal else "complete" if complete else "running"),
+            "terminal": terminal,
+            "terminal_reason": terminal_reason,
+            "error": error,
+            "cached_markers": tail_markers,
+        }
+
+    mock_orch.get_incremental_status.side_effect = _get_incremental_status
+    mock_orch.get_status.side_effect = AssertionError(
+        "_get_enrichment_status should use get_incremental_status() for polling"
+    )
+    return mock_orch
+
+
 def test_enrichment_status_unknown_job(client):
     """GET /enrichment/status/nonexistent returns explicit terminal JSON."""
     response = client.get("/enrichment/status/nonexistentjob123?since=7")
@@ -376,14 +428,13 @@ def test_enrichment_status_returns_json(client):
     """GET /enrichment/status/{job_id} returns correct JSON structure."""
     import app.routes._helpers as routes_module
 
-    mock_orchestrator = MagicMock()
-    mock_orchestrator.cached_markers = {}
-    mock_orchestrator.get_status.return_value = {
-        "total": 3,
-        "done": 2,
-        "complete": False,
-        "results": [],
-    }
+    mock_orchestrator = _build_incremental_snapshot_orchestrator(
+        [],
+        total=3,
+        done=2,
+        complete=False,
+        status="running",
+    )
 
     job_id = "testjob123abc"
     # Inject directly into module-level registry
@@ -400,6 +451,8 @@ def test_enrichment_status_returns_json(client):
         assert data["terminal"] is False
         assert data["terminal_reason"] is None
         assert "results" in data
+        mock_orchestrator.get_incremental_status.assert_called_once_with(job_id, since=0)
+        mock_orchestrator.get_status.assert_not_called()
     finally:
         routes_module._orchestrators.pop(job_id, None)
 
@@ -421,14 +474,7 @@ def test_enrichment_result_serialization(client):
         raw_stats={"malicious": 5, "clean": 67},
     )
 
-    mock_orchestrator = MagicMock()
-    mock_orchestrator.cached_markers = {}
-    mock_orchestrator.get_status.return_value = {
-        "total": 1,
-        "done": 1,
-        "complete": True,
-        "results": [sample_result],
-    }
+    mock_orchestrator = _build_incremental_snapshot_orchestrator([sample_result])
 
     job_id = "serialjob456def"
     routes_module._orchestrators[job_id] = mock_orchestrator
@@ -468,14 +514,7 @@ def test_enrichment_error_serialization(client):
         error="Timeout",
     )
 
-    mock_orchestrator = MagicMock()
-    mock_orchestrator.cached_markers = {}
-    mock_orchestrator.get_status.return_value = {
-        "total": 1,
-        "done": 1,
-        "complete": True,
-        "results": [sample_error],
-    }
+    mock_orchestrator = _build_incremental_snapshot_orchestrator([sample_error])
 
     job_id = "errorjob789ghi"
     routes_module._orchestrators[job_id] = mock_orchestrator
@@ -495,6 +534,92 @@ def test_enrichment_error_serialization(client):
         assert data["status"] == "complete"
         assert data["terminal"] is False
         assert data["terminal_reason"] is None
+    finally:
+        routes_module._orchestrators.pop(job_id, None)
+
+
+def test_enrichment_status_serializes_cached_at_only_for_cached_rows(client):
+    """Cached markers come from the incremental tail and only annotate cached rows."""
+    import app.routes._helpers as routes_module
+    from app.enrichment.models import EnrichmentResult
+
+    first_result = EnrichmentResult(
+        ioc=make_ipv4_ioc("1.1.1.1"),
+        provider="FreshProvider",
+        verdict="clean",
+        detection_count=0,
+        total_engines=10,
+        scan_date=None,
+        raw_stats={},
+    )
+    cached_ioc = make_ipv4_ioc("2.2.2.2")
+    cached_result = EnrichmentResult(
+        ioc=cached_ioc,
+        provider="CachedProvider",
+        verdict="clean",
+        detection_count=0,
+        total_engines=5,
+        scan_date=None,
+        raw_stats={},
+    )
+
+    cache_key = f"{cached_ioc.value}|{cached_result.provider}"
+    mock_orchestrator = _build_incremental_snapshot_orchestrator(
+        [first_result, cached_result],
+        cached_markers={cache_key: "2026-04-25T00:00:00Z"},
+    )
+
+    job_id = "cachedrowsjob123"
+    routes_module._orchestrators[job_id] = mock_orchestrator
+
+    try:
+        response = client.get(f"/enrichment/status/{job_id}")
+        assert response.status_code == 200
+        data = response.get_json()
+        assert len(data["results"]) == 2
+        assert "cached_at" not in data["results"][0]
+        assert data["results"][1]["cached_at"] == "2026-04-25T00:00:00Z"
+        mock_orchestrator.get_incremental_status.assert_called_once_with(job_id, since=0)
+        mock_orchestrator.get_status.assert_not_called()
+    finally:
+        routes_module._orchestrators.pop(job_id, None)
+
+
+def test_enrichment_status_job_failed_payload_stays_truthful(client):
+    """Orchestrator terminal failures stay terminal without being collapsed into 404 tombstones."""
+    import app.routes._helpers as routes_module
+
+    mock_orchestrator = MagicMock(spec_set=["get_incremental_status", "get_status"])
+    mock_orchestrator.get_incremental_status.return_value = {
+        "total": 2,
+        "done": 1,
+        "complete": True,
+        "results": [],
+        "next_since": 5,
+        "status": "failed",
+        "terminal": True,
+        "terminal_reason": "job_failed",
+        "error": "VirusTotal lookup crashed",
+        "cached_markers": {},
+    }
+    mock_orchestrator.get_status.side_effect = AssertionError(
+        "_get_enrichment_status should not fall back to get_status()"
+    )
+
+    job_id = "jobfailed123"
+    routes_module._orchestrators[job_id] = mock_orchestrator
+
+    try:
+        response = client.get(f"/enrichment/status/{job_id}?since=5")
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["status"] == "failed"
+        assert data["terminal"] is True
+        assert data["terminal_reason"] == "job_failed"
+        assert data["error"] == "VirusTotal lookup crashed"
+        assert data["next_since"] == 5
+        mock_orchestrator.get_incremental_status.assert_called_once_with(job_id, since=5)
+        mock_orchestrator.get_status.assert_not_called()
     finally:
         routes_module._orchestrators.pop(job_id, None)
 
@@ -546,15 +671,7 @@ def _make_three_result_orchestrator():
                          detection_count=0, total_engines=0,
                          scan_date=None, raw_stats={}),
     ]
-    mock_orch = MagicMock()
-    mock_orch.cached_markers = {}
-    mock_orch.get_status.return_value = {
-        "total": 3,
-        "done": 3,
-        "complete": True,
-        "results": results,
-    }
-    return mock_orch
+    return _build_incremental_snapshot_orchestrator(results)
 
 
 def test_enrichment_status_since_returns_slice(client):
@@ -603,6 +720,43 @@ def test_enrichment_status_no_since_returns_all(client):
         assert response.status_code == 200
         data = response.get_json()
         assert len(data["results"]) == 3
+        assert data["next_since"] == 3
+    finally:
+        routes_module._orchestrators.pop(job_id, None)
+
+
+def test_enrichment_status_negative_since_preserves_tail_behavior(client):
+    """Negative since values preserve the existing Python-slice tail behavior."""
+    import app.routes._helpers as routes_module
+
+    mock_orch = _make_three_result_orchestrator()
+    job_id = "cursor_negative_job"
+    routes_module._orchestrators[job_id] = mock_orch
+    try:
+        response = client.get(f"/enrichment/status/{job_id}?since=-1")
+        assert response.status_code == 200
+        data = response.get_json()
+        assert len(data["results"]) == 1
+        assert data["results"][0]["provider"] == "Shodan"
+        assert data["next_since"] == 3
+        mock_orch.get_incremental_status.assert_called_once_with(job_id, since=-1)
+        mock_orch.get_status.assert_not_called()
+    finally:
+        routes_module._orchestrators.pop(job_id, None)
+
+
+def test_enrichment_status_since_equal_to_length_returns_empty_delta(client):
+    """?since=3 with 3 results returns no new rows and preserves next_since."""
+    import app.routes._helpers as routes_module
+
+    mock_orch = _make_three_result_orchestrator()
+    job_id = "cursor_exact_length_job"
+    routes_module._orchestrators[job_id] = mock_orch
+    try:
+        response = client.get(f"/enrichment/status/{job_id}?since=3")
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["results"] == []
         assert data["next_since"] == 3
     finally:
         routes_module._orchestrators.pop(job_id, None)

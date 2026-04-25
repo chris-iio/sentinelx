@@ -11,3 +11,12 @@
 {"id":"ccf3e66f-3c7b-4b0c-ad96-5b622c2aef45","ts":"2026-04-25T04:52:10.124Z","severity":"info","message":"Auto-mode started. Will loop until milestone complete.","source":"notify","read":false}
 {"id":"91846b83-cf24-41e5-a81e-93dbf4bca709","ts":"2026-04-25T04:52:10.126Z","severity":"info","message":"Dynamic routing: enabled — simple tasks may use cheaper models (ceiling: openai-codex/gpt-5.4)","source":"notify","read":false}
 {"id":"fdc3259f-a98f-406a-9cf5-08011ca51de6","ts":"2026-04-25T04:52:10.127Z","severity":"info","message":"Pre-flight: 12 milestones queued. All have full context.","source":"notify","read":false}
+{"id":"4f96a814-6edc-42ad-9070-98a4ea72e7e2","ts":"2026-04-25T04:53:56.253Z","severity":"info","message":"Committed: test: Confirmed the lock-safe orchestrator incremental status snapshot…","source":"notify","read":false}
+{"id":"836e668e-82eb-4875-b721-c9936b796352","ts":"2026-04-25T04:53:56.598Z","severity":"info","message":"Verification gate: 1/1 checks passed","source":"notify","read":false}
+{"id":"5a498a86-35bd-46e1-9cad-7d47d957df7a","ts":"2026-04-25T06:14:12.783Z","severity":"info","message":"Auto-mode started. Will loop until milestone complete.","source":"notify","read":false}
+{"id":"70871398-6066-41c2-828f-082307090d2d","ts":"2026-04-25T06:14:12.785Z","severity":"info","message":"Dynamic routing: enabled — simple tasks may use cheaper models (ceiling: openai-codex/gpt-5.4)","source":"notify","read":false}
+{"id":"781b3cdf-f8ca-4d71-8926-e6f3430af991","ts":"2026-04-25T06:14:12.786Z","severity":"info","message":"Pre-flight: 12 milestones queued. All have full context.","source":"notify","read":false}
+{"id":"77a6f2de-deb0-4fe9-a035-c717dc570d67","ts":"2026-04-25T06:14:13.387Z","severity":"info","message":"Pre-dispatch: pre-dispatch: created gsd snapshot after 80m of uncommitted changes","source":"notify","read":false}
+{"id":"700c0cca-4165-471f-ada6-ba2b6b8457ea","ts":"2026-04-25T06:26:36.921Z","severity":"info","message":"Auto-mode started. Will loop until milestone complete.","source":"notify","read":false}
+{"id":"3eae6f8e-af9a-499f-b864-c47b06d7b1e9","ts":"2026-04-25T06:26:36.922Z","severity":"info","message":"Dynamic routing: enabled — simple tasks may use cheaper models (ceiling: openai-codex/gpt-5.4)","source":"notify","read":false}
+{"id":"1c8a762a-b529-4be0-9da0-1e664fb1750b","ts":"2026-04-25T06:26:36.924Z","severity":"info","message":"Pre-flight: 12 milestones queued. All have full context.","source":"notify","read":false}
