@@ -70,7 +70,7 @@
   - Files: `tools/runtime_state_repair.py`, `tests/test_runtime_state_repair.py`, `tools/runtime_state_boundary.py`, `tests/test_runtime_state_boundary.py`
   - Verify: python3 -m pytest -q tests/test_runtime_state_repair.py && python3 tools/runtime_state_repair.py --help
 
-- [ ] **T02: Prove quarantine repair flows and expose `make repair-runtime-state`** `est:0.75d`
+- [x] **T02: Prove quarantine repair flows and expose `make repair-runtime-state`** `est:0.75d`
   Extend the repair surface to the remaining actionable transient case, then wire and document the single supported operator entrypoint. This task closes R063 by proving the repair path in temp repos and by making the live-repo contract explicit.
 
 ## Failure Modes

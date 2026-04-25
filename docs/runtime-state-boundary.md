@@ -10,8 +10,8 @@ repair commands each guess their own glob set.
   - Checked-in planning and audit artifacts that should stay tracked.
   - Representative examples: `.gsd/milestones/**`, `.gsd/CODEBASE.md`, `.gsd/DECISIONS.md`, `.gsd/KNOWLEDGE.md`, `.gsd/REQUIREMENTS.md`, `.gsd/audits/**`.
 - `transient`
-  - Repo-local runtime state, manifests, logs, locks, and background-process surfaces that should be ignored and, when currently tracked, surfaced as blockers.
-  - Representative examples: `.gsd/audit/**`, `.gsd/state-manifest.json`, `.gsd/notifications.jsonl`, `.gsd/event-log.jsonl`, `.gsd/gsd.db*`, `.gsd/activity/**`, `.bg-shell/**`.
+  - Repo-local runtime state, manifests, logs, locks, quarantine trees, and background-process surfaces that should be ignored and, when currently tracked or unignored, surfaced for repair.
+  - Representative examples: `.gsd/audit/**`, `.gsd/state-manifest.json`, `.gsd/notifications.jsonl`, `.gsd/event-log.jsonl`, `.gsd/gsd.db*`, `.gsd/activity/**`, `.gsd/runtime/**`, `.bg-shell/**`.
 - `manual-review`
   - Mixed or legacy workflow paths that must fail closed until a later slice gives them a migration plan.
   - Representative examples: `.planning/**` and any unclassified path under the supported boundary roots.
@@ -22,8 +22,9 @@ repair commands each guess their own glob set.
 stateful planning files there, but it also contains human-readable workflow context that later work
 may still need to inspect or migrate. Blanket ignore/deindex/cleanup would be fast but unsafe.
 
-The classifier therefore treats `.planning/**` as `manual-review` on purpose. The audit command will
-surface those paths explicitly, but it will not silently promote them into the transient set.
+The classifier therefore treats `.planning/**` as `manual-review` on purpose. The audit and repair
+commands will surface those paths explicitly, but they will not silently promote them into the
+transient set.
 
 ## CLI contract
 
@@ -49,38 +50,73 @@ python3 tools/runtime_state_boundary.py audit \
 make verify-runtime-boundary
 ```
 
-`make verify-runtime-boundary` now runs both focused classifier coverage and a temp-repo Git regression suite before the live repo audit, but it only fails on blocker classes (`tracked-transient`, `unignored-transient`, `conflicting-rule-match`, and `unknown-root`). The Git fixtures prove two representative workflows:
+Repair the supported transient classes, then re-run the inspection-only audit:
 
-- tracked `.gsd/audit/events.jsonl` still reproduces a real `git stash pop` conflict until the audit surfaces it as `tracked-transient`
-- ignored/untracked `.gsd/state-manifest.json` and `.gsd/event-log.jsonl` stay out of normal checkout flows and out of audit findings
+```bash
+python3 tools/runtime_state_repair.py --format text
+python3 tools/runtime_state_repair.py --format json
+make repair-runtime-state
+```
 
-Legacy `manual-review-path` findings under `.planning/**` still appear in the live audit output, but they do not fail `make verify-runtime-boundary`; that backlog is intentional surfacing, not an auto-cleanup step.
+`make verify-runtime-boundary` runs both focused classifier coverage and a temp-repo Git regression
+suite before the live repo audit, but it only fails on blocker classes (`tracked-transient`,
+`unignored-transient`, `conflicting-rule-match`, and `unknown-root`).
 
-The audit surfaces three issue codes for later slices and CI-style verification:
+`make repair-runtime-state` is the one supported repo-native recovery entrypoint. It applies the
+repair action table below and then runs the same inspection-only audit gate so any remaining blocker
+classes stay visible.
 
-- `tracked-transient`
-- `unignored-transient`
-- `manual-review-path`
+## Repair action table
 
-Conflicting rule matches are reported as `conflicting-rule-match`, and paths outside the supported
-boundary roots fail closed as `unknown-root`.
+| Issue code | Meaning | Repair action | Notes |
+| --- | --- | --- | --- |
+| `tracked-transient` | Transient runtime file is still tracked in Git | `git rm --cached -- <path>` | Preserves working-tree contents while removing the Git blocker. |
+| `unignored-transient` | Transient runtime file is visible to Git because it is not ignored | Move to `.gsd/runtime/repair-quarantine/<timestamp>/<original-path>` | Preserves relative path context inside an already ignored subtree; reports the quarantine destination in text/JSON output. |
+| `manual-review-path` | Legacy/mixed workflow path under `.planning/**` | Report only | Visible in repair output but never moved, deindexed, or deleted automatically. |
+| `conflicting-rule-match` | Boundary rules disagree | Report only | Fail closed; fix the classifier/policy instead of widening cleanup logic. |
+| `unknown-root` | Path falls outside the supported boundary contract | Report only | Fail closed; extend the authoritative boundary rules explicitly before adding automation. |
+
+Repair diagnostics are intentionally path-only. Reports surface issue codes, per-path actions,
+Git stderr, failure details, and quarantine destinations, but they do **not** print runtime file
+contents.
+
+## Quarantine contract
+
+- Quarantined files land under `.gsd/runtime/repair-quarantine/<timestamp>/...`.
+- The original repo-relative path is preserved under that timestamped subtree so later inspection
+  can recover context without dumping contents into logs.
+- The destination must already be ignored by Git. If the quarantine subtree is not ignored or a
+  destination collision exists, the repair run fails closed and reports the reason.
+- Re-running repair after a successful quarantine/deindex pass should converge to a no-op when no
+  new actionable findings have appeared.
+
+## Inspection and failure visibility
+
+Use these surfaces when diagnosing boundary or repair behavior:
+
+- `python3 tools/runtime_state_repair.py --format text|json`
+- `make repair-runtime-state`
+- `make verify-runtime-boundary`
+- `.gsd/runtime/repair-quarantine/`
+
+Expected visibility properties:
+
+- blocked/manual-review findings remain visible in repair output
+- follow-up audit failures stay visible after repair runs
+- quarantine destinations are reported as paths, not file contents
+- Git stderr and filesystem/quarantine errors are preserved in the action detail fields
 
 ## Handoff to later slices
 
 - **S02** consumes this classifier when expanding `.gitignore`, deindexing already-tracked
-  transient files, and exposing `make verify-runtime-boundary` as the supported repo-native check.
+  transient files, quarantining unignored transient files, and exposing `make repair-runtime-state`
+  plus `make verify-runtime-boundary` as the supported repo-native loop.
 - **S03** should reuse the same classes and issue codes when it hardens the supported dev-process
   loop, so the runtime boundary does not drift between cleanup and startup paths.
 
 ## Non-goals
 
 - No blanket `.planning/**` cleanup.
-- No file-content inspection or secret dumping in diagnostics.
-- No repo mutation from `audit`; it is inspection-only.
- the runtime boundary does not drift between cleanup and startup paths.
-
-## Non-goals
-
-- No blanket `.planning/**` cleanup.
+- No blanket `.gsd/**` cleanup outside the supported boundary action table.
 - No file-content inspection or secret dumping in diagnostics.
 - No repo mutation from `audit`; it is inspection-only.

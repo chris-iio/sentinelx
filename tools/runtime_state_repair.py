@@ -5,8 +5,8 @@ This tool is the mutating companion to ``tools/runtime_state_boundary.py``. It
 reuses the boundary classifier's authoritative audit helpers and issue codes,
 and it stays intentionally conservative:
 
-* only ``tracked-transient`` findings mutate in this first slice
-* ``unignored-transient`` remains report-only until quarantine support lands
+* ``tracked-transient`` findings are deindexed via ``git rm --cached``
+* ``unignored-transient`` findings are moved into an ignored quarantine subtree
 * manual-review, conflicting, and unknown-root findings never mutate
 
 Examples:
@@ -17,9 +17,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import re
+import shutil
 import subprocess
 import sys
 from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Sequence
 
@@ -45,24 +49,18 @@ from runtime_state_boundary import (  # noqa: E402
 )
 
 ACTION_DEINDEX = "deindex-tracked-transient"
+ACTION_QUARANTINE = "quarantine-unignored-transient"
 ACTION_BLOCKED = "blocked"
-SUPPORTED_MUTATION_ISSUES = frozenset({ISSUE_TRACKED_TRANSIENT})
-REPORT_ONLY_ISSUES = frozenset(
-    {
-        ISSUE_UNIGNORED_TRANSIENT,
-        ISSUE_MANUAL_REVIEW,
-        ISSUE_CONFLICTING_RULE,
-        ISSUE_UNKNOWN_ROOT,
-    }
-)
+DEFAULT_QUARANTINE_ROOT = ".gsd/runtime/repair-quarantine"
+QUARANTINE_STAMP_ENV = "RUNTIME_STATE_REPAIR_QUARANTINE_STAMP"
+SUPPORTED_MUTATION_ISSUES = frozenset({ISSUE_TRACKED_TRANSIENT, ISSUE_UNIGNORED_TRANSIENT})
+SOFT_BLOCKED_ISSUES = frozenset({ISSUE_MANUAL_REVIEW})
+HARD_BLOCKED_ISSUES = frozenset({ISSUE_CONFLICTING_RULE, ISSUE_UNKNOWN_ROOT})
+REPORT_ONLY_ISSUES = frozenset(SOFT_BLOCKED_ISSUES | HARD_BLOCKED_ISSUES)
 
 
 class RepairError(Exception):
     """Base runtime-state repair error."""
-
-
-class GitRepairError(RepairError):
-    """Raised when a git-backed repair operation fails."""
 
 
 @dataclass(frozen=True)
@@ -77,6 +75,7 @@ class RepairAction:
     ignored: bool | None
     rationale: str
     command: tuple[str, ...] | None = None
+    destination: str | None = None
     detail: str | None = None
 
 
@@ -131,7 +130,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Plan repairs without mutating the git index.",
+        help="Plan repairs without mutating the git index or quarantine tree.",
     )
     return parser.parse_args()
 
@@ -151,7 +150,27 @@ def normalize_repair_targets(paths: Sequence[str], repo_root: Path) -> tuple[str
     return tuple(normalized)
 
 
-def plan_action_for_finding(finding: AuditFinding, *, dry_run: bool) -> RepairAction:
+def current_quarantine_stamp() -> str:
+    configured = os.environ.get(QUARANTINE_STAMP_ENV)
+    if configured:
+        if not re.fullmatch(r"[A-Za-z0-9._-]+", configured):
+            raise RepairError(
+                f"{QUARANTINE_STAMP_ENV} must contain only letters, numbers, dot, underscore, or hyphen."
+            )
+        return configured
+    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
+def build_quarantine_destination(path: str, *, quarantine_stamp: str) -> str:
+    return f"{DEFAULT_QUARANTINE_ROOT}/{quarantine_stamp}/{path}"
+
+
+def plan_action_for_finding(
+    finding: AuditFinding,
+    *,
+    dry_run: bool,
+    quarantine_stamp: str,
+) -> RepairAction:
     if finding.issue_code == ISSUE_TRACKED_TRANSIENT:
         command = ("git", "rm", "--cached", "--", finding.path)
         status = "planned" if dry_run else "pending"
@@ -173,8 +192,27 @@ def plan_action_for_finding(finding: AuditFinding, *, dry_run: bool) -> RepairAc
         )
 
     if finding.issue_code == ISSUE_UNIGNORED_TRANSIENT:
-        detail = "quarantine support is not available in this task, so the path stays blocked"
-    elif finding.issue_code == ISSUE_MANUAL_REVIEW:
+        destination = build_quarantine_destination(finding.path, quarantine_stamp=quarantine_stamp)
+        status = "planned" if dry_run else "pending"
+        detail = f"would move into ignored quarantine at {destination}" if dry_run else None
+        return RepairAction(
+            path=finding.path,
+            issue_code=finding.issue_code,
+            classification=finding.classification,
+            action=ACTION_QUARANTINE,
+            status=status,
+            mutate=True,
+            tracked=finding.tracked,
+            ignored=finding.ignored,
+            rationale=(
+                "Unignored transient runtime state should move into the ignored quarantine subtree so the repo "
+                "converges back to the supported boundary."
+            ),
+            destination=destination,
+            detail=detail,
+        )
+
+    if finding.issue_code == ISSUE_MANUAL_REVIEW:
         detail = "manual-review paths remain report-only and never mutate automatically"
     elif finding.issue_code == ISSUE_CONFLICTING_RULE:
         detail = "conflicting classifier matches fail closed to blocked/manual review"
@@ -198,12 +236,43 @@ def plan_action_for_finding(finding: AuditFinding, *, dry_run: bool) -> RepairAc
 
 
 def plan_repair_actions(report: AuditReport, *, dry_run: bool) -> tuple[RepairAction, ...]:
-    return tuple(plan_action_for_finding(finding, dry_run=dry_run) for finding in report.findings)
+    quarantine_stamp = current_quarantine_stamp()
+    return tuple(
+        plan_action_for_finding(finding, dry_run=dry_run, quarantine_stamp=quarantine_stamp)
+        for finding in report.findings
+    )
+
+
+def replace_action(action: RepairAction, *, status: str, detail: str, destination: str | None = None) -> RepairAction:
+    payload = {
+        **asdict(action),
+        "status": status,
+        "detail": detail,
+    }
+    if destination is not None:
+        payload["destination"] = destination
+    return RepairAction(**payload)
+
+
+def git_path_is_ignored(repo_root: Path, path: str) -> bool:
+    completed = subprocess.run(
+        ["git", "check-ignore", "-q", "--", path],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if completed.returncode == 0:
+        return True
+    if completed.returncode == 1:
+        return False
+    stderr = completed.stderr.strip() or completed.stdout.strip() or "git check-ignore failed"
+    raise RepairError(stderr)
 
 
 def apply_tracked_transient_repair(action: RepairAction, repo_root: Path) -> RepairAction:
-    if action.issue_code not in SUPPORTED_MUTATION_ISSUES or not action.command:
-        raise RepairError(f"Unsupported mutation request for issue code '{action.issue_code}'.")
+    if action.issue_code != ISSUE_TRACKED_TRANSIENT or not action.command:
+        raise RepairError(f"Unsupported tracked-transient mutation request for issue code '{action.issue_code}'.")
 
     completed = subprocess.run(
         list(action.command),
@@ -215,32 +284,65 @@ def apply_tracked_transient_repair(action: RepairAction, repo_root: Path) -> Rep
     stderr = completed.stderr.strip()
     if completed.returncode != 0:
         detail = stderr or "git rm --cached returned a non-zero exit code"
-        return RepairAction(
-            **{
-                **asdict(action),
-                "status": "failed",
-                "detail": detail,
-            }
-        )
+        return replace_action(action, status="failed", detail=detail)
 
     if not (repo_root / action.path).exists():
-        return RepairAction(
-            **{
-                **asdict(action),
-                "status": "failed",
-                "detail": "git rm --cached removed the working-tree file unexpectedly",
-            }
+        return replace_action(
+            action,
+            status="failed",
+            detail="git rm --cached removed the working-tree file unexpectedly",
         )
 
     detail = "removed from git index; working-tree file preserved"
     if stderr:
         detail = f"{detail}; git stderr: {stderr}"
-    return RepairAction(
-        **{
-            **asdict(action),
-            "status": "applied",
-            "detail": detail,
-        }
+    return replace_action(action, status="applied", detail=detail)
+
+
+def apply_unignored_transient_repair(action: RepairAction, repo_root: Path) -> RepairAction:
+    if action.issue_code != ISSUE_UNIGNORED_TRANSIENT or not action.destination:
+        raise RepairError(f"Unsupported unignored-transient mutation request for issue code '{action.issue_code}'.")
+
+    source = repo_root / action.path
+    destination = repo_root / action.destination
+    if not source.exists():
+        return replace_action(action, status="failed", detail="source path disappeared before quarantine could run")
+    if destination.exists():
+        return replace_action(
+            action,
+            status="failed",
+            detail=f"quarantine destination already exists: {action.destination}",
+        )
+    if not git_path_is_ignored(repo_root, action.destination):
+        return replace_action(
+            action,
+            status="failed",
+            detail=f"quarantine destination is not ignored by git: {action.destination}",
+        )
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        shutil.move(str(source), str(destination))
+    except OSError as exc:
+        return replace_action(action, status="failed", detail=f"failed to move into quarantine: {exc}")
+
+    if source.exists():
+        return replace_action(
+            action,
+            status="failed",
+            detail=f"source path still exists after quarantine move: {action.path}",
+        )
+    if not destination.exists():
+        return replace_action(
+            action,
+            status="failed",
+            detail=f"quarantine move completed without leaving a destination file: {action.destination}",
+        )
+
+    return replace_action(
+        action,
+        status="applied",
+        detail=f"moved into ignored quarantine at {action.destination}",
     )
 
 
@@ -250,7 +352,13 @@ def execute_plan(actions: Sequence[RepairAction], repo_root: Path, *, dry_run: b
         if dry_run or not action.mutate:
             executed.append(action)
             continue
-        executed.append(apply_tracked_transient_repair(action, repo_root))
+        if action.issue_code == ISSUE_TRACKED_TRANSIENT:
+            executed.append(apply_tracked_transient_repair(action, repo_root))
+            continue
+        if action.issue_code == ISSUE_UNIGNORED_TRANSIENT:
+            executed.append(apply_unignored_transient_repair(action, repo_root))
+            continue
+        raise RepairError(f"Unsupported mutation request for issue code '{action.issue_code}'.")
     return tuple(executed)
 
 
@@ -260,12 +368,17 @@ def summarize_actions(actions: Sequence[RepairAction]) -> RepairSummary:
         for action in actions
         if action.action == ACTION_DEINDEX and action.status in {"planned", "pending", "applied"}
     )
+    quarantine_count = sum(
+        1
+        for action in actions
+        if action.action == ACTION_QUARANTINE and action.status in {"planned", "pending", "applied"}
+    )
     blocked_count = sum(1 for action in actions if action.status == "blocked")
     failed_count = sum(1 for action in actions if action.status == "failed")
     noop_count = 1 if not actions else 0
     return RepairSummary(
         deindex_count=deindex_count,
-        quarantine_count=0,
+        quarantine_count=quarantine_count,
         blocked_count=blocked_count,
         failed_count=failed_count,
         noop_count=noop_count,
@@ -279,9 +392,7 @@ def build_repair_report(
     dry_run: bool,
 ) -> RepairReport:
     summary = summarize_actions(actions)
-    actionable_issue_count = sum(
-        1 for action in actions if action.issue_code in SUPPORTED_MUTATION_ISSUES
-    )
+    actionable_issue_count = sum(1 for action in actions if action.issue_code in SUPPORTED_MUTATION_ISSUES)
     blocked_issue_count = sum(1 for action in actions if action.status == "blocked")
     failed_issue_count = sum(1 for action in actions if action.status == "failed")
     return RepairReport(
@@ -336,10 +447,11 @@ def render_text(report: RepairReport) -> str:
         tracked = "yes" if action.tracked else "no"
         ignored = "yes" if action.ignored else "no"
         command = " ".join(action.command) if action.command else "-"
+        destination = action.destination or "-"
         detail = action.detail or "-"
         lines.append(
             f"- [{action.issue_code}] {action.action} {action.path} status={action.status} "
-            f"tracked={tracked} ignored={ignored} command={command} detail={detail}"
+            f"tracked={tracked} ignored={ignored} command={command} destination={destination} detail={detail}"
         )
     return "\n".join(lines)
 
@@ -349,8 +461,15 @@ def exit_code_for_report(report: RepairReport) -> int:
         return 1
     if report.summary.noop_count == 1:
         return 0
-    unresolved = any(action.status in {"planned", "pending", "blocked", "failed"} for action in report.actions)
-    return 1 if unresolved else 0
+
+    has_unapplied_action = any(action.status in {"planned", "pending"} for action in report.actions)
+    if has_unapplied_action:
+        return 1
+
+    hard_blocked = any(
+        action.status == "blocked" and action.issue_code in HARD_BLOCKED_ISSUES for action in report.actions
+    )
+    return 1 if hard_blocked else 0
 
 
 def run_repair(paths: Sequence[str], repo_root: Path, *, dry_run: bool) -> RepairReport:

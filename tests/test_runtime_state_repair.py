@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -25,12 +26,16 @@ def load_repair_module():
     return module
 
 
-def run_repair(*args: str) -> subprocess.CompletedProcess[str]:
+def run_repair(*args: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+    merged_env = os.environ.copy()
+    if env:
+        merged_env.update(env)
     return subprocess.run(
         [sys.executable, str(SCRIPT), *args],
         capture_output=True,
         text=True,
         check=False,
+        env=merged_env,
     )
 
 
@@ -64,7 +69,7 @@ def write_file(repo_root: Path, relative_path: str, content: str) -> Path:
     return path
 
 
-def test_action_planner_only_mutates_tracked_transient_findings():
+def test_action_planner_mutates_tracked_and_unignored_transient_findings():
     repair = load_repair_module()
 
     findings = (
@@ -120,20 +125,30 @@ def test_action_planner_only_mutates_tracked_transient_findings():
         findings=findings,
     )
 
-    actions = repair.plan_repair_actions(audit_report, dry_run=True)
+    previous = os.environ.get(repair.QUARANTINE_STAMP_ENV)
+    os.environ[repair.QUARANTINE_STAMP_ENV] = "stamp-123"
+    try:
+        actions = repair.plan_repair_actions(audit_report, dry_run=True)
+    finally:
+        if previous is None:
+            os.environ.pop(repair.QUARANTINE_STAMP_ENV, None)
+        else:
+            os.environ[repair.QUARANTINE_STAMP_ENV] = previous
 
     assert [action.action for action in actions] == [
         repair.ACTION_DEINDEX,
-        repair.ACTION_BLOCKED,
+        repair.ACTION_QUARANTINE,
         repair.ACTION_BLOCKED,
         repair.ACTION_BLOCKED,
         repair.ACTION_BLOCKED,
     ]
     assert actions[0].status == "planned"
     assert actions[0].command == ("git", "rm", "--cached", "--", ".gsd/audit/events.jsonl")
-    assert all(not action.mutate for action in actions[1:])
-    assert {action.issue_code for action in actions[1:]} == {
-        repair.ISSUE_UNIGNORED_TRANSIENT,
+    assert actions[1].status == "planned"
+    assert actions[1].destination == ".gsd/runtime/repair-quarantine/stamp-123/.gsd/state-manifest.json"
+    assert actions[1].mutate is True
+    assert all(not action.mutate for action in actions[2:])
+    assert {action.issue_code for action in actions[2:]} == {
         repair.ISSUE_MANUAL_REVIEW,
         repair.ISSUE_CONFLICTING_RULE,
         repair.ISSUE_UNKNOWN_ROOT,
@@ -144,18 +159,19 @@ def test_dry_run_json_reports_counts_for_actionable_and_blocked_findings(tmp_pat
     repo_root = tmp_path
     init_temp_repo(repo_root)
 
-    write_file(repo_root, ".gitignore", ".gsd/audit/\n")
+    write_file(repo_root, ".gitignore", ".gsd/audit/\n.gsd/runtime/\n")
     tracked_transient = write_file(repo_root, ".gsd/audit/events.jsonl", '{"event":"tracked"}\n')
     manual_review = write_file(repo_root, ".planning/STATE.md", "legacy\n")
     git(repo_root, "add", ".gitignore", str(manual_review.relative_to(repo_root)))
     git(repo_root, "add", "-f", str(tracked_transient.relative_to(repo_root)))
 
-    result = run_repair("--repo-root", str(repo_root), "--dry-run", "--format", "json")
+    result = run_repair("--repo-root", str(repo_root), "--dry-run", "--format", "json", env={"RUNTIME_STATE_REPAIR_QUARANTINE_STAMP": "dry-run-stamp"})
 
     assert result.returncode == 1, result.stderr
     payload = json.loads(result.stdout)
     assert payload["mode"] == "dry-run"
     assert payload["summary"]["deindex_count"] == 1
+    assert payload["summary"]["quarantine_count"] == 0
     assert payload["summary"]["blocked_count"] == 1
     assert payload["summary"]["failed_count"] == 0
     assert payload["summary"]["noop_count"] == 0
@@ -168,7 +184,7 @@ def test_apply_deindexes_tracked_transient_and_preserves_worktree_contents(tmp_p
     repo_root = tmp_path
     init_temp_repo(repo_root)
 
-    write_file(repo_root, ".gitignore", ".gsd/audit/\n")
+    write_file(repo_root, ".gitignore", ".gsd/audit/\n.gsd/runtime/\n")
     tracked_transient = write_file(repo_root, ".gsd/audit/events.jsonl", '{"event":"tracked"}\n')
     git(repo_root, "add", ".gitignore")
     git(repo_root, "add", "-f", str(tracked_transient.relative_to(repo_root)))
@@ -205,6 +221,74 @@ def test_apply_deindexes_tracked_transient_and_preserves_worktree_contents(tmp_p
     assert json.loads(boundary_audit.stdout)["findings"] == []
 
 
+def test_manual_review_only_apply_is_safe_and_reports_blocked_path(tmp_path: Path):
+    repo_root = tmp_path
+    init_temp_repo(repo_root)
+
+    planning_path = write_file(repo_root, ".planning/STATE.md", "legacy planning notes\n")
+    git(repo_root, "add", str(planning_path.relative_to(repo_root)))
+    git(repo_root, "commit", "-m", "seed manual review path")
+
+    result = run_repair("--repo-root", str(repo_root), "--format", "json")
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["summary"]["blocked_count"] == 1
+    assert payload["summary"]["deindex_count"] == 0
+    assert payload["summary"]["quarantine_count"] == 0
+    assert payload["actions"] == [
+        {
+            "path": ".planning/STATE.md",
+            "issue_code": "manual-review-path",
+            "classification": "manual-review",
+            "action": "blocked",
+            "status": "blocked",
+            "mutate": False,
+            "tracked": True,
+            "ignored": False,
+            "rationale": ".planning is a mixed legacy workflow tree and stays manual-review until a later slice migrates it safely.",
+            "command": None,
+            "destination": None,
+            "detail": "manual-review paths remain report-only and never mutate automatically",
+        }
+    ]
+    assert planning_path.exists()
+    assert planning_path.read_text(encoding="utf-8") == "legacy planning notes\n"
+
+
+def test_quarantine_fails_when_destination_collision_exists(tmp_path: Path):
+    repo_root = tmp_path
+    init_temp_repo(repo_root)
+
+    write_file(repo_root, ".gitignore", ".gsd/runtime/\n")
+    write_file(repo_root, ".gsd/state-manifest.json", '{"jobs":[]}\n')
+    collision = write_file(
+        repo_root,
+        ".gsd/runtime/repair-quarantine/fixed-stamp/.gsd/state-manifest.json",
+        '{"jobs":["collision"]}\n',
+    )
+
+    result = run_repair(
+        "--repo-root",
+        str(repo_root),
+        "--format",
+        "json",
+        env={"RUNTIME_STATE_REPAIR_QUARANTINE_STAMP": "fixed-stamp"},
+    )
+
+    assert result.returncode == 1, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["summary"]["failed_count"] == 1
+    assert payload["summary"]["quarantine_count"] == 0
+    assert payload["actions"][0]["status"] == "failed"
+    assert payload["actions"][0]["detail"] == (
+        "quarantine destination already exists: "
+        ".gsd/runtime/repair-quarantine/fixed-stamp/.gsd/state-manifest.json"
+    )
+    assert collision.exists()
+    assert (repo_root / ".gsd/state-manifest.json").exists()
+
+
 def test_cli_rejects_unsupported_root_argument():
     result = run_repair("README.md")
 
@@ -216,7 +300,7 @@ def test_clean_repo_reports_noop(tmp_path: Path):
     repo_root = tmp_path
     init_temp_repo(repo_root)
 
-    write_file(repo_root, ".gitignore", ".gsd/audit/\n.gsd/state-manifest.json\n")
+    write_file(repo_root, ".gitignore", ".gsd/audit/\n.gsd/runtime/\n.gsd/state-manifest.json\n")
     write_file(repo_root, ".gsd/milestones/M014/M014-ROADMAP.md", "durable\n")
     git(repo_root, "add", ".")
     git(repo_root, "commit", "-m", "seed durable files")
@@ -227,4 +311,5 @@ def test_clean_repo_reports_noop(tmp_path: Path):
     payload = json.loads(result.stdout)
     assert payload["summary"]["noop_count"] == 1
     assert payload["summary"]["deindex_count"] == 0
+    assert payload["summary"]["quarantine_count"] == 0
     assert payload["actions"] == []

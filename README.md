@@ -18,14 +18,15 @@ SentinelX exposes three repo-native verification commands so contributors can ch
 
 ## Runtime-state boundary
 
-SentinelX now exposes a repo-native boundary verifier for the durable-versus-transient workflow split:
+SentinelX now exposes both a repo-native verifier and a repo-native repair loop for the durable-versus-transient workflow split:
 
+- `make repair-runtime-state` is the one supported recovery entrypoint. It runs `tools/runtime_state_repair.py` in apply mode, deindexes `tracked-transient` findings, quarantines `unignored-transient` files into `.gsd/runtime/repair-quarantine/<timestamp>/...`, and then re-runs the inspection-only boundary audit so lingering blocker classes remain visible.
 - `make verify-runtime-boundary` runs the focused classifier pytest coverage, the temp-repo Git regression fixtures, and then the live repo audit with `--fail-on-codes tracked-transient unignored-transient conflicting-rule-match unknown-root`.
-- Transient runtime surfaces such as `.gsd/state-manifest.json`, `.gsd/event-log.jsonl`, `.gsd/notifications.jsonl`, `.gsd/audit/**`, `.gsd/exec/**`, `.gsd/graphs/**`, `.gsd/safety/**`, and `.bg-shell/**` are repo-local state and should stay ignored/untracked.
+- Transient runtime surfaces such as `.gsd/state-manifest.json`, `.gsd/event-log.jsonl`, `.gsd/notifications.jsonl`, `.gsd/audit/**`, `.gsd/runtime/**`, `.gsd/exec/**`, `.gsd/graphs/**`, `.gsd/safety/**`, and `.bg-shell/**` are repo-local state and should stay ignored/untracked.
 - Durable milestone artifacts and canonical ledgers under `.gsd/milestones/**`, `.gsd/CODEBASE.md`, `.gsd/DECISIONS.md`, `.gsd/PROJECT.md`, and `.gsd/REQUIREMENTS.md` remain checked in.
-- Legacy `.planning/**` paths are surfaced as `manual-review` findings on purpose; this verifier reports them explicitly instead of auto-cleaning them.
+- Legacy `.planning/**` paths are surfaced as `manual-review` findings on purpose; repair reports them explicitly but will not auto-clean, move, or deindex them.
 
-See `docs/runtime-state-boundary.md` for the full class table and audit contract.
+See `docs/runtime-state-boundary.md` for the full class table, repair action table, and non-goals.
 
 ## Optimization audit workflow
 
