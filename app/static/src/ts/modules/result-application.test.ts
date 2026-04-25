@@ -44,6 +44,20 @@ function buildCard(iocValue: string, iocType = "ipv4"): string {
   `;
 }
 
+function buildCardWithoutSlot(iocValue: string, iocType = "ipv4"): string {
+  return `
+    <div class="ioc-card" data-ioc-value="${iocValue}" data-ioc-type="${iocType}" data-verdict="no_data">
+      <div class="ioc-card-header">
+        <div class="ioc-row-left">
+          <span class="verdict-label verdict-label--no_data">NO DATA</span>
+          <code class="ioc-value">${iocValue}</code>
+        </div>
+      </div>
+      <div class="ioc-context-line"></div>
+    </div>
+  `;
+}
+
 function buildDom(cards: string, providerCounts = '{"ipv4":4}'): void {
   document.body.innerHTML = `
     <div class="page-results" data-provider-counts='${providerCounts}'>
@@ -212,11 +226,105 @@ describe("result-application coordinator", () => {
     expect(waiting?.textContent).toBe("1 provider still loading...");
   });
 
-  it("ignores missing cards without breaking valid IOC application", async () => {
-    buildDom(buildCard("1.2.3.4") + buildCard("5.6.7.8"));
+  it("caches stable IOC handles and provider counts across repeated apply, flush, and finalize calls", async () => {
+    buildDom(buildCard("1.2.3.4") + buildCard("5.6.7.8"), '{"ipv4":2}');
+    const { createResultApplicationCoordinator } = await import("./result-application");
+    const querySelectorSpy = vi.spyOn(Document.prototype, "querySelector");
+    const jsonParseSpy = vi.spyOn(JSON, "parse");
+    const coordinator = createResultApplicationCoordinator();
+
+    coordinator.apply(
+      resultItem({
+        provider: "VirusTotal",
+        verdict: "clean",
+        ioc_value: "1.2.3.4",
+      })
+    );
+    coordinator.flush();
+    coordinator.apply(
+      resultItem({
+        provider: "ThreatFox",
+        verdict: "malicious",
+        detection_count: 1,
+        total_engines: 1,
+        ioc_value: "1.2.3.4",
+      })
+    );
+    coordinator.apply(
+      resultItem({
+        provider: "VirusTotal",
+        verdict: "clean",
+        ioc_value: "5.6.7.8",
+      })
+    );
+
+    coordinator.finalize();
+    await vi.advanceTimersByTimeAsync(150);
+
+    const cardLookupCalls = querySelectorSpy.mock.calls.filter(([selector]) =>
+      selector === '.ioc-card[data-ioc-value="1.2.3.4"]' ||
+      selector === '.ioc-card[data-ioc-value="5.6.7.8"]'
+    );
+
+    expect(jsonParseSpy).toHaveBeenCalledTimes(1);
+    expect(cardLookupCalls).toHaveLength(2);
+    expect(
+      document.querySelector('.ioc-card[data-ioc-value="1.2.3.4"]')?.getAttribute("data-verdict")
+    ).toBe("malicious");
+    expect(
+      document.querySelector('.ioc-card[data-ioc-value="5.6.7.8"] .detail-link')
+    ).not.toBeNull();
+  });
+
+  it.each([
+    { label: "missing", providerCounts: null },
+    { label: "malformed", providerCounts: "not-json" },
+  ])(
+    "falls back to default provider counts when page metadata is $label",
+    async ({ providerCounts }) => {
+      buildDom(buildCard("1.2.3.4"));
+      const pageResults = document.querySelector<HTMLElement>(".page-results");
+      if (providerCounts === null) {
+        pageResults?.removeAttribute("data-provider-counts");
+      } else {
+        pageResults?.setAttribute("data-provider-counts", providerCounts);
+      }
+
+      const { createResultApplicationCoordinator } = await import("./result-application");
+      const jsonParseSpy = vi.spyOn(JSON, "parse");
+      const coordinator = createResultApplicationCoordinator();
+
+      coordinator.apply(
+        resultItem({
+          provider: "IP Context",
+          raw_stats: {
+            geo: "Tokyo, JP",
+          },
+        })
+      );
+      coordinator.flush();
+
+      expect(document.querySelector(".enrichment-waiting-text")?.textContent).toBe(
+        "1 provider still loading..."
+      );
+      expect(jsonParseSpy).toHaveBeenCalledTimes(providerCounts === null ? 0 : 1);
+    }
+  );
+
+  it("ignores missing cards and malformed slot structure without breaking valid IOC application", async () => {
+    buildDom(buildCardWithoutSlot("1.2.3.4") + buildCard("5.6.7.8"));
     const { createResultApplicationCoordinator } = await import("./result-application");
     const coordinator = createResultApplicationCoordinator();
 
+    coordinator.apply(
+      resultItem({
+        ioc_value: "1.2.3.4",
+        provider: "VirusTotal",
+        verdict: "malicious",
+        detection_count: 1,
+        total_engines: 10,
+      })
+    );
     coordinator.apply(
       resultItem({
         ioc_value: "9.9.9.9",
@@ -237,13 +345,12 @@ describe("result-application coordinator", () => {
     coordinator.finalize();
     await vi.advanceTimersByTimeAsync(150);
 
+    const malformedCard = document.querySelector<HTMLElement>('.ioc-card[data-ioc-value="1.2.3.4"]');
     const validCard = document.querySelector<HTMLElement>('.ioc-card[data-ioc-value="5.6.7.8"]');
-    const missingCard = document.querySelector<HTMLElement>('.ioc-card[data-ioc-value="9.9.9.9"]');
-    const detailLink = validCard?.querySelector(".detail-link");
 
-    expect(missingCard).toBeNull();
+    expect(malformedCard?.querySelector(".detail-link")).toBeNull();
     expect(validCard?.getAttribute("data-verdict")).toBe("clean");
-    expect(detailLink).not.toBeNull();
+    expect(validCard?.querySelector(".detail-link")).not.toBeNull();
   });
 
   it("finalize flushes repeated results and updates copy-button worst verdict before link injection", async () => {

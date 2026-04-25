@@ -17,10 +17,10 @@
 - [x] **S02: S02** `risk:High — orchestrator dispatch, retry/backoff, session reuse, and cache interaction are the highest-leverage runtime seams but already encode correctness-critical behavior, so any change must be evidence-backed and narrowly shipped.` `depends:[]`
   > After this: After this: An analyst can run enrichment through the existing UI with the same concurrency/backoff/cache guarantees and either lower measured runtime overhead or a justified leave-alone decision recorded in the ranked audit.
 
-- [ ] **S03: S03** `risk:Medium-high — Flask helper/state ownership and WAL-backed stores sit on correctness-heavy seams where unnecessary work may exist, but regressions would directly threaten polling continuity, history durability, and cache behavior.` `depends:[]`
+- [x] **S03: S03** `risk:Medium-high — Flask helper/state ownership and WAL-backed stores sit on correctness-heavy seams where unnecessary work may exist, but regressions would directly threaten polling continuity, history durability, and cache behavior.` `depends:[]`
   > After this: After this: Status polling, history reload, cache continuity, and helper diagnostics still behave the same for users while any justified request-path or SQLite hot-path improvement is shipped and the rest is explicitly ranked as keep, later, or do next.
 
-- [ ] **S04: Frontend polling/render shipped fixes and final rerun** `risk:Medium — the analyst-visible polling/render seam is where hidden DOM churn and transport coordination waste will show up, but the slice must preserve live/history parity while also closing the milestone with a truthful rerun of the full audit.` `depends:[S01,S02,S03]`
+- [ ] **S04: S04** `risk:Medium — the analyst-visible polling/render seam is where hidden DOM churn and transport coordination waste will show up, but the slice must preserve live/history parity while also closing the milestone with a truthful rerun of the full audit.` `depends:[]`
   > After this: After this: An analyst sees unchanged live/history enrichment UX with any proven polling/render improvement shipped, and the repo contains the final rerun of the ranked audit showing what shipped now versus what remains deferred.
 
 ## Boundary Map

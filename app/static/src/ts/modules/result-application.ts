@@ -7,14 +7,10 @@
  */
 
 import type { EnrichmentItem } from "../types/api";
-import { getProviderCounts } from "../types/ioc";
+import { getProviderCounts, VERDICT_LABELS } from "../types/ioc";
+import type { VerdictKey } from "../types/ioc";
 import { attr } from "../utils/dom";
-import {
-  findCardForIoc,
-  updateCardVerdict,
-  updateDashboardCounts,
-  sortCardsBySeverity,
-} from "./cards";
+import { findCardForIoc, updateDashboardCounts, sortCardsBySeverity } from "./cards";
 import type { VerdictEntry } from "./verdict-compute";
 import { findWorstEntry, computeWorstVerdict } from "./verdict-compute";
 import {
@@ -43,6 +39,16 @@ interface MinimalEnrichmentItem {
   provider: string;
 }
 
+interface CachedIocHandles {
+  card: HTMLElement;
+  slot: HTMLElement;
+  copyButton: HTMLElement | null;
+  contextSection: HTMLElement | null;
+  reputationSection: HTMLElement | null;
+  noDataSection: HTMLElement | null;
+  totalExpected: number;
+}
+
 function isMinimalEnrichmentItem(value: EnrichmentItem): value is EnrichmentItem & MinimalEnrichmentItem {
   return Boolean(
     value &&
@@ -52,36 +58,38 @@ function isMinimalEnrichmentItem(value: EnrichmentItem): value is EnrichmentItem
   );
 }
 
-function findCopyButtonForIoc(iocValue: string): HTMLElement | null {
-  return document.querySelector<HTMLElement>(
-    '.copy-btn[data-value="' + CSS.escape(iocValue) + '"]'
-  );
+function updateCardVerdictLabel(card: HTMLElement, worstVerdict: VerdictKey): void {
+  card.setAttribute("data-verdict", worstVerdict);
+
+  const label = card.querySelector<HTMLElement>(".verdict-label");
+  if (!label) return;
+
+  const classes = label.className
+    .split(" ")
+    .filter((className) => !className.startsWith("verdict-label--"));
+  classes.push("verdict-label--" + worstVerdict);
+  label.className = classes.join(" ");
+  label.textContent = VERDICT_LABELS[worstVerdict] || worstVerdict.toUpperCase();
 }
 
 function updateCopyButtonWorstVerdict(
-  iocValue: string,
-  iocVerdicts: Record<string, VerdictEntry[]>
+  copyButton: HTMLElement | null,
+  entries: VerdictEntry[]
 ): void {
-  const copyBtn = findCopyButtonForIoc(iocValue);
-  if (!copyBtn) return;
+  if (!copyButton) return;
 
-  const worstEntry = findWorstEntry(iocVerdicts[iocValue] ?? []);
+  const worstEntry = findWorstEntry(entries);
   if (!worstEntry) return;
 
-  copyBtn.setAttribute("data-enrichment", worstEntry.summaryText);
+  copyButton.setAttribute("data-enrichment", worstEntry.summaryText);
 }
 
 function updatePendingIndicator(
-  slot: HTMLElement,
-  card: HTMLElement | null,
+  handles: CachedIocHandles,
   receivedCount: number
 ): void {
-  const iocType = card ? attr(card, "data-ioc-type") : "";
-  const providerCounts = getProviderCounts();
-  const totalExpected = Object.prototype.hasOwnProperty.call(providerCounts, iocType)
-    ? (providerCounts[iocType] ?? 0)
-    : 0;
-  const remaining = totalExpected - receivedCount;
+  const remaining = handles.totalExpected - receivedCount;
+  const { slot } = handles;
 
   if (remaining <= 0) {
     const existingIndicator = slot.querySelector(".enrichment-waiting-text");
@@ -100,45 +108,64 @@ function updatePendingIndicator(
   indicator.textContent = remaining + " provider" + (remaining !== 1 ? "s" : "") + " still loading...";
 }
 
-function flushIoc(
-  iocValue: string,
-  iocVerdicts: Record<string, VerdictEntry[]>
-): void {
-  const entries = iocVerdicts[iocValue] ?? [];
-  if (entries.length === 0) return;
-
-  const card = findCardForIoc(iocValue);
-  if (!card) return;
-
-  const slot = card.querySelector<HTMLElement>(".enrichment-slot");
-  if (!slot) return;
-
-  updateSummaryRow(slot, iocValue, iocVerdicts);
-  updateCardVerdict(iocValue, computeWorstVerdict(entries));
-  updateCopyButtonWorstVerdict(iocValue, iocVerdicts);
-
-  const reputationSection = slot.querySelector<HTMLElement>(
-    ".enrichment-section--reputation"
-  );
-  if (reputationSection) {
-    sortDetailRows(reputationSection);
-  }
-}
-
 export function createResultApplicationCoordinator(): ResultApplicationCoordinator {
+  const providerCounts = getProviderCounts();
   const iocVerdicts: Record<string, VerdictEntry[]> = {};
   const iocResultCounts: Record<string, number> = {};
   const dirtyIocs = new Set<string>();
+  const handleCache = new Map<string, CachedIocHandles>();
+
+  function getCachedHandles(iocValue: string): CachedIocHandles | null {
+    const cached = handleCache.get(iocValue);
+    if (cached) return cached;
+
+    const card = findCardForIoc(iocValue);
+    if (!card) return null;
+
+    const slot = card.querySelector<HTMLElement>(".enrichment-slot");
+    if (!slot) return null;
+
+    const iocType = attr(card, "data-ioc-type");
+    const totalExpected = Object.prototype.hasOwnProperty.call(providerCounts, iocType)
+      ? (providerCounts[iocType] ?? 0)
+      : 0;
+
+    const handles: CachedIocHandles = {
+      card,
+      slot,
+      copyButton: card.querySelector<HTMLElement>(".copy-btn"),
+      contextSection: slot.querySelector<HTMLElement>(".enrichment-section--context"),
+      reputationSection: slot.querySelector<HTMLElement>(".enrichment-section--reputation"),
+      noDataSection: slot.querySelector<HTMLElement>(".enrichment-section--no-data"),
+      totalExpected,
+    };
+    handleCache.set(iocValue, handles);
+    return handles;
+  }
+
+  function flushIoc(iocValue: string): void {
+    const entries = iocVerdicts[iocValue] ?? [];
+    if (entries.length === 0) return;
+
+    const handles = getCachedHandles(iocValue);
+    if (!handles) return;
+
+    updateSummaryRow(handles.slot, iocValue, iocVerdicts);
+    updateCardVerdictLabel(handles.card, computeWorstVerdict(entries));
+    updateCopyButtonWorstVerdict(handles.copyButton, entries);
+
+    if (handles.reputationSection) {
+      sortDetailRows(handles.reputationSection);
+    }
+  }
 
   function apply(result: EnrichmentItem): void {
     if (!isMinimalEnrichmentItem(result)) return;
 
-    const card = findCardForIoc(result.ioc_value);
-    if (!card) return;
+    const handles = getCachedHandles(result.ioc_value);
+    if (!handles) return;
 
-    const slot = card.querySelector<HTMLElement>(".enrichment-slot");
-    if (!slot) return;
-
+    const { card, slot } = handles;
     const spinnerWrapper = slot.querySelector(".spinner-wrapper");
     if (spinnerWrapper) {
       slot.removeChild(spinnerWrapper);
@@ -149,16 +176,13 @@ export function createResultApplicationCoordinator(): ResultApplicationCoordinat
     const receivedCount = iocResultCounts[result.ioc_value] ?? 1;
 
     if (CONTEXT_PROVIDERS.has(result.provider)) {
-      const contextSection = slot.querySelector<HTMLElement>(
-        ".enrichment-section--context"
-      );
-      if (contextSection && result.type === "result") {
+      if (handles.contextSection && result.type === "result") {
         const contextRow = createContextRow(result);
-        contextSection.appendChild(contextRow);
+        handles.contextSection.appendChild(contextRow);
         updateContextLine(card, result);
       }
 
-      updatePendingIndicator(slot, card, receivedCount);
+      updatePendingIndicator(handles, receivedCount);
       return;
     }
 
@@ -178,24 +202,23 @@ export function createResultApplicationCoordinator(): ResultApplicationCoordinat
     });
 
     const isNoData = verdict === "no_data" || verdict === "error";
-    const sectionSelector = isNoData
-      ? ".enrichment-section--no-data"
-      : ".enrichment-section--reputation";
-    const sectionContainer = slot.querySelector<HTMLElement>(sectionSelector);
+    const sectionContainer = isNoData
+      ? handles.noDataSection
+      : handles.reputationSection;
     if (sectionContainer) {
       const detailRow = createDetailRow(result.provider, verdict, statText, result);
       sectionContainer.appendChild(detailRow);
     }
 
     dirtyIocs.add(result.ioc_value);
-    updatePendingIndicator(slot, card, receivedCount);
+    updatePendingIndicator(handles, receivedCount);
   }
 
   function flush(): void {
     if (dirtyIocs.size === 0) return;
 
     for (const iocValue of dirtyIocs) {
-      flushIoc(iocValue, iocVerdicts);
+      flushIoc(iocValue);
     }
     dirtyIocs.clear();
 
@@ -206,17 +229,14 @@ export function createResultApplicationCoordinator(): ResultApplicationCoordinat
   function finalize(): void {
     flush();
 
-    document.querySelectorAll<HTMLElement>(".enrichment-slot").forEach((slot) => {
-      if (!slot.querySelector(".no-data-summary-row")) {
-        injectSectionHeadersAndNoDataSummary(slot);
+    for (const handles of handleCache.values()) {
+      if (!handles.slot.querySelector(".no-data-summary-row")) {
+        injectSectionHeadersAndNoDataSummary(handles.slot);
       }
-    });
-
-    document
-      .querySelectorAll<HTMLElement>(".enrichment-slot--loaded")
-      .forEach((slot) => {
-        injectDetailLink(slot);
-      });
+      if (handles.slot.classList.contains("enrichment-slot--loaded")) {
+        injectDetailLink(handles.slot);
+      }
+    }
   }
 
   return {

@@ -1,0 +1,5 @@
+app/static/src/ts/modules/enrichment.ts: querySelector=3, querySelectorAll=0, document.getElementById=10, appendChild=0, insertBefore=0
+app/static/src/ts/modules/result-application.ts: querySelector=12, querySelectorAll=2, document.getElementById=0, appendChild=3, insertBefore=0
+app/static/src/ts/modules/row-factory.ts: querySelector=9, querySelectorAll=1, document.getElementById=0, appendChild=24, insertBefore=2
+app/static/src/ts/modules/cards.ts: querySelector=5, querySelectorAll=2, document.getElementById=2, appendChild=1, insertBefore=0
+app/static/src/ts/modules/history.ts: querySelector=1, querySelectorAll=0, document.getElementById=3, appendChild=0, insertBefore=0
