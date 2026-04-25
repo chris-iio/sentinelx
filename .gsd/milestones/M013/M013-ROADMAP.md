@@ -1,4 +1,4 @@
-# M013: M013 — SentinelX optimization-audit workflow and shipped full-stack pass
+# M013: M013 - SentinelX optimization-audit workflow and shipped full-stack pass
 
 **Vision:** Run a reusable SentinelX-first optimization-audit workflow, publish ranked evidence-backed findings, and ship the high-confidence full-stack fixes that the pass justifies without weakening existing runtime, persistence, security, or analyst-visible behavior.
 

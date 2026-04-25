@@ -97,11 +97,19 @@ tmp/
 .gsd/activity/
 .gsd/runtime/
 .gsd/worktrees/
-.gsd/gsd.db-shm
-.gsd/gsd.db-wal
-.gsd/doctor-history.jsonl
+.gsd/audit/
 .gsd/browser-state/
 .gsd/browser-baselines/
+.gsd/exec/
+.gsd/graphs/
+.gsd/safety/
+.gsd/completed-units-*.json
+.gsd/doctor-history.jsonl
+.gsd/event-log.jsonl
+.gsd/gsd.db-shm
+.gsd/gsd.db-wal
+.gsd/notifications.jsonl
+.gsd/state-manifest.json
 
 # ── GSD baseline (auto-generated) ──
 .bg-shell/

@@ -52,7 +52,11 @@ def test_classify_reports_representative_repo_paths():
         "classify",
         ".gsd/milestones/M014/M014-ROADMAP.md",
         ".gsd/state-manifest.json",
+        ".gsd/event-log.jsonl",
         ".gsd/audit/events.jsonl",
+        ".gsd/exec/example.stdout",
+        ".gsd/graphs/graph.json",
+        ".gsd/safety/evidence-M014-S01-T02.json",
         ".planning/STATE.md",
         ".bg-shell/manifest.json",
         "--format",
@@ -64,7 +68,11 @@ def test_classify_reports_representative_repo_paths():
     classes = {row["normalized_path"]: row["classification"] for row in payload}
     assert classes[".gsd/milestones/M014/M014-ROADMAP.md"] == "durable"
     assert classes[".gsd/state-manifest.json"] == "transient"
+    assert classes[".gsd/event-log.jsonl"] == "transient"
     assert classes[".gsd/audit/events.jsonl"] == "transient"
+    assert classes[".gsd/exec/example.stdout"] == "transient"
+    assert classes[".gsd/graphs/graph.json"] == "transient"
+    assert classes[".gsd/safety/evidence-M014-S01-T02.json"] == "transient"
     assert classes[".planning/STATE.md"] == "manual-review"
     assert classes[".bg-shell/manifest.json"] == "transient"
 
@@ -126,6 +134,7 @@ def test_audit_reports_tracked_transient_unignored_transient_and_manual_review(t
 
     tracked_transient = repo_root / ".gsd" / "audit" / "events.jsonl"
     unignored_transient = repo_root / ".gsd" / "state-manifest.json"
+    ignored_transient = repo_root / ".gsd" / "notifications.jsonl"
     manual_review = repo_root / ".planning" / "STATE.md"
     tracked_transient.parent.mkdir(parents=True)
     unignored_transient.parent.mkdir(parents=True, exist_ok=True)
@@ -133,10 +142,18 @@ def test_audit_reports_tracked_transient_unignored_transient_and_manual_review(t
 
     tracked_transient.write_text("[]\n", encoding="utf-8")
     unignored_transient.write_text("{}\n", encoding="utf-8")
+    ignored_transient.write_text("[]\n", encoding="utf-8")
     manual_review.write_text("legacy\n", encoding="utf-8")
+    (repo_root / ".gitignore").write_text(".gsd/notifications.jsonl\n", encoding="utf-8")
 
     subprocess.run(
-        ["git", "add", str(tracked_transient.relative_to(repo_root)), str(manual_review.relative_to(repo_root))],
+        [
+            "git",
+            "add",
+            str(tracked_transient.relative_to(repo_root)),
+            str(manual_review.relative_to(repo_root)),
+            ".gitignore",
+        ],
         cwd=repo_root,
         capture_output=True,
         check=True,
@@ -152,11 +169,12 @@ def test_audit_reports_tracked_transient_unignored_transient_and_manual_review(t
     )
 
     assert result.returncode == 1, result.stderr
-    payload = json.loads(result.stdout)
-    findings = {(row["issue_code"], row["path"]) for row in payload["findings"]}
+    findings = {(row["issue_code"], row["path"]) for row in json.loads(result.stdout)["findings"]}
     assert ("tracked-transient", ".gsd/audit/events.jsonl") in findings
     assert ("unignored-transient", ".gsd/state-manifest.json") in findings
     assert ("manual-review-path", ".planning/STATE.md") in findings
+    assert ("unignored-transient", ".gsd/notifications.jsonl") not in findings
+    assert ("tracked-transient", ".gsd/notifications.jsonl") not in findings
 
 
 def test_cli_rejects_unsupported_subcommand():

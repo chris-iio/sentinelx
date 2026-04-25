@@ -43,7 +43,15 @@ Audit the current repo boundary without mutating anything:
 ```bash
 python3 tools/runtime_state_boundary.py audit --format text
 python3 tools/runtime_state_boundary.py audit --format json --fail-on-issues
+make verify-runtime-boundary
 ```
+
+`make verify-runtime-boundary` now runs both focused classifier coverage and a temp-repo Git regression suite before the live repo audit. The Git fixtures prove two representative workflows:
+
+- tracked `.gsd/audit/events.jsonl` still reproduces a real `git stash pop` conflict until the audit surfaces it as `tracked-transient`
+- ignored/untracked `.gsd/state-manifest.json` and `.gsd/event-log.jsonl` stay out of normal checkout flows and out of audit findings
+
+The live repo audit may still exit non-zero on legacy `manual-review-path` findings under `.planning/**`; that failure is intentional surfacing, not an auto-cleanup step.
 
 The audit surfaces three issue codes for later slices and CI-style verification:
 
@@ -56,8 +64,8 @@ boundary roots fail closed as `unknown-root`.
 
 ## Handoff to later slices
 
-- **S02** should consume this classifier when expanding `.gitignore`, deindexing already-tracked
-  transient files, and building the supported repair/recovery command.
+- **S02** consumes this classifier when expanding `.gitignore`, deindexing already-tracked
+  transient files, and exposing `make verify-runtime-boundary` as the supported repo-native check.
 - **S03** should reuse the same classes and issue codes when it hardens the supported dev-process
   loop, so the runtime boundary does not drift between cleanup and startup paths.
 

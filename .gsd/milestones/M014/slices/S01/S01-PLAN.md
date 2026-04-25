@@ -98,7 +98,7 @@
   - Files: `.gitignore`, `.gsd/notifications.jsonl`, `.gsd/audit/events.jsonl`, `.planning/STATE.md`, `.planning/HANDOFF.json`, `.bg-shell/manifest.json`, `tools/optimization_audit.py`, `tests/test_optimization_audit.py`
   - Verify: pytest tests/test_runtime_state_boundary.py -q && python3 tools/runtime_state_boundary.py classify .gsd/milestones/M014/M014-ROADMAP.md .gsd/state-manifest.json .gsd/audit/events.jsonl .planning/STATE.md .bg-shell/manifest.json
 
-- [ ] **T02: Align `.gitignore`, tracked runtime files, and the repo-native boundary command** `est:0.75d`
+- [x] **T02: Align `.gitignore`, tracked runtime files, and the repo-native boundary command** `est:0.75d`
   Apply the new policy to the actual repository so R061 and R062 become true in repo behavior, not just in a classifier. This task is where the slice stops being diagnostic-only and actually prevents the known blocker class for unequivocally transient paths.
 
 ## Failure Modes
@@ -149,7 +149,7 @@
   - Files: `tools/runtime_state_boundary.py`, `.gitignore`, `Makefile`, `README.md`, `docs/runtime-state-boundary.md`, `.gsd/audit/events.jsonl`, `.gsd/notifications.jsonl`, `.bg-shell/manifest.json`
   - Verify: python3 tools/runtime_state_boundary.py audit --format text --fail-on-issues && git check-ignore -v .gsd/state-manifest.json .gsd/event-log.jsonl .bg-shell/manifest.json && test -z "$(git ls-files .gsd/audit/events.jsonl .gsd/notifications.jsonl .bg-shell/manifest.json)"
 
-- [ ] **T03: Prove the stash/pop blocker class with temp-repo Git regression fixtures** `est:0.5d`
+- [x] **T03: Prove the stash/pop blocker class with temp-repo Git regression fixtures** `est:0.5d`
   Close the slice with real Git behavior. The point of S01 is not that the rules look plausible; it is that tracked transient state no longer wedges ordinary workflows without either being prevented or being surfaced by an explicit repo check.
 
 ## Failure Modes

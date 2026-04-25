@@ -16,6 +16,17 @@ SentinelX exposes three repo-native verification commands so contributors can ch
 - Escalate to `make verify-deep` (or just run `make verify`) whenever you change live enrichment behavior, browser flows, result rendering, polling/status handling, or deterministic mocked E2E coverage.
 - If you need the unambiguous full repo proof command, run `make verify`.
 
+## Runtime-state boundary
+
+SentinelX now exposes a repo-native boundary verifier for the durable-versus-transient workflow split:
+
+- `make verify-runtime-boundary` runs the focused classifier pytest coverage, the temp-repo Git regression fixtures, and then the live repo audit with `--fail-on-issues`.
+- Transient runtime surfaces such as `.gsd/state-manifest.json`, `.gsd/event-log.jsonl`, `.gsd/notifications.jsonl`, `.gsd/audit/**`, `.gsd/exec/**`, `.gsd/graphs/**`, `.gsd/safety/**`, and `.bg-shell/**` are repo-local state and should stay ignored/untracked.
+- Durable milestone artifacts and canonical ledgers under `.gsd/milestones/**`, `.gsd/CODEBASE.md`, `.gsd/DECISIONS.md`, `.gsd/PROJECT.md`, and `.gsd/REQUIREMENTS.md` remain checked in.
+- Legacy `.planning/**` paths are surfaced as `manual-review` findings on purpose; this verifier reports them explicitly instead of auto-cleaning them.
+
+See `docs/runtime-state-boundary.md` for the full class table and audit contract.
+
 ## Optimization audit workflow
 
 M013 adds a checked-in SentinelX-first audit runner so later optimization work can produce durable, ranked findings instead of ad hoc notes.

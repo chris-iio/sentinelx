@@ -14,7 +14,7 @@ AUDIT_RUNNER     := python3 tools/optimization_audit.py
 AUDIT_OUTPUT     := .gsd/milestones/M013/M013-AUDIT.md
 AUDIT_TEMPLATE   := .gsd/milestones/M013/M013-AUDIT-TEMPLATE.md
 
-.PHONY: tailwind-install esbuild-install css css-watch js js-dev js-watch typecheck build verify-fast verify-deep verify audit-m013-template audit-m013
+.PHONY: tailwind-install esbuild-install css css-watch js js-dev js-watch typecheck build verify-runtime-boundary verify-fast verify-deep verify audit-m013-template audit-m013
 
 ## Download Tailwind standalone CLI binary
 tailwind-install:
@@ -80,6 +80,12 @@ typecheck:
 
 ## Full build (CSS + JS)
 build: css js
+
+## Runtime-state boundary verification lane
+verify-runtime-boundary:
+	python3 -m pytest -q tests/test_runtime_state_boundary.py
+	python3 -m pytest -q tests/test_runtime_state_boundary_git.py
+	python3 tools/runtime_state_boundary.py audit --format text --fail-on-issues
 
 ## Fast verification lane (non-E2E pytest + frontend checks + build)
 verify-fast:
