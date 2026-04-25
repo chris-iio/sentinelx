@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-04-25T11:24:02Z | Files: 170 | Described: 0/170
-<!-- gsd:codebase-meta {"generatedAt":"2026-04-25T11:24:02Z","fingerprint":"3caeecb36c138736e00e3c6c8c40a6032c904713","fileCount":170,"truncated":false} -->
+Generated: 2026-04-25T11:50:51Z | Files: 172 | Described: 0/172
+<!-- gsd:codebase-meta {"generatedAt":"2026-04-25T11:50:51Z","fingerprint":"ca2967c5348f8c919c658ec81485183e1ddbc264","fileCount":172,"truncated":false} -->
 
 ### (root)/
 - `.codex`
@@ -145,7 +145,7 @@ Generated: 2026-04-25T11:24:02Z | Files: 170 | Described: 0/170
 - `docs/plans/2026-03-04-settings-page-redesign.md`
 
 ### tests/
-- *(49 files: 49 .py)*
+- *(50 files: 50 .py)*
 
 ### tests/e2e/
 - `tests/e2e/__init__.py`
@@ -166,6 +166,7 @@ Generated: 2026-04-25T11:24:02Z | Files: 170 | Described: 0/170
 - `tests/e2e/pages/settings_page.py`
 
 ### tools/
+- `tools/dev_server.py`
 - `tools/optimization_audit.py`
 - `tools/runtime_state_boundary.py`
 - `tools/runtime_state_repair.py`

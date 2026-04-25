@@ -73,7 +73,7 @@ no.
   - Verify: `python3 -m pytest -q tests/test_api.py tests/test_dev_server.py`
 `python3 tools/dev_server.py --help`
 
-- [ ] **T02: Implement lifecycle commands and crash-recovery subprocess proof** `est:0.75d`
+- [x] **T02: Implement lifecycle commands and crash-recovery subprocess proof** `est:0.75d`
   Turn the probe/state contract into the supported direct CLI. This task delivers the actual start/status/restart/stop flow, keeps the child process manager lightweight, and proves cheap crash recovery end to end on an ephemeral port.
 
 ## Failure Modes

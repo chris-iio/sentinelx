@@ -134,7 +134,7 @@ def test_status_round_trip_and_empty_runtime_default(tmp_path: Path):
     assert default_status.probe is None
 
     stored_status = dev_server.DevServerStatus(
-        status="healthy",
+        status="running",
         host="127.0.0.1",
         port=5001,
         updated_at="2026-04-25T11:00:00Z",
@@ -158,15 +158,15 @@ def test_status_round_trip_and_empty_runtime_default(tmp_path: Path):
 
     assert destination == paths.status_path
     assert loaded_status == stored_status
-    assert json.loads(paths.status_path.read_text(encoding="utf-8"))["status"] == "healthy"
+    assert json.loads(paths.status_path.read_text(encoding="utf-8"))["status"] == "running"
 
 
-def test_load_status_rejects_partial_unknown_and_invalid_port_payloads(tmp_path: Path):
+def test_load_status_rejects_partial_unknown_invalid_port_and_non_local_host_payloads(tmp_path: Path):
     dev_server = load_dev_server_module()
     paths = dev_server.dev_server_paths(tmp_path)
     paths.runtime_dir.mkdir(parents=True)
 
-    paths.status_path.write_text('{"status": "healthy"}\n', encoding="utf-8")
+    paths.status_path.write_text('{"status": "running"}\n', encoding="utf-8")
     with pytest.raises(dev_server.StatusContractError, match="missing required keys"):
         dev_server.load_status(paths)
 
@@ -185,6 +185,26 @@ def test_load_status_rejects_partial_unknown_and_invalid_port_payloads(tmp_path:
         encoding="utf-8",
     )
     with pytest.raises(dev_server.StatusContractError, match="Unknown dev-server status"):
+        dev_server.load_status(paths)
+
+    paths.status_path.write_text(
+        json.dumps(
+            {
+                "status": "running",
+                "host": "0.0.0.0",
+                "port": 5000,
+                "updated_at": "2026-04-25T11:00:00Z",
+                "restart_count": 0,
+                "pid": 101,
+                "log_path": ".gsd/runtime/dev-server/logs/server.log",
+                "started_at": "2026-04-25T10:59:00Z",
+                "probe": None,
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(dev_server.StatusContractError, match="Host must stay local"):
         dev_server.load_status(paths)
 
     with pytest.raises(dev_server.StatusContractError, match="between 1 and 65535"):
@@ -229,3 +249,143 @@ def test_probe_health_reports_refused_timeout_and_malformed():
         malformed_result = dev_server.probe_health(port=malformed_port, timeout=0.2)
     assert malformed_result.status == "malformed"
     assert malformed_result.detail == "unexpected health payload"
+
+
+def test_refresh_status_reports_running_starting_stale_and_crashed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    dev_server = load_dev_server_module()
+    paths = dev_server.dev_server_paths(tmp_path)
+
+    base = dev_server.DevServerStatus(
+        status="running",
+        host="127.0.0.1",
+        port=5001,
+        updated_at="2026-04-25T11:00:00Z",
+        restart_count=0,
+        pid=12345,
+        log_path=".gsd/runtime/dev-server/logs/server.log",
+        started_at="2026-04-25T10:59:00Z",
+        last_failure_at=None,
+        last_failure_reason=None,
+        probe=None,
+    )
+    dev_server.write_status(paths, base)
+
+    monkeypatch.setattr(dev_server, "process_is_running", lambda pid: True)
+    monkeypatch.setattr(
+        dev_server,
+        "probe_health",
+        lambda host, port, timeout=0.5: dev_server.HealthProbeResult(
+            status="healthy",
+            checked_at="2026-04-25T11:01:00Z",
+            url="http://127.0.0.1:5001/api/health",
+            http_status=200,
+            detail=None,
+        ),
+    )
+    running = dev_server.refresh_status(paths)
+    assert running.status == "running"
+
+    fresh_start = dev_server.DevServerStatus(
+        status="starting",
+        host="127.0.0.1",
+        port=5001,
+        updated_at="2026-04-25T11:00:00Z",
+        restart_count=0,
+        pid=12345,
+        log_path=".gsd/runtime/dev-server/logs/server.log",
+        started_at=dev_server.utc_now(),
+        last_failure_at=None,
+        last_failure_reason=None,
+        probe=None,
+    )
+    dev_server.write_status(paths, fresh_start)
+    monkeypatch.setattr(
+        dev_server,
+        "probe_health",
+        lambda host, port, timeout=0.5: dev_server.HealthProbeResult(
+            status="refused",
+            checked_at="2026-04-25T11:01:00Z",
+            url="http://127.0.0.1:5001/api/health",
+            http_status=None,
+            detail="connection refused",
+        ),
+    )
+    starting = dev_server.refresh_status(paths, starting_grace_seconds=5.0)
+    assert starting.status == "starting"
+
+    dev_server.write_status(paths, base)
+    monkeypatch.setattr(
+        dev_server,
+        "probe_health",
+        lambda host, port, timeout=0.5: dev_server.HealthProbeResult(
+            status="timeout",
+            checked_at="2026-04-25T11:01:00Z",
+            url="http://127.0.0.1:5001/api/health",
+            http_status=None,
+            detail="request timed out",
+        ),
+    )
+    stale = dev_server.refresh_status(paths, starting_grace_seconds=0.0)
+    assert stale.status == "stale"
+    assert stale.last_failure_reason == "Health probe timed out."
+
+    dev_server.write_status(paths, base)
+    monkeypatch.setattr(dev_server, "process_is_running", lambda pid: False)
+    monkeypatch.setattr(
+        dev_server,
+        "probe_health",
+        lambda host, port, timeout=0.5: dev_server.HealthProbeResult(
+            status="refused",
+            checked_at="2026-04-25T11:01:00Z",
+            url="http://127.0.0.1:5001/api/health",
+            http_status=None,
+            detail="connection refused",
+        ),
+    )
+    crashed = dev_server.refresh_status(paths)
+    assert crashed.status == "crashed"
+    assert "Managed child pid 12345 is no longer running" in crashed.last_failure_reason
+
+
+def test_status_command_surfaces_malformed_state_contract(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+    dev_server = load_dev_server_module()
+    paths = dev_server.dev_server_paths(tmp_path)
+    paths.runtime_dir.mkdir(parents=True)
+    paths.status_path.write_text('{"status": ', encoding="utf-8")
+
+    exit_code = dev_server.main([
+        "--repo-root",
+        str(tmp_path),
+        "status",
+        "--format",
+        "json",
+    ])
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert exit_code == 1
+    assert payload["status"] == "crashed"
+    assert "malformed JSON" in payload["last_failure_reason"]
+    assert payload["status_path"] == ".gsd/runtime/dev-server/status.json"
+
+
+def test_start_rejects_non_local_host_before_launch(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+    dev_server = load_dev_server_module()
+
+    exit_code = dev_server.main([
+        "--repo-root",
+        str(tmp_path),
+        "start",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "5001",
+        "--format",
+        "json",
+    ])
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert exit_code == 1
+    assert payload["status"] == "crashed"
+    assert "Host must stay local" in payload["last_failure_reason"]
