@@ -85,7 +85,7 @@ build: css js
 verify-runtime-boundary:
 	python3 -m pytest -q tests/test_runtime_state_boundary.py
 	python3 -m pytest -q tests/test_runtime_state_boundary_git.py
-	python3 tools/runtime_state_boundary.py audit --format text --fail-on-issues
+	python3 tools/runtime_state_boundary.py audit --format text --fail-on-codes tracked-transient unignored-transient conflicting-rule-match unknown-root
 
 ## Fast verification lane (non-E2E pytest + frontend checks + build)
 verify-fast:

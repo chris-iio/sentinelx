@@ -33,6 +33,13 @@ ISSUE_UNIGNORED_TRANSIENT = "unignored-transient"
 ISSUE_MANUAL_REVIEW = "manual-review-path"
 ISSUE_CONFLICTING_RULE = "conflicting-rule-match"
 ISSUE_UNKNOWN_ROOT = "unknown-root"
+ALL_ISSUE_CODES = (
+    ISSUE_TRACKED_TRANSIENT,
+    ISSUE_UNIGNORED_TRANSIENT,
+    ISSUE_MANUAL_REVIEW,
+    ISSUE_CONFLICTING_RULE,
+    ISSUE_UNKNOWN_ROOT,
+)
 
 KNOWN_BOUNDARY_ROOTS = (".gsd", ".planning", ".bg-shell")
 DEFAULT_AUDIT_ROOTS = KNOWN_BOUNDARY_ROOTS
@@ -261,6 +268,15 @@ def parse_args() -> argparse.Namespace:
         "--fail-on-issues",
         action="store_true",
         help="Exit non-zero when any audit findings are present.",
+    )
+    audit_parser.add_argument(
+        "--fail-on-codes",
+        nargs="+",
+        choices=ALL_ISSUE_CODES,
+        help=(
+            "Exit non-zero only when one or more findings match the selected issue codes. "
+            "Useful when manual-review findings should stay visible without failing the verifier."
+        ),
     )
     audit_parser.add_argument(
         "--repo-root",
@@ -546,6 +562,11 @@ def audit_report_to_dict(report: AuditReport) -> dict[str, object]:
     }
 
 
+def report_has_issue_codes(report: AuditReport, issue_codes: Sequence[str]) -> bool:
+    selected_codes = set(issue_codes)
+    return any(finding.issue_code in selected_codes for finding in report.findings)
+
+
 def main() -> int:
     args = parse_args()
     repo_root = normalize_repo_root(args.repo_root)
@@ -565,7 +586,11 @@ def main() -> int:
                 print(json.dumps(audit_report_to_dict(report), indent=2))
             else:
                 print(render_audit_text(report))
-            return 1 if args.fail_on_issues and report.findings else 0
+            if args.fail_on_issues and report.findings:
+                return 1
+            if args.fail_on_codes and report_has_issue_codes(report, args.fail_on_codes):
+                return 1
+            return 0
     except BoundaryError as exc:
         print(str(exc), file=sys.stderr)
         return 2

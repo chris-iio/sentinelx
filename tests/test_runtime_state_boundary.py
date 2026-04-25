@@ -177,6 +177,57 @@ def test_audit_reports_tracked_transient_unignored_transient_and_manual_review(t
     assert ("tracked-transient", ".gsd/notifications.jsonl") not in findings
 
 
+def test_audit_can_fail_only_on_selected_issue_codes(tmp_path):
+    repo_root = tmp_path
+    init_temp_repo(repo_root)
+
+    manual_review = repo_root / ".planning" / "STATE.md"
+    manual_review.parent.mkdir(parents=True)
+    manual_review.write_text("legacy\n", encoding="utf-8")
+    subprocess.run(
+        ["git", "add", str(manual_review.relative_to(repo_root))],
+        cwd=repo_root,
+        capture_output=True,
+        check=True,
+    )
+
+    manual_only = run_boundary(
+        "audit",
+        "--repo-root",
+        str(repo_root),
+        "--format",
+        "json",
+        "--fail-on-codes",
+        "tracked-transient",
+        "unignored-transient",
+    )
+
+    assert manual_only.returncode == 0, manual_only.stderr
+    assert ("manual-review-path", ".planning/STATE.md") in {
+        (row["issue_code"], row["path"]) for row in json.loads(manual_only.stdout)["findings"]
+    }
+
+    unignored_transient = repo_root / ".gsd" / "state-manifest.json"
+    unignored_transient.parent.mkdir(parents=True, exist_ok=True)
+    unignored_transient.write_text("{}\n", encoding="utf-8")
+
+    blocker = run_boundary(
+        "audit",
+        "--repo-root",
+        str(repo_root),
+        "--format",
+        "json",
+        "--fail-on-codes",
+        "tracked-transient",
+        "unignored-transient",
+    )
+
+    assert blocker.returncode == 1, blocker.stderr
+    findings = {(row["issue_code"], row["path"]) for row in json.loads(blocker.stdout)["findings"]}
+    assert ("unignored-transient", ".gsd/state-manifest.json") in findings
+    assert ("manual-review-path", ".planning/STATE.md") in findings
+
+
 def test_cli_rejects_unsupported_subcommand():
     result = run_boundary("bogus")
 

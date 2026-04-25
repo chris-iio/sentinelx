@@ -10,11 +10,11 @@ Safe, correct, and transparent IOC extraction and enrichment — never invent sc
 
 ## Current State
 
-**M013 is complete and M014 is planned (2026-04-25).** The product-facing SentinelX stack is in a strong state: the repo has the checked-in optimization-audit workflow from M013, explicit evidence-backed keep-decisions for the runtime/provider and WAL persistence seams, a shipped request/status hot-path improvement, and a shipped frontend/render coordinator optimization backed by fresh final-state `verify-fast` and `verify-deep` proof.
+**M013 is complete and M014 is active (S01 complete).** The product-facing SentinelX stack remains stable: the repo still has the checked-in optimization-audit workflow from M013, explicit evidence-backed keep-decisions for the runtime/provider and WAL persistence seams, a shipped request/status hot-path improvement, and a shipped frontend/render coordinator optimization backed by fresh final-state `verify-fast` and `verify-deep` proof.
 
-The next milestone is not a new analyst-facing feature. M014 is a local workflow hardening pass aimed at the repo/operator seam: transient runtime-state files should stop polluting normal git workflows, durable planning artifacts should have a sharper behavioral boundary from machine/session state, local crash recovery should stop depending on manual archaeology, and the repo should expose one supported repair/recovery entrypoint plus one supported local dev-process path. The end of M014 should also include an explicit review/refactor pass over the changed workflow seams.
+M014 is a local workflow hardening pass aimed at the repo/operator seam rather than an analyst-facing feature. S01 is now complete and established the authoritative runtime-state boundary: `tools/runtime_state_boundary.py` classifies durable `.gsd` artifacts, transient `.gsd`/`.bg-shell` runtime state, and fail-closed legacy `.planning/**` paths; `.gitignore` and the repo-native verifier were aligned to that contract; and temp-repo Git regression fixtures prove the stash/pop blocker class is either prevented or surfaced explicitly. The remaining slices still need to build the repair/recovery entrypoint (S02), standardize the supported local dev-process loop (S03), and close with final review/refactor plus full assembled verification (S04).
 
-`tools/optimization_audit.py`, `Makefile`, `README.md`, and `docs/optimization-audit.md` remain the command surface and proof vocabulary for performance-related work. M014 does not replace them; it hardens the local developer/operator loop around them so repo-local state and crashed local processes are easier to classify, repair, and restart without risking milestone/context artifacts.
+`tools/optimization_audit.py`, `Makefile`, `README.md`, and `docs/optimization-audit.md` remain the command surface and proof vocabulary for performance-related work. M014 hardens the local developer/operator loop around them so repo-local state and crashed local processes are easier to classify, repair, and restart without risking milestone/context artifacts.
 
 ## Architecture / Key Patterns
 
@@ -28,10 +28,10 @@ The next milestone is not a new analyst-facing feature. M014 is a local workflow
 - **Optimization audit:** `tools/optimization_audit.py` is the canonical audit runner; Make targets stay thin; each finding fits one ranked bucket and cites measurement or code-path reasoning
 - **Helper observability:** `app/routes/_helpers.py` owns bounded history-save diagnostics; `/settings` is the aggregate inspection surface for helper persistence health; terminal tombstones stay helper-owned even though live polling reads incremental orchestrator snapshots
 - **Security:** CSP (7 directives), CSRF, SSRF allowlist, host validation, textContent-only DOM (SEC-08)
-- **Build/dev entrypoints:** Makefile targets include `css`, `js`, `js-dev`, `js-watch`, `typecheck`, `build`, `verify-fast`, `verify-deep`, `verify`, `audit-m013-template`, and `audit-m013`; M014 is expected to tighten the supported local dev-process/recovery path around this existing surface
+- **Build/dev entrypoints:** Makefile targets include `css`, `js`, `js-dev`, `js-watch`, `typecheck`, `build`, `verify-fast`, `verify-deep`, `verify`, `verify-runtime-boundary`, `audit-m013-template`, and `audit-m013`
+- **Runtime-boundary seam:** `tools/runtime_state_boundary.py` is the authoritative classifier/audit seam for durable vs transient repo-local workflow state. `make verify-runtime-boundary` is the supported proof lane and fails only on blocker classes (`tracked-transient`, `unignored-transient`, `conflicting-rule-match`, `unknown-root`) while still surfacing `.planning/**` `manual-review-path` backlog.
 - **Routes:** `app/routes/` package with shared `main` Blueprint, separate `api` Blueprint (CSRF-exempt)
 - **Closeout discipline:** milestone/slice validation artifacts must be written through the DB-backed GSD toolchain (`gsd_summary_save`, `gsd_validate_milestone`, `gsd_complete_slice`, `gsd_complete_milestone`) so the ledger, projections, and disk artifacts stay aligned
-- **Planned M014 workflow boundary:** durable planning artifacts remain protected in-repo, while transient runtime/session state is expected to gain a sharper repo-local boundary plus a supported repair surface and a supported local dev-process loop
 
 ## Capability Contract
 
@@ -52,7 +52,7 @@ See `.gsd/REQUIREMENTS.md` for the explicit capability contract, requirement sta
 - [x] M011: Lean & Fast — Adapter docstring trim (1,062 lines), per-adapter test consolidation (49 tests, -431 lines), dead CSS audit (207 classes verified), orchestrator test speedup (6.2s → 0.09s). Net -1,601 LOC, 1,012 tests, 0 failures.
 - [x] M012: Optimization Audit & Next-Work Decision — Hardened live terminal status semantics, unified live/history result application, formalized fast/deep verification lanes with deterministic mocked-online browser proof, added bounded `/settings` history-save diagnostics, and closed with a validated keep/change decision preserving WAL-backed persistence and cursor/history continuity until future measurement proves otherwise.
 - [x] M013: SentinelX optimization-audit workflow and shipped full-stack pass — S01 established the reusable audit runner and ranked baseline, S02 closed the runtime/provider seam with measured keep-decisions, S03 shipped the request/status cursor hot-path improvement and re-proved WAL persistence as a keep-decision, and S04 shipped coordinator-local frontend/render caching plus the final audit rerun with embedded `verify-fast` / `verify-deep` proof.
-- [ ] M014: Local workflow hardening and recovery loop — Hardens the durable/runtime boundary, adds a repo-native repair surface, standardizes the supported local dev-process loop, and closes with explicit workflow-seam review/refactor.
+- [ ] M014: Local workflow hardening and recovery loop — S01 complete: the runtime boundary is now explicit, verified, and backed by repo-native proof; S02–S04 remain to add repair tooling, a supported local dev loop, and final closure.
 
 ---
-*Last updated: 2026-04-25 — M013 complete; M014 planned to harden repo-local workflow boundaries, recovery tooling, and the supported dev-process loop without changing analyst-facing product scope.*
+*Last updated: 2026-04-25 — M014 active with S01 complete; runtime-state boundary hardening is shipped and verified, with recovery/dev-loop closure still remaining in later slices.*

@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T03",
+  "unitId": "M014/S01/T03",
+  "timestamp": 1777112053690,
+  "passed": false,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "pytest tests/test_runtime_state_boundary_git.py -q",
+      "exitCode": 0,
+      "durationMs": 426,
+      "verdict": "pass"
+    },
+    {
+      "command": "make verify-runtime-boundary",
+      "exitCode": 2,
+      "durationMs": 949,
+      "verdict": "fail"
+    },
+    {
+      "command": "make verify-fast",
+      "exitCode": 0,
+      "durationMs": 6854,
+      "verdict": "pass"
+    }
+  ],
+  "retryAttempt": 1,
+  "maxRetries": 2
+}

@@ -20,7 +20,7 @@ SentinelX exposes three repo-native verification commands so contributors can ch
 
 SentinelX now exposes a repo-native boundary verifier for the durable-versus-transient workflow split:
 
-- `make verify-runtime-boundary` runs the focused classifier pytest coverage, the temp-repo Git regression fixtures, and then the live repo audit with `--fail-on-issues`.
+- `make verify-runtime-boundary` runs the focused classifier pytest coverage, the temp-repo Git regression fixtures, and then the live repo audit with `--fail-on-codes tracked-transient unignored-transient conflicting-rule-match unknown-root`.
 - Transient runtime surfaces such as `.gsd/state-manifest.json`, `.gsd/event-log.jsonl`, `.gsd/notifications.jsonl`, `.gsd/audit/**`, `.gsd/exec/**`, `.gsd/graphs/**`, `.gsd/safety/**`, and `.bg-shell/**` are repo-local state and should stay ignored/untracked.
 - Durable milestone artifacts and canonical ledgers under `.gsd/milestones/**`, `.gsd/CODEBASE.md`, `.gsd/DECISIONS.md`, `.gsd/PROJECT.md`, and `.gsd/REQUIREMENTS.md` remain checked in.
 - Legacy `.planning/**` paths are surfaced as `manual-review` findings on purpose; this verifier reports them explicitly instead of auto-cleaning them.

@@ -4,28 +4,6 @@ This file is the explicit capability and coverage contract for the project.
 
 ## Active
 
-### R061 — Runtime state does not block normal Git workflows.
-- Class: continuity
-- Status: active
-- Description: Runtime state does not block normal Git workflows.
-- Why it matters: Local workflow hardening is not real if transient machine state can still wedge ordinary git operations like stash/pop.
-- Source: user
-- Primary owning slice: M014/S01
-- Supporting slices: M014/S02, M014/S04
-- Validation: mapped
-- Notes: Covers the stash/pop conflict class caused by transient local state files participating in normal repo operations. The outcome must be behavioral, not just documented.
-
-### R062 — Durable planning artifacts and transient machine state have an explicit repo boundary.
-- Class: constraint
-- Status: active
-- Description: Durable planning artifacts and transient machine state have an explicit repo boundary.
-- Why it matters: Without a hard boundary between durable and transient state, recovery tooling becomes unsafe and git behavior stays unpredictable.
-- Source: inferred
-- Primary owning slice: M014/S01
-- Supporting slices: M014/S02
-- Validation: mapped
-- Notes: Durable milestone/context/summary artifacts stay protected; runtime/session debris is classified and managed separately.
-
 ### R063 — SentinelX has one supported local recovery entrypoint for runtime-state cleanup and repair.
 - Class: operability
 - Status: active
@@ -691,6 +669,28 @@ This file is the explicit capability and coverage contract for the project.
 - Validation: unmapped
 - Notes: Test count expected to decrease (granular tests consolidated). Coverage same or better.
 
+### R061 — Runtime state does not block normal Git workflows.
+- Class: continuity
+- Status: validated
+- Description: Runtime state does not block normal Git workflows.
+- Why it matters: Local workflow hardening is not real if transient machine state can still wedge ordinary git operations like stash/pop.
+- Source: user
+- Primary owning slice: M014/S01
+- Supporting slices: M014/S02, M014/S04
+- Validation: Validated in M014/S01 by passing `make verify-runtime-boundary` after the verifier was narrowed to fail on blocker classes only. Focused temp-repo Git fixtures prove tracked transient `.gsd/audit/events.jsonl` conflicts are surfaced as `tracked-transient`, ignored/untracked `.gsd/state-manifest.json` and `.gsd/event-log.jsonl` no longer wedge checkout flows, and the live repo audit reports zero blocker-class findings.
+- Notes: Covers the stash/pop conflict class caused by transient local state files participating in normal repo operations. The outcome must be behavioral, not just documented.
+
+### R062 — Durable planning artifacts and transient machine state have an explicit repo boundary.
+- Class: constraint
+- Status: validated
+- Description: Durable planning artifacts and transient machine state have an explicit repo boundary.
+- Why it matters: Without a hard boundary between durable and transient state, recovery tooling becomes unsafe and git behavior stays unpredictable.
+- Source: inferred
+- Primary owning slice: M014/S01
+- Supporting slices: M014/S02
+- Validation: Validated in M014/S01 by the checked-in classifier/audit seam in `tools/runtime_state_boundary.py`, focused classifier+Git regression tests, and the supported `make verify-runtime-boundary` lane. The repo now distinguishes durable `.gsd/milestones/**` and canonical ledgers from transient `.gsd`/`.bg-shell` runtime state, while `.planning/**` remains explicit `manual-review` instead of being auto-cleaned.
+- Notes: Durable milestone/context/summary artifacts stay protected; runtime/session debris is classified and managed separately.
+
 ## Deferred
 
 ### R013 — Update the input/home page to match the new design language.
@@ -799,8 +799,8 @@ This file is the explicit capability and coverage contract for the project.
 | R058 | quality-attribute | validated | M011/S03 | none | CSS audit verified all 207 classes in input.css are referenced. 3 dynamic classes confirmed via string concatenation in row-factory.ts:336, row-factory.ts:309/416, cards.ts:60. Zero dead CSS found. |
 | R059 | quality-attribute | validated | M011/S03 | none | 7 orchestrator tests rewritten with threading.Barrier/Event primitives. Suite runs in 0.09s (target <1s, was 6.2s). 27 orchestrator tests pass. |
 | R060 | continuity | validated | M011/all | none | unmapped |
-| R061 | continuity | active | M014/S01 | M014/S02, M014/S04 | mapped |
-| R062 | constraint | active | M014/S01 | M014/S02 | mapped |
+| R061 | continuity | validated | M014/S01 | M014/S02, M014/S04 | Validated in M014/S01 by passing `make verify-runtime-boundary` after the verifier was narrowed to fail on blocker classes only. Focused temp-repo Git fixtures prove tracked transient `.gsd/audit/events.jsonl` conflicts are surfaced as `tracked-transient`, ignored/untracked `.gsd/state-manifest.json` and `.gsd/event-log.jsonl` no longer wedge checkout flows, and the live repo audit reports zero blocker-class findings. |
+| R062 | constraint | validated | M014/S01 | M014/S02 | Validated in M014/S01 by the checked-in classifier/audit seam in `tools/runtime_state_boundary.py`, focused classifier+Git regression tests, and the supported `make verify-runtime-boundary` lane. The repo now distinguishes durable `.gsd/milestones/**` and canonical ledgers from transient `.gsd`/`.bg-shell` runtime state, while `.planning/**` remains explicit `manual-review` instead of being auto-cleaned. |
 | R063 | operability | active | M014/S02 | M014/S01, M014/S04 | mapped |
 | R064 | operability | active | M014/S03 | M014/S02, M014/S04 | mapped |
 | R065 | continuity | active | M014/S04 | M014/S01, M014/S02, M014/S03 | mapped |
@@ -811,7 +811,7 @@ This file is the explicit capability and coverage contract for the project.
 
 ## Coverage Summary
 
-- Active requirements: 6
-- Mapped to slices: 6
-- Validated: 58 (R001, R002, R003, R004, R005, R006, R007, R008, R009, R010, R011, R012, R014, R015, R016, R017, R018, R019, R020, R021, R022, R023, R024, R025, R026, R027, R028, R029, R030, R031, R032, R033, R035, R036, R037, R038, R039, R040, R041, R042, R043, R044, R045, R046, R047, R048, R049, R050, R051, R052, R053, R054, R055, R056, R057, R058, R059, R060)
+- Active requirements: 4
+- Mapped to slices: 4
+- Validated: 60 (R001, R002, R003, R004, R005, R006, R007, R008, R009, R010, R011, R012, R014, R015, R016, R017, R018, R019, R020, R021, R022, R023, R024, R025, R026, R027, R028, R029, R030, R031, R032, R033, R035, R036, R037, R038, R039, R040, R041, R042, R043, R044, R045, R046, R047, R048, R049, R050, R051, R052, R053, R054, R055, R056, R057, R058, R059, R060, R061, R062)
 - Unmapped active requirements: 0

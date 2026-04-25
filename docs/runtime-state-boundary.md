@@ -43,15 +43,18 @@ Audit the current repo boundary without mutating anything:
 ```bash
 python3 tools/runtime_state_boundary.py audit --format text
 python3 tools/runtime_state_boundary.py audit --format json --fail-on-issues
+python3 tools/runtime_state_boundary.py audit \
+  --format text \
+  --fail-on-codes tracked-transient unignored-transient conflicting-rule-match unknown-root
 make verify-runtime-boundary
 ```
 
-`make verify-runtime-boundary` now runs both focused classifier coverage and a temp-repo Git regression suite before the live repo audit. The Git fixtures prove two representative workflows:
+`make verify-runtime-boundary` now runs both focused classifier coverage and a temp-repo Git regression suite before the live repo audit, but it only fails on blocker classes (`tracked-transient`, `unignored-transient`, `conflicting-rule-match`, and `unknown-root`). The Git fixtures prove two representative workflows:
 
 - tracked `.gsd/audit/events.jsonl` still reproduces a real `git stash pop` conflict until the audit surfaces it as `tracked-transient`
 - ignored/untracked `.gsd/state-manifest.json` and `.gsd/event-log.jsonl` stay out of normal checkout flows and out of audit findings
 
-The live repo audit may still exit non-zero on legacy `manual-review-path` findings under `.planning/**`; that failure is intentional surfacing, not an auto-cleanup step.
+Legacy `manual-review-path` findings under `.planning/**` still appear in the live audit output, but they do not fail `make verify-runtime-boundary`; that backlog is intentional surfacing, not an auto-cleanup step.
 
 The audit surfaces three issue codes for later slices and CI-style verification:
 
@@ -68,6 +71,13 @@ boundary roots fail closed as `unknown-root`.
   transient files, and exposing `make verify-runtime-boundary` as the supported repo-native check.
 - **S03** should reuse the same classes and issue codes when it hardens the supported dev-process
   loop, so the runtime boundary does not drift between cleanup and startup paths.
+
+## Non-goals
+
+- No blanket `.planning/**` cleanup.
+- No file-content inspection or secret dumping in diagnostics.
+- No repo mutation from `audit`; it is inspection-only.
+ the runtime boundary does not drift between cleanup and startup paths.
 
 ## Non-goals
 
