@@ -1,0 +1,18 @@
+{
+  "id": "ae94e43b-ae81-4c50-8b54-b66d6dc75860",
+  "runtime": "python",
+  "purpose": "Timed pytest evidence for M013 S03 T01",
+  "script_chars": 541,
+  "started_at": "2026-04-25T04:53:17.219Z",
+  "finished_at": "2026-04-25T04:53:17.586Z",
+  "exit_code": 0,
+  "signal": null,
+  "timed_out": false,
+  "duration_ms": 367,
+  "stdout_bytes": 183,
+  "stderr_bytes": 0,
+  "stdout_truncated": false,
+  "stderr_truncated": false,
+  "stdout_path": "/home/chris/projects/sentinelx/.gsd/exec/ae94e43b-ae81-4c50-8b54-b66d6dc75860.stdout",
+  "stderr_path": "/home/chris/projects/sentinelx/.gsd/exec/ae94e43b-ae81-4c50-8b54-b66d6dc75860.stderr"
+}

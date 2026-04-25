@@ -832,6 +832,146 @@ class TestGetStatusListSnapshot:
         )
 
 
+class TestIncrementalStatusSnapshot:
+    """Prove the additive tail snapshot path stays lock-safe and cursor-correct."""
+
+    def test_get_incremental_status_returns_tail_and_aligned_cached_markers(self, mock_adapter):
+        """Tail reads should include only requested results and matching cache markers."""
+        orchestrator = _make_orchestrator(mock_adapter)
+        ioc_a = _make_ioc(IOCType.IPV4, "198.51.100.1")
+        ioc_b = _make_ioc(IOCType.IPV4, "198.51.100.2")
+        ioc_c = _make_ioc(IOCType.IPV4, "198.51.100.3")
+        result_a = _make_result(ioc_a, provider="ProviderA")
+        result_b = _make_result(ioc_b, provider="ProviderB")
+        result_c = _make_result(ioc_c, provider="ProviderC")
+
+        with orchestrator._lock:
+            orchestrator._jobs["job-incremental-tail"] = {
+                "total": 3,
+                "done": 3,
+                "results": [result_a, result_b, result_c],
+                "complete": True,
+                "status": "complete",
+                "terminal": False,
+                "terminal_reason": None,
+                "error": None,
+                "_diagnostics": {},
+            }
+            orchestrator._cached_markers[f"{ioc_a.value}|ProviderA"] = "2024-01-01T00:00:00Z"
+            orchestrator._cached_markers[f"{ioc_b.value}|ProviderB"] = "2024-01-02T00:00:00Z"
+
+        snapshot = orchestrator.get_incremental_status("job-incremental-tail", since=1)
+        assert snapshot is not None
+        assert snapshot["results"] == [result_b, result_c]
+        assert snapshot["next_since"] == 3
+        assert snapshot["cached_markers"] == {
+            f"{ioc_b.value}|ProviderB": "2024-01-02T00:00:00Z"
+        }
+
+        snapshot["results"].append(_make_error(ioc_a, msg="dummy", provider="ProviderA"))
+        snapshot["cached_markers"][f"{ioc_b.value}|ProviderB"] = "tampered"
+
+        fresh_snapshot = orchestrator.get_incremental_status("job-incremental-tail", since=1)
+        assert fresh_snapshot is not None
+        assert fresh_snapshot["results"] == [result_b, result_c]
+        assert fresh_snapshot["cached_markers"] == {
+            f"{ioc_b.value}|ProviderB": "2024-01-02T00:00:00Z"
+        }
+
+        full_snapshot = orchestrator.get_status("job-incremental-tail")
+        assert full_snapshot is not None
+        assert full_snapshot["results"] == [result_a, result_b, result_c]
+
+    def test_get_incremental_status_preserves_negative_since_behavior(self, mock_adapter):
+        """Negative since values should keep Python slice semantics for compatibility."""
+        orchestrator = _make_orchestrator(mock_adapter)
+        iocs = [_make_ioc(IOCType.IPV4, f"203.0.113.{i}") for i in range(3)]
+        results = [_make_result(ioc, provider=f"Provider{i}") for i, ioc in enumerate(iocs)]
+
+        with orchestrator._lock:
+            orchestrator._jobs["job-negative-since"] = {
+                "total": 3,
+                "done": 3,
+                "results": results,
+                "complete": True,
+                "status": "complete",
+                "terminal": False,
+                "terminal_reason": None,
+                "error": None,
+                "_diagnostics": {},
+            }
+
+        snapshot = orchestrator.get_incremental_status("job-negative-since", since=-1)
+        assert snapshot is not None
+        assert snapshot["results"] == [results[-1]]
+        assert snapshot["next_since"] == 3
+        assert snapshot["cached_markers"] == {}
+
+    def test_get_incremental_status_returns_empty_tail_beyond_retained_length(self, mock_adapter):
+        """Out-of-range since values should return an empty tail without cursor drift."""
+        orchestrator = _make_orchestrator(mock_adapter)
+        ioc_a = _make_ioc(IOCType.IPV4, "192.0.2.40")
+        ioc_b = _make_ioc(IOCType.IPV4, "192.0.2.41")
+
+        with orchestrator._lock:
+            orchestrator._jobs["job-since-beyond"] = {
+                "total": 2,
+                "done": 2,
+                "results": [_make_result(ioc_a), _make_result(ioc_b)],
+                "complete": True,
+                "status": "complete",
+                "terminal": False,
+                "terminal_reason": None,
+                "error": None,
+                "_diagnostics": {},
+            }
+
+        snapshot = orchestrator.get_incremental_status("job-since-beyond", since=99)
+        assert snapshot is not None
+        assert snapshot["results"] == []
+        assert snapshot["next_since"] == 2
+        assert snapshot["cached_markers"] == {}
+
+    def test_get_incremental_status_preserves_terminal_failed_cursor_defaults(self, mock_adapter):
+        """Failed terminal jobs should expose empty tails plus the safe cursor fallback."""
+        ioc = _make_ioc(IOCType.IPV4, "11.11.11.11")
+        mock_adapter.lookup.side_effect = RuntimeError("adapter exploded")
+
+        orchestrator = _make_orchestrator(mock_adapter)
+        orchestrator.enrich_all("job-hard-fail-incremental", [ioc])
+
+        snapshot = orchestrator.get_incremental_status("job-hard-fail-incremental", since=4)
+        assert snapshot is not None
+        assert snapshot["status"] == "failed"
+        assert snapshot["terminal"] is True
+        assert snapshot["terminal_reason"] == "job_failed"
+        assert snapshot["error"] == "adapter exploded"
+        assert snapshot["results"] == []
+        assert snapshot["next_since"] == 4
+        assert snapshot["cached_markers"] == {}
+
+    def test_get_incremental_status_returns_eviction_tombstone_and_none_for_unknown_job(self):
+        """Evicted jobs should keep tombstones; unknown jobs should still return None."""
+        ioc = _make_ioc(IOCType.IPV4, "9.9.9.9")
+        adapter = _make_public_adapter("VirusTotal", supported_types={IOCType.IPV4})
+        adapter.lookup.return_value = _make_result(ioc, provider="VirusTotal")
+
+        orchestrator = EnrichmentOrchestrator(adapters=[adapter], max_workers=1, max_jobs=1)
+        orchestrator.enrich_all("job-evicted-0", [ioc])
+        orchestrator.enrich_all("job-evicted-1", [ioc])
+
+        evicted = orchestrator.get_incremental_status("job-evicted-0", since=7)
+        assert evicted is not None
+        assert evicted["status"] == "failed"
+        assert evicted["terminal"] is True
+        assert evicted["terminal_reason"] == "evicted"
+        assert evicted["results"] == []
+        assert evicted["next_since"] == 7
+        assert evicted["cached_markers"] == {}
+
+        assert orchestrator.get_incremental_status("job-unknown") is None
+
+
 class TestCachedMarkersLock:
     """Prove that _cached_markers reads and writes are protected by _lock."""
 

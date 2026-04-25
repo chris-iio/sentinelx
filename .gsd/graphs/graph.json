@@ -951,6 +951,31 @@
       "confidence": "EXTRACTED"
     },
     {
+      "id": "slice:M013:S02",
+      "label": "S02: Runtime/provider seam shipped fixes",
+      "type": "slice",
+      "confidence": "EXTRACTED",
+      "sourceFile": "milestones/M013/slices/S02/S02-PLAN.md"
+    },
+    {
+      "id": "task:M013:S02:T01",
+      "label": "T01: Add job-scoped runtime/provider diagnostics to the orchestrator",
+      "type": "task",
+      "confidence": "EXTRACTED"
+    },
+    {
+      "id": "task:M013:S02:T02",
+      "label": "T02: Capture runtime/provider evidence in the audit workflow",
+      "type": "task",
+      "confidence": "EXTRACTED"
+    },
+    {
+      "id": "task:M013:S02:T03",
+      "label": "T03: Ship the measured runtime fix or codify the keep-decision and rerun proof",
+      "type": "task",
+      "confidence": "EXTRACTED"
+    },
+    {
       "id": "decision:M012:1",
       "label": "Kept the live enrichment status contract additive: terminal metadata (`status`, `terminal`, `terminal_reason`, `error`) was added without replacing the existing success-path payload (`results`, `complete`, `next_since`, progress fields).",
       "type": "decision",
@@ -2057,6 +2082,30 @@
       "confidence": "EXTRACTED"
     },
     {
+      "from": "milestone:M013",
+      "to": "slice:M013:S02",
+      "type": "contains",
+      "confidence": "EXTRACTED"
+    },
+    {
+      "from": "slice:M013:S02",
+      "to": "task:M013:S02:T01",
+      "type": "contains",
+      "confidence": "EXTRACTED"
+    },
+    {
+      "from": "slice:M013:S02",
+      "to": "task:M013:S02:T02",
+      "type": "contains",
+      "confidence": "EXTRACTED"
+    },
+    {
+      "from": "slice:M013:S02",
+      "to": "task:M013:S02:T03",
+      "type": "contains",
+      "confidence": "EXTRACTED"
+    },
+    {
       "from": "milestone:M012",
       "to": "decision:M012:1",
       "type": "relates_to",
@@ -2273,5 +2322,5 @@
       "confidence": "EXTRACTED"
     }
   ],
-  "builtAt": "2026-04-24T01:03:30.066Z"
+  "builtAt": "2026-04-24T02:56:05.810Z"
 }

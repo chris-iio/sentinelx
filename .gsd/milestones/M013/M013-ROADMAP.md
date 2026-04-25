@@ -14,10 +14,10 @@
 - [x] **S01: S01** `risk:High — if M013 does not first produce a repeatable, evidence-backed audit loop, later slices can devolve into optimization theater and cannot truthfully justify changes to concurrency, WAL persistence, polling, or rendering seams.` `depends:[]`
   > After this: After this: A contributor can run a checked-in SentinelX-first optimization-audit workflow and get a durable ranked artifact with do now / do next / later / leave alone buckets, baseline evidence, and explicit continuity notes for runtime, persistence, request flow, and frontend seams.
 
-- [ ] **S02: S02** `risk:High — orchestrator dispatch, retry/backoff, session reuse, and cache interaction are the highest-leverage runtime seams but already encode correctness-critical behavior, so any change must be evidence-backed and narrowly shipped.` `depends:[]`
+- [x] **S02: S02** `risk:High — orchestrator dispatch, retry/backoff, session reuse, and cache interaction are the highest-leverage runtime seams but already encode correctness-critical behavior, so any change must be evidence-backed and narrowly shipped.` `depends:[]`
   > After this: After this: An analyst can run enrichment through the existing UI with the same concurrency/backoff/cache guarantees and either lower measured runtime overhead or a justified leave-alone decision recorded in the ranked audit.
 
-- [ ] **S03: Request-flow and persistence seam shipped fixes** `risk:Medium-high — Flask helper/state ownership and WAL-backed stores sit on correctness-heavy seams where unnecessary work may exist, but regressions would directly threaten polling continuity, history durability, and cache behavior.` `depends:[S01,S02]`
+- [ ] **S03: S03** `risk:Medium-high — Flask helper/state ownership and WAL-backed stores sit on correctness-heavy seams where unnecessary work may exist, but regressions would directly threaten polling continuity, history durability, and cache behavior.` `depends:[]`
   > After this: After this: Status polling, history reload, cache continuity, and helper diagnostics still behave the same for users while any justified request-path or SQLite hot-path improvement is shipped and the rest is explicitly ranked as keep, later, or do next.
 
 - [ ] **S04: Frontend polling/render shipped fixes and final rerun** `risk:Medium — the analyst-visible polling/render seam is where hidden DOM churn and transport coordination waste will show up, but the slice must preserve live/history parity while also closing the milestone with a truthful rerun of the full audit.` `depends:[S01,S02,S03]`

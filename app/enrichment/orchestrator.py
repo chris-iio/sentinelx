@@ -297,6 +297,24 @@ class EnrichmentOrchestrator:
                 return self._status_snapshot(terminal)
             return self._status_snapshot(job)
 
+    def get_incremental_status(self, job_id: str, since: int = 0) -> dict[str, Any] | None:
+        """Return a lock-safe status snapshot containing only the requested tail.
+
+        The returned payload preserves the scalar job fields from ``get_status()``
+        but copies only ``results[since:]`` plus the cached markers needed to
+        serialize that tail. ``next_since`` is computed from the retained result
+        length so callers do not need to reconstruct cursor state from a full
+        snapshot. Terminal tombstones preserve the existing safe cursor fallback.
+        """
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if job is None:
+                terminal = self._terminal_jobs.get(job_id)
+                if terminal is None:
+                    return None
+                return self._incremental_status_snapshot(terminal, since)
+            return self._incremental_status_snapshot(job, since)
+
     def get_diagnostics(self, job_id: str) -> dict[str, Any] | None:
         """Return a safe snapshot of bounded per-job runtime/provider diagnostics."""
         with self._lock:
@@ -320,14 +338,40 @@ class EnrichmentOrchestrator:
         with self._lock:
             return dict(self._cached_markers)
 
-    def _status_snapshot(self, job: dict[str, Any]) -> dict[str, Any]:
-        """Return a safe status snapshot without exposing internal diagnostics state."""
-        snapshot = {
+    def _status_fields_snapshot(self, job: dict[str, Any]) -> dict[str, Any]:
+        """Return scalar status fields without live results or diagnostics state."""
+        return {
             key: value
             for key, value in job.items()
-            if key != "_diagnostics"
+            if key not in {"_diagnostics", "results"}
         }
-        snapshot["results"] = list(job.get("results", []))
+
+    def _status_snapshot(self, job: dict[str, Any]) -> dict[str, Any]:
+        """Return a safe full status snapshot without diagnostics internals."""
+        raw_results = job.get("results")
+        results = raw_results if isinstance(raw_results, list) else []
+        snapshot = self._status_fields_snapshot(job)
+        snapshot["results"] = list(results)
+        return snapshot
+
+    def _incremental_status_snapshot(self, job: dict[str, Any], since: int) -> dict[str, Any]:
+        """Return a safe tail-only status snapshot plus aligned cached markers."""
+        raw_results = job.get("results")
+        results = raw_results if isinstance(raw_results, list) else []
+        tail_results = list(results[since:])
+        snapshot = self._status_fields_snapshot(job)
+        snapshot["results"] = tail_results
+        snapshot["next_since"] = since if snapshot.get("terminal", False) else len(results)
+
+        cached_markers: dict[str, str] = {}
+        for result in tail_results:
+            if not isinstance(result, EnrichmentResult):
+                continue
+            cache_key = result.ioc.value + "|" + result.provider
+            cached_at = self._cached_markers.get(cache_key)
+            if cached_at:
+                cached_markers[cache_key] = cached_at
+        snapshot["cached_markers"] = cached_markers
         return snapshot
 
     def _build_dispatch_diagnostics(
