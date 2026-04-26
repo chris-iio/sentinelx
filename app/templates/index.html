@@ -34,10 +34,22 @@
                 </div>
 
                 <div class="form-options">
-                    <div class="mode-toggle">
+                    <div class="mode-toggle" aria-labelledby="mode-title" aria-describedby="mode-help mode-status">
+                        <div class="mode-toggle-copy">
+                            <h2 class="mode-toggle-title" id="mode-title">Analysis mode</h2>
+                            <p class="mode-toggle-help" id="mode-help">Offline mode is the safe default: extract locally without contacting external providers. Use Online only when configured providers should enrich the results.</p>
+                            <p class="mode-toggle-status" id="mode-status" aria-live="polite">Offline selected — local extraction only; no provider enrichment requests are sent.</p>
+                        </div>
                         <div class="mode-toggle-widget" id="mode-toggle-widget" data-mode="offline">
                             <span class="mode-toggle-label mode-toggle-label--offline">Offline</span>
-                            <button type="button" class="mode-toggle-track" id="mode-toggle-btn" aria-pressed="false" aria-label="Toggle analysis mode">
+                            <button
+                                type="button"
+                                class="mode-toggle-track"
+                                id="mode-toggle-btn"
+                                aria-pressed="false"
+                                aria-label="Toggle analysis mode"
+                                aria-describedby="mode-help mode-status"
+                            >
                                 <span class="mode-toggle-thumb"></span>
                             </button>
                             <span class="mode-toggle-label mode-toggle-label--online">Online</span>

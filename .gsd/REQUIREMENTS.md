@@ -4,17 +4,6 @@ This file is the explicit capability and coverage contract for the project.
 
 ## Active
 
-### R013 — Update the input/home page to match the new design language.
-- Class: quality-attribute
-- Status: active
-- Description: Update the input/home page to match the new design language.
-- Why it matters: Visual consistency across pages.
-- Source: inferred
-- Primary owning slice: M015/S01
-- Supporting slices: M015/S02, M015/S03, M015/S04
-- Validation: mapped to M015/S01-S04; pending implementation proof
-- Notes: M015 reactivates this deferred input/home-page design gap as part of the fast Intake Workbench scope. It should be validated by the final integrated intake proof rather than treated as a standalone cosmetic cleanup.
-
 ### R070 — The home page functions as a fast analyst intake workbench, with a dominant paste-and-submit command surface rather than a generic textarea-only page.
 - Class: primary-user-loop
 - Status: active
@@ -225,6 +214,17 @@ This file is the explicit capability and coverage contract for the project.
 - Supporting slices: none
 - Validation: S03 applied M002 design tokens to ioc_detail.html: stacked .detail-provider-card layout with --bg-secondary surfaces, --border dividers, --text-primary/--text-secondary typography, --font-mono for IOC code, verdict-badge--{verdict} as only color class. Inline <style> block removed. Graph labels untruncated (routes.py and graph.ts [:N] slices removed). 13 tests pass: test_detail_page_with_results asserts detail-provider-card, verdict-badge--malicious, and absence of <style>; test_detail_graph_labels_untruncated asserts "Shodan InternetDB" appears verbatim in data-graph-nodes.
 - Notes: Design-only refresh — no new data or structural features. R013 (input page) stays deferred.
+
+### R013 — Update the input/home page to match the new design language.
+- Class: quality-attribute
+- Status: validated
+- Description: Update the input/home page to match the new design language.
+- Why it matters: Visual consistency across pages.
+- Source: inferred
+- Primary owning slice: M015/S01
+- Supporting slices: M015/S02, M015/S03, M015/S04
+- Validation: M015/S01 delivered and verified the redesigned index command-card DOM/CSS foundation: `python3 -m pytest -q tests/test_index_intake_contract.py ...` passed 6 route/contract checks, `make build` passed, `npx tsc --noEmit` passed, and `python3 -m pytest -q tests/e2e/test_homepage.py tests/e2e/test_extraction.py::test_extract_mixed_iocs_offline` passed 18 Playwright tests proving the visible command-card intake surface and offline paste-to-results path.
+- Notes: M015 reactivates this deferred input/home-page design gap as part of the fast Intake Workbench scope. It should be validated by the final integrated intake proof rather than treated as a standalone cosmetic cleanup.
 
 ### R014 — The enrichment orchestrator enforces rate limits per provider, not globally. VirusTotal is capped at 4 concurrent requests (free tier). Zero-auth providers (Shodan, DNS, ip-api, ASN Cymru, crt.sh, Hashlookup, ThreatMiner) are not blocked by VT's constraint.
 - Class: quality-attribute
@@ -895,7 +895,7 @@ This file is the explicit capability and coverage contract for the project.
 | R010 | quality-attribute | validated | M012/S01 | M012/S02 | S04 T03 production bundle 27,226 bytes (≤ 30KB gate). 750ms polling interval, dedup, and debounced sort patterns confirmed unchanged in enrichment.ts and cards.ts. |
 | R011 | quality-attribute | validated | M002/S05 | none | python3 -m pytest tests/e2e/ -q → 99 passed, 0 failed (up from 91 baseline). ResultsPage page object expanded from 118 to 266 lines. 8 new tests added. No tests removed. |
 | R012 | quality-attribute | validated | M003/S03 | none | S03 applied M002 design tokens to ioc_detail.html: stacked .detail-provider-card layout with --bg-secondary surfaces, --border dividers, --text-primary/--text-secondary typography, --font-mono for IOC code, verdict-badge--{verdict} as only color class. Inline <style> block removed. Graph labels untruncated (routes.py and graph.ts [:N] slices removed). 13 tests pass: test_detail_page_with_results asserts detail-provider-card, verdict-badge--malicious, and absence of <style>; test_detail_graph_labels_untruncated asserts "Shodan InternetDB" appears verbatim in data-graph-nodes. |
-| R013 | quality-attribute | active | M015/S01 | M015/S02, M015/S03, M015/S04 | mapped to M015/S01-S04; pending implementation proof |
+| R013 | quality-attribute | validated | M015/S01 | M015/S02, M015/S03, M015/S04 | M015/S01 delivered and verified the redesigned index command-card DOM/CSS foundation: `python3 -m pytest -q tests/test_index_intake_contract.py ...` passed 6 route/contract checks, `make build` passed, `npx tsc --noEmit` passed, and `python3 -m pytest -q tests/e2e/test_homepage.py tests/e2e/test_extraction.py::test_extract_mixed_iocs_offline` passed 18 Playwright tests proving the visible command-card intake surface and offline paste-to-results path. |
 | R014 | quality-attribute | validated | M012/S01 | none | S01 added per-provider semaphore dict in orchestrator._do_lookup(): VT gets Semaphore(4), zero-auth providers get Semaphore(8). Unit tests in tests/test_orchestrator.py assert VT calls are capped at 4 concurrent while zero-auth providers run freely. All 828 unit tests + 99 E2E tests passing at M003 close. |
 | R015 | quality-attribute | validated | M012/S01 | none | S01 added 429-aware backoff retry in orchestrator._do_lookup_inner(): exponential backoff with jitter using _BACKOFF_BASE and _MAX_RATE_LIMIT_RETRIES constants. Unit tests assert time.sleep is called with delay >= _BACKOFF_BASE on 429 response. All 828 unit tests + 99 E2E tests passing at M003 close. |
 | R016 | core-capability | validated | M003/S02 | none | S02 added IOCType.EMAIL to models.py, email regex classifier in classifier.py at precedence position 8 (before Domain), OTX adapter explicit frozenset excluding EMAIL. CSS badge (.ioc-type-badge--email) in input.css and dist/style.css. Filter pill (.filter-pill--email.filter-pill--active) in both CSS files. 6 E2E tests added to test_results_page.py confirming: email cards render, EMAIL filter pill appears, filtering shows only email cards, active state works, All Types resets, badge is visible. 105/105 E2E passing, 828/828 unit tests passing. Fully-defanged form user[@]evil[.]com is a known limitation (iocsearcher doesn't extract it; domain is extracted instead). |
@@ -967,7 +967,7 @@ This file is the explicit capability and coverage contract for the project.
 
 ## Coverage Summary
 
-- Active requirements: 8
-- Mapped to slices: 8
-- Validated: 64 (R001, R002, R003, R004, R005, R006, R007, R008, R009, R010, R011, R012, R014, R015, R016, R017, R018, R019, R020, R021, R022, R023, R024, R025, R026, R027, R028, R029, R030, R031, R032, R033, R035, R036, R037, R038, R039, R040, R041, R042, R043, R044, R045, R046, R047, R048, R049, R050, R051, R052, R053, R054, R055, R056, R057, R058, R059, R060, R061, R062, R063, R064, R065, R069)
+- Active requirements: 7
+- Mapped to slices: 7
+- Validated: 65 (R001, R002, R003, R004, R005, R006, R007, R008, R009, R010, R011, R012, R013, R014, R015, R016, R017, R018, R019, R020, R021, R022, R023, R024, R025, R026, R027, R028, R029, R030, R031, R032, R033, R035, R036, R037, R038, R039, R040, R041, R042, R043, R044, R045, R046, R047, R048, R049, R050, R051, R052, R053, R054, R055, R056, R057, R058, R059, R060, R061, R062, R063, R064, R065, R069)
 - Unmapped active requirements: 0

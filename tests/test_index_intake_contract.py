@@ -41,6 +41,17 @@ def has_hidden_input(tags: list[tuple[str, dict[str, str | None]]], name: str) -
     )
 
 
+def assert_describedby_targets_exist(
+    tags: list[tuple[str, dict[str, str | None]]], attrs: dict[str, str | None], element_name: str
+) -> None:
+    describedby = attrs.get("aria-describedby")
+    assert describedby, f"Missing aria-describedby on {element_name}"
+    for target_id in describedby.split():
+        assert by_id(tags, target_id) is not None, (
+            f"{element_name} aria-describedby references missing #{target_id}"
+        )
+
+
 def test_index_renders_command_card_intake_contract(client: Any) -> None:
     """GET / exposes the stable S01 command-card selectors and form controls."""
     response = client.get("/")
@@ -83,10 +94,26 @@ def test_index_renders_command_card_intake_contract(client: Any) -> None:
     assert mode_widget is not None, "Missing #mode-toggle-widget"
     assert mode_widget.get("data-mode") == "offline"
 
+    mode_title = by_id(tags, "mode-title")
+    assert mode_title is not None, "Missing #mode-title"
+    mode_help = by_id(tags, "mode-help")
+    assert mode_help is not None, "Missing #mode-help"
+    mode_status = by_id(tags, "mode-status")
+    assert mode_status is not None, "Missing #mode-status"
+    assert "Analysis mode" in html
+    assert "Offline" in html
+    assert "Online" in html
+    assert "Offline mode is the safe default" in html
+    assert "without contacting external providers" in html
+    assert "Online" in html and "configured providers" in html
+    assert "Offline selected" in html
+    assert "local extraction only" in html
+
     mode_button = by_id(tags, "mode-toggle-btn")
     assert mode_button is not None, "Missing #mode-toggle-btn"
     assert mode_button.get("type") == "button"
     assert mode_button.get("aria-pressed") == "false"
+    assert_describedby_targets_exist(tags, mode_button, "#mode-toggle-btn")
 
     paste_feedback = by_id(tags, "paste-feedback")
     assert paste_feedback is not None, "Missing #paste-feedback"
