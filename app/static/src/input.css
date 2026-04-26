@@ -274,39 +274,108 @@
     /* ---- Input page ---- */
 
     .page-index {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        padding-top: 20vh;
+        position: relative;
+        width: 100%;
         min-height: calc(100vh - 5rem);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: clamp(2rem, 7vh, 5rem) 0;
+        isolation: isolate;
     }
 
+    .page-index::before {
+        content: "";
+        position: absolute;
+        inset: -2rem min(-4vw, -1.5rem);
+        z-index: -1;
+        pointer-events: none;
+        background:
+            radial-gradient(circle at 50% 0%, rgba(56, 189, 248, 0.14), transparent 32rem),
+            linear-gradient(135deg, rgba(255, 255, 255, 0.035) 0 1px, transparent 1px 12px);
+        mask-image: linear-gradient(to bottom, #000, transparent 86%);
+        opacity: 0.9;
+    }
+
+    .intake-workbench {
+        width: min(100%, 880px);
+    }
+
+    .command-card,
     .input-card {
+        position: relative;
         width: 100%;
-        max-width: 720px;
-        background-color: transparent;
-        border: none;
-        border-radius: 0;
-        padding: 1.5rem 0;
-        box-shadow: none;
+        overflow: hidden;
+        background:
+            linear-gradient(180deg, rgba(24, 24, 27, 0.98), rgba(12, 18, 24, 0.98)),
+            var(--bg-secondary);
+        border: 1px solid rgba(125, 211, 252, 0.16);
+        border-radius: 28px;
+        padding: clamp(1.25rem, 3.6vw, 2.5rem);
+        box-shadow:
+            0 34px 90px rgba(0, 0, 0, 0.55),
+            0 0 0 1px rgba(255, 255, 255, 0.025) inset,
+            0 1px 0 rgba(255, 255, 255, 0.08) inset;
         animation: fadeSlideUp var(--duration-slow) var(--ease-out-expo) both;
         animation-delay: 100ms;
     }
 
+    .command-card::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background:
+            linear-gradient(90deg, transparent, rgba(56, 189, 248, 0.1), transparent) top left / 100% 1px no-repeat,
+            radial-gradient(circle at 10% 0%, rgba(14, 165, 233, 0.14), transparent 18rem);
+        opacity: 0.75;
+    }
+
+    .command-card-header,
     .index-hero {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 0.5rem;
-        margin-bottom: 1.5rem;
+        position: relative;
+        display: grid;
+        gap: 0.45rem;
+        max-width: 42rem;
+        margin-bottom: clamp(1.25rem, 3vw, 2rem);
     }
 
     .index-hero-brand {
-        font-family: var(--font-ui);
-        font-size: 1.5rem;
-        font-weight: 600;
+        width: fit-content;
+        font-family: var(--font-mono);
+        font-size: 0.78rem;
+        font-weight: 800;
         color: var(--text-primary);
-        letter-spacing: -0.02em;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+    }
+
+    .command-card-eyebrow {
+        width: fit-content;
+        color: var(--accent-hover);
+        font-family: var(--font-mono);
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+    }
+
+    .command-card-title {
+        max-width: 12ch;
+        color: var(--text-primary);
+        font-size: clamp(2.45rem, 7.5vw, 5.5rem);
+        font-weight: 780;
+        letter-spacing: -0.075em;
+        line-height: 0.88;
+        text-wrap: balance;
+    }
+
+    .command-card-help {
+        max-width: 40rem;
+        color: var(--text-secondary);
+        font-size: clamp(1rem, 1.7vw, 1.15rem);
+        line-height: 1.65;
+        text-wrap: pretty;
     }
 
     /* ---- Alert ---- */
@@ -327,6 +396,7 @@
     /* ---- Form elements ---- */
 
     .form-field {
+        position: relative;
         margin-bottom: 1.25rem;
     }
 
@@ -371,34 +441,44 @@
 
     .ioc-textarea {
         width: 100%;
-        background-color: var(--bg-secondary);
+        min-height: clamp(220px, 32vh, 360px);
+        background:
+            linear-gradient(180deg, rgba(9, 9, 11, 0.92), rgba(18, 18, 22, 0.96)),
+            var(--bg-secondary);
         color: var(--text-primary);
-        border: 1px solid var(--border);
-        border-radius: var(--radius);
-        padding: 1rem 1.25rem;
+        border: 1px solid rgba(125, 211, 252, 0.18);
+        border-radius: 18px;
+        padding: 1.2rem 1.35rem;
         font-family: var(--font-mono);
-        font-size: 0.85rem;
-        line-height: 1.6;
+        font-size: 0.9rem;
+        line-height: 1.7;
         resize: none;
         overflow-y: auto;
-        max-height: 400px;
+        max-height: 440px;
         caret-color: var(--accent);
+        box-shadow:
+            0 1px 0 rgba(255, 255, 255, 0.05) inset,
+            0 20px 48px rgba(0, 0, 0, 0.22);
         transition: border-color var(--duration-normal) var(--ease-out-quart),
-                    box-shadow var(--duration-normal) var(--ease-out-quart);
+                    box-shadow var(--duration-normal) var(--ease-out-quart),
+                    background-color var(--duration-normal) var(--ease-out-quart);
     }
 
     .ioc-textarea:focus-visible {
         border-color: var(--accent);
-        box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.12), var(--shadow-glow-accent);
+        box-shadow:
+            0 0 0 3px rgba(56, 189, 248, 0.14),
+            0 0 42px rgba(56, 189, 248, 0.14),
+            0 20px 48px rgba(0, 0, 0, 0.28);
     }
 
     .form-options {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 0.5rem;
+        gap: 1rem;
         flex-wrap: nowrap;
-        margin-top: 0.75rem;
+        margin-top: 1rem;
     }
 
     .mode-toggle {
@@ -408,7 +488,12 @@
     .mode-toggle-widget {
         display: flex;
         align-items: center;
-        gap: 0.6rem;
+        gap: 0.65rem;
+        min-height: 44px;
+        padding: 0.35rem 0.65rem;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        background-color: rgba(255, 255, 255, 0.025);
     }
 
     .mode-toggle-track {
@@ -487,7 +572,7 @@
 
     .form-actions {
         display: flex;
-        gap: 0.5rem;
+        gap: 0.6rem;
         align-items: center;
         flex-shrink: 0;
     }
@@ -498,35 +583,39 @@
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        padding: 0.5rem 1rem;
-        border-radius: var(--radius-sm);
+        min-height: 44px;
+        padding: 0.65rem 1.1rem;
+        border-radius: 999px;
         border: 1px solid transparent;
         font-family: var(--font-ui);
         font-size: 0.875rem;
-        font-weight: 500;
+        font-weight: 650;
         cursor: pointer;
         transition: background-color var(--duration-fast) var(--ease-out-quart),
                     border-color var(--duration-fast) var(--ease-out-quart),
                     color var(--duration-fast) var(--ease-out-quart),
                     opacity var(--duration-fast) var(--ease-out-quart),
-                    transform var(--duration-fast) var(--ease-out-quart);
+                    transform var(--duration-fast) var(--ease-out-quart),
+                    box-shadow var(--duration-fast) var(--ease-out-quart);
         white-space: nowrap;
         text-decoration: none;
         line-height: 1;
     }
 
     .btn:active:not(:disabled) {
-        transform: scale(0.97);
+        transform: scale(0.96);
     }
 
     .btn-primary {
         background-color: var(--btn-primary-bg);
         color: #fff;
         border-color: rgba(240, 246, 252, 0.1);
+        box-shadow: 0 12px 30px rgba(14, 165, 233, 0.22);
     }
 
     .btn-primary:hover:not(:disabled) {
         background-color: var(--btn-primary-hover);
+        box-shadow: 0 16px 38px rgba(14, 165, 233, 0.28);
     }
 
     .btn-primary:disabled {
@@ -1632,6 +1721,7 @@
         background-color: var(--btn-secondary-bg);
         color: var(--text-primary);
         border-color: var(--border-default);
+        box-shadow: none;
     }
 
     .btn-primary.mode-offline:hover:not(:disabled) {
@@ -1879,20 +1969,55 @@
 
     @media (max-width: 640px) {
         .site-main {
+            padding: 0.75rem;
+        }
+
+        .page-index {
+            align-items: stretch;
+            min-height: calc(100vh - 3rem);
+            padding: 0.5rem 0;
+        }
+
+        .intake-workbench {
+            width: 100%;
+        }
+
+        .command-card,
+        .input-card {
+            border-radius: 22px;
             padding: 1rem;
         }
 
-        .input-card {
-            padding: 1.25rem;
+        .command-card-title {
+            max-width: 11ch;
         }
 
         .ioc-textarea {
-            min-height: 40vh;
+            min-height: 44vh;
+            padding: 1rem;
+            border-radius: 16px;
         }
 
         .form-options {
-            flex-direction: row;
-            align-items: center;
+            flex-direction: column;
+            align-items: stretch;
+            gap: 0.85rem;
+        }
+
+        .mode-toggle,
+        .form-actions,
+        .btn {
+            width: 100%;
+        }
+
+        .mode-toggle-widget,
+        .form-actions {
+            justify-content: space-between;
+        }
+
+        .form-actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
         }
 
         .results-header {

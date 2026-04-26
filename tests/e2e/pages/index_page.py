@@ -10,9 +10,18 @@ class IndexPage:
         self.page = page
         self.base_url = base_url
 
-        # Locators
-        self.title = page.locator("h1.input-title")
-        self.subtitle = page.locator("p.input-subtitle")
+        # Command-card shell locators
+        self.page_index = page.locator(".page-index")
+        self.workbench = page.locator(".intake-workbench")
+        self.command_card = page.locator(".command-card")
+        self.card_header = page.locator(".command-card-header")
+        self.hero_brand = page.locator(".index-hero-brand")
+        self.eyebrow = page.locator(".command-card-eyebrow")
+        self.title = page.locator(".command-card-title")
+        self.subtitle = page.locator(".command-card-help")
+        self.form = page.locator("#analyze-form")
+
+        # Stable form-control locators consumed by downstream tests
         self.textarea = page.locator("#ioc-text")
         self.submit_btn = page.locator("#submit-btn")
         self.clear_btn = page.locator("#clear-btn")
@@ -21,7 +30,6 @@ class IndexPage:
         self.mode_input = page.locator("#mode-input")
         self.paste_feedback = page.locator("#paste-feedback")
         self.error_alert = page.locator(".alert-error")
-        self.hero_brand = page.locator(".index-hero-brand")
         self.site_settings_link = page.locator("nav.floating-settings a[aria-label='Settings']")
 
     def goto(self) -> None:
@@ -63,6 +71,20 @@ class IndexPage:
         self.fill_text(text)
         self.select_mode(mode)
         self.submit()
+
+    def expect_command_surface_visible(self) -> None:
+        """Assert the command-card intake shell and stable controls are visible."""
+        expect(self.page_index).to_be_visible()
+        expect(self.workbench).to_be_visible()
+        expect(self.command_card).to_be_visible()
+        expect(self.card_header).to_be_visible()
+        expect(self.title).to_be_visible()
+        expect(self.subtitle).to_be_visible()
+        expect(self.form).to_be_visible()
+        expect(self.textarea).to_be_visible()
+        expect(self.mode_toggle_widget).to_be_visible()
+        expect(self.clear_btn).to_be_visible()
+        expect(self.submit_btn).to_be_visible()
 
     def expect_submit_disabled(self) -> None:
         """Assert the submit button is disabled."""

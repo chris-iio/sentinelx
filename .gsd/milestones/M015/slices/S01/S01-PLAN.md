@@ -50,7 +50,7 @@ Steps:
   - Files: `app/templates/index.html`, `tests/test_index_intake_contract.py`, `tests/test_routes.py`
   - Verify: python3 -m pytest -q tests/test_index_intake_contract.py tests/test_routes.py::test_analyze_empty_input tests/test_routes.py::test_offline_mode_makes_no_http_calls tests/test_routes.py::test_security_headers_present
 
-- [ ] **T02: Style and prove the responsive command-card fast path** `est:0.75d`
+- [x] **T02: Style and prove the responsive command-card fast path** `est:0.75d`
   Load the `frontend-design`, `make-interfaces-feel-better`, `accessibility`, and `verify-before-complete` skills before editing. Build on T01's stable DOM to make the command card visually dominant, update browser tests/POM locators for the new workbench shape, and prove the live offline extraction path still works.
 
 Quality gates — Failure Modes: if the Tailwind/CSS build tool is missing or fails, stop with the build error and do not hand-edit `app/static/dist/style.css`; if Playwright cannot find the command card or form controls, treat it as a DOM/regression failure rather than weakening selectors; if submit enablement or extraction navigation breaks, diagnose `form.ts` selector compatibility before changing route logic. Load Profile: style-only runtime cost should remain static CSS plus the existing `form.ts` event listeners; no new fetches, timers beyond existing paste feedback, DB reads, or history-store calls are allowed. Negative Tests: cover empty initial submit-disabled state, enabled Extract after synthetic paste/fill, desktop and mobile command-card visibility, and a real offline submit reaching results with no provider dependency.
