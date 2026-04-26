@@ -324,13 +324,16 @@ class TestHistoryListRoute:
         with pytest.raises(Exception, match="DB corrupt"):
             client.get("/history")
 
-    def test_index_no_recent_analyses(self, client, seeded_store):
-        """GET / no longer shows recent analyses section."""
+    def test_index_shows_compact_recent_analyses(self, client, seeded_store):
+        """GET / shows a compact recent analyses rail when history exists."""
         store, _, _, _ = seeded_store
         client.application.history_store = store
         response = client.get("/")
         assert response.status_code == 200
-        assert b"Recent Analyses" not in response.data
+        assert b"Recent Analyses" in response.data
+        assert b"recent-analyses-rail" in response.data
+        assert b"recent-analysis-row" in response.data
+        assert b"/history/abc123deadbeef" in response.data
 
 
 # ---------------------------------------------------------------------------

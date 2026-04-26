@@ -73,6 +73,45 @@
                 </div>
             </form>
         </div>
+
+        {% set recent_unavailable = recent_analyses_unavailable|default(false) %}
+        {% set recent_items = recent_analyses|default([]) %}
+        <aside class="recent-analyses-rail" aria-labelledby="recent-analyses-title">
+            <div class="recent-analyses-header">
+                <p class="command-card-eyebrow">Resume work</p>
+                <h2 id="recent-analyses-title">Recent Analyses</h2>
+            </div>
+
+            {% if recent_unavailable %}
+            <p class="recent-analyses-unavailable" role="status">Recent analyses are temporarily unavailable. Paste-and-extract is still ready.</p>
+            {% elif recent_items %}
+            <div class="recent-analyses-list">
+                {% for entry in recent_items %}
+                    {% set analysis_id = entry.get('id') %}
+                    {% set input_text = entry.get('input_text') or 'Untitled analysis' %}
+                    {% set total_count = entry.get('total_count') %}
+                    {% set top_verdict = entry.get('top_verdict') or 'unknown verdict' %}
+                    {% set mode = entry.get('mode') or 'unknown mode' %}
+                    {% set created_at = entry.get('created_at') or 'time unknown' %}
+                    {% if analysis_id %}
+                    <a class="recent-analysis-row" href="{{ url_for('main.history_detail', analysis_id=analysis_id) }}">
+                    {% else %}
+                    <div class="recent-analysis-row" aria-disabled="true">
+                    {% endif %}
+                        <span class="recent-analysis-summary">{{ input_text }}</span>
+                        <span class="recent-analysis-meta">
+                            <span class="recent-analysis-count">{{ total_count if total_count is not none else 'Unknown count' }}</span>
+                            <span class="recent-analysis-verdict">{{ top_verdict }}</span>
+                            <span class="recent-analysis-mode">{{ mode }}</span>
+                            <span class="recent-analysis-created">{{ created_at }}</span>
+                        </span>
+                    {% if analysis_id %}</a>{% else %}</div>{% endif %}
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="recent-analyses-empty" role="status">No analyses yet. Paste alert text to create the first saved analysis.</p>
+            {% endif %}
+        </aside>
     </section>
 </div>
 {% endblock %}

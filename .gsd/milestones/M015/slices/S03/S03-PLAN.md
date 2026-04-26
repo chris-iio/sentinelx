@@ -20,7 +20,7 @@
 
 ## Proof Level
 
-- This slice proves: integration contract + browser UI proof for server-rendered recent summaries on the intake page.
+- This slice proves: - This slice proves: integration contract + browser UI proof for server-rendered recent summaries on the intake page.
 - Real runtime required: yes — Playwright must exercise the live Flask app so layout, links, and the existing offline submit path are proven in a browser.
 - Human/UAT required: no — focused Flask tests, build/typecheck, and Playwright assertions are sufficient for S03.
 
@@ -39,7 +39,7 @@
 
 ## Tasks
 
-- [ ] **T01: Wire fail-open recent summaries into the index route and template contract** `est:0.75d`
+- [x] **T01: Wire fail-open recent summaries into the index route and template contract** `est:0.75d`
   Load the `tdd`, `security-review`, and `verify-before-complete` skills before editing. Start with failing route/HTML contract coverage, then add the smallest server-rendered integration from GET `/` to `HistoryStore.list_recent(limit=4)` and `index.html`. Preserve every S01/S02 command-card selector and form behavior while adding recent, empty, and unavailable states as secondary markup.
 
 Quality gates — Failure Modes: if `current_app.history_store.list_recent()` raises, GET `/` must catch it, log a warning without raw IOC content, and still render the command-card form with status 200; if a returned row is missing optional display fields, the template should degrade to safe text rather than breaking the whole page; if `/history/<id>` receives an unknown ID, the existing 404 behavior remains owned by `app/routes/history.py` and must not be changed. Load Profile: GET `/` adds exactly one bounded SQLite read using a small limit and no provider calls, background work, client fetch, or per-row detail loads; 10x homepage traffic should be limited by the existing SQLite read and should fail open if storage is unhealthy. Negative Tests: route tests must cover seeded rows with links, no-history empty/degraded state, `list_recent` exception, preserved CSRF/form selectors, offline no-HTTP behavior, and safe rendering of stored text containing markup-like characters.

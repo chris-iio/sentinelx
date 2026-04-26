@@ -50,7 +50,11 @@ def analyze():
     mode = request.form.get("mode", "offline")
 
     if not text.strip():
-        return render_template("index.html", error="No input provided.")
+        return render_template(
+            "index.html",
+            error="No input provided.",
+            **_recent_analyses_context(limit=4),
+        )
 
     iocs = run_pipeline(text)
     grouped = group_by_type(iocs)
