@@ -2,60 +2,65 @@
 
 {% block content %}
 <div class="page-index">
-    <div class="input-card">
-        <div class="index-hero">
-            <span class="index-hero-brand"><span class="brand-accent">sentinel</span>x</span>
-        </div>
-
-        {% if error %}
-        <div class="alert alert-error" role="alert">{{ error }}</div>
-        {% endif %}
-
-        <form method="post" action="{{ url_for('main.analyze') }}" id="analyze-form">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-
-            <div class="form-field">
-                <textarea
-                    id="ioc-text"
-                    name="text"
-                    class="ioc-textarea"
-                    rows="5"
-                    placeholder=""
-                    spellcheck="false"
-                    autocomplete="off"
-                    autofocus
-                    aria-label="IOC text input"
-                ></textarea>
-                <span id="paste-feedback" class="paste-feedback" style="display:none;" aria-live="polite"></span>
+    <section class="intake-workbench">
+        <div class="command-card input-card">
+            <div class="index-hero command-card-header">
+                <span class="index-hero-brand"><span class="brand-accent">sentinel</span>x</span>
+                <p class="command-card-eyebrow">Offline-first IOC extraction</p>
+                <h1 class="command-card-title">Paste indicators. Extract fast.</h1>
+                <p class="command-card-help">Drop raw alert text, keep Offline mode selected, and extract normalized IOCs without contacting external providers.</p>
             </div>
 
-            <div class="form-options">
-                <div class="mode-toggle">
-                    <div class="mode-toggle-widget" id="mode-toggle-widget" data-mode="offline">
-                        <span class="mode-toggle-label mode-toggle-label--offline">Offline</span>
-                        <button type="button" class="mode-toggle-track" id="mode-toggle-btn" aria-pressed="false" aria-label="Toggle analysis mode">
-                            <span class="mode-toggle-thumb"></span>
-                        </button>
-                        <span class="mode-toggle-label mode-toggle-label--online">Online</span>
+            {% if error %}
+            <div class="alert alert-error" role="alert">{{ error }}</div>
+            {% endif %}
+
+            <form method="post" action="{{ url_for('main.analyze') }}" id="analyze-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
+                <div class="form-field">
+                    <textarea
+                        id="ioc-text"
+                        name="text"
+                        class="ioc-textarea"
+                        rows="5"
+                        placeholder=""
+                        spellcheck="false"
+                        autocomplete="off"
+                        autofocus
+                        aria-label="IOC text input"
+                    ></textarea>
+                    <span id="paste-feedback" class="paste-feedback" style="display:none;" aria-live="polite"></span>
+                </div>
+
+                <div class="form-options">
+                    <div class="mode-toggle">
+                        <div class="mode-toggle-widget" id="mode-toggle-widget" data-mode="offline">
+                            <span class="mode-toggle-label mode-toggle-label--offline">Offline</span>
+                            <button type="button" class="mode-toggle-track" id="mode-toggle-btn" aria-pressed="false" aria-label="Toggle analysis mode">
+                                <span class="mode-toggle-thumb"></span>
+                            </button>
+                            <span class="mode-toggle-label mode-toggle-label--online">Online</span>
+                        </div>
+                        <input type="hidden" name="mode" id="mode-input" value="offline">
                     </div>
-                    <input type="hidden" name="mode" id="mode-input" value="offline">
-                </div>
 
-                <div class="form-actions">
-                    <button
-                        type="button"
-                        class="btn btn-secondary"
-                        id="clear-btn"
-                    >Clear</button>
-                    <button
-                        type="submit"
-                        class="btn btn-primary"
-                        id="submit-btn"
-                        disabled
-                    >Extract</button>
+                    <div class="form-actions">
+                        <button
+                            type="button"
+                            class="btn btn-secondary"
+                            id="clear-btn"
+                        >Clear</button>
+                        <button
+                            type="submit"
+                            class="btn btn-primary"
+                            id="submit-btn"
+                            disabled
+                        >Extract</button>
+                    </div>
                 </div>
-            </div>
-        </form>
-    </div>
+            </form>
+        </div>
+    </section>
 </div>
 {% endblock %}

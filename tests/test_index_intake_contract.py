@@ -1,0 +1,111 @@
+"""Contract tests for the index intake surface."""
+from html.parser import HTMLParser
+from typing import Any
+
+
+class TagCollector(HTMLParser):
+    """Collect start tags and their attributes for lightweight HTML assertions."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.tags: list[tuple[str, dict[str, str | None]]] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self.tags.append((tag, dict(attrs)))
+
+
+def parse_tags(html: str) -> list[tuple[str, dict[str, str | None]]]:
+    parser = TagCollector()
+    parser.feed(html)
+    return parser.tags
+
+
+def has_class(tags: list[tuple[str, dict[str, str | None]]], class_name: str) -> bool:
+    return any(
+        class_name in (attrs.get("class") or "").split()
+        for _, attrs in tags
+    )
+
+
+def by_id(tags: list[tuple[str, dict[str, str | None]]], element_id: str) -> dict[str, str | None] | None:
+    for _, attrs in tags:
+        if attrs.get("id") == element_id:
+            return attrs
+    return None
+
+
+def has_hidden_input(tags: list[tuple[str, dict[str, str | None]]], name: str) -> bool:
+    return any(
+        tag == "input" and attrs.get("type") == "hidden" and attrs.get("name") == name
+        for tag, attrs in tags
+    )
+
+
+def test_index_renders_command_card_intake_contract(client: Any) -> None:
+    """GET / exposes the stable S01 command-card selectors and form controls."""
+    response = client.get("/")
+
+    assert response.status_code == 200
+    html = response.data.decode("utf-8")
+    tags = parse_tags(html)
+
+    for class_name in ("page-index", "intake-workbench", "command-card"):
+        assert has_class(tags, class_name), f"Missing .{class_name} index contract selector"
+
+    form = by_id(tags, "analyze-form")
+    assert form is not None, "Missing #analyze-form"
+    assert form.get("method") == "post"
+    assert form.get("action") == "/analyze"
+    assert has_hidden_input(tags, "csrf_token"), "Missing hidden csrf_token input"
+
+    textarea = by_id(tags, "ioc-text")
+    assert textarea is not None, "Missing #ioc-text"
+    assert textarea.get("name") == "text"
+    assert textarea.get("rows") == "5"
+    assert textarea.get("aria-label") == "IOC text input"
+
+    submit = by_id(tags, "submit-btn")
+    assert submit is not None, "Missing #submit-btn"
+    assert submit.get("type") == "submit"
+    assert "disabled" in submit
+
+    clear = by_id(tags, "clear-btn")
+    assert clear is not None, "Missing #clear-btn"
+    assert clear.get("type") == "button"
+
+    mode_input = by_id(tags, "mode-input")
+    assert mode_input is not None, "Missing #mode-input"
+    assert mode_input.get("type") == "hidden"
+    assert mode_input.get("name") == "mode"
+    assert mode_input.get("value") == "offline"
+
+    mode_widget = by_id(tags, "mode-toggle-widget")
+    assert mode_widget is not None, "Missing #mode-toggle-widget"
+    assert mode_widget.get("data-mode") == "offline"
+
+    mode_button = by_id(tags, "mode-toggle-btn")
+    assert mode_button is not None, "Missing #mode-toggle-btn"
+    assert mode_button.get("type") == "button"
+    assert mode_button.get("aria-pressed") == "false"
+
+    paste_feedback = by_id(tags, "paste-feedback")
+    assert paste_feedback is not None, "Missing #paste-feedback"
+
+
+def test_index_does_not_render_future_intake_surfaces(client: Any) -> None:
+    """S01 keeps history and pre-submit preview UI out of the index page."""
+    response = client.get("/")
+
+    assert response.status_code == 200
+    html = response.data.decode("utf-8")
+    tags = parse_tags(html)
+
+    assert "Recent Analyses" not in html
+    for class_name in (
+        "recent-analyses-list",
+        "recent-analysis-row",
+        "analysis-preview",
+        "pre-submit-preview",
+        "preview-panel",
+    ):
+        assert not has_class(tags, class_name), f"Unexpected .{class_name} rendered on /"

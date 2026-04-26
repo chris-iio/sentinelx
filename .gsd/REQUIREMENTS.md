@@ -2,6 +2,96 @@
 
 This file is the explicit capability and coverage contract for the project.
 
+## Active
+
+### R013 — Update the input/home page to match the new design language.
+- Class: quality-attribute
+- Status: active
+- Description: Update the input/home page to match the new design language.
+- Why it matters: Visual consistency across pages.
+- Source: inferred
+- Primary owning slice: M015/S01
+- Supporting slices: M015/S02, M015/S03, M015/S04
+- Validation: mapped to M015/S01-S04; pending implementation proof
+- Notes: M015 reactivates this deferred input/home-page design gap as part of the fast Intake Workbench scope. It should be validated by the final integrated intake proof rather than treated as a standalone cosmetic cleanup.
+
+### R070 — The home page functions as a fast analyst intake workbench, with a dominant paste-and-submit command surface rather than a generic textarea-only page.
+- Class: primary-user-loop
+- Status: active
+- Description: The home page functions as a fast analyst intake workbench, with a dominant paste-and-submit command surface rather than a generic textarea-only page.
+- Why it matters: The rest of SentinelX is mature, but the front door still feels thin compared with the results/detail surfaces.
+- Source: user
+- Primary owning slice: M015/S01
+- Supporting slices: M015/S04
+- Validation: mapped to M015/S01 and final integrated proof
+- Notes: The user emphasized "go fast"; this must remain a command surface, not a dashboard.
+
+### R071 — The primary paste-to-results flow remains unchanged: paste IOC text, choose Offline or Online mode, click Extract, and reach the existing results flow.
+- Class: continuity
+- Status: active
+- Description: The primary paste-to-results flow remains unchanged: paste IOC text, choose Offline or Online mode, click Extract, and reach the existing results flow.
+- Why it matters: A redesign that slows or changes the core analyst loop would violate the user's fast-intake direction.
+- Source: user
+- Primary owning slice: M015/S01
+- Supporting slices: M015/S02, M015/S04
+- Validation: mapped to M015/S01/S02/S04 browser proof
+- Notes: No pre-submit extraction preview or extra staging step should be inserted.
+
+### R072 — Offline and Online mode choice is clearer visually and textually while preserving the existing hidden `mode` form contract and submit behavior.
+- Class: quality-attribute
+- Status: active
+- Description: Offline and Online mode choice is clearer visually and textually while preserving the existing hidden `mode` form contract and submit behavior.
+- Why it matters: Analysts should not second-guess mode selection, but the stable form semantics are already tested and should not churn unnecessarily.
+- Source: user
+- Primary owning slice: M015/S02
+- Supporting slices: M015/S04
+- Validation: mapped to M015/S02 and final E2E proof
+- Notes: Clarify the current toggle; do not replace it with a different workflow unless implementation proves the current control cannot meet accessibility or clarity needs.
+
+### R073 — A compact Recent Analyses list appears on the intake page when history exists, remains visually secondary to the paste command card, and links to `/history/<id>` reload routes.
+- Class: primary-user-loop
+- Status: active
+- Description: A compact Recent Analyses list appears on the intake page when history exists, remains visually secondary to the paste command card, and links to `/history/<id>` reload routes.
+- Why it matters: Recent work should be easy to resume from the start page without turning the home page into a dashboard.
+- Source: user
+- Primary owning slice: M015/S03
+- Supporting slices: M015/S04
+- Validation: mapped to M015/S03 backend and E2E proof
+- Notes: Use the existing server-rendered HistoryStore.list_recent(limit) path; no new API or live-refresh endpoint is planned.
+
+### R074 — History listing failures never block the intake page; the paste form still renders and works, with a quiet degraded recent-history state or omission.
+- Class: failure-visibility
+- Status: active
+- Description: History listing failures never block the intake page; the paste form still renders and works, with a quiet degraded recent-history state or omission.
+- Why it matters: History is secondary; the fast paste-and-extract path must stay available even if history storage is unavailable.
+- Source: user
+- Primary owning slice: M015/S03
+- Supporting slices: M015/S04
+- Validation: mapped to M015/S03 route tests and final proof
+- Notes: No retry loop, async recovery UI, or blocking alert for history failures in M015.
+
+### R075 — The intake page uses a command-card plus compact recent rail layout that works on desktop and stacks cleanly on mobile.
+- Class: quality-attribute
+- Status: active
+- Description: The intake page uses a command-card plus compact recent rail layout that works on desktop and stacks cleanly on mobile.
+- Why it matters: The layout must support the fast-intake mental model across common viewport sizes.
+- Source: inferred
+- Primary owning slice: M015/S01
+- Supporting slices: M015/S03, M015/S04
+- Validation: mapped to M015/S01/S04 responsive browser proof
+- Notes: Desktop should keep recent history as a secondary rail; mobile should stack without hiding the primary form.
+
+### R076 — Existing extraction, enrichment, history reload, CSRF/security headers, TypeScript build, and E2E behavior remain intact after the intake redesign.
+- Class: continuity
+- Status: active
+- Description: Existing extraction, enrichment, history reload, CSRF/security headers, TypeScript build, and E2E behavior remain intact after the intake redesign.
+- Why it matters: This is a front-door redesign, not a behavior rewrite; current SentinelX capabilities must not regress.
+- Source: inferred
+- Primary owning slice: M015/S04
+- Supporting slices: M015/S01, M015/S02, M015/S03
+- Validation: mapped to M015/S04 final integrated verification
+- Notes: Final proof should include focused backend tests, relevant E2E tests, make verify-fast, and full make verify.
+
 ## Validated
 
 ### R001 — IOC results render in a single-column, full-width layout replacing the current 2-column card grid. Each IOC gets the full page width for data presentation.
@@ -691,17 +781,6 @@ This file is the explicit capability and coverage contract for the project.
 
 ## Deferred
 
-### R013 — Update the input/home page to match the new design language.
-- Class: quality-attribute
-- Status: deferred
-- Description: Update the input/home page to match the new design language.
-- Why it matters: Visual consistency across pages.
-- Source: inferred
-- Primary owning slice: none
-- Supporting slices: none
-- Validation: unmapped
-- Notes: Deferred — input page is minimal and functional; not worth disrupting M003 scope
-
 ### R066 — Automatic self-healing of transient runtime state at session start is deferred.
 - Class: operability
 - Status: deferred
@@ -722,6 +801,39 @@ This file is the explicit capability and coverage contract for the project.
 - Validation: unmapped
 - Notes: M014 should solve the problem at the repo boundary first rather than assuming immediate changes to tooling outside the SentinelX repository.
 
+### R077 — Pre-submit extraction preview is intentionally deferred; M015 should not show detected IOCs before the analyst clicks Extract.
+- Class: deferred
+- Status: deferred
+- Description: Pre-submit extraction preview is intentionally deferred; M015 should not show detected IOCs before the analyst clicks Extract.
+- Why it matters: Preview could be useful later, but it would add staging and complexity that conflicts with this milestone's go-fast direction.
+- Source: user
+- Primary owning slice: none
+- Supporting slices: none
+- Validation: unmapped
+- Notes: The user explicitly said preview stays out of scope to preserve a fast flow.
+
+### R078 — Email/phishing enrichment depth is deferred from M015.
+- Class: deferred
+- Status: deferred
+- Description: Email/phishing enrichment depth is deferred from M015.
+- Why it matters: It is a meaningful analyst feature, but it would expand M015 from intake UX into provider strategy and external-service decisions.
+- Source: prior scope
+- Primary owning slice: none
+- Supporting slices: none
+- Validation: unmapped
+- Notes: Email IOCs are already display-capable; provider/API choices for email reputation belong in a separate milestone.
+
+### R079 — API/automation polish is deferred from M015.
+- Class: deferred
+- Status: deferred
+- Description: API/automation polish is deferred from M015.
+- Why it matters: Programmatic workflows are a separate design target from the fast analyst browser intake experience.
+- Source: prior scope
+- Primary owning slice: none
+- Supporting slices: none
+- Validation: unmapped
+- Notes: The REST API exists, but M015 is browser intake work, not script automation.
+
 ## Out of Scope
 
 ### R068 — M014 does not add a new analyst-facing SentinelX product capability.
@@ -733,6 +845,39 @@ This file is the explicit capability and coverage contract for the project.
 - Supporting slices: none
 - Validation: n/a
 - Notes: This milestone is reserved for local workflow hardening and recovery, not feature expansion for analysts.
+
+### R080 — M015 must not turn the home page into a heavy dashboard.
+- Class: anti-feature
+- Status: out-of-scope
+- Description: M015 must not turn the home page into a heavy dashboard.
+- Why it matters: A dashboard would dilute the paste-and-go primary action and conflict with the desired fast analyst workbench feel.
+- Source: user
+- Primary owning slice: none
+- Supporting slices: none
+- Validation: n/a
+- Notes: The user chose go-fast intake and compact history, not equal-weight status/history panels.
+
+### R081 — M015 must not change provider or enrichment behavior as part of the intake redesign.
+- Class: anti-feature
+- Status: out-of-scope
+- Description: M015 must not change provider or enrichment behavior as part of the intake redesign.
+- Why it matters: Changing enrichment behavior would increase risk and move the milestone away from front-door UX.
+- Source: user
+- Primary owning slice: none
+- Supporting slices: none
+- Validation: n/a
+- Notes: Small support changes for server-rendered history are allowed; enrichment semantics are not.
+
+### R082 — M015 does not redesign the results or detail pages beyond necessary integration consistency with the intake page.
+- Class: anti-feature
+- Status: out-of-scope
+- Description: M015 does not redesign the results or detail pages beyond necessary integration consistency with the intake page.
+- Why it matters: This prevents a scoped intake milestone from becoming a broad visual redesign.
+- Source: user
+- Primary owning slice: none
+- Supporting slices: none
+- Validation: n/a
+- Notes: Results/detail surfaces are already mature; M015 focuses on the start page.
 
 ## Traceability
 
@@ -750,7 +895,7 @@ This file is the explicit capability and coverage contract for the project.
 | R010 | quality-attribute | validated | M012/S01 | M012/S02 | S04 T03 production bundle 27,226 bytes (≤ 30KB gate). 750ms polling interval, dedup, and debounced sort patterns confirmed unchanged in enrichment.ts and cards.ts. |
 | R011 | quality-attribute | validated | M002/S05 | none | python3 -m pytest tests/e2e/ -q → 99 passed, 0 failed (up from 91 baseline). ResultsPage page object expanded from 118 to 266 lines. 8 new tests added. No tests removed. |
 | R012 | quality-attribute | validated | M003/S03 | none | S03 applied M002 design tokens to ioc_detail.html: stacked .detail-provider-card layout with --bg-secondary surfaces, --border dividers, --text-primary/--text-secondary typography, --font-mono for IOC code, verdict-badge--{verdict} as only color class. Inline <style> block removed. Graph labels untruncated (routes.py and graph.ts [:N] slices removed). 13 tests pass: test_detail_page_with_results asserts detail-provider-card, verdict-badge--malicious, and absence of <style>; test_detail_graph_labels_untruncated asserts "Shodan InternetDB" appears verbatim in data-graph-nodes. |
-| R013 | quality-attribute | deferred | none | none | unmapped |
+| R013 | quality-attribute | active | M015/S01 | M015/S02, M015/S03, M015/S04 | mapped to M015/S01-S04; pending implementation proof |
 | R014 | quality-attribute | validated | M012/S01 | none | S01 added per-provider semaphore dict in orchestrator._do_lookup(): VT gets Semaphore(4), zero-auth providers get Semaphore(8). Unit tests in tests/test_orchestrator.py assert VT calls are capped at 4 concurrent while zero-auth providers run freely. All 828 unit tests + 99 E2E tests passing at M003 close. |
 | R015 | quality-attribute | validated | M012/S01 | none | S01 added 429-aware backoff retry in orchestrator._do_lookup_inner(): exponential backoff with jitter using _BACKOFF_BASE and _MAX_RATE_LIMIT_RETRIES constants. Unit tests assert time.sleep is called with delay >= _BACKOFF_BASE on 429 response. All 828 unit tests + 99 E2E tests passing at M003 close. |
 | R016 | core-capability | validated | M003/S02 | none | S02 added IOCType.EMAIL to models.py, email regex classifier in classifier.py at precedence position 8 (before Domain), OTX adapter explicit frozenset excluding EMAIL. CSS badge (.ioc-type-badge--email) in input.css and dist/style.css. Filter pill (.filter-pill--email.filter-pill--active) in both CSS files. 6 E2E tests added to test_results_page.py confirming: email cards render, EMAIL filter pill appears, filtering shows only email cards, active state works, All Types resets, badge is visible. 105/105 E2E passing, 828/828 unit tests passing. Fully-defanged form user[@]evil[.]com is a known limitation (iocsearcher doesn't extract it; domain is extracted instead). |
@@ -806,10 +951,23 @@ This file is the explicit capability and coverage contract for the project.
 | R067 | constraint | deferred | none | none | unmapped |
 | R068 | anti-feature | out-of-scope | none | none | n/a |
 | R069 | quality-attribute | validated | M014/S04 | M014/S01, M014/S02, M014/S03 | Validated in M014/S04 on 2026-04-26. `.gsd/milestones/M014/slices/S04/S04-REVIEW.md` records an explicit seam-by-seam review of `tools/runtime_state_boundary.py`, `tools/runtime_state_repair.py`, `tools/dev_server.py`, `app/routes/api.py`, focused tests, Make/docs, and the relevant ADRs. The review separated `refactor-now` from `leave-alone`, landed the minimal `app/health_contract.py` single-source refactor for `/api/health`, and explicitly preserved classifier-owned repair policy, report-only `.planning/**`, thin Make wrappers, and the single local dev-server lifecycle surface. |
+| R070 | primary-user-loop | active | M015/S01 | M015/S04 | mapped to M015/S01 and final integrated proof |
+| R071 | continuity | active | M015/S01 | M015/S02, M015/S04 | mapped to M015/S01/S02/S04 browser proof |
+| R072 | quality-attribute | active | M015/S02 | M015/S04 | mapped to M015/S02 and final E2E proof |
+| R073 | primary-user-loop | active | M015/S03 | M015/S04 | mapped to M015/S03 backend and E2E proof |
+| R074 | failure-visibility | active | M015/S03 | M015/S04 | mapped to M015/S03 route tests and final proof |
+| R075 | quality-attribute | active | M015/S01 | M015/S03, M015/S04 | mapped to M015/S01/S04 responsive browser proof |
+| R076 | continuity | active | M015/S04 | M015/S01, M015/S02, M015/S03 | mapped to M015/S04 final integrated verification |
+| R077 | deferred | deferred | none | none | unmapped |
+| R078 | deferred | deferred | none | none | unmapped |
+| R079 | deferred | deferred | none | none | unmapped |
+| R080 | anti-feature | out-of-scope | none | none | n/a |
+| R081 | anti-feature | out-of-scope | none | none | n/a |
+| R082 | anti-feature | out-of-scope | none | none | n/a |
 
 ## Coverage Summary
 
-- Active requirements: 0
-- Mapped to slices: 0
+- Active requirements: 8
+- Mapped to slices: 8
 - Validated: 64 (R001, R002, R003, R004, R005, R006, R007, R008, R009, R010, R011, R012, R014, R015, R016, R017, R018, R019, R020, R021, R022, R023, R024, R025, R026, R027, R028, R029, R030, R031, R032, R033, R035, R036, R037, R038, R039, R040, R041, R042, R043, R044, R045, R046, R047, R048, R049, R050, R051, R052, R053, R054, R055, R056, R057, R058, R059, R060, R061, R062, R063, R064, R065, R069)
 - Unmapped active requirements: 0
