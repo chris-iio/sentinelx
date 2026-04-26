@@ -12,6 +12,7 @@ Routes:
 from flask import Blueprint, current_app, jsonify, request
 
 from app import limiter
+from app.health_contract import HEALTH_PATH, HEALTH_PAYLOAD
 from app.pipeline.extractor import run_pipeline
 from app.pipeline.models import IOCType, group_by_type
 
@@ -23,16 +24,10 @@ from ._helpers import (
 
 bp_api = Blueprint("api", __name__, url_prefix="/api")
 
-HEALTH_PAYLOAD = {
-    "service": "sentinelx",
-    "status": "ok",
-    "ready": True,
-}
-
 _VALID_MODES = {"offline", "online"}
 
 
-@bp_api.route("/health", methods=["GET"])
+@bp_api.route(HEALTH_PATH.removeprefix("/api"), methods=["GET"])
 @limiter.limit("240 per minute")
 def api_health():
     """Return a fixed, secret-free health contract for local probes."""

@@ -11,6 +11,8 @@ import time
 from pathlib import Path
 from urllib import request
 
+from app.health_contract import HEALTH_PATH, HEALTH_PAYLOAD
+
 SCRIPT = Path("tools/dev_server.py").resolve()
 
 
@@ -53,7 +55,7 @@ def wait_for_status(runtime_root: Path, expected: str, *, timeout: float = 10.0)
 
 
 def fetch_health(port: int) -> dict:
-    with request.urlopen(f"http://127.0.0.1:{port}/api/health", timeout=2.0) as response:  # noqa: S310
+    with request.urlopen(f"http://127.0.0.1:{port}{HEALTH_PATH}", timeout=2.0) as response:  # noqa: S310
         assert response.status == 200
         return json.loads(response.read().decode("utf-8"))
 
@@ -82,11 +84,7 @@ def test_start_status_restart_and_stop_after_crash(tmp_path: Path):
         assert started["restart_count"] == 0
         assert started["probe"]["status"] == "healthy"
         assert started["log_path"].startswith(".gsd/runtime/dev-server/logs/")
-        assert fetch_health(port) == {
-            "service": "sentinelx",
-            "status": "ok",
-            "ready": True,
-        }
+        assert fetch_health(port) == HEALTH_PAYLOAD
 
         os.kill(pid, signal.SIGKILL)
         crashed = wait_for_status(runtime_root, "crashed")
@@ -103,11 +101,7 @@ def test_start_status_restart_and_stop_after_crash(tmp_path: Path):
         assert restarted["port"] == port
         assert restarted["restart_count"] == 1
         assert restarted["probe"]["status"] == "healthy"
-        assert fetch_health(port) == {
-            "service": "sentinelx",
-            "status": "ok",
-            "ready": True,
-        }
+        assert fetch_health(port) == HEALTH_PAYLOAD
 
         stopped_result = run_cli(runtime_root, "stop", "--format", "json", timeout=30.0)
         assert stopped_result.returncode == 0, stopped_result.stderr or stopped_result.stdout

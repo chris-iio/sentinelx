@@ -14,6 +14,8 @@ from pathlib import Path
 
 import pytest
 
+from app.health_contract import HEALTH_PATH, HEALTH_PAYLOAD
+
 SCRIPT = Path("tools/dev_server.py")
 BOUNDARY_SCRIPT = Path("tools/runtime_state_boundary.py")
 
@@ -45,9 +47,7 @@ class _SilentHandler(BaseHTTPRequestHandler):
 
 class HealthyHandler(_SilentHandler):
     def do_GET(self):  # noqa: N802
-        payload = json.dumps(
-            {"service": "sentinelx", "status": "ok", "ready": True}
-        ).encode("utf-8")
+        payload = json.dumps(HEALTH_PAYLOAD).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(payload)))
@@ -59,9 +59,7 @@ class SecretBearingHealthHandler(_SilentHandler):
     def do_GET(self):  # noqa: N802
         payload = json.dumps(
             {
-                "service": "sentinelx",
-                "status": "ok",
-                "ready": True,
+                **HEALTH_PAYLOAD,
                 "provider_key": "sk-local-dev-should-never-appear",
             }
         ).encode("utf-8")
@@ -72,12 +70,20 @@ class SecretBearingHealthHandler(_SilentHandler):
         self.wfile.write(payload)
 
 
+class DriftedHealthHandler(_SilentHandler):
+    def do_GET(self):  # noqa: N802
+        payload = json.dumps({**HEALTH_PAYLOAD, "ready": False}).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
+
+
 class SlowHealthHandler(_SilentHandler):
     def do_GET(self):  # noqa: N802
         time.sleep(0.2)
-        payload = json.dumps(
-            {"service": "sentinelx", "status": "ok", "ready": True}
-        ).encode("utf-8")
+        payload = json.dumps(HEALTH_PAYLOAD).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(payload)))
@@ -148,7 +154,7 @@ def test_status_round_trip_and_empty_runtime_default(tmp_path: Path):
         probe=dev_server.HealthProbeResult(
             status="healthy",
             checked_at="2026-04-25T11:00:00Z",
-            url="http://127.0.0.1:5001/api/health",
+            url=f"http://127.0.0.1:5001{HEALTH_PATH}",
             http_status=200,
             detail=None,
         ),
@@ -233,7 +239,7 @@ def test_probe_health_reports_healthy_for_exact_contract():
     assert result.status == "healthy"
     assert result.http_status == 200
     assert result.detail is None
-    assert result.url == f"http://127.0.0.1:{port}/api/health"
+    assert result.url == f"http://127.0.0.1:{port}{HEALTH_PATH}"
 
 
 def test_probe_health_reports_refused_timeout_and_malformed():
@@ -250,6 +256,11 @@ def test_probe_health_reports_refused_timeout_and_malformed():
         malformed_result = dev_server.probe_health(port=malformed_port, timeout=0.2)
     assert malformed_result.status == "malformed"
     assert malformed_result.detail == "unexpected health payload"
+
+    with running_server(DriftedHealthHandler) as drifted_port:
+        drifted_result = dev_server.probe_health(port=drifted_port, timeout=0.2)
+    assert drifted_result.status == "malformed"
+    assert drifted_result.detail == "unexpected health payload"
 
 
 def test_refresh_status_reports_running_starting_stale_and_crashed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -278,7 +289,7 @@ def test_refresh_status_reports_running_starting_stale_and_crashed(tmp_path: Pat
         lambda host, port, timeout=0.5: dev_server.HealthProbeResult(
             status="healthy",
             checked_at="2026-04-25T11:01:00Z",
-            url="http://127.0.0.1:5001/api/health",
+            url=f"http://127.0.0.1:5001{HEALTH_PATH}",
             http_status=200,
             detail=None,
         ),
@@ -306,7 +317,7 @@ def test_refresh_status_reports_running_starting_stale_and_crashed(tmp_path: Pat
         lambda host, port, timeout=0.5: dev_server.HealthProbeResult(
             status="refused",
             checked_at="2026-04-25T11:01:00Z",
-            url="http://127.0.0.1:5001/api/health",
+            url=f"http://127.0.0.1:5001{HEALTH_PATH}",
             http_status=None,
             detail="connection refused",
         ),
@@ -321,7 +332,7 @@ def test_refresh_status_reports_running_starting_stale_and_crashed(tmp_path: Pat
         lambda host, port, timeout=0.5: dev_server.HealthProbeResult(
             status="timeout",
             checked_at="2026-04-25T11:01:00Z",
-            url="http://127.0.0.1:5001/api/health",
+            url=f"http://127.0.0.1:5001{HEALTH_PATH}",
             http_status=None,
             detail="request timed out",
         ),
@@ -338,7 +349,7 @@ def test_refresh_status_reports_running_starting_stale_and_crashed(tmp_path: Pat
         lambda host, port, timeout=0.5: dev_server.HealthProbeResult(
             status="refused",
             checked_at="2026-04-25T11:01:00Z",
-            url="http://127.0.0.1:5001/api/health",
+            url=f"http://127.0.0.1:5001{HEALTH_PATH}",
             http_status=None,
             detail="connection refused",
         ),

@@ -6,6 +6,7 @@ import pytest
 
 from app import create_app
 from app.enrichment.models import EnrichmentResult
+from app.health_contract import HEALTH_PATH, HEALTH_PAYLOAD
 from app.pipeline.models import IOCType
 
 from tests.helpers import make_ipv4_ioc
@@ -93,19 +94,24 @@ def _build_incremental_snapshot_orchestrator(
 class TestApiHealth:
     """Local liveness/readiness contract for the dev-server manager."""
 
-    def test_health_returns_fixed_secret_free_json(self, client):
-        resp = client.get("/api/health")
-
-        assert resp.status_code == 200
-        assert resp.is_json is True
-        assert resp.get_json() == {
+    def test_health_contract_constants_stay_fixed_and_secret_free(self):
+        assert HEALTH_PATH == "/api/health"
+        assert HEALTH_PAYLOAD == {
             "service": "sentinelx",
             "status": "ok",
             "ready": True,
         }
+        assert "provider_key" not in HEALTH_PAYLOAD
+
+    def test_health_returns_fixed_secret_free_json(self, client):
+        resp = client.get(HEALTH_PATH)
+
+        assert resp.status_code == 200
+        assert resp.is_json is True
+        assert resp.get_json() == HEALTH_PAYLOAD
 
     def test_health_does_not_touch_provider_configuration(self, client):
-        resp = client.get("/api/health")
+        resp = client.get(HEALTH_PATH)
 
         assert resp.status_code == 200
         client.application.registry.configured.assert_not_called()

@@ -36,6 +36,13 @@ from pathlib import Path
 from typing import Any
 from urllib import error, request
 
+SCRIPT_PATH = Path(__file__).resolve()
+REPO_ROOT = SCRIPT_PATH.parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from app.health_contract import HEALTH_PATH, HEALTH_PAYLOAD
+
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 5000
 DEFAULT_STARTUP_TIMEOUT = 10.0
@@ -43,12 +50,6 @@ DEFAULT_SHUTDOWN_TIMEOUT = 5.0
 DEFAULT_PROBE_TIMEOUT = 0.5
 DEFAULT_PROBE_INTERVAL = 0.1
 DEFAULT_STARTING_GRACE_SECONDS = 2.0
-HEALTH_PATH = "/api/health"
-HEALTH_PAYLOAD = {
-    "service": "sentinelx",
-    "status": "ok",
-    "ready": True,
-}
 
 VALID_MANAGER_STATUSES = {"stopped", "starting", "running", "stale", "crashed"}
 VALID_PROBE_STATUSES = {"healthy", "refused", "timeout", "malformed"}
