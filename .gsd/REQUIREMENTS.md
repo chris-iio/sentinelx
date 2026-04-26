@@ -2,30 +2,6 @@
 
 This file is the explicit capability and coverage contract for the project.
 
-## Active
-
-### R065 — Workflow hardening preserves existing SentinelX verification and app behavior.
-- Class: continuity
-- Status: active
-- Description: Workflow hardening preserves existing SentinelX verification and app behavior.
-- Why it matters: A safer local workflow that regresses the actual product or its verification contract is not a net improvement.
-- Source: inferred
-- Primary owning slice: M014/S04
-- Supporting slices: M014/S01, M014/S02, M014/S03
-- Validation: mapped
-- Notes: The milestone is about developer-workflow hardening, not analyst-facing product regression. Existing verification lanes must still pass on the final state.
-
-### R069 — M014 ends with an explicit code review/refactor pass over the changed workflow seams.
-- Class: quality-attribute
-- Status: active
-- Description: M014 ends with an explicit code review/refactor pass over the changed workflow seams.
-- Why it matters: Workflow hardening should close with cleanup and simplification, not just a pile of fixes that happen to pass once.
-- Source: user
-- Primary owning slice: M014/S04
-- Supporting slices: M014/S01, M014/S02, M014/S03
-- Validation: mapped
-- Notes: The final slice should review, simplify, and tighten the new boundary/recovery/process surfaces after they are assembled and re-verified.
-
 ## Validated
 
 ### R001 — IOC results render in a single-column, full-width layout replacing the current 2-column card grid. Each IOC gets the full page width for data presentation.
@@ -691,6 +667,28 @@ This file is the explicit capability and coverage contract for the project.
 - Validation: M014/S03 slice verification passed on 2026-04-25: `python3 -m pytest -q tests/test_api.py tests/test_dev_server.py tests/test_dev_server_process.py` (36 passed), `make verify-runtime-boundary`, and `make verify-fast` all exited 0; live repo-native lifecycle proof also confirmed start → /api/health healthy → crash detection → restart recovery → stop using `tools/dev_server.py` / `make dev-server-stop`.
 - Notes: A crashed local server should be detectable and restartable through the supported workflow without manual archaeology.
 
+### R065 — Workflow hardening preserves existing SentinelX verification and app behavior.
+- Class: continuity
+- Status: validated
+- Description: Workflow hardening preserves existing SentinelX verification and app behavior.
+- Why it matters: A safer local workflow that regresses the actual product or its verification contract is not a net improvement.
+- Source: inferred
+- Primary owning slice: M014/S04
+- Supporting slices: M014/S01, M014/S02, M014/S03
+- Validation: Validated in M014/S04 on 2026-04-26. Fresh slice-close proof passed after the final seam state: `python3 -m pytest -q tests/test_runtime_state_boundary.py tests/test_runtime_state_boundary_git.py tests/test_runtime_state_repair.py tests/test_runtime_state_repair_git.py tests/test_api.py tests/test_dev_server.py tests/test_dev_server_process.py` (57 passed), `make repair-runtime-state` (0 actionable repairs; `.planning/**` remained report-only/manual-review), `make verify-runtime-boundary` (blocker classes stayed at zero), live `tools/dev_server.py` start -> healthy -> forced crash -> crashed -> restart -> stop proof captured in `.gsd/milestones/M014/slices/S04/S04-LIFECYCLE-PROOF.json`, and `make verify` passed end to end (`1018` non-E2E pytest passes, `81` Vitest passes, clean TypeScript/build, `113` E2E passes).
+- Notes: S04 re-proved that local workflow hardening preserved existing SentinelX verification and the supported app/dev-server behavior while closing the runtime-state seam.
+
+### R069 — M014 ends with an explicit code review/refactor pass over the changed workflow seams.
+- Class: quality-attribute
+- Status: validated
+- Description: M014 ends with an explicit code review/refactor pass over the changed workflow seams.
+- Why it matters: Workflow hardening should close with cleanup and simplification, not just a pile of fixes that happen to pass once.
+- Source: user
+- Primary owning slice: M014/S04
+- Supporting slices: M014/S01, M014/S02, M014/S03
+- Validation: Validated in M014/S04 on 2026-04-26. `.gsd/milestones/M014/slices/S04/S04-REVIEW.md` records an explicit seam-by-seam review of `tools/runtime_state_boundary.py`, `tools/runtime_state_repair.py`, `tools/dev_server.py`, `app/routes/api.py`, focused tests, Make/docs, and the relevant ADRs. The review separated `refactor-now` from `leave-alone`, landed the minimal `app/health_contract.py` single-source refactor for `/api/health`, and explicitly preserved classifier-owned repair policy, report-only `.planning/**`, thin Make wrappers, and the single local dev-server lifecycle surface.
+- Notes: The slice closed with both a durable review artifact and fresh closure proof rather than inherited summaries.
+
 ## Deferred
 
 ### R013 — Update the input/home page to match the new design language.
@@ -803,15 +801,15 @@ This file is the explicit capability and coverage contract for the project.
 | R062 | constraint | validated | M014/S01 | M014/S02 | Validated in M014/S01 by the checked-in classifier/audit seam in `tools/runtime_state_boundary.py`, focused classifier+Git regression tests, and the supported `make verify-runtime-boundary` lane. The repo now distinguishes durable `.gsd/milestones/**` and canonical ledgers from transient `.gsd`/`.bg-shell` runtime state, while `.planning/**` remains explicit `manual-review` instead of being auto-cleaned. |
 | R063 | operability | validated | M014/S02 | M014/S01, M014/S04 | Validated in M014/S02 by shipping `tools/runtime_state_repair.py` plus `make repair-runtime-state` as the single repo-native recovery entrypoint. Fresh proof on 2026-04-25: `python3 -m pytest -q tests/test_runtime_state_repair.py` (7 passed), `python3 -m pytest -q tests/test_runtime_state_repair_git.py` (3 passed), `make repair-runtime-state` (apply-mode no-op on live repo with 0 actionable repairs, 237 visible `.planning/**` manual-review findings, 0 failures), `make verify-runtime-boundary` (focused boundary/Git lanes green; live audit clean of tracked/unignored/conflicting/unknown blockers), and `python3 tools/runtime_state_repair.py --format json` (machine-readable repair summary/report contract). |
 | R064 | operability | validated | M014/S03 | M014/S02, M014/S04 | M014/S03 slice verification passed on 2026-04-25: `python3 -m pytest -q tests/test_api.py tests/test_dev_server.py tests/test_dev_server_process.py` (36 passed), `make verify-runtime-boundary`, and `make verify-fast` all exited 0; live repo-native lifecycle proof also confirmed start → /api/health healthy → crash detection → restart recovery → stop using `tools/dev_server.py` / `make dev-server-stop`. |
-| R065 | continuity | active | M014/S04 | M014/S01, M014/S02, M014/S03 | mapped |
+| R065 | continuity | validated | M014/S04 | M014/S01, M014/S02, M014/S03 | Validated in M014/S04 on 2026-04-26. Fresh slice-close proof passed after the final seam state: `python3 -m pytest -q tests/test_runtime_state_boundary.py tests/test_runtime_state_boundary_git.py tests/test_runtime_state_repair.py tests/test_runtime_state_repair_git.py tests/test_api.py tests/test_dev_server.py tests/test_dev_server_process.py` (57 passed), `make repair-runtime-state` (0 actionable repairs; `.planning/**` remained report-only/manual-review), `make verify-runtime-boundary` (blocker classes stayed at zero), live `tools/dev_server.py` start -> healthy -> forced crash -> crashed -> restart -> stop proof captured in `.gsd/milestones/M014/slices/S04/S04-LIFECYCLE-PROOF.json`, and `make verify` passed end to end (`1018` non-E2E pytest passes, `81` Vitest passes, clean TypeScript/build, `113` E2E passes). |
 | R066 | operability | deferred | none | none | unmapped |
 | R067 | constraint | deferred | none | none | unmapped |
 | R068 | anti-feature | out-of-scope | none | none | n/a |
-| R069 | quality-attribute | active | M014/S04 | M014/S01, M014/S02, M014/S03 | mapped |
+| R069 | quality-attribute | validated | M014/S04 | M014/S01, M014/S02, M014/S03 | Validated in M014/S04 on 2026-04-26. `.gsd/milestones/M014/slices/S04/S04-REVIEW.md` records an explicit seam-by-seam review of `tools/runtime_state_boundary.py`, `tools/runtime_state_repair.py`, `tools/dev_server.py`, `app/routes/api.py`, focused tests, Make/docs, and the relevant ADRs. The review separated `refactor-now` from `leave-alone`, landed the minimal `app/health_contract.py` single-source refactor for `/api/health`, and explicitly preserved classifier-owned repair policy, report-only `.planning/**`, thin Make wrappers, and the single local dev-server lifecycle surface. |
 
 ## Coverage Summary
 
-- Active requirements: 2
-- Mapped to slices: 2
-- Validated: 62 (R001, R002, R003, R004, R005, R006, R007, R008, R009, R010, R011, R012, R014, R015, R016, R017, R018, R019, R020, R021, R022, R023, R024, R025, R026, R027, R028, R029, R030, R031, R032, R033, R035, R036, R037, R038, R039, R040, R041, R042, R043, R044, R045, R046, R047, R048, R049, R050, R051, R052, R053, R054, R055, R056, R057, R058, R059, R060, R061, R062, R063, R064)
+- Active requirements: 0
+- Mapped to slices: 0
+- Validated: 64 (R001, R002, R003, R004, R005, R006, R007, R008, R009, R010, R011, R012, R014, R015, R016, R017, R018, R019, R020, R021, R022, R023, R024, R025, R026, R027, R028, R029, R030, R031, R032, R033, R035, R036, R037, R038, R039, R040, R041, R042, R043, R044, R045, R046, R047, R048, R049, R050, R051, R052, R053, R054, R055, R056, R057, R058, R059, R060, R061, R062, R063, R064, R065, R069)
 - Unmapped active requirements: 0

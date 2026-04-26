@@ -21,7 +21,7 @@
 - [x] **S03: S03** `risk:Medium — local process management is narrower than the boundary/cleanup work, but hidden assumptions in current ad hoc startup habits could still invalidate downstream closure if not retired here.` `depends:[]`
   > After this: After this: SentinelX has one supported local dev-process path, and a crashed local server can be detected and restarted through the supported workflow instead of manual archaeology.
 
-- [ ] **S04: S04** `risk:Medium — the individual pieces may work in isolation but still compose badly; the final review/refactor pass is also easy to skip unless it is first-class scope.` `depends:[]`
+- [x] **S04: S04** `risk:Medium — the individual pieces may work in isolation but still compose badly; the final review/refactor pass is also easy to skip unless it is first-class scope.` `depends:[]`
   > After this: After this: the assembled workflow is re-proved against the original stash/conflict and crash-recovery classes, existing SentinelX verification still passes, and the changed seams get an explicit code review/refactor pass.
 
 ## Boundary Map
