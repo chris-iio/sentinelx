@@ -16,7 +16,7 @@ class IndexPage:
         self.command_card = page.locator(".command-card")
         self.card_header = page.locator(".command-card-header")
         self.hero_brand = page.locator(".index-hero-brand")
-        self.eyebrow = page.locator(".command-card-eyebrow")
+        self.eyebrow = self.card_header.locator(".command-card-eyebrow")
         self.title = page.locator(".command-card-title")
         self.subtitle = page.locator(".command-card-help")
         self.form = page.locator("#analyze-form")
@@ -36,6 +36,13 @@ class IndexPage:
         self.paste_feedback = page.locator("#paste-feedback")
         self.error_alert = page.locator(".alert-error")
         self.site_settings_link = page.locator("nav.floating-settings a[aria-label='Settings']")
+
+        # Recent analyses rail locators
+        self.recent_rail = page.locator(".recent-analyses-rail")
+        self.recent_rows = page.locator(".recent-analysis-row")
+        self.recent_empty_state = page.locator(".recent-analyses-empty")
+        self.recent_unavailable_state = page.locator(".recent-analyses-unavailable")
+        self.recent_title = page.locator("#recent-analyses-title")
 
     def goto(self) -> None:
         """Navigate to the index page."""
@@ -109,3 +116,55 @@ class IndexPage:
     def expect_submit_enabled(self) -> None:
         """Assert the submit button is enabled."""
         expect(self.submit_btn).to_be_enabled()
+
+    def recent_row(self, text: str):
+        """Return a recent-analysis row containing *text*."""
+        return self.recent_rows.filter(has_text=text)
+
+    def expect_recent_rail_visible(self) -> None:
+        """Assert the recent analyses rail shell is visible."""
+        expect(self.recent_rail).to_be_visible()
+        expect(self.recent_title).to_have_text("Recent Analyses")
+
+    def expect_recent_empty_without_rows(self) -> None:
+        """Assert empty recent-history state does not render row links."""
+        self.expect_recent_rail_visible()
+        expect(self.recent_empty_state).to_be_visible()
+        expect(self.recent_rows).to_have_count(0)
+
+    def expect_recent_unavailable_without_rows(self) -> None:
+        """Assert unavailable recent-history state does not render row links."""
+        self.expect_recent_rail_visible()
+        expect(self.recent_unavailable_state).to_be_visible()
+        expect(self.recent_rows).to_have_count(0)
+
+    def expect_desktop_command_card_dominates_recent_rail(self) -> None:
+        """Assert desktop workbench keeps the paste command card visually primary."""
+        self.expect_command_surface_visible()
+        self.expect_recent_rail_visible()
+        command_box = self.command_card.bounding_box()
+        rail_box = self.recent_rail.bounding_box()
+        assert command_box is not None
+        assert rail_box is not None
+
+        assert command_box["x"] < rail_box["x"], "Recent rail should sit after the command card on desktop"
+        assert command_box["width"] >= rail_box["width"] * 2.2, (
+            f"Command card should remain dominant, got command={command_box['width']}px "
+            f"rail={rail_box['width']}px"
+        )
+        assert abs(command_box["y"] - rail_box["y"]) <= 24, "Desktop rail should align with the command card top"
+
+    def expect_mobile_recent_rail_stacks_below_command_card(self, viewport_width: int) -> None:
+        """Assert mobile layout places recent history below the paste command card without overflow."""
+        self.expect_command_surface_visible()
+        self.expect_recent_rail_visible()
+        command_box = self.command_card.bounding_box()
+        rail_box = self.recent_rail.bounding_box()
+        assert command_box is not None
+        assert rail_box is not None
+
+        assert rail_box["y"] >= command_box["y"] + command_box["height"] - 1, (
+            "Recent rail should stack below the command card on mobile"
+        )
+        assert 0 <= rail_box["x"] <= 12
+        assert rail_box["width"] <= viewport_width

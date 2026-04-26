@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T01",
+  "unitId": "M015/S03/T01",
+  "timestamp": 1777200649179,
+  "passed": true,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "python3 -m pytest -q tests/test_index_intake_contract.py tests/test_history_routes.py::TestHistoryListRoute tests/test_routes.py::test_offline_mode_makes_no_http_calls tests/test_routes.py::test_security_headers_present",
+      "exitCode": 0,
+      "durationMs": 547,
+      "verdict": "pass"
+    }
+  ]
+}

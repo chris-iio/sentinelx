@@ -59,6 +59,7 @@ def test_desktop_command_card_hierarchy(page: Page, index_url: str) -> None:
     idx.goto()
 
     idx.expect_command_surface_visible()
+    idx.expect_desktop_command_card_dominates_recent_rail()
     card_box = idx.command_card.bounding_box()
     textarea_box = idx.textarea.bounding_box()
     title_box = idx.title.bounding_box()
@@ -78,6 +79,7 @@ def test_mobile_command_card_stacks_without_overflow(page: Page, index_url: str)
     idx.goto()
 
     idx.expect_command_surface_visible()
+    idx.expect_mobile_recent_rail_stacks_below_command_card(viewport_width=390)
     card_box = idx.command_card.bounding_box()
     textarea_box = idx.textarea.bounding_box()
     actions_box = page.locator(".form-actions").bounding_box()
@@ -175,16 +177,93 @@ def test_extract_disabled_until_text_entry(page: Page, index_url: str) -> None:
     idx.expect_submit_enabled()
 
 
-def test_no_presubmit_preview_or_recent_rail(page: Page, index_url: str) -> None:
-    """S01 index page does not introduce preview or recent-analysis rails before submit."""
+def test_recent_analyses_empty_state_keeps_intake_ready(page: Page, index_url: str) -> None:
+    """Empty live-server history shows a secondary state without blocking paste-and-extract."""
     idx = IndexPage(page, index_url.rstrip("/"))
     idx.goto()
 
-    expect(page.locator(".recent-analyses-list")).to_have_count(0)
-    expect(page.locator(".recent-analysis-row")).to_have_count(0)
+    idx.expect_command_surface_visible()
+    idx.expect_recent_empty_without_rows()
     expect(page.locator(".ioc-preview")).to_have_count(0)
     expect(page.locator(".preview-rail")).to_have_count(0)
-    expect(page.get_by_text("Recent Analyses")).to_have_count(0)
+    idx.fill_text(SYNTHETIC_IOCS)
+    idx.expect_submit_enabled()
+
+
+def test_seeded_recent_analysis_renders_resume_link(
+    page: Page,
+    index_url: str,
+    seed_recent_analysis,
+) -> None:
+    """Seeded history renders a compact row linking to /history/<id>."""
+    analysis_id = seed_recent_analysis(
+        analysis_id="e2e-homepage-resume",
+        input_text="Resume investigation for 203.0.113.10",
+    )
+    idx = IndexPage(page, index_url.rstrip("/"))
+    idx.goto()
+
+    idx.expect_recent_rail_visible()
+    expect(idx.recent_empty_state).to_have_count(0)
+    expect(idx.recent_unavailable_state).to_have_count(0)
+    expect(idx.recent_rows).to_have_count(1)
+    row = idx.recent_row("Resume investigation")
+    expect(row).to_be_visible()
+    expect(row).to_have_attribute("href", f"/history/{analysis_id}")
+
+    row.click()
+    expect(page).to_have_url(f"{index_url.rstrip('/')}/history/{analysis_id}")
+    expect(page.locator(".page-results")).to_be_visible()
+
+
+def test_seeded_recent_analysis_desktop_rail_is_secondary(
+    page: Page,
+    index_url: str,
+    seed_recent_analysis,
+) -> None:
+    """A populated desktop rail stays secondary to the paste command card."""
+    seed_recent_analysis(input_text="Desktop hierarchy check for 203.0.113.10")
+    page.set_viewport_size({"width": 1280, "height": 720})
+    idx = IndexPage(page, index_url.rstrip("/"))
+    idx.goto()
+
+    expect(idx.recent_rows).to_have_count(1)
+    idx.expect_desktop_command_card_dominates_recent_rail()
+
+
+def test_seeded_recent_analysis_mobile_stacks_below_command_card(
+    page: Page,
+    index_url: str,
+    seed_recent_analysis,
+) -> None:
+    """A populated mobile rail appears below the command card without horizontal overflow."""
+    seed_recent_analysis(input_text="Mobile stacking check for 203.0.113.10")
+    page.set_viewport_size({"width": 390, "height": 844})
+    idx = IndexPage(page, index_url.rstrip("/"))
+    idx.goto()
+
+    expect(idx.recent_rows).to_have_count(1)
+    idx.expect_mobile_recent_rail_stacks_below_command_card(viewport_width=390)
+
+
+def test_recent_analyses_unavailable_state_keeps_form_visible(
+    page: Page,
+    index_url: str,
+    e2e_history_store,
+    monkeypatch,
+) -> None:
+    """History lookup failures render an unavailable state while keeping the form usable."""
+    def fail_recent_lookup(*, limit: int = 4):
+        raise RuntimeError("synthetic e2e history failure with 203.0.113.10")
+
+    monkeypatch.setattr(e2e_history_store, "list_recent", fail_recent_lookup)
+    idx = IndexPage(page, index_url.rstrip("/"))
+    idx.goto()
+
+    idx.expect_command_surface_visible()
+    idx.expect_recent_unavailable_without_rows()
+    idx.fill_text(SYNTHETIC_IOCS)
+    idx.expect_submit_enabled()
 
 
 def test_offline_command_card_submit_reaches_results(page: Page, index_url: str) -> None:

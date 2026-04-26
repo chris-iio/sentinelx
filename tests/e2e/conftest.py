@@ -11,6 +11,7 @@ import itertools
 import socket
 import threading
 import time
+from collections.abc import Callable
 
 import pytest
 
@@ -20,13 +21,16 @@ pytest.importorskip("playwright.sync_api", reason="Playwright not installed")
 from werkzeug.serving import make_server
 
 import app.enrichment.config_store as _config_store_mod
+import app.enrichment.history_store as _history_store_mod
 import app.routes.analysis as _analysis_routes
 from app import create_app
+from app.enrichment.history_store import HistoryStore
 
 _MOCKED_ONLINE_JOB_PREFIX = "e2e-mocked-online-"
 _mocked_online_job_ids: list[str] = []
 _mocked_online_job_counter = itertools.count(1)
 _mocked_online_job_lock = threading.Lock()
+_e2e_history_store: HistoryStore | None = None
 
 
 def _clear_mocked_online_jobs() -> None:
@@ -49,6 +53,21 @@ def _consume_mocked_online_job() -> str | None:
         if not _mocked_online_job_ids:
             return None
         return _mocked_online_job_ids.pop(0)
+
+
+def _require_e2e_history_store() -> HistoryStore:
+    """Return the live-server temp HistoryStore or fail loudly if unavailable."""
+    if _e2e_history_store is None:
+        raise RuntimeError("E2E history store is not initialized; request live_server first")
+    return _e2e_history_store
+
+
+def _clear_e2e_history_store() -> None:
+    """Remove all deterministic E2E history rows without touching user history."""
+    store = _require_e2e_history_store()
+    with store._lock:  # noqa: SLF001 - test fixture intentionally resets temp DB state.
+        store._conn.execute("DELETE FROM analysis_history")  # noqa: SLF001
+        store._conn.commit()  # noqa: SLF001
 
 
 def assert_security_headers(headers: dict) -> None:
@@ -99,6 +118,16 @@ def _isolate_config(tmp_path_factory):
     _config_store_mod.CONFIG_PATH = original
 
 
+@pytest.fixture(scope="session")
+def _isolate_history(tmp_path_factory):
+    """Redirect HistoryStore to a temp DB so E2E tests never read real history."""
+    original = _history_store_mod.DEFAULT_DB_PATH
+    tmp_history = tmp_path_factory.mktemp("sentinelx-history") / "history.db"
+    _history_store_mod.DEFAULT_DB_PATH = tmp_history
+    yield tmp_history
+    _history_store_mod.DEFAULT_DB_PATH = original
+
+
 @pytest.fixture(autouse=True)
 def _reset_mocked_online_jobs():
     """Keep deterministic mocked-online submissions isolated to each test."""
@@ -107,13 +136,22 @@ def _reset_mocked_online_jobs():
     _clear_mocked_online_jobs()
 
 
+@pytest.fixture(autouse=True)
+def _reset_e2e_history(live_server):
+    """Keep live-server history deterministic and empty unless a test seeds it."""
+    _clear_e2e_history_store()
+    yield
+    _clear_e2e_history_store()
+
+
 @pytest.fixture(scope="session")
-def live_server(_isolate_config):
+def live_server(_isolate_config, _isolate_history):
     """Start SentinelX on an ephemeral port for the entire E2E session.
 
     Yields the base URL (e.g. ``http://127.0.0.1:54321``).
     The server shuts down automatically when the session ends.
     """
+    global _e2e_history_store
     real_setup_orchestrator = _analysis_routes._setup_orchestrator
 
     def _e2e_setup_orchestrator(iocs, text, mode, history_store):
@@ -126,6 +164,7 @@ def live_server(_isolate_config):
 
     port = _find_free_port()
     app = create_app({"TESTING": False, "WTF_CSRF_ENABLED": True, "RATELIMIT_ENABLED": False})
+    _e2e_history_store = app.history_store
     server = make_server("127.0.0.1", port, app)
 
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -137,6 +176,7 @@ def live_server(_isolate_config):
     finally:
         server.shutdown()
         _analysis_routes._setup_orchestrator = real_setup_orchestrator
+        _e2e_history_store = None
 
 
 @pytest.fixture(scope="session")
@@ -158,6 +198,51 @@ def index_url(live_server: str) -> str:
 def settings_url(live_server: str) -> str:
     """URL for the settings page."""
     return live_server + "/settings"
+
+
+@pytest.fixture()
+def seed_recent_analysis(live_server: str) -> Callable[..., str]:
+    """Seed one deterministic recent analysis in the live server's temp history DB."""
+    store = _require_e2e_history_store()
+
+    def _seed(
+        *,
+        analysis_id: str = "e2e-recent-analysis",
+        input_text: str = "Alert source: 203.0.113.10",
+        mode: str = "online",
+        verdict: str = "clean",
+    ) -> str:
+        iocs = [
+            {"type": "ipv4", "value": "203.0.113.10", "raw_match": "203.0.113.10"},
+        ]
+        results = [
+            {
+                "type": "result",
+                "ioc_value": "203.0.113.10",
+                "ioc_type": "ipv4",
+                "provider": "E2E Provider",
+                "verdict": verdict,
+                "detection_count": 0,
+                "total_engines": 1,
+                "scan_date": "2026-04-26T08:30:00Z",
+                "raw_stats": {},
+            },
+        ]
+        return store.save_analysis(
+            input_text=input_text,
+            mode=mode,
+            iocs=iocs,
+            results=results,
+            analysis_id=analysis_id,
+        )
+
+    return _seed
+
+
+@pytest.fixture()
+def e2e_history_store(live_server: str) -> HistoryStore:
+    """Expose the live server's temp HistoryStore for fault-injection tests."""
+    return _require_e2e_history_store()
 
 
 # ---------------------------------------------------------------------------

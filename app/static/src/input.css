@@ -298,7 +298,11 @@
     }
 
     .intake-workbench {
-        width: min(100%, 880px);
+        display: grid;
+        grid-template-columns: minmax(760px, 1fr) minmax(260px, 320px);
+        align-items: start;
+        gap: clamp(1rem, 2.6vw, 1.75rem);
+        width: min(100%, 1160px);
     }
 
     .command-card,
@@ -376,6 +380,62 @@
         font-size: clamp(1rem, 1.7vw, 1.15rem);
         line-height: 1.65;
         text-wrap: pretty;
+    }
+
+    .recent-analyses-rail {
+        position: relative;
+        display: grid;
+        gap: 0.85rem;
+        min-width: 0;
+        padding: 1rem;
+        overflow: hidden;
+        background:
+            linear-gradient(180deg, rgba(24, 24, 27, 0.82), rgba(15, 23, 32, 0.74)),
+            var(--bg-secondary);
+        border: 1px solid rgba(255, 255, 255, 0.075);
+        border-radius: 22px;
+        box-shadow:
+            0 18px 48px rgba(0, 0, 0, 0.34),
+            0 1px 0 rgba(255, 255, 255, 0.055) inset;
+        animation: fadeSlideUp var(--duration-slow) var(--ease-out-expo) both;
+        animation-delay: 160ms;
+    }
+
+    .recent-analyses-rail::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background: radial-gradient(circle at 18% 0%, rgba(56, 189, 248, 0.09), transparent 13rem);
+        opacity: 0.7;
+    }
+
+    .recent-analyses-header {
+        position: relative;
+        display: grid;
+        gap: 0.2rem;
+    }
+
+    .recent-analyses-header h2 {
+        color: var(--text-primary);
+        font-size: 1rem;
+        font-weight: 720;
+        letter-spacing: -0.025em;
+        line-height: 1.15;
+        text-wrap: balance;
+    }
+
+    .recent-analyses-empty,
+    .recent-analyses-unavailable {
+        position: relative;
+        color: var(--text-secondary);
+        font-size: 0.86rem;
+        line-height: 1.55;
+        text-wrap: pretty;
+    }
+
+    .recent-analyses-unavailable {
+        color: #fcd34d;
     }
 
     /* ---- Alert ---- */
@@ -2049,7 +2109,18 @@
         }
 
         .intake-workbench {
+            grid-template-columns: 1fr;
             width: 100%;
+        }
+
+        .recent-analyses-rail {
+            order: 2;
+            border-radius: 20px;
+            padding: 0.9rem;
+        }
+
+        .recent-analyses-rail .recent-analysis-row {
+            min-height: 3.4rem;
         }
 
         .command-card,
@@ -2139,9 +2210,10 @@
         }
     }
 
-    /* ---- Recent analyses list (history page) ---- */
+    /* ---- Recent analyses list (history + intake rail) ---- */
 
     .recent-analyses-list {
+        position: relative;
         display: flex;
         flex-direction: column;
         gap: 0;
@@ -2151,27 +2223,37 @@
     }
 
     .recent-analysis-row {
+        position: relative;
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: 1rem;
+        min-height: 2.75rem;
         padding: 0.6rem 1rem;
         background-color: var(--bg-secondary);
         border-bottom: 1px solid var(--border);
         text-decoration: none;
         color: inherit;
-        transition: background-color var(--duration-fast) var(--ease-out-quart);
+        transition:
+            background-color var(--duration-fast) var(--ease-out-quart),
+            transform var(--duration-fast) var(--ease-out-quart),
+            border-color var(--duration-fast) var(--ease-out-quart);
     }
 
     .recent-analysis-row:last-child {
         border-bottom: none;
     }
 
-    .recent-analysis-row:hover {
+    a.recent-analysis-row:hover {
         background-color: var(--bg-tertiary);
     }
 
-    .recent-analysis-text {
+    a.recent-analysis-row:active {
+        transform: scale(0.99);
+    }
+
+    .recent-analysis-text,
+    .recent-analysis-summary {
         font-family: var(--font-mono);
         font-size: 0.8rem;
         color: var(--text-primary);
@@ -2193,12 +2275,92 @@
         font-size: 0.75rem;
         color: var(--text-secondary);
         white-space: nowrap;
+        font-variant-numeric: tabular-nums;
     }
 
-    .recent-analysis-time {
+    .recent-analysis-time,
+    .recent-analysis-created,
+    .recent-analysis-verdict,
+    .recent-analysis-mode {
         font-size: 0.7rem;
         color: var(--text-muted);
         white-space: nowrap;
+    }
+
+    .recent-analyses-rail .recent-analyses-list {
+        border-color: rgba(255, 255, 255, 0.06);
+        border-radius: 16px;
+        background: rgba(9, 9, 11, 0.22);
+        box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset;
+    }
+
+    .recent-analyses-rail .recent-analysis-row {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 0.35rem;
+        min-height: 4rem;
+        padding: 0.78rem 0.85rem;
+        background-color: rgba(24, 24, 27, 0.62);
+    }
+
+    .recent-analyses-rail a.recent-analysis-row:hover {
+        background-color: rgba(39, 39, 42, 0.78);
+        border-color: rgba(125, 211, 252, 0.12);
+    }
+
+    .recent-analyses-rail .recent-analysis-summary {
+        width: 100%;
+        line-height: 1.35;
+    }
+
+    .recent-analyses-rail .recent-analysis-meta {
+        width: 100%;
+        flex-wrap: wrap;
+        gap: 0.3rem 0.5rem;
+        color: var(--text-muted);
+    }
+
+    .recent-analyses-rail .recent-analysis-count,
+    .recent-analyses-rail .recent-analysis-verdict,
+    .recent-analyses-rail .recent-analysis-mode {
+        display: inline-flex;
+        align-items: center;
+        min-height: 1.35rem;
+        border-radius: 999px;
+        padding: 0.12rem 0.45rem;
+        background: rgba(255, 255, 255, 0.045);
+        color: var(--text-secondary);
+        font-family: var(--font-mono);
+        font-size: 0.66rem;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+    }
+
+    .recent-analyses-rail .recent-analysis-created {
+        width: 100%;
+        font-family: var(--font-mono);
+        font-variant-numeric: tabular-nums;
+    }
+
+    @media (max-width: 900px) {
+        .intake-workbench {
+            grid-template-columns: 1fr;
+        }
+
+        .recent-analyses-rail {
+            order: 2;
+        }
+    }
+
+    @media (max-width: 640px) {
+        .recent-analysis-row,
+        .recent-analyses-rail .recent-analysis-row {
+            padding: 0.75rem;
+        }
+
+        .recent-analysis-meta {
+            flex-wrap: wrap;
+        }
     }
 
     /* ---- Autofill override for dark inputs ---- */
