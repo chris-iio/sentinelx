@@ -23,7 +23,7 @@
 - [x] **S03: S03** `risk:High — this is the only slice that adds a data dependency to `/`, and it must not make history availability a prerequisite for intake.` `depends:[]`
   > After this: The intake page shows a compact recent-analysis rail/list when history exists, links into `/history/<id>`, and still renders the paste form if history listing fails.
 
-- [ ] **S04: S04** `risk:Medium — individual pieces are straightforward, but composition can still regress responsive layout, accessibility, or existing E2E coverage.` `depends:[]`
+- [x] **S04: S04** `risk:Medium — individual pieces are straightforward, but composition can still regress responsive layout, accessibility, or existing E2E coverage.` `depends:[]`
   > After this: The assembled intake workbench is verified on desktop/mobile, fast paste-to-results still works, history resume works, and existing SentinelX verification remains green.
 
 ## Boundary Map

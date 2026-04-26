@@ -2,52 +2,6 @@
 
 This file is the explicit capability and coverage contract for the project.
 
-## Active
-
-### R070 — The home page functions as a fast analyst intake workbench, with a dominant paste-and-submit command surface rather than a generic textarea-only page.
-- Class: primary-user-loop
-- Status: active
-- Description: The home page functions as a fast analyst intake workbench, with a dominant paste-and-submit command surface rather than a generic textarea-only page.
-- Why it matters: The rest of SentinelX is mature, but the front door still feels thin compared with the results/detail surfaces.
-- Source: user
-- Primary owning slice: M015/S01
-- Supporting slices: M015/S04
-- Validation: mapped to M015/S01 and final integrated proof
-- Notes: The user emphasized "go fast"; this must remain a command surface, not a dashboard.
-
-### R071 — The primary paste-to-results flow remains unchanged: paste IOC text, choose Offline or Online mode, click Extract, and reach the existing results flow.
-- Class: continuity
-- Status: active
-- Description: The primary paste-to-results flow remains unchanged: paste IOC text, choose Offline or Online mode, click Extract, and reach the existing results flow.
-- Why it matters: A redesign that slows or changes the core analyst loop would violate the user's fast-intake direction.
-- Source: user
-- Primary owning slice: M015/S01
-- Supporting slices: M015/S02, M015/S04
-- Validation: mapped to M015/S01/S02/S04 browser proof
-- Notes: No pre-submit extraction preview or extra staging step should be inserted.
-
-### R075 — The intake page uses a command-card plus compact recent rail layout that works on desktop and stacks cleanly on mobile.
-- Class: quality-attribute
-- Status: active
-- Description: The intake page uses a command-card plus compact recent rail layout that works on desktop and stacks cleanly on mobile.
-- Why it matters: The layout must support the fast-intake mental model across common viewport sizes.
-- Source: inferred
-- Primary owning slice: M015/S01
-- Supporting slices: M015/S03, M015/S04
-- Validation: mapped to M015/S01/S04 responsive browser proof
-- Notes: Desktop should keep recent history as a secondary rail; mobile should stack without hiding the primary form.
-
-### R076 — Existing extraction, enrichment, history reload, CSRF/security headers, TypeScript build, and E2E behavior remain intact after the intake redesign.
-- Class: continuity
-- Status: active
-- Description: Existing extraction, enrichment, history reload, CSRF/security headers, TypeScript build, and E2E behavior remain intact after the intake redesign.
-- Why it matters: This is a front-door redesign, not a behavior rewrite; current SentinelX capabilities must not regress.
-- Source: inferred
-- Primary owning slice: M015/S04
-- Supporting slices: M015/S01, M015/S02, M015/S03
-- Validation: mapped to M015/S04 final integrated verification
-- Notes: Final proof should include focused backend tests, relevant E2E tests, make verify-fast, and full make verify.
-
 ## Validated
 
 ### R001 — IOC results render in a single-column, full-width layout replacing the current 2-column card grid. Each IOC gets the full page width for data presentation.
@@ -746,6 +700,28 @@ This file is the explicit capability and coverage contract for the project.
 - Validation: Validated in M014/S04 on 2026-04-26. `.gsd/milestones/M014/slices/S04/S04-REVIEW.md` records an explicit seam-by-seam review of `tools/runtime_state_boundary.py`, `tools/runtime_state_repair.py`, `tools/dev_server.py`, `app/routes/api.py`, focused tests, Make/docs, and the relevant ADRs. The review separated `refactor-now` from `leave-alone`, landed the minimal `app/health_contract.py` single-source refactor for `/api/health`, and explicitly preserved classifier-owned repair policy, report-only `.planning/**`, thin Make wrappers, and the single local dev-server lifecycle surface.
 - Notes: The slice closed with both a durable review artifact and fresh closure proof rather than inherited summaries.
 
+### R070 — The home page functions as a fast analyst intake workbench, with a dominant paste-and-submit command surface rather than a generic textarea-only page.
+- Class: primary-user-loop
+- Status: validated
+- Description: The home page functions as a fast analyst intake workbench, with a dominant paste-and-submit command surface rather than a generic textarea-only page.
+- Why it matters: The rest of SentinelX is mature, but the front door still feels thin compared with the results/detail surfaces.
+- Source: user
+- Primary owning slice: M015/S01
+- Supporting slices: M015/S04
+- Validation: M015/S04 final integrated proof validated the home page as a fast analyst intake workbench: route contract passed 27 checks, focused Playwright assembly passed 34 tests, `make verify-fast` passed 1026 pytest + 87 Vitest + TypeScript + build, and full E2E passed 125 tests. Proof covers stable paste form, clarified mode state, submit enablement, secondary Recent Analyses rail, no preview surfaces, and fail-open history behavior.
+- Notes: The user emphasized "go fast"; this must remain a command surface, not a dashboard.
+
+### R071 — The primary paste-to-results flow remains unchanged: paste IOC text, choose Offline or Online mode, click Extract, and reach the existing results flow.
+- Class: continuity
+- Status: validated
+- Description: The primary paste-to-results flow remains unchanged: paste IOC text, choose Offline or Online mode, click Extract, and reach the existing results flow.
+- Why it matters: A redesign that slows or changes the core analyst loop would violate the user's fast-intake direction.
+- Source: user
+- Primary owning slice: M015/S01
+- Supporting slices: M015/S02, M015/S04
+- Validation: M015/S04 re-proved the primary paste → default Offline mode → Extract → results flow in the final assembled command-card plus recent-rail layout. Fresh verification passed the focused homepage/UI/offline lane (34 tests), `make verify-fast`, and full Playwright E2E (125 tests), including an assertion that Offline extraction reaches `.page-results` without enrichment polling.
+- Notes: No pre-submit extraction preview or extra staging step should be inserted.
+
 ### R072 — Offline and Online mode choice is clearer visually and textually while preserving the existing hidden `mode` form contract and submit behavior.
 - Class: quality-attribute
 - Status: validated
@@ -778,6 +754,28 @@ This file is the explicit capability and coverage contract for the project.
 - Supporting slices: M015/S04
 - Validation: M015/S03 proved history listing is fail-open: route tests cover `list_recent` exceptions with sanitized warning logging, preserved status 200, preserved CSRF and stable paste form selectors, quiet unavailable state, and offline no-HTTP behavior; browser tests cover empty/unavailable states with form visibility and submit enablement. Fresh slice verification passed (`make build`, `npx tsc --noEmit`, route/history/security tests: 18 passed, focused E2E homepage/extraction tests: 22 passed).
 - Notes: No retry loop, async recovery UI, or blocking alert for history failures in M015.
+
+### R075 — The intake page uses a command-card plus compact recent rail layout that works on desktop and stacks cleanly on mobile.
+- Class: quality-attribute
+- Status: validated
+- Description: The intake page uses a command-card plus compact recent rail layout that works on desktop and stacks cleanly on mobile.
+- Why it matters: The layout must support the fast-intake mental model across common viewport sizes.
+- Source: inferred
+- Primary owning slice: M015/S01
+- Supporting slices: M015/S03, M015/S04
+- Validation: M015/S04 validated desktop and mobile command-card plus compact recent rail behavior. Playwright assertions prove the command card remains visually dominant on desktop, the populated recent rail stays secondary, mobile stacks the rail below the command card, and the page has no horizontal overflow at 390px; all focused and full browser lanes passed.
+- Notes: Desktop should keep recent history as a secondary rail; mobile should stack without hiding the primary form.
+
+### R076 — Existing extraction, enrichment, history reload, CSRF/security headers, TypeScript build, and E2E behavior remain intact after the intake redesign.
+- Class: continuity
+- Status: validated
+- Description: Existing extraction, enrichment, history reload, CSRF/security headers, TypeScript build, and E2E behavior remain intact after the intake redesign.
+- Why it matters: This is a front-door redesign, not a behavior rewrite; current SentinelX capabilities must not regress.
+- Source: inferred
+- Primary owning slice: M015/S04
+- Supporting slices: M015/S01, M015/S02, M015/S03
+- Validation: M015/S04 final regression proof passed after the intake redesign: route/security/history command passed 27 tests, focused browser assembly passed 34 tests, `make verify-fast` passed 1026 non-E2E pytest tests, 87 Vitest tests, TypeScript, and generated asset build, and the full E2E suite passed 125 tests. Fresh milestone-close verification re-ran `make verify-fast` successfully with 1026 pytest + 87 Vitest + TypeScript + build. Coverage preserved extraction, offline no-HTTP behavior, online no-provider guard, history reload/resume, CSRF/security headers, TypeScript/build, generated assets, and E2E behavior.
+- Notes: Final proof should include focused backend tests, relevant E2E tests, make verify-fast, and full make verify.
 
 ## Deferred
 
@@ -951,13 +949,13 @@ This file is the explicit capability and coverage contract for the project.
 | R067 | constraint | deferred | none | none | unmapped |
 | R068 | anti-feature | out-of-scope | none | none | n/a |
 | R069 | quality-attribute | validated | M014/S04 | M014/S01, M014/S02, M014/S03 | Validated in M014/S04 on 2026-04-26. `.gsd/milestones/M014/slices/S04/S04-REVIEW.md` records an explicit seam-by-seam review of `tools/runtime_state_boundary.py`, `tools/runtime_state_repair.py`, `tools/dev_server.py`, `app/routes/api.py`, focused tests, Make/docs, and the relevant ADRs. The review separated `refactor-now` from `leave-alone`, landed the minimal `app/health_contract.py` single-source refactor for `/api/health`, and explicitly preserved classifier-owned repair policy, report-only `.planning/**`, thin Make wrappers, and the single local dev-server lifecycle surface. |
-| R070 | primary-user-loop | active | M015/S01 | M015/S04 | mapped to M015/S01 and final integrated proof |
-| R071 | continuity | active | M015/S01 | M015/S02, M015/S04 | mapped to M015/S01/S02/S04 browser proof |
+| R070 | primary-user-loop | validated | M015/S01 | M015/S04 | M015/S04 final integrated proof validated the home page as a fast analyst intake workbench: route contract passed 27 checks, focused Playwright assembly passed 34 tests, `make verify-fast` passed 1026 pytest + 87 Vitest + TypeScript + build, and full E2E passed 125 tests. Proof covers stable paste form, clarified mode state, submit enablement, secondary Recent Analyses rail, no preview surfaces, and fail-open history behavior. |
+| R071 | continuity | validated | M015/S01 | M015/S02, M015/S04 | M015/S04 re-proved the primary paste → default Offline mode → Extract → results flow in the final assembled command-card plus recent-rail layout. Fresh verification passed the focused homepage/UI/offline lane (34 tests), `make verify-fast`, and full Playwright E2E (125 tests), including an assertion that Offline extraction reaches `.page-results` without enrichment polling. |
 | R072 | quality-attribute | validated | M015/S02 | M015/S04 | M015/S02 delivered and verified the clarified Offline/Online mode UI while preserving hidden `#mode-input name="mode"` submit semantics: `python3 -m pytest -q tests/test_index_intake_contract.py ...` passed 4 contract/route checks, `npx vitest run app/static/src/ts/modules/form.test.ts` passed 6 form-module tests, `npx tsc --noEmit` exited 0, `make build` regenerated assets successfully, and focused Playwright checks passed 16/16 across mode UI controls, default offline behavior, offline extraction, and online mode indication. |
 | R073 | primary-user-loop | validated | M015/S03 | M015/S04 | M015/S03 delivered the compact server-rendered Recent Analyses rail on `/`: GET `/` performs one bounded `HistoryStore.list_recent(limit=4)` read, renders linked `.recent-analysis-row` entries with `url_for('main.history_detail', analysis_id=...)`, keeps the rail visually secondary on desktop and stacked below the command card on mobile, and passed fresh slice proof (`make build`, `npx tsc --noEmit`, route/history/security tests: 18 passed, and focused E2E homepage/extraction tests: 22 passed). |
 | R074 | failure-visibility | validated | M015/S03 | M015/S04 | M015/S03 proved history listing is fail-open: route tests cover `list_recent` exceptions with sanitized warning logging, preserved status 200, preserved CSRF and stable paste form selectors, quiet unavailable state, and offline no-HTTP behavior; browser tests cover empty/unavailable states with form visibility and submit enablement. Fresh slice verification passed (`make build`, `npx tsc --noEmit`, route/history/security tests: 18 passed, focused E2E homepage/extraction tests: 22 passed). |
-| R075 | quality-attribute | active | M015/S01 | M015/S03, M015/S04 | mapped to M015/S01/S04 responsive browser proof |
-| R076 | continuity | active | M015/S04 | M015/S01, M015/S02, M015/S03 | mapped to M015/S04 final integrated verification |
+| R075 | quality-attribute | validated | M015/S01 | M015/S03, M015/S04 | M015/S04 validated desktop and mobile command-card plus compact recent rail behavior. Playwright assertions prove the command card remains visually dominant on desktop, the populated recent rail stays secondary, mobile stacks the rail below the command card, and the page has no horizontal overflow at 390px; all focused and full browser lanes passed. |
+| R076 | continuity | validated | M015/S04 | M015/S01, M015/S02, M015/S03 | M015/S04 final regression proof passed after the intake redesign: route/security/history command passed 27 tests, focused browser assembly passed 34 tests, `make verify-fast` passed 1026 non-E2E pytest tests, 87 Vitest tests, TypeScript, and generated asset build, and the full E2E suite passed 125 tests. Fresh milestone-close verification re-ran `make verify-fast` successfully with 1026 pytest + 87 Vitest + TypeScript + build. Coverage preserved extraction, offline no-HTTP behavior, online no-provider guard, history reload/resume, CSRF/security headers, TypeScript/build, generated assets, and E2E behavior. |
 | R077 | deferred | deferred | none | none | unmapped |
 | R078 | deferred | deferred | none | none | unmapped |
 | R079 | deferred | deferred | none | none | unmapped |
@@ -967,7 +965,7 @@ This file is the explicit capability and coverage contract for the project.
 
 ## Coverage Summary
 
-- Active requirements: 4
-- Mapped to slices: 4
-- Validated: 68 (R001, R002, R003, R004, R005, R006, R007, R008, R009, R010, R011, R012, R013, R014, R015, R016, R017, R018, R019, R020, R021, R022, R023, R024, R025, R026, R027, R028, R029, R030, R031, R032, R033, R035, R036, R037, R038, R039, R040, R041, R042, R043, R044, R045, R046, R047, R048, R049, R050, R051, R052, R053, R054, R055, R056, R057, R058, R059, R060, R061, R062, R063, R064, R065, R069, R072, R073, R074)
+- Active requirements: 0
+- Mapped to slices: 0
+- Validated: 72 (R001, R002, R003, R004, R005, R006, R007, R008, R009, R010, R011, R012, R013, R014, R015, R016, R017, R018, R019, R020, R021, R022, R023, R024, R025, R026, R027, R028, R029, R030, R031, R032, R033, R035, R036, R037, R038, R039, R040, R041, R042, R043, R044, R045, R046, R047, R048, R049, R050, R051, R052, R053, R054, R055, R056, R057, R058, R059, R060, R061, R062, R063, R064, R065, R069, R070, R071, R072, R073, R074, R075, R076)
 - Unmapped active requirements: 0
