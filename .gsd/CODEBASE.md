@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-04-25T22:58:21Z | Files: 173 | Described: 0/173
-<!-- gsd:codebase-meta {"generatedAt":"2026-04-25T22:58:21Z","fingerprint":"f4bef7e838bf7373a89bca085e5b466bf4f3a075","fileCount":173,"truncated":false} -->
+Generated: 2026-04-26T01:06:03Z | Files: 174 | Described: 0/174
+<!-- gsd:codebase-meta {"generatedAt":"2026-04-26T01:06:03Z","fingerprint":"e649c9db680a4c17ebc5ed06994afe36c8477c50","fileCount":174,"truncated":false} -->
 
 ### (root)/
 - `.codex`
@@ -25,6 +25,7 @@ Generated: 2026-04-25T22:58:21Z | Files: 173 | Described: 0/173
 ### app/
 - `app/__init__.py`
 - `app/config.py`
+- `app/health_contract.py`
 
 ### app/cache/
 - `app/cache/__init__.py`

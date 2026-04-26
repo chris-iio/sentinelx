@@ -1,0 +1,256 @@
+{
+  "captured_at": "2026-04-26T01:17:50Z",
+  "expected_health_payload": {
+    "ready": true,
+    "service": "sentinelx",
+    "status": "ok"
+  },
+  "health_path": "/api/health",
+  "port": 59655,
+  "repo_root": "/home/chris/projects/sentinelx",
+  "steps": [
+    {
+      "args": [
+        "status",
+        "--format",
+        "json"
+      ],
+      "command": "/usr/bin/python3 /home/chris/projects/sentinelx/tools/dev_server.py status --format json",
+      "duration_ms": 132,
+      "exit_code": 0,
+      "name": "baseline_status",
+      "started_at": "2026-04-26T01:17:50Z",
+      "stderr": "",
+      "stdout": {
+        "host": "127.0.0.1",
+        "last_failure_at": "2026-04-25T12:11:32Z",
+        "last_failure_reason": "Managed child pid 152297 is no longer running. Health probe refused connection.",
+        "log_path": ".gsd/runtime/dev-server/logs/dev-server-127.0.0.1-35119-20260425T121132Z.log",
+        "pid": null,
+        "port": 35119,
+        "probe": {
+          "checked_at": "2026-04-26T01:17:50Z",
+          "detail": "connection refused",
+          "http_status": null,
+          "status": "refused",
+          "url": "http://127.0.0.1:35119/api/health"
+        },
+        "restart_count": 1,
+        "started_at": "2026-04-25T12:11:32Z",
+        "status": "stopped",
+        "status_path": ".gsd/runtime/dev-server/status.json",
+        "updated_at": "2026-04-26T01:17:50Z"
+      }
+    },
+    {
+      "args": [
+        "stop",
+        "--format",
+        "json"
+      ],
+      "command": "/usr/bin/python3 /home/chris/projects/sentinelx/tools/dev_server.py stop --format json",
+      "duration_ms": 120,
+      "exit_code": 0,
+      "name": "preflight_stop",
+      "started_at": "2026-04-26T01:17:50Z",
+      "stderr": "",
+      "stdout": {
+        "host": "127.0.0.1",
+        "last_failure_at": "2026-04-25T12:11:32Z",
+        "last_failure_reason": "Managed child pid 152297 is no longer running. Health probe refused connection.",
+        "log_path": ".gsd/runtime/dev-server/logs/dev-server-127.0.0.1-35119-20260425T121132Z.log",
+        "pid": null,
+        "port": 35119,
+        "probe": {
+          "checked_at": "2026-04-26T01:17:50Z",
+          "detail": "connection refused",
+          "http_status": null,
+          "status": "refused",
+          "url": "http://127.0.0.1:35119/api/health"
+        },
+        "restart_count": 1,
+        "started_at": "2026-04-25T12:11:32Z",
+        "status": "stopped",
+        "status_path": ".gsd/runtime/dev-server/status.json",
+        "updated_at": "2026-04-26T01:17:50Z"
+      }
+    },
+    {
+      "args": [
+        "start",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "59655",
+        "--format",
+        "json"
+      ],
+      "command": "/usr/bin/python3 /home/chris/projects/sentinelx/tools/dev_server.py start --host 127.0.0.1 --port 59655 --format json",
+      "duration_ms": 535,
+      "exit_code": 0,
+      "name": "start",
+      "started_at": "2026-04-26T01:17:50Z",
+      "stderr": "",
+      "stdout": {
+        "host": "127.0.0.1",
+        "last_failure_at": "2026-04-25T12:11:32Z",
+        "last_failure_reason": "Managed child pid 152297 is no longer running. Health probe refused connection.",
+        "log_path": ".gsd/runtime/dev-server/logs/dev-server-127.0.0.1-59655-20260426T011750Z.log",
+        "pid": 175879,
+        "port": 59655,
+        "probe": {
+          "checked_at": "2026-04-26T01:17:51Z",
+          "detail": null,
+          "http_status": 200,
+          "status": "healthy",
+          "url": "http://127.0.0.1:59655/api/health"
+        },
+        "restart_count": 1,
+        "started_at": "2026-04-26T01:17:50Z",
+        "status": "running",
+        "status_path": ".gsd/runtime/dev-server/status.json",
+        "updated_at": "2026-04-26T01:17:51Z"
+      }
+    },
+    {
+      "checked_at": "2026-04-26T01:17:51Z",
+      "duration_ms": 2,
+      "http_status": 200,
+      "name": "health_after_start",
+      "payload": {
+        "ready": true,
+        "service": "sentinelx",
+        "status": "ok"
+      },
+      "url": "http://127.0.0.1:59655/api/health"
+    },
+    {
+      "at": "2026-04-26T01:17:51Z",
+      "name": "kill_child",
+      "pid": 175879,
+      "signal": "SIGKILL"
+    },
+    {
+      "args": [
+        "status",
+        "--format",
+        "json"
+      ],
+      "attempt_count": 1,
+      "command": "/usr/bin/python3 /home/chris/projects/sentinelx/tools/dev_server.py status --format json",
+      "duration_ms": 123,
+      "exit_code": 0,
+      "name": "wait_for_crashed",
+      "started_at": "2026-04-26T01:17:51Z",
+      "stderr": "",
+      "stdout": {
+        "host": "127.0.0.1",
+        "last_failure_at": "2026-04-26T01:17:51Z",
+        "last_failure_reason": "Managed child pid 175879 is no longer running. Health probe refused connection.",
+        "log_path": ".gsd/runtime/dev-server/logs/dev-server-127.0.0.1-59655-20260426T011750Z.log",
+        "pid": 175879,
+        "port": 59655,
+        "probe": {
+          "checked_at": "2026-04-26T01:17:51Z",
+          "detail": "connection refused",
+          "http_status": null,
+          "status": "refused",
+          "url": "http://127.0.0.1:59655/api/health"
+        },
+        "restart_count": 1,
+        "started_at": "2026-04-26T01:17:50Z",
+        "status": "crashed",
+        "status_path": ".gsd/runtime/dev-server/status.json",
+        "updated_at": "2026-04-26T01:17:51Z"
+      }
+    },
+    {
+      "args": [
+        "restart",
+        "--format",
+        "json"
+      ],
+      "command": "/usr/bin/python3 /home/chris/projects/sentinelx/tools/dev_server.py restart --format json",
+      "duration_ms": 319,
+      "exit_code": 0,
+      "name": "restart",
+      "started_at": "2026-04-26T01:17:51Z",
+      "stderr": "",
+      "stdout": {
+        "host": "127.0.0.1",
+        "last_failure_at": "2026-04-26T01:17:51Z",
+        "last_failure_reason": "Managed child pid 175879 is no longer running. Health probe refused connection.",
+        "log_path": ".gsd/runtime/dev-server/logs/dev-server-127.0.0.1-59655-20260426T011751Z.log",
+        "pid": 175887,
+        "port": 59655,
+        "probe": {
+          "checked_at": "2026-04-26T01:17:51Z",
+          "detail": null,
+          "http_status": 200,
+          "status": "healthy",
+          "url": "http://127.0.0.1:59655/api/health"
+        },
+        "restart_count": 2,
+        "started_at": "2026-04-26T01:17:51Z",
+        "status": "running",
+        "status_path": ".gsd/runtime/dev-server/status.json",
+        "updated_at": "2026-04-26T01:17:51Z"
+      }
+    },
+    {
+      "checked_at": "2026-04-26T01:17:51Z",
+      "duration_ms": 1,
+      "http_status": 200,
+      "name": "health_after_restart",
+      "payload": {
+        "ready": true,
+        "service": "sentinelx",
+        "status": "ok"
+      },
+      "url": "http://127.0.0.1:59655/api/health"
+    },
+    {
+      "args": [
+        "stop",
+        "--format",
+        "json"
+      ],
+      "command": "/usr/bin/python3 /home/chris/projects/sentinelx/tools/dev_server.py stop --format json",
+      "duration_ms": 166,
+      "exit_code": 0,
+      "name": "stop",
+      "started_at": "2026-04-26T01:17:51Z",
+      "stderr": "",
+      "stdout": {
+        "host": "127.0.0.1",
+        "last_failure_at": "2026-04-26T01:17:51Z",
+        "last_failure_reason": "Managed child pid 175879 is no longer running. Health probe refused connection.",
+        "log_path": ".gsd/runtime/dev-server/logs/dev-server-127.0.0.1-59655-20260426T011751Z.log",
+        "pid": null,
+        "port": 59655,
+        "probe": {
+          "checked_at": "2026-04-26T01:17:51Z",
+          "detail": "connection refused",
+          "http_status": null,
+          "status": "refused",
+          "url": "http://127.0.0.1:59655/api/health"
+        },
+        "restart_count": 2,
+        "started_at": "2026-04-26T01:17:51Z",
+        "status": "stopped",
+        "status_path": ".gsd/runtime/dev-server/status.json",
+        "updated_at": "2026-04-26T01:17:51Z"
+      }
+    }
+  ],
+  "summary": {
+    "crash_probe_status": "refused",
+    "last_failure_reason": "Managed child pid 175879 is no longer running. Health probe refused connection.",
+    "log_path": ".gsd/runtime/dev-server/logs/dev-server-127.0.0.1-59655-20260426T011751Z.log",
+    "restart_count_after": 2,
+    "restart_count_before": 1,
+    "status": "passed",
+    "status_path": ".gsd/runtime/dev-server/status.json",
+    "stop_probe_status": "refused"
+  }
+}

@@ -103,7 +103,7 @@ rg -n "refactor-now|leave-alone|health contract|classifier-owned" .gsd/milestone
   - Verify: python3 -m pytest -q tests/test_api.py tests/test_dev_server.py tests/test_dev_server_process.py
 python3 -m pytest -q tests/test_runtime_state_boundary.py tests/test_runtime_state_repair.py
 
-- [ ] **T03: Re-prove the assembled workflow and capture closure evidence** `est:0.75d`
+- [x] **T03: Re-prove the assembled workflow and capture closure evidence** `est:0.75d`
   Load `verify-before-complete` before claiming the slice is done. After the last edit from T02, rerun the focused workflow proof surface, exercise the supported repair and dev-server commands on the live repo, and finish with the full repository verification lane. Capture both a machine-readable lifecycle transcript and a narrative closure artifact so S04 closes on fresh evidence instead of inherited summaries.
 
 ## Failure Modes
