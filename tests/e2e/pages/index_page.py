@@ -1,6 +1,6 @@
 """Page Object Model for the SentinelX index (paste form) page."""
 
-from playwright.sync_api import Page, expect
+from playwright.sync_api import Locator, Page, expect
 
 
 class IndexPage:
@@ -109,6 +109,38 @@ class IndexPage:
         expect(self.clear_btn).to_be_visible()
         expect(self.submit_btn).to_be_visible()
 
+    def expect_no_preview_surfaces(self) -> None:
+        """Assert pre-submit preview/results surfaces are absent from the intake workbench."""
+        expect(self.page.locator(".ioc-preview")).to_have_count(0)
+        expect(self.page.locator(".preview-rail")).to_have_count(0)
+        expect(self.page.locator(".page-results")).to_have_count(0)
+
+    def expect_integrated_workbench_ready(self, mode: str = "offline") -> None:
+        """Assert the assembled intake workbench is visible, synchronized, and diagnostic-ready."""
+        self.expect_command_surface_visible()
+        self.expect_mode(mode)
+        self.expect_recent_rail_visible()
+        self.expect_no_preview_surfaces()
+
+    def expect_no_horizontal_overflow(self, *, tolerance_px: int = 1) -> None:
+        """Assert the document does not create horizontal scroll at the current viewport."""
+        viewport = self.page.evaluate(
+            """() => {
+                const scrolling = document.scrollingElement || document.documentElement;
+                return {
+                    clientWidth: document.documentElement.clientWidth,
+                    scrollWidth: scrolling.scrollWidth,
+                    bodyScrollWidth: document.body.scrollWidth,
+                };
+            }"""
+        )
+        max_scroll_width = max(viewport["scrollWidth"], viewport["bodyScrollWidth"])
+        assert max_scroll_width <= viewport["clientWidth"] + tolerance_px, (
+            "Workbench should not create horizontal overflow: "
+            f"clientWidth={viewport['clientWidth']}px scrollWidth={viewport['scrollWidth']}px "
+            f"bodyScrollWidth={viewport['bodyScrollWidth']}px"
+        )
+
     def expect_submit_disabled(self) -> None:
         """Assert the submit button is disabled."""
         expect(self.submit_btn).to_be_disabled()
@@ -117,9 +149,16 @@ class IndexPage:
         """Assert the submit button is enabled."""
         expect(self.submit_btn).to_be_enabled()
 
-    def recent_row(self, text: str):
+    def recent_row(self, text: str) -> Locator:
         """Return a recent-analysis row containing *text*."""
         return self.recent_rows.filter(has_text=text)
+
+    def expect_recent_resume_link(self, text: str, href: str) -> Locator:
+        """Assert a recent-analysis row exists for *text* and links to *href*."""
+        row = self.recent_row(text)
+        expect(row).to_be_visible()
+        expect(row).to_have_attribute("href", href)
+        return row
 
     def expect_recent_rail_visible(self) -> None:
         """Assert the recent analyses rail shell is visible."""
@@ -168,3 +207,4 @@ class IndexPage:
         )
         assert 0 <= rail_box["x"] <= 12
         assert rail_box["width"] <= viewport_width
+        self.expect_no_horizontal_overflow()

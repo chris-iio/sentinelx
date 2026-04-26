@@ -271,6 +271,10 @@
         margin: 0 auto;
     }
 
+    .site-main:has(.page-index) {
+        max-width: 1208px;
+    }
+
     /* ---- Input page ---- */
 
     .page-index {
@@ -287,7 +291,7 @@
     .page-index::before {
         content: "";
         position: absolute;
-        inset: -2rem min(-4vw, -1.5rem);
+        inset: -2rem 0;
         z-index: -1;
         pointer-events: none;
         background:

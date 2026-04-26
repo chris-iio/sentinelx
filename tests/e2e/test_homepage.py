@@ -46,7 +46,7 @@ def test_command_card_surface_visible(page: Page, index_url: str) -> None:
     idx = IndexPage(page, index_url.rstrip("/"))
     idx.goto()
 
-    idx.expect_command_surface_visible()
+    idx.expect_integrated_workbench_ready()
     expect(idx.eyebrow).to_have_text("Offline-first IOC extraction")
     expect(idx.title).to_contain_text("Paste indicators")
     expect(idx.subtitle).to_contain_text("Offline mode")
@@ -60,6 +60,7 @@ def test_desktop_command_card_hierarchy(page: Page, index_url: str) -> None:
 
     idx.expect_command_surface_visible()
     idx.expect_desktop_command_card_dominates_recent_rail()
+    idx.expect_no_horizontal_overflow()
     card_box = idx.command_card.bounding_box()
     textarea_box = idx.textarea.bounding_box()
     title_box = idx.title.bounding_box()
@@ -184,8 +185,7 @@ def test_recent_analyses_empty_state_keeps_intake_ready(page: Page, index_url: s
 
     idx.expect_command_surface_visible()
     idx.expect_recent_empty_without_rows()
-    expect(page.locator(".ioc-preview")).to_have_count(0)
-    expect(page.locator(".preview-rail")).to_have_count(0)
+    idx.expect_no_preview_surfaces()
     idx.fill_text(SYNTHETIC_IOCS)
     idx.expect_submit_enabled()
 
@@ -203,13 +203,11 @@ def test_seeded_recent_analysis_renders_resume_link(
     idx = IndexPage(page, index_url.rstrip("/"))
     idx.goto()
 
-    idx.expect_recent_rail_visible()
+    idx.expect_integrated_workbench_ready()
     expect(idx.recent_empty_state).to_have_count(0)
     expect(idx.recent_unavailable_state).to_have_count(0)
     expect(idx.recent_rows).to_have_count(1)
-    row = idx.recent_row("Resume investigation")
-    expect(row).to_be_visible()
-    expect(row).to_have_attribute("href", f"/history/{analysis_id}")
+    row = idx.expect_recent_resume_link("Resume investigation", f"/history/{analysis_id}")
 
     row.click()
     expect(page).to_have_url(f"{index_url.rstrip('/')}/history/{analysis_id}")
@@ -227,8 +225,11 @@ def test_seeded_recent_analysis_desktop_rail_is_secondary(
     idx = IndexPage(page, index_url.rstrip("/"))
     idx.goto()
 
+    idx.expect_integrated_workbench_ready()
     expect(idx.recent_rows).to_have_count(1)
+    idx.expect_recent_resume_link("Desktop hierarchy check", "/history/e2e-recent-analysis")
     idx.expect_desktop_command_card_dominates_recent_rail()
+    idx.expect_no_horizontal_overflow()
 
 
 def test_seeded_recent_analysis_mobile_stacks_below_command_card(
@@ -242,7 +243,9 @@ def test_seeded_recent_analysis_mobile_stacks_below_command_card(
     idx = IndexPage(page, index_url.rstrip("/"))
     idx.goto()
 
+    idx.expect_integrated_workbench_ready()
     expect(idx.recent_rows).to_have_count(1)
+    idx.expect_recent_resume_link("Mobile stacking check", "/history/e2e-recent-analysis")
     idx.expect_mobile_recent_rail_stacks_below_command_card(viewport_width=390)
 
 
@@ -260,7 +263,7 @@ def test_recent_analyses_unavailable_state_keeps_form_visible(
     idx = IndexPage(page, index_url.rstrip("/"))
     idx.goto()
 
-    idx.expect_command_surface_visible()
+    idx.expect_integrated_workbench_ready()
     idx.expect_recent_unavailable_without_rows()
     idx.fill_text(SYNTHETIC_IOCS)
     idx.expect_submit_enabled()
@@ -268,14 +271,21 @@ def test_recent_analyses_unavailable_state_keeps_form_visible(
 
 def test_offline_command_card_submit_reaches_results(page: Page, index_url: str) -> None:
     """A real offline command-card submit navigates to results without provider dependency."""
+    requested_urls: list[str] = []
+    page.on("request", lambda request: requested_urls.append(request.url))
+
     idx = IndexPage(page, index_url.rstrip("/"))
     idx.goto()
+    idx.expect_integrated_workbench_ready()
     idx.extract_iocs(SYNTHETIC_IOCS, mode="offline")
 
     results = ResultsPage(page)
     expect(page.locator(".page-results")).to_be_visible()
     results.expect_mode("offline")
     assert results.ioc_cards.count() >= 2
+    assert not any("/enrichment/status/" in url for url in requested_urls), (
+        "Offline extraction must not start enrichment polling"
+    )
 
 
 def test_security_headers(page: Page, index_url: str) -> None:

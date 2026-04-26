@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T01",
+  "unitId": "M015/S04/T01",
+  "timestamp": 1777201764720,
+  "passed": true,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "python3 -m pytest -q tests/test_index_intake_contract.py tests/test_routes.py::test_offline_mode_makes_no_http_calls tests/test_routes.py::test_analyze_online_without_api_key_redirects_to_settings tests/test_routes.py::test_security_headers_present tests/test_routes.py::test_csrf_token_required tests/test_history_routes.py",
+      "exitCode": 0,
+      "durationMs": 867,
+      "verdict": "pass"
+    }
+  ]
+}
