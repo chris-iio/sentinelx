@@ -107,3 +107,15 @@ If T02 does only one thing, it should be this:
 4. leave boundary/repair/local-lifecycle ownership untouched.
 
 Anything beyond that is scope creep relative to this review.
+
+## T02 landed change
+
+- Landed `app/health_contract.py` as the single checked-in source for `HEALTH_PATH` and `HEALTH_PAYLOAD`.
+- `app/routes/api.py` now serves `/api/health` from that shared contract, preserving the exact secret-free 200/JSON payload.
+- `tools/dev_server.py` now imports the same contract for URL construction and probe validation while preserving direct CLI execution, localhost-only validation, bounded probe behavior, and fail-closed `malformed` classification on any payload drift.
+- Focused tests continue to pin the exact-match healthy case plus malformed secret-bearing and drifted payload cases.
+
+## Deferred cleanup kept out of T02
+
+- No helper extraction beyond the shared-contract seam was applied.
+- Boundary classification, runtime repair behavior, Make wrappers, `.planning/**` manual-review handling, and dev-server lifecycle/status semantics remain intentionally unchanged.

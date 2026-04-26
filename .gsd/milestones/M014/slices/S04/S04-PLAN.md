@@ -57,7 +57,7 @@
   - Verify: test -s .gsd/milestones/M014/slices/S04/S04-REVIEW.md
 rg -n "refactor-now|leave-alone|health contract|classifier-owned" .gsd/milestones/M014/slices/S04/S04-REVIEW.md
 
-- [ ] **T02: Retire the shared health-contract drift with a minimal seam-local refactor** `est:0.5d`
+- [x] **T02: Retire the shared health-contract drift with a minimal seam-local refactor** `est:0.5d`
   Use the review artifact from T01 plus `verify-before-complete` before making any completion claim. Implement the smallest code change that removes the real drift found during review: introduce `app/health_contract.py` as the single source for the local `HEALTH_PATH` / `HEALTH_PAYLOAD`, update both `app/routes/api.py` and `tools/dev_server.py` to consume it, and keep the rest of the workflow seam unchanged unless T01 documented an equally small helper extraction in the same files. Do not widen repair scope, change `.planning/**` handling, or add another operator surface.
 
 ## Failure Modes
