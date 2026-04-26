@@ -14,11 +14,28 @@ from . import bp
 from ._helpers import _setup_orchestrator
 
 
+def _recent_analyses_context(limit: int = 4) -> dict:
+    """Return fail-open recent-analysis template context for the intake page."""
+    try:
+        recent_analyses = current_app.history_store.list_recent(limit=limit)
+    except Exception as exc:  # pragma: no cover - exercised through the route
+        current_app.logger.warning(
+            "Recent history lookup failed for index page: %s",
+            type(exc).__name__,
+        )
+        return {"recent_analyses": [], "recent_analyses_unavailable": True}
+
+    return {
+        "recent_analyses": recent_analyses,
+        "recent_analyses_unavailable": False,
+    }
+
+
 @bp.route("/")
 @limiter.limit("60 per minute")
 def index():
-    """Home page — shows the IOC paste form."""
-    return render_template("index.html")
+    """Home page — shows the IOC paste form and recent analysis summaries."""
+    return render_template("index.html", **_recent_analyses_context(limit=4))
 
 
 @bp.route("/analyze", methods=["POST"])

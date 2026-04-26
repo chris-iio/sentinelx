@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T02",
+  "unitId": "M015/S02/T02",
+  "timestamp": 1777193890623,
+  "passed": false,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "npx vitest run app/static/src/ts/modules/form.test.ts\nnpx tsc --noEmit\nmake build\npython3 -m pytest -q tests/e2e/test_ui_controls.py tests/e2e/test_homepage.py::test_mode_toggle_labels tests/e2e/test_homepage.py::test_offline_mode_by_default tests/e2e/test_extraction.py::test_extract_mixed_iocs_offline tests/e2e/test_extraction.py::test_online_mode_indicator",
+      "exitCode": 0,
+      "durationMs": 7868,
+      "verdict": "pass"
+    }
+  ],
+  "retryAttempt": 1,
+  "maxRetries": 2,
+  "runtimeErrors": [
+    {
+      "source": "bg-shell",
+      "severity": "crash",
+      "message": "[sentinelx-dev-ui-check] exitCode=1",
+      "blocking": true
+    }
+  ]
+}

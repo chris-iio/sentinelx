@@ -26,17 +26,6 @@ This file is the explicit capability and coverage contract for the project.
 - Validation: mapped to M015/S01/S02/S04 browser proof
 - Notes: No pre-submit extraction preview or extra staging step should be inserted.
 
-### R072 — Offline and Online mode choice is clearer visually and textually while preserving the existing hidden `mode` form contract and submit behavior.
-- Class: quality-attribute
-- Status: active
-- Description: Offline and Online mode choice is clearer visually and textually while preserving the existing hidden `mode` form contract and submit behavior.
-- Why it matters: Analysts should not second-guess mode selection, but the stable form semantics are already tested and should not churn unnecessarily.
-- Source: user
-- Primary owning slice: M015/S02
-- Supporting slices: M015/S04
-- Validation: mapped to M015/S02 and final E2E proof
-- Notes: Clarify the current toggle; do not replace it with a different workflow unless implementation proves the current control cannot meet accessibility or clarity needs.
-
 ### R073 — A compact Recent Analyses list appears on the intake page when history exists, remains visually secondary to the paste command card, and links to `/history/<id>` reload routes.
 - Class: primary-user-loop
 - Status: active
@@ -779,6 +768,17 @@ This file is the explicit capability and coverage contract for the project.
 - Validation: Validated in M014/S04 on 2026-04-26. `.gsd/milestones/M014/slices/S04/S04-REVIEW.md` records an explicit seam-by-seam review of `tools/runtime_state_boundary.py`, `tools/runtime_state_repair.py`, `tools/dev_server.py`, `app/routes/api.py`, focused tests, Make/docs, and the relevant ADRs. The review separated `refactor-now` from `leave-alone`, landed the minimal `app/health_contract.py` single-source refactor for `/api/health`, and explicitly preserved classifier-owned repair policy, report-only `.planning/**`, thin Make wrappers, and the single local dev-server lifecycle surface.
 - Notes: The slice closed with both a durable review artifact and fresh closure proof rather than inherited summaries.
 
+### R072 — Offline and Online mode choice is clearer visually and textually while preserving the existing hidden `mode` form contract and submit behavior.
+- Class: quality-attribute
+- Status: validated
+- Description: Offline and Online mode choice is clearer visually and textually while preserving the existing hidden `mode` form contract and submit behavior.
+- Why it matters: Analysts should not second-guess mode selection, but the stable form semantics are already tested and should not churn unnecessarily.
+- Source: user
+- Primary owning slice: M015/S02
+- Supporting slices: M015/S04
+- Validation: M015/S02 delivered and verified the clarified Offline/Online mode UI while preserving hidden `#mode-input name="mode"` submit semantics: `python3 -m pytest -q tests/test_index_intake_contract.py ...` passed 4 contract/route checks, `npx vitest run app/static/src/ts/modules/form.test.ts` passed 6 form-module tests, `npx tsc --noEmit` exited 0, `make build` regenerated assets successfully, and focused Playwright checks passed 16/16 across mode UI controls, default offline behavior, offline extraction, and online mode indication.
+- Notes: Clarify the current toggle; do not replace it with a different workflow unless implementation proves the current control cannot meet accessibility or clarity needs.
+
 ## Deferred
 
 ### R066 — Automatic self-healing of transient runtime state at session start is deferred.
@@ -953,7 +953,7 @@ This file is the explicit capability and coverage contract for the project.
 | R069 | quality-attribute | validated | M014/S04 | M014/S01, M014/S02, M014/S03 | Validated in M014/S04 on 2026-04-26. `.gsd/milestones/M014/slices/S04/S04-REVIEW.md` records an explicit seam-by-seam review of `tools/runtime_state_boundary.py`, `tools/runtime_state_repair.py`, `tools/dev_server.py`, `app/routes/api.py`, focused tests, Make/docs, and the relevant ADRs. The review separated `refactor-now` from `leave-alone`, landed the minimal `app/health_contract.py` single-source refactor for `/api/health`, and explicitly preserved classifier-owned repair policy, report-only `.planning/**`, thin Make wrappers, and the single local dev-server lifecycle surface. |
 | R070 | primary-user-loop | active | M015/S01 | M015/S04 | mapped to M015/S01 and final integrated proof |
 | R071 | continuity | active | M015/S01 | M015/S02, M015/S04 | mapped to M015/S01/S02/S04 browser proof |
-| R072 | quality-attribute | active | M015/S02 | M015/S04 | mapped to M015/S02 and final E2E proof |
+| R072 | quality-attribute | validated | M015/S02 | M015/S04 | M015/S02 delivered and verified the clarified Offline/Online mode UI while preserving hidden `#mode-input name="mode"` submit semantics: `python3 -m pytest -q tests/test_index_intake_contract.py ...` passed 4 contract/route checks, `npx vitest run app/static/src/ts/modules/form.test.ts` passed 6 form-module tests, `npx tsc --noEmit` exited 0, `make build` regenerated assets successfully, and focused Playwright checks passed 16/16 across mode UI controls, default offline behavior, offline extraction, and online mode indication. |
 | R073 | primary-user-loop | active | M015/S03 | M015/S04 | mapped to M015/S03 backend and E2E proof |
 | R074 | failure-visibility | active | M015/S03 | M015/S04 | mapped to M015/S03 route tests and final proof |
 | R075 | quality-attribute | active | M015/S01 | M015/S03, M015/S04 | mapped to M015/S01/S04 responsive browser proof |
@@ -967,7 +967,7 @@ This file is the explicit capability and coverage contract for the project.
 
 ## Coverage Summary
 
-- Active requirements: 7
-- Mapped to slices: 7
-- Validated: 65 (R001, R002, R003, R004, R005, R006, R007, R008, R009, R010, R011, R012, R013, R014, R015, R016, R017, R018, R019, R020, R021, R022, R023, R024, R025, R026, R027, R028, R029, R030, R031, R032, R033, R035, R036, R037, R038, R039, R040, R041, R042, R043, R044, R045, R046, R047, R048, R049, R050, R051, R052, R053, R054, R055, R056, R057, R058, R059, R060, R061, R062, R063, R064, R065, R069)
+- Active requirements: 6
+- Mapped to slices: 6
+- Validated: 66 (R001, R002, R003, R004, R005, R006, R007, R008, R009, R010, R011, R012, R013, R014, R015, R016, R017, R018, R019, R020, R021, R022, R023, R024, R025, R026, R027, R028, R029, R030, R031, R032, R033, R035, R036, R037, R038, R039, R040, R041, R042, R043, R044, R045, R046, R047, R048, R049, R050, R051, R052, R053, R054, R055, R056, R057, R058, R059, R060, R061, R062, R063, R064, R065, R069, R072)
 - Unmapped active requirements: 0

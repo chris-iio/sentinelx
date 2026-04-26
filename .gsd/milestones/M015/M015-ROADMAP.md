@@ -17,7 +17,7 @@
 - [x] **S01: S01** `risk:Medium — visual restructuring can break existing homepage selectors, form semantics, or the fast path if not grounded in current DOM contracts.` `depends:[]`
   > After this: The home page has a redesigned command-card layout where the analyst can paste IOC text, see Extract enable, and submit offline exactly as before.
 
-- [ ] **S02: S02** `risk:Medium — mode UI changes are small but can silently break form submission, accessibility, or existing tests.` `depends:[]`
+- [x] **S02: S02** `risk:Medium — mode UI changes are small but can silently break form submission, accessibility, or existing tests.` `depends:[]`
   > After this: Offline/Online mode is visually clearer and keyboard-accessible while preserving the existing hidden `mode` form contract and current submit behavior.
 
 - [ ] **S03: Compact Recent Analyses rail** `risk:High — this is the only slice that adds a data dependency to `/`, and it must not make history availability a prerequisite for intake.` `depends:[S01]`

@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-04-26T08:40:53Z | Files: 175 | Described: 0/175
-<!-- gsd:codebase-meta {"generatedAt":"2026-04-26T08:40:53Z","fingerprint":"cf0715f25c84a402f3d8fbd51096cb62a2ebe126","fileCount":175,"truncated":false} -->
+Generated: 2026-04-26T09:00:26Z | Files: 176 | Described: 0/176
+<!-- gsd:codebase-meta {"generatedAt":"2026-04-26T09:00:26Z","fingerprint":"c5d63279b735a113731d2730ed2d90c212ddf490","fileCount":176,"truncated":false} -->
 
 ### (root)/
 - `.codex`
@@ -90,26 +90,7 @@ Generated: 2026-04-26T08:40:53Z | Files: 175 | Described: 0/175
 - `app/static/src/ts/main.ts`
 
 ### app/static/src/ts/modules/
-- `app/static/src/ts/modules/cards.ts`
-- `app/static/src/ts/modules/clipboard.ts`
-- `app/static/src/ts/modules/enrichment.test.ts`
-- `app/static/src/ts/modules/enrichment.ts`
-- `app/static/src/ts/modules/export.ts`
-- `app/static/src/ts/modules/filter.ts`
-- `app/static/src/ts/modules/form.ts`
-- `app/static/src/ts/modules/graph.ts`
-- `app/static/src/ts/modules/history.test.ts`
-- `app/static/src/ts/modules/history.ts`
-- `app/static/src/ts/modules/main.test.ts`
-- `app/static/src/ts/modules/result-application.test.ts`
-- `app/static/src/ts/modules/result-application.ts`
-- `app/static/src/ts/modules/row-factory.test.ts`
-- `app/static/src/ts/modules/row-factory.ts`
-- `app/static/src/ts/modules/settings.ts`
-- `app/static/src/ts/modules/shared-rendering.ts`
-- `app/static/src/ts/modules/ui.ts`
-- `app/static/src/ts/modules/verdict-compute.test.ts`
-- `app/static/src/ts/modules/verdict-compute.ts`
+- *(21 files: 21 .ts)*
 
 ### app/static/src/ts/types/
 - `app/static/src/ts/types/api.ts`
