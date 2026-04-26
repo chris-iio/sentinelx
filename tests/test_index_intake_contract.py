@@ -55,6 +55,94 @@ def assert_describedby_targets_exist(
         )
 
 
+def test_index_renders_assembled_intake_workbench_contract(client: Any) -> None:
+    """GET / exposes one assembled intake workbench with bounded recent history."""
+    mock_store = MagicMock()
+    mock_store.list_recent.return_value = [
+        {
+            "id": "abc123deadbeef",
+            "input_text": "Alert <img src=x onerror=alert(1)> from 10[.]0[.]0[.]1",
+            "mode": "online",
+            "total_count": 3,
+            "top_verdict": "malicious",
+            "created_at": "2026-04-26T08:30:00+00:00",
+        },
+        {
+            "id": "def456cafebabe",
+            "input_text": "Second investigation",
+            "mode": "offline",
+            "total_count": 1,
+            "top_verdict": "clean",
+            "created_at": "2026-04-25T12:00:00+00:00",
+        },
+    ]
+    mock_registry = MagicMock()
+    client.application.history_store = mock_store
+    client.application.registry = mock_registry
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    html = response.data.decode("utf-8")
+    tags = parse_tags(html)
+
+    mock_store.list_recent.assert_called_once_with(limit=4)
+    mock_registry.assert_not_called()
+    assert mock_registry.method_calls == []
+
+    for class_name in ("page-index", "intake-workbench", "command-card", "recent-analyses-rail"):
+        assert has_class(tags, class_name), f"Missing .{class_name} assembled workbench selector"
+
+    form = by_id(tags, "analyze-form")
+    assert form is not None, "Missing #analyze-form"
+    assert form.get("method") == "post"
+    assert form.get("action") == "/analyze"
+    assert has_hidden_input(tags, "csrf_token"), "Missing hidden csrf_token input"
+
+    for element_id in (
+        "ioc-text",
+        "submit-btn",
+        "clear-btn",
+        "mode-input",
+        "mode-toggle-widget",
+        "mode-title",
+        "mode-help",
+        "mode-status",
+        "paste-feedback",
+    ):
+        assert by_id(tags, element_id) is not None, f"Missing #{element_id}"
+
+    mode_input = by_id(tags, "mode-input")
+    assert mode_input is not None
+    assert mode_input.get("type") == "hidden"
+    assert mode_input.get("name") == "mode"
+    assert mode_input.get("value") == "offline"
+    assert by_id(tags, "mode-toggle-widget")["data-mode"] == "offline"  # type: ignore[index]
+    assert "Analysis mode" in html
+    assert "Offline mode is the safe default" in html
+    assert "without contacting external providers" in html
+    assert "Online" in html and "configured providers" in html
+    assert "Offline selected" in html
+    assert "local extraction only" in html
+
+    assert has_class(tags, "recent-analysis-row")
+    assert not has_class(tags, "recent-analyses-empty")
+    assert not has_class(tags, "recent-analyses-unavailable")
+    for analysis_id in ("abc123deadbeef", "def456cafebabe"):
+        assert any(
+            tag == "a"
+            and attrs.get("href") == f"/history/{analysis_id}"
+            and "recent-analysis-row" in (attrs.get("class") or "").split()
+            for tag, attrs in tags
+        ), f"Missing recent row link for {analysis_id}"
+
+    assert "&lt;img src=x onerror=alert(1)&gt;" in html
+    assert "<img src=x onerror=alert(1)>" not in html
+    assert "data-history-results" not in html
+    for class_name in ("analysis-preview", "pre-submit-preview", "preview-panel"):
+        assert not has_class(tags, class_name), f"Unexpected .{class_name} rendered on /"
+
+
 def test_index_renders_command_card_intake_contract(client: Any) -> None:
     """GET / exposes the stable S01 command-card selectors and form controls."""
     response = client.get("/")
@@ -227,6 +315,44 @@ def test_index_recent_history_failure_is_fail_open_and_sanitized(
     assert "203.0.113.44" not in caplog.text
     assert "secret-value" not in caplog.text
     assert "DB corrupt" not in caplog.text
+
+
+def test_analyze_empty_input_preserves_form_csrf_and_fail_open_history(
+    client: Any, caplog: pytest.LogCaptureFixture
+) -> None:
+    """No-input POST re-renders the full intake contract even when history fails."""
+    mock_store = MagicMock()
+    mock_store.list_recent.side_effect = RuntimeError(
+        "history failed near 198.51.100.7 with token raw-secret"
+    )
+    client.application.history_store = mock_store
+
+    response = client.post("/analyze", data={"text": "   \n\t", "mode": "offline"})
+
+    assert response.status_code == 200
+    html = response.data.decode("utf-8")
+    tags = parse_tags(html)
+
+    mock_store.list_recent.assert_called_once_with(limit=4)
+    assert "No input provided." in html
+    assert has_class(tags, "recent-analyses-rail")
+    assert has_class(tags, "recent-analyses-unavailable")
+    assert not has_class(tags, "recent-analysis-row")
+    assert not has_class(tags, "recent-analyses-empty")
+    for element_id in (
+        "analyze-form",
+        "ioc-text",
+        "submit-btn",
+        "mode-input",
+        "mode-toggle-widget",
+    ):
+        assert by_id(tags, element_id) is not None, f"Missing #{element_id} after no-input POST"
+    assert has_hidden_input(tags, "csrf_token"), "Missing hidden csrf_token input"
+    assert "recent history lookup failed" in caplog.text.lower()
+    assert "RuntimeError" in caplog.text
+    assert "198.51.100.7" not in caplog.text
+    assert "raw-secret" not in caplog.text
+    assert "history failed" not in caplog.text
 
 
 def test_index_recent_analysis_missing_optional_fields_degrades(client: Any) -> None:

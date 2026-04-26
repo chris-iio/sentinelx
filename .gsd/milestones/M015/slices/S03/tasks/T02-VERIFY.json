@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T02",
+  "unitId": "M015/S03/T02",
+  "timestamp": 1777201196463,
+  "passed": true,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "make build\nnpx tsc --noEmit\npython3 -m pytest -q tests/e2e/test_homepage.py tests/e2e/test_extraction.py::test_extract_mixed_iocs_offline",
+      "exitCode": 0,
+      "durationMs": 6580,
+      "verdict": "pass"
+    }
+  ]
+}

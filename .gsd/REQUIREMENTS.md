@@ -26,28 +26,6 @@ This file is the explicit capability and coverage contract for the project.
 - Validation: mapped to M015/S01/S02/S04 browser proof
 - Notes: No pre-submit extraction preview or extra staging step should be inserted.
 
-### R073 — A compact Recent Analyses list appears on the intake page when history exists, remains visually secondary to the paste command card, and links to `/history/<id>` reload routes.
-- Class: primary-user-loop
-- Status: active
-- Description: A compact Recent Analyses list appears on the intake page when history exists, remains visually secondary to the paste command card, and links to `/history/<id>` reload routes.
-- Why it matters: Recent work should be easy to resume from the start page without turning the home page into a dashboard.
-- Source: user
-- Primary owning slice: M015/S03
-- Supporting slices: M015/S04
-- Validation: mapped to M015/S03 backend and E2E proof
-- Notes: Use the existing server-rendered HistoryStore.list_recent(limit) path; no new API or live-refresh endpoint is planned.
-
-### R074 — History listing failures never block the intake page; the paste form still renders and works, with a quiet degraded recent-history state or omission.
-- Class: failure-visibility
-- Status: active
-- Description: History listing failures never block the intake page; the paste form still renders and works, with a quiet degraded recent-history state or omission.
-- Why it matters: History is secondary; the fast paste-and-extract path must stay available even if history storage is unavailable.
-- Source: user
-- Primary owning slice: M015/S03
-- Supporting slices: M015/S04
-- Validation: mapped to M015/S03 route tests and final proof
-- Notes: No retry loop, async recovery UI, or blocking alert for history failures in M015.
-
 ### R075 — The intake page uses a command-card plus compact recent rail layout that works on desktop and stacks cleanly on mobile.
 - Class: quality-attribute
 - Status: active
@@ -779,6 +757,28 @@ This file is the explicit capability and coverage contract for the project.
 - Validation: M015/S02 delivered and verified the clarified Offline/Online mode UI while preserving hidden `#mode-input name="mode"` submit semantics: `python3 -m pytest -q tests/test_index_intake_contract.py ...` passed 4 contract/route checks, `npx vitest run app/static/src/ts/modules/form.test.ts` passed 6 form-module tests, `npx tsc --noEmit` exited 0, `make build` regenerated assets successfully, and focused Playwright checks passed 16/16 across mode UI controls, default offline behavior, offline extraction, and online mode indication.
 - Notes: Clarify the current toggle; do not replace it with a different workflow unless implementation proves the current control cannot meet accessibility or clarity needs.
 
+### R073 — A compact Recent Analyses list appears on the intake page when history exists, remains visually secondary to the paste command card, and links to `/history/<id>` reload routes.
+- Class: primary-user-loop
+- Status: validated
+- Description: A compact Recent Analyses list appears on the intake page when history exists, remains visually secondary to the paste command card, and links to `/history/<id>` reload routes.
+- Why it matters: Recent work should be easy to resume from the start page without turning the home page into a dashboard.
+- Source: user
+- Primary owning slice: M015/S03
+- Supporting slices: M015/S04
+- Validation: M015/S03 delivered the compact server-rendered Recent Analyses rail on `/`: GET `/` performs one bounded `HistoryStore.list_recent(limit=4)` read, renders linked `.recent-analysis-row` entries with `url_for('main.history_detail', analysis_id=...)`, keeps the rail visually secondary on desktop and stacked below the command card on mobile, and passed fresh slice proof (`make build`, `npx tsc --noEmit`, route/history/security tests: 18 passed, and focused E2E homepage/extraction tests: 22 passed).
+- Notes: Use the existing server-rendered HistoryStore.list_recent(limit) path; no new API or live-refresh endpoint is planned.
+
+### R074 — History listing failures never block the intake page; the paste form still renders and works, with a quiet degraded recent-history state or omission.
+- Class: failure-visibility
+- Status: validated
+- Description: History listing failures never block the intake page; the paste form still renders and works, with a quiet degraded recent-history state or omission.
+- Why it matters: History is secondary; the fast paste-and-extract path must stay available even if history storage is unavailable.
+- Source: user
+- Primary owning slice: M015/S03
+- Supporting slices: M015/S04
+- Validation: M015/S03 proved history listing is fail-open: route tests cover `list_recent` exceptions with sanitized warning logging, preserved status 200, preserved CSRF and stable paste form selectors, quiet unavailable state, and offline no-HTTP behavior; browser tests cover empty/unavailable states with form visibility and submit enablement. Fresh slice verification passed (`make build`, `npx tsc --noEmit`, route/history/security tests: 18 passed, focused E2E homepage/extraction tests: 22 passed).
+- Notes: No retry loop, async recovery UI, or blocking alert for history failures in M015.
+
 ## Deferred
 
 ### R066 — Automatic self-healing of transient runtime state at session start is deferred.
@@ -954,8 +954,8 @@ This file is the explicit capability and coverage contract for the project.
 | R070 | primary-user-loop | active | M015/S01 | M015/S04 | mapped to M015/S01 and final integrated proof |
 | R071 | continuity | active | M015/S01 | M015/S02, M015/S04 | mapped to M015/S01/S02/S04 browser proof |
 | R072 | quality-attribute | validated | M015/S02 | M015/S04 | M015/S02 delivered and verified the clarified Offline/Online mode UI while preserving hidden `#mode-input name="mode"` submit semantics: `python3 -m pytest -q tests/test_index_intake_contract.py ...` passed 4 contract/route checks, `npx vitest run app/static/src/ts/modules/form.test.ts` passed 6 form-module tests, `npx tsc --noEmit` exited 0, `make build` regenerated assets successfully, and focused Playwright checks passed 16/16 across mode UI controls, default offline behavior, offline extraction, and online mode indication. |
-| R073 | primary-user-loop | active | M015/S03 | M015/S04 | mapped to M015/S03 backend and E2E proof |
-| R074 | failure-visibility | active | M015/S03 | M015/S04 | mapped to M015/S03 route tests and final proof |
+| R073 | primary-user-loop | validated | M015/S03 | M015/S04 | M015/S03 delivered the compact server-rendered Recent Analyses rail on `/`: GET `/` performs one bounded `HistoryStore.list_recent(limit=4)` read, renders linked `.recent-analysis-row` entries with `url_for('main.history_detail', analysis_id=...)`, keeps the rail visually secondary on desktop and stacked below the command card on mobile, and passed fresh slice proof (`make build`, `npx tsc --noEmit`, route/history/security tests: 18 passed, and focused E2E homepage/extraction tests: 22 passed). |
+| R074 | failure-visibility | validated | M015/S03 | M015/S04 | M015/S03 proved history listing is fail-open: route tests cover `list_recent` exceptions with sanitized warning logging, preserved status 200, preserved CSRF and stable paste form selectors, quiet unavailable state, and offline no-HTTP behavior; browser tests cover empty/unavailable states with form visibility and submit enablement. Fresh slice verification passed (`make build`, `npx tsc --noEmit`, route/history/security tests: 18 passed, focused E2E homepage/extraction tests: 22 passed). |
 | R075 | quality-attribute | active | M015/S01 | M015/S03, M015/S04 | mapped to M015/S01/S04 responsive browser proof |
 | R076 | continuity | active | M015/S04 | M015/S01, M015/S02, M015/S03 | mapped to M015/S04 final integrated verification |
 | R077 | deferred | deferred | none | none | unmapped |
@@ -967,7 +967,7 @@ This file is the explicit capability and coverage contract for the project.
 
 ## Coverage Summary
 
-- Active requirements: 6
-- Mapped to slices: 6
-- Validated: 66 (R001, R002, R003, R004, R005, R006, R007, R008, R009, R010, R011, R012, R013, R014, R015, R016, R017, R018, R019, R020, R021, R022, R023, R024, R025, R026, R027, R028, R029, R030, R031, R032, R033, R035, R036, R037, R038, R039, R040, R041, R042, R043, R044, R045, R046, R047, R048, R049, R050, R051, R052, R053, R054, R055, R056, R057, R058, R059, R060, R061, R062, R063, R064, R065, R069, R072)
+- Active requirements: 4
+- Mapped to slices: 4
+- Validated: 68 (R001, R002, R003, R004, R005, R006, R007, R008, R009, R010, R011, R012, R013, R014, R015, R016, R017, R018, R019, R020, R021, R022, R023, R024, R025, R026, R027, R028, R029, R030, R031, R032, R033, R035, R036, R037, R038, R039, R040, R041, R042, R043, R044, R045, R046, R047, R048, R049, R050, R051, R052, R053, R054, R055, R056, R057, R058, R059, R060, R061, R062, R063, R064, R065, R069, R072, R073, R074)
 - Unmapped active requirements: 0
