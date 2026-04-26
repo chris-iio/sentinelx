@@ -78,13 +78,14 @@ def test_clear_button_focuses_textarea(page: Page, index_url: str) -> None:
 
 
 def test_mode_toggle_to_online(page: Page, index_url: str) -> None:
-    """User can switch to online mode via toggle."""
+    """User can switch to online mode via toggle and every state surface synchronizes."""
     idx = IndexPage(page, index_url.rstrip("/"))
     idx.goto()
 
     idx.toggle_mode()
     idx.expect_mode("online")
-    expect(idx.mode_toggle_btn).to_have_attribute("aria-pressed", "true")
+    expect(idx.submit_btn).to_have_text("Extract")
+    expect(idx.submit_btn).to_have_class(re.compile(r"mode-online"))
 
 
 def test_mode_toggle_back_to_offline(page: Page, index_url: str) -> None:
@@ -97,7 +98,38 @@ def test_mode_toggle_back_to_offline(page: Page, index_url: str) -> None:
 
     idx.toggle_mode()
     idx.expect_mode("offline")
-    expect(idx.mode_toggle_btn).to_have_attribute("aria-pressed", "false")
+    expect(idx.submit_btn).to_have_class(re.compile(r"mode-offline"))
+
+
+def test_mode_toggle_keyboard_space_enter_syncs_state(page: Page, index_url: str) -> None:
+    """Keyboard Space and Enter activate the native mode button and keep state synchronized."""
+    idx = IndexPage(page, index_url.rstrip("/"))
+    idx.goto()
+
+    idx.mode_toggle_btn.focus()
+    page.keyboard.press("Space")
+    idx.expect_mode("online")
+    expect(idx.submit_btn).to_have_text("Extract")
+    expect(idx.submit_btn).to_have_class(re.compile(r"mode-online"))
+
+    page.keyboard.press("Enter")
+    idx.expect_mode("offline")
+    expect(idx.submit_btn).to_have_class(re.compile(r"mode-offline"))
+
+
+def test_mode_toggle_copy_and_accessible_description(page: Page, index_url: str) -> None:
+    """Clarified mode copy is visible and wired into the toggle description."""
+    idx = IndexPage(page, index_url.rstrip("/"))
+    idx.goto()
+
+    expect(idx.mode_title).to_have_text("Analysis mode")
+    expect(idx.mode_help).to_contain_text("Offline mode is the safe default")
+    expect(idx.mode_help).to_contain_text("Use Online only")
+    expect(idx.mode_status).to_have_text(
+        "Offline selected — local extraction only; no provider enrichment requests are sent."
+    )
+    expect(idx.mode_toggle_btn).to_have_attribute("aria-describedby", re.compile(r"\bmode-help\b"))
+    expect(idx.mode_toggle_btn).to_have_attribute("aria-describedby", re.compile(r"\bmode-status\b"))
 
 
 def test_submit_style_changes_on_mode_toggle(page: Page, index_url: str) -> None:

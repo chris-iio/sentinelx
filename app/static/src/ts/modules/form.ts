@@ -31,15 +31,42 @@ function showPasteFeedback(charCount: number): void {
   }, 2000);
 }
 
-// ---- Submit label (mode-aware) ----
+// ---- Mode rendering ----
 
-function updateSubmitLabel(mode: string): void {
-  const submitBtn = document.getElementById("submit-btn");
-  if (!submitBtn) return;
-  submitBtn.textContent = "Extract";
-  // Mode-aware button color
-  submitBtn.classList.remove("mode-online", "mode-offline");
-  submitBtn.classList.add(mode === "online" ? "mode-online" : "mode-offline");
+type AnalysisMode = "offline" | "online";
+
+const MODE_COPY: Record<AnalysisMode, string> = {
+  offline: "Offline selected — local extraction only; no provider enrichment requests are sent.",
+  online: "Online selected — configured providers may enrich submitted indicators.",
+};
+
+function normalizeMode(mode: string): AnalysisMode {
+  return mode === "online" ? "online" : "offline";
+}
+
+function renderModeState(mode: string, elements: {
+  widget: HTMLElement;
+  toggleBtn: HTMLElement;
+  modeInput: HTMLInputElement;
+  modeStatus: HTMLElement;
+  submitBtn: HTMLElement | null;
+}): void {
+  const normalizedMode = normalizeMode(mode);
+  const isOnline = normalizedMode === "online";
+
+  elements.widget.setAttribute("data-mode", normalizedMode);
+  elements.modeInput.value = normalizedMode;
+  elements.toggleBtn.setAttribute("aria-pressed", isOnline ? "true" : "false");
+  if (elements.toggleBtn.hasAttribute("aria-checked")) {
+    elements.toggleBtn.setAttribute("aria-checked", isOnline ? "true" : "false");
+  }
+  elements.modeStatus.textContent = MODE_COPY[normalizedMode];
+
+  if (elements.submitBtn) {
+    elements.submitBtn.textContent = "Extract";
+    elements.submitBtn.classList.remove("mode-online", "mode-offline");
+    elements.submitBtn.classList.add(isOnline ? "mode-online" : "mode-offline");
+  }
 }
 
 // ---- Submit button: disable when textarea is empty ----
@@ -115,27 +142,43 @@ function initAutoGrow(): void {
 // ---- Mode toggle switch (INPUT-01, INPUT-03) ----
 
 function initModeToggle(): void {
+  const form = document.getElementById("analyze-form");
   const widget = document.getElementById("mode-toggle-widget");
   const toggleBtn = document.getElementById("mode-toggle-btn");
   const modeInput = document.querySelector<HTMLInputElement>("#mode-input");
-  if (!widget || !toggleBtn || !modeInput) return;
+  const modeStatus = document.getElementById("mode-status");
+  const submitBtn = document.querySelector<HTMLButtonElement>("#submit-btn");
+
+  if (!form && !widget && !toggleBtn && !modeInput && !modeStatus) return;
+  if (!form || !widget || !toggleBtn || !modeInput || !modeStatus) {
+    throw new Error("Missing mode toggle markup required for form state synchronization");
+  }
 
   // Non-nullable aliases for closures
   const w: HTMLElement = widget;
   const tb: HTMLElement = toggleBtn;
   const mi: HTMLInputElement = modeInput;
+  const ms: HTMLElement = modeStatus;
+  const sb: HTMLButtonElement | null = submitBtn;
+
+  const render = (mode: string): void => {
+    renderModeState(mode, {
+      widget: w,
+      toggleBtn: tb,
+      modeInput: mi,
+      modeStatus: ms,
+      submitBtn: sb,
+    });
+  };
 
   tb.addEventListener("click", function () {
-    const current = attr(w, "data-mode");
-    const next = current === "offline" ? "online" : "offline";
-    w.setAttribute("data-mode", next);
-    mi.value = next;
-    tb.setAttribute("aria-pressed", next === "online" ? "true" : "false");
-    updateSubmitLabel(next);
+    const current = normalizeMode(attr(w, "data-mode", mi.value));
+    const next: AnalysisMode = current === "offline" ? "online" : "offline";
+    render(next);
   });
 
-  // Set initial label based on current mode (defensive)
-  updateSubmitLabel(mi.value);
+  // Set initial synchronized state based on the hidden form contract first.
+  render(mi.value || attr(w, "data-mode", "offline"));
 }
 
 // ---- Public API ----

@@ -147,10 +147,13 @@ def test_mode_toggle_labels(page: Page, index_url: str) -> None:
     idx = IndexPage(page, index_url.rstrip("/"))
     idx.goto()
 
-    offline_label = idx.mode_toggle_widget.locator(".mode-toggle-label--offline")
-    online_label = idx.mode_toggle_widget.locator(".mode-toggle-label--online")
-    expect(offline_label).to_have_text("Offline")
-    expect(online_label).to_have_text("Online")
+    expect(idx.mode_offline_label).to_have_text("Offline")
+    expect(idx.mode_online_label).to_have_text("Online")
+    expect(idx.mode_title).to_have_text("Analysis mode")
+    expect(idx.mode_help).to_contain_text("Offline mode is the safe default")
+    expect(idx.mode_status).to_have_text(
+        "Offline selected — local extraction only; no provider enrichment requests are sent."
+    )
 
 
 def test_offline_mode_by_default(page: Page, index_url: str) -> None:
