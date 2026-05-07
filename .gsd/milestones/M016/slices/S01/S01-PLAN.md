@@ -26,7 +26,7 @@ No registry/settings/UI wiring in this slice. S01 closes only the adapter seam: 
 
 ## Tasks
 
-- [ ] **T01: Pin the EmailRep adapter contract in tests** `est:45m`
+- [x] **T01: Pin the EmailRep adapter contract in tests** `est:45m`
   Why: Lock the EmailRep adapter contract before implementation so verdict thresholds and flattened raw_stats do not drift during coding.
   - Files: `tests/test_emailrep.py`, `tests/helpers.py`, `app/pipeline/models.py`
   - Verify: python3 -m pytest tests/test_emailrep.py -q (expected red until T02 creates the adapter)

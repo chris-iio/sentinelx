@@ -12,7 +12,7 @@
 
 ## Slices
 
-- [ ] **S01: EmailRep adapter contract** `risk:high` `depends:[]`
+- [ ] **S01: S01** `risk:high` `depends:[]`
   > After this: After this, a tested EmailRepAdapter exists and maps representative EmailRep responses into SentinelX verdicts without touching registry or UI behavior.
 
 - [ ] **S02: Registry, settings, and email provider coverage** `risk:medium` `depends:[S01]`
