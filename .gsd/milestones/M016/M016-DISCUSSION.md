@@ -46,3 +46,36 @@ Which completion boundary best matches what you want M016 to prove?
 **Selected:** Provider integration (Recommended)
 
 ---
+## Exchange — 2026-05-08T04:52:41.820Z
+
+### Verdict
+
+How conservative should the EmailRep verdict mapping be when its fields disagree or are weak?
+
+- **Conservative ladder (Recommended)** — Use EmailRep as a triage signal, but only promote strong abuse flags to malicious and keep weak signals suspicious/no_data.
+- **Strict malicious only** — Only definitive abuse fields become malicious; most other concerning fields remain suspicious or detail-only.
+- **Risk-forward triage** — Let leaked credentials, data breaches, spoofable domains, or failed deliverability more aggressively influence row verdicts.
+
+**Selected:** Conservative ladder (Recommended)
+
+### No Key
+
+When an analyst runs Online mode with email IOCs but no EmailRep key configured, what should SentinelX show?
+
+- **Existing zero coverage (Recommended)** — Keep current provider-count behavior: email has zero configured providers, with no new special-case warning in M016.
+- **Email-specific hint** — Add a small user-facing hint that email enrichment needs an EmailRep key when email IOCs are present.
+- **Settings-only clarity** — Do not change results; make the settings/provider metadata clearly explain that EmailRep unlocks email enrichment.
+
+**Selected:** Existing zero coverage (Recommended)
+
+### Proof
+
+What proof should be required before calling M016 complete?
+
+- **Mocked E2E required (Recommended)** — Require deterministic tests and mocked Online browser proof; keep live EmailRep calls optional and non-blocking.
+- **Optional live smoke** — Require all mocked proof, plus document an optional live-key smoke test when a key is available.
+- **Live key required** — Treat a real EmailRep key smoke test as required for milestone completion.
+
+**Selected:** Mocked E2E required (Recommended)
+
+---
