@@ -38,6 +38,7 @@ class Config:
         "otx.alienvault.com",        # OTX AlienVault (key-required)
         "api.greynoise.io",          # GreyNoise (key-required)
         "api.abuseipdb.com",         # AbuseIPDB (key-required)
+        "emailrep.io",               # EmailRep (key-required)
         "internetdb.shodan.io",      # Shodan InternetDB (zero-auth)
         "ipinfo.io",                 # ipinfo.io GeoIP (zero-auth)
         "hashlookup.circl.lu",       # CIRCL Hashlookup (zero-auth)

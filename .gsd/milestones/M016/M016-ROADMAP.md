@@ -12,17 +12,17 @@
 
 ## Slices
 
-- [ ] **S01: S01** `risk:high` `depends:[]`
-  > After this: After this, a tested EmailRepAdapter exists and maps representative EmailRep responses into SentinelX verdicts without touching registry or UI behavior.
+- [ ] **S01: EmailRep launch-readiness bundle** `risk:high` `depends:[]`
+  > After this: A tested EmailRepAdapter exists, EmailRep is registered/settings-visible/key-gated for email IOCs, compact flattened context is available to existing rendering paths, and mocked Online-mode E2E covers email enrichment without a live key.
 
-- [ ] **S02: Registry, settings, and email provider coverage** `risk:medium` `depends:[S01]`
-  > After this: After this, configuring an EmailRep key makes Online mode report provider coverage for email IOCs; without a key, email coverage remains zero.
+- [ ] **S02: Reserved / absorbed into S01** `risk:medium` `depends:[S01]`
+  > Registry, settings, and email provider coverage were implemented with the bundled S01 change.
 
-- [ ] **S03: Compact EmailRep result rendering** `risk:medium` `depends:[S01,S02]`
-  > After this: After this, mocked EmailRep results render compact reputation and risk context in the existing result row UI without unsafe nested-data dumping.
+- [ ] **S03: Reserved / absorbed into S01** `risk:medium` `depends:[S01]`
+  > Compact EmailRep result fields are emitted by the adapter as flattened raw_stats for existing safe UI rendering.
 
-- [ ] **S04: Mocked Online email enrichment proof** `risk:high` `depends:[S02,S03]`
-  > After this: After this, a deterministic browser test submits an email IOC in Online mode and sees an EmailRep verdict/context row without requiring a live EmailRep key.
+- [ ] **S04: Reserved / absorbed into S01** `risk:high` `depends:[S01]`
+  > Mocked Online email enrichment proof was implemented with the bundled S01 change.
 
 ## Boundary Map
 

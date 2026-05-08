@@ -44,6 +44,9 @@ htmlcov/
 # Bandit output
 bandit-report.json
 
+# Web research scratch artifacts
+.firecrawl/
+
 # Build tools (downloaded binaries)
 tools/*
 !tools/*.py

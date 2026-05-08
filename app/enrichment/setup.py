@@ -16,6 +16,7 @@ from app.enrichment.adapters.asn_cymru import CymruASNAdapter
 from app.enrichment.adapters.crtsh import CrtShAdapter
 from app.enrichment.adapters.threatminer import ThreatMinerAdapter
 from app.enrichment.adapters.dns_lookup import DnsAdapter
+from app.enrichment.adapters.emailrep import EmailRepAdapter
 from app.enrichment.adapters.whois_lookup import WhoisAdapter
 from app.enrichment.adapters.greynoise import GreyNoiseAdapter
 from app.enrichment.adapters.hashlookup import HashlookupAdapter
@@ -88,6 +89,14 @@ PROVIDER_INFO: list[dict[str, str | bool]] = [
         "description": "IP only, crowd-sourced abuse reporting",
         "ioc_types": "IP",
     },
+    {
+        "id": "emailrep",
+        "name": "EmailRep",
+        "requires_key": True,
+        "signup_url": "https://emailrep.io/key",
+        "description": "Email only, reputation and account-risk signals",
+        "ioc_types": "email",
+    },
 ]
 
 
@@ -95,7 +104,7 @@ def build_registry(
     allowed_hosts: list[str],
     config_store: ConfigStore,
 ) -> ProviderRegistry:
-    """Build and return a ProviderRegistry with all 15 providers registered.
+    """Build and return a ProviderRegistry with all 16 providers registered.
 
     Reads API keys from ConfigStore for key-requiring providers. Zero-auth providers
     (Shodan InternetDB, CIRCL Hashlookup, ipinfo.io IP Context, DNS Records,
@@ -111,6 +120,7 @@ def build_registry(
         - OTX AlienVault    (requires key — via get_provider_key("otx"))
         - GreyNoise         (requires key — via get_provider_key("greynoise"))
         - AbuseIPDB         (requires key — via get_provider_key("abuseipdb"))
+        - EmailRep          (requires key — via get_provider_key("emailrep"))
         - CIRCL Hashlookup  (zero-auth — NSRL known-good hash detection)
         - IP Context        (zero-auth — GeoIP/rDNS via ipinfo.io)
         - DNS Records       (zero-auth — live DNS resolution via dnspython)
@@ -124,7 +134,7 @@ def build_registry(
         config_store: ConfigStore instance used to read provider API keys.
 
     Returns:
-        ProviderRegistry with all 15 providers registered.
+        ProviderRegistry with all 16 providers registered.
     """
     registry = ProviderRegistry()
 
@@ -149,6 +159,9 @@ def build_registry(
 
     abuseipdb_key = config_store.get_provider_key("abuseipdb") or ""
     registry.register(AbuseIPDBAdapter(api_key=abuseipdb_key, allowed_hosts=allowed_hosts))
+
+    emailrep_key = config_store.get_provider_key("emailrep") or ""
+    registry.register(EmailRepAdapter(api_key=emailrep_key, allowed_hosts=allowed_hosts))
 
     # Zero-auth providers — no key needed, always configured
     registry.register(HashlookupAdapter(allowed_hosts=allowed_hosts))

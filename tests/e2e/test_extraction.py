@@ -190,8 +190,8 @@ def test_no_iocs_found(page: Page, index_url: str) -> None:
     results.expect_no_results()
 
 
-def test_online_mode_indicator(page: Page, index_url: str) -> None:
-    """Submitting in online mode shows 'Online Mode' in results."""
+def test_online_mode_indicator(page: Page, index_url: str, mocked_enrichment) -> None:
+    """Submitting in online mode shows 'Online Mode' in results without real lookups."""
     idx = IndexPage(page, index_url.rstrip("/"))
     idx.goto()
     idx.extract_iocs(IPV4_ONLY, mode="online")
@@ -252,8 +252,10 @@ def test_cards_have_data_ioc_value_attribute(page: Page, index_url: str) -> None
     assert data_value == "10.0.0.1"
 
 
-def test_online_mode_shows_verdict_dashboard(page: Page, index_url: str) -> None:
-    """Online mode results page shows the verdict dashboard."""
+def test_online_mode_shows_verdict_dashboard(
+    page: Page, index_url: str, mocked_enrichment,
+) -> None:
+    """Online mode results page shows the verdict dashboard without real lookups."""
     idx = IndexPage(page, index_url.rstrip("/"))
     idx.goto()
     idx.extract_iocs(IPV4_ONLY, mode="online")

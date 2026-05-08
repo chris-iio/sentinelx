@@ -2,6 +2,11 @@
   <img src="app/static/images/screenshot.png" alt="SentinelX" width="600">
 </p>
 
+## Launch/readiness artifacts
+
+- `docs/code-analysis-launch-deck.html` summarizes the code audit, market research, launch positioning, and verification evidence as an HTML slide deck.
+- `docs/launch-checklist.md` defines the release artifact boundary, clean install smoke path, required pre-launch proof, positioning, and roadmap candidates.
+
 ## Supported local dev-server workflow
 
 Use the repo-native manager commands as the one supported local server path:

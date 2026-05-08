@@ -21,6 +21,7 @@ from app.enrichment.adapters.abuseipdb import AbuseIPDBAdapter
 from app.enrichment.adapters.asn_cymru import CymruASNAdapter
 from app.enrichment.adapters.crtsh import CrtShAdapter
 from app.enrichment.adapters.dns_lookup import DnsAdapter
+from app.enrichment.adapters.emailrep import EmailRepAdapter
 from app.enrichment.adapters.greynoise import GreyNoiseAdapter
 from app.enrichment.adapters.hashlookup import HashlookupAdapter
 from app.enrichment.adapters.ip_api import IPApiAdapter
@@ -46,7 +47,7 @@ from tests.helpers import (
 
 
 # ---------------------------------------------------------------------------
-# Registry of all 15 adapters with expected contract values
+# Registry of all 16 adapters with expected contract values
 # ---------------------------------------------------------------------------
 
 @dataclass(frozen=True)
@@ -100,6 +101,21 @@ _ABUSEIPDB = AdapterEntry(
     is_http=True,
     allowed_hosts_config_entry="api.abuseipdb.com",
     sample_ioc_factory=make_ipv4_ioc,
+)
+
+_EMAILREP = AdapterEntry(
+    adapter_class=EmailRepAdapter,
+    constructor_kwargs={"allowed_hosts": ["emailrep.io"], "api_key": "test-key"},
+    name="EmailRep",
+    requires_api_key=True,
+    supported_types=frozenset({IOCType.EMAIL}),
+    excluded_types=_excluded(frozenset({IOCType.EMAIL})),
+    http_method="get",
+    is_http=True,
+    allowed_hosts_config_entry="emailrep.io",
+    sample_ioc_factory=lambda: IOC(
+        type=IOCType.EMAIL, value="user@evil.com", raw_match="user@evil.com"
+    ),
 )
 
 _GREYNOISE = AdapterEntry(
@@ -291,7 +307,7 @@ _WHOIS = AdapterEntry(
 # --- Aggregate registries ----------------------------------------------------
 
 ADAPTER_REGISTRY: list[AdapterEntry] = [
-    _SHODAN, _ABUSEIPDB, _GREYNOISE, _HASHLOOKUP, _IP_API, _OTX,
+    _SHODAN, _ABUSEIPDB, _EMAILREP, _GREYNOISE, _HASHLOOKUP, _IP_API, _OTX,
     _MALWAREBAZAAR, _THREATFOX, _URLHAUS, _CRTSH, _VIRUSTOTAL, _THREATMINER,
     _DNS, _ASN_CYMRU, _WHOIS,
 ]

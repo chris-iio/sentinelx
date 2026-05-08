@@ -1,7 +1,7 @@
 """Tests for app/enrichment/setup.py — build_registry() factory.
 
-Verifies that build_registry() returns a ProviderRegistry with all eight
-providers registered, using the correct API key from ConfigStore.
+Verifies that build_registry() returns a ProviderRegistry with all registered
+providers, using the correct API key from ConfigStore.
 """
 from unittest.mock import MagicMock
 
@@ -29,6 +29,7 @@ def _make_allowed_hosts() -> list[str]:
         "otx.alienvault.com",
         "api.greynoise.io",
         "api.abuseipdb.com",
+        "emailrep.io",
         "ip-api.com",
         "hashlookup.circl.lu",
         "crt.sh",
@@ -49,15 +50,15 @@ class TestBuildRegistry:
         )
         assert isinstance(registry, ProviderRegistry)
 
-    def test_registry_has_fourteen_providers(self):
-        """build_registry() registers exactly 14 providers."""
+    def test_registry_has_sixteen_providers(self):
+        """build_registry() registers exactly 16 providers."""
         from app.enrichment.setup import build_registry
 
         registry = build_registry(
             allowed_hosts=_make_allowed_hosts(),
             config_store=_make_config_store(),
         )
-        assert len(registry.all()) == 15
+        assert len(registry.all()) == 16
 
     def test_registry_contains_virustotal(self):
         """build_registry() registers a provider named 'VirusTotal'."""
@@ -146,6 +147,17 @@ class TestBuildRegistry:
         )
         names = [p.name for p in registry.all()]
         assert "AbuseIPDB" in names
+
+    def test_registry_contains_emailrep(self):
+        """build_registry() registers a provider named 'EmailRep'."""
+        from app.enrichment.setup import build_registry
+
+        registry = build_registry(
+            allowed_hosts=_make_allowed_hosts(),
+            config_store=_make_config_store(),
+        )
+        names = [p.name for p in registry.all()]
+        assert "EmailRep" in names
 
     def test_shodan_is_always_configured(self):
         """ShodanAdapter is configured even without any API key (zero-auth)."""
@@ -269,7 +281,7 @@ class TestBuildRegistry:
 
         key_provider_names = {
             "MalwareBazaar", "ThreatFox", "URLhaus",
-            "OTX AlienVault", "GreyNoise", "AbuseIPDB",
+            "OTX AlienVault", "GreyNoise", "AbuseIPDB", "EmailRep",
         }
         for provider in registry.all():
             if provider.name in key_provider_names:
@@ -305,10 +317,14 @@ class TestBuildRegistry:
             config_store=config_store,
         )
 
-        # Should be called for malwarebazaar, threatfox, urlhaus, otx, greynoise, abuseipdb = 6 times
-        assert config_store.get_provider_key.call_count == 6
+        # Should be called for malwarebazaar, threatfox, urlhaus, otx, greynoise,
+        # abuseipdb, emailrep = 7 times
+        assert config_store.get_provider_key.call_count == 7
         called_names = {c.args[0] for c in config_store.get_provider_key.call_args_list}
-        assert called_names == {"malwarebazaar", "threatfox", "urlhaus", "otx", "greynoise", "abuseipdb"}
+        assert called_names == {
+            "malwarebazaar", "threatfox", "urlhaus", "otx",
+            "greynoise", "abuseipdb", "emailrep",
+        }
 
     def test_registry_contains_dns_records(self):
         """build_registry() registers a provider named 'DNS Records'."""

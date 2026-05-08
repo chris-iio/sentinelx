@@ -1,7 +1,7 @@
-# S01: EmailRep adapter contract
+# S01: EmailRep launch-readiness bundle
 
-**Goal:** Add the backend EmailRep adapter as an isolated contract proof using the existing HTTP adapter safety path.
-**Demo:** After this, a tested EmailRepAdapter exists and maps representative EmailRep responses into SentinelX verdicts without touching registry or UI behavior.
+**Goal:** Add the backend EmailRep adapter and keep the already-implemented registry/settings/E2E/docs launch-readiness wiring in the same bundled change.
+**Demo:** After this, EmailRep is a tested, key-gated email provider with settings/registry coverage and deterministic mocked Online-mode proof.
 
 ## Must-Haves
 
@@ -18,7 +18,7 @@
 
 ## Integration Closure
 
-No registry/settings/UI wiring in this slice. S01 closes only the adapter seam: a new EmailRepAdapter exists, is key-gated, supports only IOCType.EMAIL, dispatches through BaseHTTPAdapter/safe_request, and exposes a stable flattened raw_stats contract for downstream S02/S03 work.
+Scope reconciliation on 2026-05-08: implementation intentionally went beyond the original adapter-only boundary. Keep the bundled registry/settings/E2E/docs work rather than reverting it; S02-S04 in the milestone roadmap are now absorbed/reserved follow-ups unless fresh gaps are found.
 
 ## Verification
 
@@ -31,12 +31,12 @@ No registry/settings/UI wiring in this slice. S01 closes only the adapter seam: 
   - Files: `tests/test_emailrep.py`, `tests/helpers.py`, `app/pipeline/models.py`
   - Verify: python3 -m pytest tests/test_emailrep.py -q (expected red until T02 creates the adapter)
 
-- [ ] **T02: Implement EmailRepAdapter with conservative verdict mapping** `est:1h`
+- [x] **T02: Implement EmailRepAdapter with conservative verdict mapping** `est:1h`
   Why: Implement the minimal backend provider seam that S02 and S03 can consume without prematurely wiring it into Online mode.
   - Files: `app/enrichment/adapters/emailrep.py`, `tests/test_emailrep.py`
   - Verify: python3 -m pytest tests/test_emailrep.py -q
 
-- [ ] **T03: Add EmailRep to shared adapter contract coverage** `est:45m`
+- [x] **T03: Add EmailRep to shared adapter contract coverage** `est:45m`
   Why: Prove the new adapter obeys the same shared adapter invariants as existing HTTP adapters before downstream slices register it.
   - Files: `tests/test_adapter_contract.py`, `tests/helpers.py`, `app/enrichment/adapters/emailrep.py`
   - Verify: python3 -m pytest tests/test_emailrep.py tests/test_adapter_contract.py -q

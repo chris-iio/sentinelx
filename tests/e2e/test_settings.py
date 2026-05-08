@@ -12,7 +12,7 @@ from tests.e2e.pages import IndexPage, SettingsPage
 # All key-requiring providers displayed on the settings page.
 EXPECTED_PROVIDERS = [
     "virustotal", "malwarebazaar", "threatfox", "urlhaus",
-    "otx", "greynoise", "abuseipdb",
+    "otx", "greynoise", "abuseipdb", "emailrep",
 ]
 
 
@@ -96,6 +96,7 @@ def test_each_provider_has_title(page: Page, live_server: str) -> None:
         "otx": "OTX AlienVault",
         "greynoise": "GreyNoise",
         "abuseipdb": "AbuseIPDB",
+        "emailrep": "EmailRep",
     }
     for pid, name in expected_names.items():
         expect(sp.provider_title(pid)).to_contain_text(name)
