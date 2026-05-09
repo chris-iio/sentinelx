@@ -1,21 +1,43 @@
-# T01 Summary: Replace stale EmailRep plan with minimal-product research and roadmap
+---
+id: T01
+parent: S01
+milestone: M016
+key_files:
+  - tests/test_emailrep.py
+key_decisions:
+  - (none)
+duration: 
+verification_result: passed
+completed_at: 2026-05-07T19:11:01.849Z
+blocker_discovered: false
+---
 
-## What changed
+# T01: Pinned the red EmailRep adapter contract tests for S01.
 
-- Replaced the stale EmailRep-centered `M016-RESEARCH.md` with product research for SentinelX as a minimal local-first IOC evidence workbench.
-- Replaced the EmailRep `M016-ROADMAP.md` with four product-hardening slices: baseline cleanup, minimal intake workbench, scannable results, and runtime/integration hardening.
-- Updated active state wording to point at `M016: Minimal Useful Product Hardening` and the next product-loop audit action.
-- Rewrote S01 and task plans so current execution no longer points at `EmailRepAdapter` implementation.
-- Saved web research artifacts under `.firecrawl/` for reference.
+**Pinned the red EmailRep adapter contract tests for S01.**
 
-## Key decision
+## What Happened
 
-EmailRep is now treated as a future provider backlog candidate, not M016 execution scope. M016 should first prove the current paste/extract/enrich/review/resume loop is useful, fast, and minimal.
+Created tests/test_emailrep.py to pin the future EmailRepAdapter public contract before implementation. The tests cover EmailRep-specific verdict mapping for malicious, suspicious, clean, and no_data responses; flattened raw_stats fields including reputation, suspicious, references, risk_flags, domain_reputation, and profiles; key-gated configuration; documented Key and User-Agent headers; URL-encoded lookup URLs; unsupported IOC type rejection; and HTTP 401 propagation through the shared safe_request path. Registry/setup/UI behavior was deliberately not touched because S01/T01 is adapter-local red test work.
 
 ## Verification
 
-Run the grep command from `T01-PLAN.md` after the latest edits. Stale active EmailRep execution references should be gone; explicitly superseded historical mentions in research/summary files are acceptable.
+Ran `python3 -m pytest tests/test_emailrep.py -q`; it exited 2 during collection with `ModuleNotFoundError: No module named 'app.enrichment.adapters.emailrep'`, which is the expected red failure until T02 creates the adapter.
 
-## Next
+## Verification Evidence
 
-Proceed to T02: audit the current browser loop on desktop/mobile and record concrete UI/runtime friction points.
+| # | Command | Exit Code | Verdict | Duration |
+|---|---------|-----------|---------|----------|
+| 1 | `python3 -m pytest tests/test_emailrep.py -q` | 2 | ✅ expected red: collection fails only because app.enrichment.adapters.emailrep is missing | 70ms |
+
+## Deviations
+
+None. The task intentionally stops at a red test collection failure because the EmailRep adapter module is not implemented until T02.
+
+## Known Issues
+
+tests/test_emailrep.py currently fails collection with ModuleNotFoundError for app.enrichment.adapters.emailrep; this is the expected red state for T01 and will be resolved in T02.
+
+## Files Created/Modified
+
+- `tests/test_emailrep.py`
