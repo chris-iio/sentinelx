@@ -1,39 +1,49 @@
 ---
-estimated_steps: 10
-estimated_files: 2
+estimated_steps: 7
+estimated_files: 4
 skills_used: []
 ---
 
-# T02: Implement EmailRepAdapter with conservative verdict mapping
+# T02: Audit the current browser loop on desktop/mobile
 
-Why: Implement the minimal backend provider seam that S02 and S03 can consume without prematurely wiring it into Online mode.
+Why: The redesign target must come from the actual product loop, not a generic preference for minimal UI.
 
 Do:
-1. Add `app/enrichment/adapters/emailrep.py` with `EmailRepAdapter(BaseHTTPAdapter)`.
-2. Set `name = "EmailRep"`, `supported_types = frozenset({IOCType.EMAIL})`, and `requires_api_key = True`.
-3. URL-encode email IOC values when building `https://emailrep.io/{email}`.
-4. Set session auth headers with documented `Key` and stable `User-Agent` values.
-5. Implement explicit verdict mapping: high-confidence abuse flags to malicious, broader risk flags/low reputation to suspicious, clean reputation with no risk flags to clean, and no/thin reputation to no_data.
-6. Flatten selected fields into raw_stats, including a stable `risk_flags` array built from true boolean risk flags.
-7. Avoid any `build_registry()`, settings, allowed-host, or frontend changes; those belong to later slices.
+1. Start or use the supported local dev-server path.
+2. Exercise `/` on desktop and mobile viewport sizes.
+3. Submit a representative Offline sample containing multiple IOC types.
+4. Inspect results page hierarchy: header, progress/status, filters, dashboard chrome, result cards, details/context affordances.
+5. Load a prior analysis from history and confirm where history feels helpful vs distracting.
+6. Record friction points with file/template/selector references and separate must-fix from nice-to-have.
+7. Identify which elements should be removed, collapsed, quieted, or preserved for S02/S03.
 
-Done when: `tests/test_emailrep.py` passes and the adapter remains isolated from app-wide registration.
+Done when: A concise audit artifact exists with concrete UI observations tied to code locations and product-loop steps.
 
 ## Inputs
 
-- `tests/test_emailrep.py`
-- `app/enrichment/adapters/base.py`
-- `app/enrichment/models.py`
-- `app/pipeline/models.py`
+- `.gsd/milestones/M016/M016-RESEARCH.md`
+- `app/templates/index.html`
+- `app/templates/results.html`
+- `app/templates/partials/_verdict_dashboard.html`
+- `app/templates/partials/_filter_bar.html`
+- Existing dev-server/browser verification conventions.
 
 ## Expected Output
 
-- `app/enrichment/adapters/emailrep.py`
+- Audit notes in an appropriate M016 artifact or slice note.
+- Prioritized target list for S02/S03.
 
 ## Verification
 
-python3 -m pytest tests/test_emailrep.py -q
+Audit notes must include:
+
+- Desktop observation for intake.
+- Mobile observation for intake.
+- Offline results observation.
+- Online/progress or mocked-online observation if feasible.
+- History resume observation.
+- Specific file/selector references for each recommended change.
 
 ## Observability Impact
 
-Uses existing safe_request/EnrichmentError paths; no new logs required. Error localization is via tested verdict/raw_stats behavior and BaseHTTPAdapter failure propagation.
+No runtime code changes. The output should make future UI changes easier to verify because it names the exact workflow states that matter.

@@ -1,112 +1,137 @@
-# M016 — Research
+# M016 — Research: Minimal Useful Product Hardening
 
-**Date:** 2026-05-07
+**Date:** 2026-05-09
+**Status:** Supersedes the earlier EmailRep-centered research
 
-## Summary
+## Executive Summary
 
-M016 should implement EmailRep as one focused, key-gated email reputation provider rather than expanding SentinelX into raw email/header phishing triage. The existing product already treats `IOCType.EMAIL` as first-class at extraction/render time, but Online enrichment has no configured provider path for email IOCs. Adding a single EmailRep adapter closes that gap while staying inside the existing provider registry, settings, orchestrator, history, and frontend rendering architecture.
+M016 should not add another provider by default. The better product move is to harden SentinelX as a minimal local-first threat-intel evidence workbench: paste messy security text, extract observables quickly, optionally enrich them, and show transparent evidence without dashboard clutter.
 
-External docs confirm EmailRep’s public API shape is a simple `GET https://emailrep.io/{email}` returning `email`, `reputation`, `suspicious`, `references`, and a nested `details` object with flags such as `blacklisted`, `malicious_activity`, `credentials_leaked`, `data_breach`, `domain_exists`, `domain_reputation`, `new_domain`, `suspicious_tld`, `spam`, `free_provider`, `disposable`, `deliverable`, `valid_mx`, `spoofable`, `spf_strict`, and `dmarc_enforced`. EmailRep does not technically require an API key, but the current user decision is to make SentinelX key-gate this provider to avoid anonymous-rate-limit ambiguity and match the existing configured-provider UX.
+The current local code already supports the right core loop (`/` paste form, Offline/Online mode, extraction, enrichment, results cards, details, history resume). The problem is focus: the UI and execution plan still lean toward provider expansion and dashboard-style status surfaces. Research of comparable IOC/enrichment workflows supports a narrower product: fast extraction, explicit enrichment, source-level evidence, and progressive depth only when needed.
 
-The main implementation risk is not the HTTP call; it is preserving SentinelX’s existing analyst contract: email rows should get a compact, scannable verdict and summary, but weak contextual signals must not overstate maliciousness. The provider should map high-confidence abuse indicators into `malicious`, broader risk indicators into `suspicious`, good deliverability/reputation into `clean`, and thin/no signal into `no_data`.
+## Product Definition
 
-## Recommendation
+SentinelX is best treated as:
 
-Add a new `EmailRepAdapter` under `app/enrichment/adapters/emailrep.py` using `BaseHTTPAdapter`. Set `supported_types = frozenset({IOCType.EMAIL})`, `requires_api_key = True`, `name = "EmailRep"`, `EMAILREP_BASE = "https://emailrep.io"`, `_build_url()` to append the URL-encoded email value, and `_auth_headers()` to include both `Key: <api key>` and a stable `User-Agent`, such as `SentinelX`. Although EmailRep supports anonymous calls, SentinelX should not expose that in M016 because the discussion chose key-gated behavior.
+> A local-first IOC evidence workbench for quickly turning raw security text into normalized observables and transparent enrichment context.
 
-Use a small, explicit verdict mapper in the adapter instead of pushing verdict logic into the frontend. Suggested first-pass mapping:
+It is **not** a SIEM, SOAR, SOC dashboard, raw-email phishing triage suite, or opaque AI verdict engine.
 
-- `malicious` if any of: `details.blacklisted`, `details.malicious_activity`, `details.malicious_activity_recent`, or `details.credentials_leaked_recent` is true.
-- `suspicious` if `suspicious` is true, `reputation == "low"`, or any strong-but-not-definitive flags are true: `spam`, `disposable`, `credentials_leaked`, `data_breach`, `new_domain`, `suspicious_tld`, `spoofable`, `domain_exists is false`, `valid_mx is false`, or `deliverable is false`.
-- `clean` if `reputation in {"high", "medium"}`, `suspicious is false`, and no risk flags are present.
-- `no_data` if `reputation == "none"`, fields are missing, or the response has no usable risk/reputation signal.
+## External Research Takeaways
 
-Keep the frontend rendering simple and safe: add `EmailRep` to `PROVIDER_CONTEXT_FIELDS` with compact text/tag fields derived by the backend, e.g. `reputation`, `suspicious`, `references`, `risk_flags`, `domain_reputation`, `profiles`. Do not render the entire nested details object directly. Build `risk_flags` in the adapter from the true boolean flags so `row-factory.ts` can use its existing tag renderer with `textContent`.
+### 1. IOC tools are valuable when they turn raw observables into reports with evidence
 
-## Implementation Landscape
+Google Threat Intelligence describes IOC investigation as checking files, URLs, IPs, or domains and producing reports that gather metadata, relationships, and vendor verdicts so users can assess and act. This maps directly to SentinelX's existing strength: extract observables, enrich when requested, and preserve source-level evidence.
 
-### Key Files
+**Implication for M016:** keep evidence visible. Do not hide all provider facts behind a single magic score.
 
-- `app/enrichment/adapters/emailrep.py` — new keyed HTTP adapter for `IOCType.EMAIL`; should subclass `BaseHTTPAdapter` and own EmailRep response parsing/verdict mapping.
-- `app/enrichment/adapters/base.py` — existing template-method HTTP adapter pattern: auth headers, `is_configured()`, type guard, `safe_request()`, and parse hook.
-- `app/enrichment/http_safety.py` — canonical HTTP safety path; the new adapter should dispatch through this indirectly via `BaseHTTPAdapter`.
-- `app/enrichment/setup.py` — import/register `EmailRepAdapter`, read `config_store.get_provider_key("emailrep")`, add `PROVIDER_INFO` settings metadata, and update provider-count docstrings/comments from 15 to 16.
-- `app/enrichment/config_store.py` — already supports generic provider keys via `[providers]`; no schema change required.
-- `app/config.py` — verify `emailrep.io` is in the outbound allowed-host list; add it if absent.
-- `app/routes/analysis.py` — no logic change expected; provider counts already iterate `IOCType` except CVE and use `registry.providers_for_type()`. Adding a configured email provider should make `email` counts non-zero.
-- `app/static/src/ts/modules/row-factory.ts` — add `EmailRep` context field definitions for compact visible context; keep DOM creation via `createElement`/`textContent`.
-- `app/static/src/ts/modules/row-factory.test.ts` — add tests proving `EmailRep` context fields render safely and are included/excluded as intended.
-- `tests/test_emailrep.py` — new adapter-specific parse/verdict tests.
-- `tests/test_adapter_contract.py` — add EmailRep to `ADAPTER_REGISTRY`, likely with a new `make_email_ioc` helper if one does not already exist.
-- `tests/test_registry_setup.py` — update provider count, allowed hosts, provider registration, key lookup expectations, and configured-provider coverage tests.
-- `tests/test_routes.py` or analysis route tests — add/adjust proof that configured provider counts include `email` when EmailRep is keyed.
-- `tests/e2e/test_results_page.py` — existing email badge/filter coverage should remain; M016 should add mocked Online-mode proof that email enrichment renders EmailRep verdict/context.
+### 2. Enrichment should reduce grunt work, not become the product surface
 
-### Build Order
+Palo Alto's IOC enrichment workflow frames enrichment as an early repetitive incident-response task: extract IOCs, query threat-intel tools, collect context, then let analysts review/act. ANY.RUN similarly emphasizes swift lookup and context for fatigue-free investigations.
 
-1. **Backend adapter proof first.** Add `EmailRepAdapter` with unit tests for URL construction, auth headers, `is_configured()`, unsupported type behavior, and response parsing. This retires the API-shape and verdict-mapping risk before touching app-wide registry behavior.
-2. **Registry/settings integration second.** Register the adapter in `build_registry()`, add `PROVIDER_INFO`, allowed host config, and update registry/contract tests. This proves EmailRep participates in SentinelX’s configured-provider model and makes `IOCType.EMAIL` enrichable in Online mode.
-3. **Frontend/context rendering third.** Add `EmailRep` context fields and UI tests after the backend raw_stats contract is stable. Do not start frontend rendering until the adapter decides the exact field names.
-4. **End-to-end mocked Online proof last.** Use mocked enrichment/status responses or the existing E2E mocking pattern to prove an email IOC renders an EmailRep verdict/context row without requiring a live API key.
+**Implication for M016:** the primary interface should be a fast paste-and-review path, not a provider-management dashboard. Provider state is supporting information.
 
-### Verification Approach
+### 3. Context beats raw data dumps
 
-Run focused tests after each stage, then full fast verification:
+Threat-intel enrichment guidance consistently frames enrichment as adding context, metadata, relationships, reputation, and temporal information to raw indicators. The useful output is not every raw field; it is the few facts that help an analyst decide whether to pivot, ignore, block, or investigate.
 
-- Adapter: `python3 -m pytest tests/test_emailrep.py tests/test_adapter_contract.py -q`
-- Registry/settings: `python3 -m pytest tests/test_registry_setup.py tests/test_settings.py tests/test_routes.py -q`
-- Frontend: `make typecheck && make js && npm test -- row-factory`
-- E2E mocked Online proof: targeted Playwright test for an email IOC with an EmailRep result row, e.g. `python3 -m pytest tests/e2e/test_results_page.py -k email -q`
-- Final: `make verify-fast` if available and not prohibitively slow.
+**Implication for M016:** result cards should show compact evidence summaries with details available on demand. Avoid dumping nested provider payloads or showing too many counters by default.
 
-Observable behavior to prove:
+### 4. Progressive enrichment is a good model for speed
 
-- With no EmailRep key, `EmailRepAdapter.is_configured()` is false and `email` provider count remains zero.
-- With an EmailRep key, `registry.providers_for_type(IOCType.EMAIL)` includes EmailRep and Online mode reports email provider coverage.
-- An EmailRep response with high-confidence abuse flags produces a malicious/suspicious row verdict.
-- A benign/high-reputation response produces a clean row verdict.
-- A no-reputation/thin response produces `no_data` instead of exaggerated risk.
-- UI context renders compact fields and tags without `innerHTML`.
+Modern enrichment guidance recommends lightweight initial context and deeper enrichment only when needed. This aligns with SentinelX's Offline-first design and explicit Online mode.
 
-## Don't Hand-Roll
+**Implication for M016:** Offline should feel instant and local. Online should be explicit, progressive, and honest about pending/provider failures without blocking the useful extracted IOC list.
 
-| Problem | Existing Solution | Why Use It |
-|---------|------------------|------------|
-| HTTP request safety, SSRF allowlist, response-size cap, exception handling | `BaseHTTPAdapter` + `safe_request()` | Keeps EmailRep consistent with the post-M005 adapter architecture and avoids bypassing established security behavior. |
-| API key storage | `ConfigStore.get_provider_key()` / `set_provider_key()` | Generic provider-key storage already exists; no new env var or config schema is needed. |
-| Provider discovery and Online dispatch | `ProviderRegistry` + `build_registry()` | Existing registry already handles configured providers, supported types, and provider counts. |
-| Frontend context rendering | `PROVIDER_CONTEXT_FIELDS` + `createContextFields()` in `row-factory.ts` | Existing text-only DOM construction avoids XSS and keeps visual treatment consistent. |
+## Local Codebase Audit Findings
 
-## Constraints
+### Current strengths
 
-- SentinelX’s product decision is key-gated EmailRep, even though EmailRep’s public docs say the API can be used anonymously with lower rate limits.
-- EmailRep requires a User-Agent header; missing User-Agent returns HTTP 403 according to the docs root.
-- EmailRep uses `Key: [api key]` as the documented auth header, not `Authorization: Bearer`.
-- Invalid EmailRep API keys return HTTP 401 according to the docs root.
-- `emailrep.io` must be present in `Config.ALLOWED_OUTBOUND_HOSTS` or `safe_request()` will reject the call before network dispatch.
-- Do not make OTX support email; project knowledge explicitly notes OTX excludes `IOCType.EMAIL` by design.
-- Provider UI fields must be updated atomically with backend registration; otherwise EmailRep data may enrich successfully but render no useful context.
-- Use `textContent`/`createElement` only for EmailRep fields. Email addresses, profiles, and flags are external data.
+- `app/templates/index.html` already centers the product around a paste form and Offline-first extraction.
+- `app/routes/analysis.py` keeps Offline simple: read text, run `run_pipeline`, group IOCs, render results.
+- Online mode is explicit and key-gated through the registry; it does not accidentally contact providers in Offline mode.
+- `app/static/src/ts/modules/result-application.ts` has a shared live/history rendering path, which is the right seam for preserving parity while simplifying UI.
+- History is already fail-open on the index route via `_recent_analyses_context()`, so history does not block the primary paste flow.
 
-## Common Pitfalls
+### Current friction / product issues
 
-- **Using anonymous EmailRep because the API allows it** — Avoid this in M016; the user selected key-gated behavior. Anonymous support can be a later explicit setting.
-- **Wrong auth header** — EmailRep docs use `Key`, not `key`, `X-API-Key`, or `Authorization`.
-- **Missing User-Agent** — EmailRep returns 403 without a user-agent; set a stable session header in `_auth_headers()`.
-- **Overstating reputation as safety** — EmailRep’s own FAQ says high reputation does not mean an email is safe because accounts can be compromised or spoofed. Map high reputation to clean only when no risk flags are present.
-- **Rendering nested `details` raw** — Flatten backend-selected fields into `raw_stats` keys like `risk_flags`; do not dump the whole object into the DOM.
-- **Forgetting adapter contract registry updates** — Adding a provider requires updating parametrized adapter contract tests or they will stop representing the full provider set.
-- **Forgetting allowed host config** — The adapter can be correct but still fail with an SSRF/allowed-host error if `emailrep.io` is not configured.
+- The milestone execution state still points at `EmailRepAdapter`, which conflicts with the product direction in `M016-CONTEXT.md`.
+- `index.html` has clearer structure than earlier dashboard surfaces, but it still spends significant space explaining mode mechanics before the analyst sees results.
+- Recent analyses are presented as a full rail next to the primary task; for a minimal first-use experience this should be visually secondary or collapsible.
+- `results.html` renders multiple controls at top-level: mode indicator, count summary, export group, back link, warning, progress, verdict dashboard, provider coverage, filter bar, search, and cards. This is useful but visually dashboard-like.
+- `_verdict_dashboard.html` duplicates filter affordances and provider-coverage counters. It is likely the main dashboard chrome to remove, collapse, or visually quiet.
+- `_filter_bar.html` shows all verdict filters even when counts are zero or Online enrichment has not completed. That can make the surface feel heavier than the evidence.
+- Runtime speed is not yet measured. We need baseline timing before claiming fast.
 
-## Open Risks
+## Recommended Direction
 
-- The docs navigation surfaced ReadMe-style field definitions and root auth behavior, but specific per-endpoint ReadMe.io pages returned 404 when fetched directly. Implementation should verify live endpoint behavior through mocked tests and, if a real key is available, an optional manual smoke test.
-- EmailRep’s response for invalid emails, unknown emails, and rate limiting needs implementation-time confirmation. Use `pre_raise_hook` if specific status codes should map to `no_data` or clean user-facing errors.
-- Exact verdict thresholds may need tuning after seeing real-world EmailRep samples; start conservative and make the mapping explicit/tested so it can be changed safely.
+### Stop: EmailRep as the default next action
 
-## Sources
+EmailRep can remain a future provider idea, but it should not drive M016. Adding EmailRep would expand settings, registry, provider-count, UI-context, and test surface without answering whether the current tool is useful and fast.
 
-- EmailRep homepage confirms simple `curl emailrep.io/bill@microsoft.com` API shape and sample fields including `reputation`, `suspicious`, `references`, and `details` flags (source: [emailrep.io](https://emailrep.io/)).
-- EmailRep docs root confirms API key is optional upstream, keyed requests use `Key: [your api key]`, missing User-Agent returns 403, and invalid key returns 401 (source: [docs.emailrep.io](https://docs.emailrep.io/)).
-- EmailRep GitHub README defines response field meanings for `reputation`, `suspicious`, `references`, and all key `details` flags (source: [sublime-security/emailrep.io README](https://raw.githubusercontent.com/sublime-security/emailrep.io/master/README.md)).
-- SentinelX adapter architecture and registration seams verified from local files: `app/enrichment/adapters/base.py`, `app/enrichment/setup.py`, `app/enrichment/config_store.py`, `app/routes/analysis.py`, and `app/static/src/ts/modules/row-factory.ts`.
+### Start: product-loop hardening
+
+M016 should implement and verify a minimal useful product loop:
+
+1. Open `/`.
+2. Paste suspicious text.
+3. Keep Offline by default or intentionally switch Online.
+4. Submit.
+5. See extracted IOCs quickly.
+6. Review compact evidence and provider status.
+7. Open details only when needed.
+8. Resume a past analysis without re-enrichment.
+
+### Runtime target
+
+Measure first, then optimize. Candidate paths:
+
+- Offline `POST /analyze` route timing around `run_pipeline()` and template render.
+- Initial browser render time for results with many IOCs.
+- Online enrichment status polling and DOM update behavior.
+- History detail replay time and DOM update behavior.
+
+The first likely target should be Offline paste-to-results, because it is the product's safest default and easiest to benchmark deterministically.
+
+## UI Simplification Hypotheses
+
+These are hypotheses to test/implement during M016, not final design mandates:
+
+- Make the input card feel like one obvious command surface: shorter copy, larger textarea, fewer explanatory paragraphs.
+- Keep Offline/Online choice, but reduce mode explanation to one line plus accessible status.
+- Move recent analyses into a quieter secondary strip/details disclosure rather than a competing rail.
+- Replace the Online verdict KPI dashboard with a compact status line and let result-card labels carry verdict information.
+- Keep filters, but make them conditional or compact so they do not dominate small result sets.
+- Preserve detail/context links so provider evidence remains available.
+- Prefer progressive disclosure over removing evidence.
+
+## Verification Strategy
+
+M016 completion requires evidence, not aesthetics alone:
+
+- Focused route/unit tests for touched analysis/history/enrichment behavior.
+- Frontend tests for touched form/filter/result modules.
+- Browser proof for Offline paste-to-results on desktop and mobile.
+- Browser proof for mocked Online enrichment with progress/failure/provider evidence.
+- Browser proof for history resume with no re-query/polling.
+- Fresh runtime evidence for at least one path, preferably Offline paste-to-results before and after simplification or optimization.
+- `make verify-fast` as the final routine lane after implementation.
+
+## Sources / Artifacts
+
+Research artifacts saved locally:
+
+- `.firecrawl/m016-product-research.json`
+- `.firecrawl/m016-workflow-research.json`
+- `.firecrawl/m016-ui-research.json`
+
+External sources consulted:
+
+- Google Threat Intelligence, "Get started with IOC Investigation" — IOC reports gather metadata, relationships, and vendor verdicts for analyst assessment.
+- Palo Alto Networks, "Security Orchestration Use Case: Automating IOC Enrichment" — enrichment extracts IOCs, queries sources, and makes context available quickly during incident response.
+- ANY.RUN, "How to Enrich IOCs with Actionable Threat Context" — quick checks and context reduce investigation fatigue.
+- Wiz, "What Is Enrichment In Threat Intelligence?" — enrichment turns raw observables into actionable context and recommends progressive enrichment strategies.
+
+## Superseded Prior Research
+
+The earlier M016 EmailRep research is intentionally superseded. Its useful takeaway is limited to a future provider backlog item: email IOCs currently have no Online provider coverage. That is not the highest-value M016 problem.

@@ -1,37 +1,43 @@
 ---
-estimated_steps: 8
-estimated_files: 3
+estimated_steps: 6
+estimated_files: 2
 skills_used: []
 ---
 
-# T03: Add EmailRep to shared adapter contract coverage
+# T03: Capture Offline paste-to-results runtime baseline
 
-Why: Prove the new adapter obeys the same shared adapter invariants as existing HTTP adapters before downstream slices register it.
+Why: M016 says SentinelX should be fast. That claim needs a fresh baseline before optimization work begins.
 
 Do:
-1. Add a `make_email_ioc()` helper if needed, following existing helper style.
-2. Extend `tests/test_adapter_contract.py` with an EmailRep `AdapterEntry` using allowed host `emailrep.io`, `api_key="test-key"`, `requires_api_key=True`, supported type `IOCType.EMAIL`, and HTTP method `get`.
-3. Ensure contract tests prove unsupported-type handling for all non-email IOC types and configured/unconfigured key behavior.
-4. Do not add EmailRep to `app/enrichment/setup.py` or settings metadata yet.
-5. Update any adapter-count wording in the contract-test module if it becomes stale.
+1. Choose the most deterministic baseline path available: Flask test-client `POST /analyze` in Offline mode, browser submit timing, or both.
+2. Use a representative sample with enough IOCs to exercise extraction and result rendering without external providers.
+3. Capture wall-clock timing and, if practical, split extraction vs template/render cost.
+4. Save the command and output in a small M016 artifact or slice note.
+5. Identify whether S04 should optimize extraction, rendering, browser DOM work, or simply preserve a good baseline.
+6. Do not claim speed improvement in T03; this is baseline only.
 
-Done when: Dedicated EmailRep tests and the shared adapter contract suite pass together.
+Done when: There is a repeatable command/output that future work can compare against.
 
 ## Inputs
 
-- `app/enrichment/adapters/emailrep.py`
-- `tests/test_adapter_contract.py`
-- `tests/helpers.py`
+- `app/routes/analysis.py`
+- `app/pipeline/extractor.py` / `run_pipeline()`
+- Existing tests or fixtures for analysis submissions.
 
 ## Expected Output
 
-- `tests/test_adapter_contract.py`
-- `tests/helpers.py`
+- Baseline timing artifact or documented command output.
+- Candidate speed target for S04.
 
 ## Verification
 
-python3 -m pytest tests/test_emailrep.py tests/test_adapter_contract.py -q
+The artifact must include:
+
+- Exact command or script used.
+- Input size/shape.
+- Timing result(s).
+- Environment caveats if any.
 
 ## Observability Impact
 
-No runtime signal change; contract tests become the inspection surface proving the adapter remains compatible with shared HTTP safety invariants.
+May add a temporary or durable benchmark-style script only if useful. Prefer a simple documented command if that gives enough signal.
