@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-04-26T12:01:39Z | Files: 176 | Described: 0/176
-<!-- gsd:codebase-meta {"generatedAt":"2026-04-26T12:01:39Z","fingerprint":"c5d63279b735a113731d2730ed2d90c212ddf490","fileCount":176,"truncated":false} -->
+Generated: 2026-05-09T11:30:48Z | Files: 180 | Described: 0/180
+<!-- gsd:codebase-meta {"generatedAt":"2026-05-09T11:30:48Z","fingerprint":"9855d5da12a5c270243ad315e7cadcf0f24463dd","fileCount":180,"truncated":false} -->
 
 ### (root)/
 - `.codex`
@@ -49,6 +49,7 @@ Generated: 2026-04-26T12:01:39Z | Files: 176 | Described: 0/176
 - `app/enrichment/adapters/base.py`
 - `app/enrichment/adapters/crtsh.py`
 - `app/enrichment/adapters/dns_lookup.py`
+- `app/enrichment/adapters/emailrep.py`
 - `app/enrichment/adapters/greynoise.py`
 - `app/enrichment/adapters/hashlookup.py`
 - `app/enrichment/adapters/ip_api.py`
@@ -118,6 +119,8 @@ Generated: 2026-04-26T12:01:39Z | Files: 176 | Described: 0/176
 - `app/templates/partials/_verdict_dashboard.html`
 
 ### docs/
+- `docs/code-analysis-launch-deck.html`
+- `docs/launch-checklist.md`
 - `docs/optimization-audit.md`
 - `docs/runtime-state-boundary.md`
 
@@ -127,7 +130,7 @@ Generated: 2026-04-26T12:01:39Z | Files: 176 | Described: 0/176
 - `docs/plans/2026-03-04-settings-page-redesign.md`
 
 ### tests/
-- *(52 files: 52 .py)*
+- *(53 files: 53 .py)*
 
 ### tests/e2e/
 - `tests/e2e/__init__.py`
