@@ -100,6 +100,14 @@ PROVIDER_INFO: list[dict[str, str | bool]] = [
 ]
 
 
+def _get_provider_key_or_empty(config_store: ConfigStore, provider_id: str) -> str:
+    """Return a provider API key, treating local config read failures as missing."""
+    try:
+        return config_store.get_provider_key(provider_id) or ""
+    except Exception:
+        return ""
+
+
 def build_registry(
     allowed_hosts: list[str],
     config_store: ConfigStore,
@@ -141,26 +149,26 @@ def build_registry(
     vt_key = config_store.get_vt_api_key() or ""
     registry.register(VTAdapter(api_key=vt_key, allowed_hosts=allowed_hosts))
 
-    mb_key = config_store.get_provider_key("malwarebazaar") or ""
+    mb_key = _get_provider_key_or_empty(config_store, "malwarebazaar")
     registry.register(MBAdapter(api_key=mb_key, allowed_hosts=allowed_hosts))
 
-    tf_key = config_store.get_provider_key("threatfox") or ""
+    tf_key = _get_provider_key_or_empty(config_store, "threatfox")
     registry.register(TFAdapter(api_key=tf_key, allowed_hosts=allowed_hosts))
     registry.register(ShodanAdapter(allowed_hosts=allowed_hosts))
 
-    urlhaus_key = config_store.get_provider_key("urlhaus") or ""
+    urlhaus_key = _get_provider_key_or_empty(config_store, "urlhaus")
     registry.register(URLhausAdapter(api_key=urlhaus_key, allowed_hosts=allowed_hosts))
 
-    otx_key = config_store.get_provider_key("otx") or ""
+    otx_key = _get_provider_key_or_empty(config_store, "otx")
     registry.register(OTXAdapter(api_key=otx_key, allowed_hosts=allowed_hosts))
 
-    gn_key = config_store.get_provider_key("greynoise") or ""
+    gn_key = _get_provider_key_or_empty(config_store, "greynoise")
     registry.register(GreyNoiseAdapter(api_key=gn_key, allowed_hosts=allowed_hosts))
 
-    abuseipdb_key = config_store.get_provider_key("abuseipdb") or ""
+    abuseipdb_key = _get_provider_key_or_empty(config_store, "abuseipdb")
     registry.register(AbuseIPDBAdapter(api_key=abuseipdb_key, allowed_hosts=allowed_hosts))
 
-    emailrep_key = config_store.get_provider_key("emailrep") or ""
+    emailrep_key = _get_provider_key_or_empty(config_store, "emailrep")
     registry.register(EmailRepAdapter(api_key=emailrep_key, allowed_hosts=allowed_hosts))
 
     # Zero-auth providers — no key needed, always configured
