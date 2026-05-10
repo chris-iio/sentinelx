@@ -12,13 +12,13 @@
 
 ## Slices
 
-- [ ] **S01: S01** `risk:high` `depends:[]`
+- [x] **S01: S01** `risk:high` `depends:[]`
   > After this: After this, a tested EmailRepAdapter exists and maps representative EmailRep responses into SentinelX verdicts without touching registry or UI behavior.
 
-- [ ] **S02: Registry, settings, and email provider coverage** `risk:medium` `depends:[S01]`
+- [x] **S02: S02** `risk:medium` `depends:[]`
   > After this: After this, configuring an EmailRep key makes Online mode report provider coverage for email IOCs; without a key, email coverage remains zero.
 
-- [ ] **S03: Compact EmailRep result rendering** `risk:medium` `depends:[S01,S02]`
+- [ ] **S03: S03** `risk:medium` `depends:[]`
   > After this: After this, mocked EmailRep results render compact reputation and risk context in the existing result row UI without unsafe nested-data dumping.
 
 - [ ] **S04: Mocked Online email enrichment proof** `risk:high` `depends:[S02,S03]`

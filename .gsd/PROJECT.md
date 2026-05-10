@@ -2,15 +2,15 @@
 
 ## What This Is
 
-A universal threat intelligence hub for SOC analysts. Paste free-form text (alerts, email headers, threat reports, raw IOCs) and the app extracts, normalizes, classifies, and enriches IOCs against 15 providers in parallel — presenting unified summary verdicts with expandable per-provider detail rows, bookmarkable per-IOC detail pages with relationship graphs, and analyst annotations (notes + tags). Analyses are persisted to SQLite and reloadable from the browser. No opaque combined scores.
+A universal threat intelligence hub for SOC analysts. Paste free-form text (alerts, email headers, threat reports, raw IOCs) and the app extracts, normalizes, classifies, and enriches IOCs against the established provider set — presenting unified summary verdicts with expandable per-provider detail rows, bookmarkable per-IOC detail pages with relationship graphs, and analyst annotations (notes + tags). Analyses are persisted to SQLite and reloadable from the browser. No opaque combined scores.
 
 ## Core Value
 
-Safe, correct, and transparent IOC extraction and enrichment — never invent scores, never make network calls the analyst didn't ask for, never trust input or API responses. The front door now supports a fast analyst motion: paste → choose mode → Extract, with compact Recent Analyses available only as a secondary resume aid.
+Safe, correct, and transparent IOC extraction and enrichment — never invent scores, never make network calls the analyst didn't ask for, never trust input or API responses. The front door supports a fast analyst motion: paste → choose mode → Extract, with compact Recent Analyses available only as a secondary resume aid.
 
 ## Current State
 
-**M015 Intake Workbench is complete.** All milestones through M015 are complete. The product-facing SentinelX stack is stable: extraction/enrichment, result rendering, detail pages, history reload, REST API, optimization-audit workflow, fast/deep verification lanes, local workflow recovery, and the redesigned intake front door are in place and verified.
+**M016 Email Reputation Depth is in progress.** All milestones through M015 are complete. M016/S01 established the tested EmailRep backend adapter contract with conservative verdict mapping, email-only support, API-key gating, documented `Key` plus `User-Agent` request headers, flattened compact `raw_stats`, and shared adapter-contract coverage. M016/S02 is now complete: EmailRep is wired into the central registry/settings contract as a key-required, email-only provider; `emailrep.io` is allowed by the SSRF host allowlist; `/settings` can save the EmailRep key through the generic `ConfigStore` path and rebuild `current_app.registry`; and Online-mode provider-count rendering reports zero email providers without a key and exactly one email provider with a configured EmailRep key. Remaining M016 slices are responsible for compact result-row rendering and a mocked Online-mode browser proof before email reputation is fully productized.
 
 M014 closed the local workflow hardening pass around the repo/operator seam. SentinelX now has `tools/runtime_state_boundary.py` as the authoritative durable/transient/manual-review classifier, `tools/runtime_state_repair.py` plus `make repair-runtime-state` as the supported repair entrypoint, and `tools/dev_server.py` plus `make dev-server-start|status|restart|stop` as the supported local dev-server lifecycle. The `/api/health` contract is single-sourced in `app/health_contract.py`, and final M014 proof passed the focused seam suite, repair/boundary commands, live crash/restart proof, and full `make verify`.
 
@@ -20,7 +20,9 @@ M015 redesigned `/` into a fast analyst **Intake Workbench** without changing ex
 
 - **Backend:** Python 3.10 + Flask 3.1, iocextract + iocsearcher for extraction, requests + dnspython for HTTP/DNS
 - **Frontend:** TypeScript 5.8 + esbuild (IIFE output), Tailwind CSS standalone CLI, Inter Variable + JetBrains Mono Variable, dark-first zinc design tokens with verdict-only color accents
-- **Enrichment:** 15 providers (12 HTTP via requests.Session, 2 DNS via dnspython, 1 WHOIS via python-whois), per-provider semaphore concurrency, 429-aware backoff, cursor polling, additive terminal status metadata
+- **Enrichment:** 15 established providers plus the M016 EmailRep integration path (HTTP via `BaseHTTPAdapter`/`requests.Session`, key-gated and email-only); per-provider semaphore concurrency, 429-aware backoff, cursor polling, additive terminal status metadata
+- **EmailRep adapter contract:** `EmailRepAdapter` uses `BaseHTTPAdapter.safe_request`, supports only `IOCType.EMAIL`, requires an API key, sends `Key` and `User-Agent: SentinelX` headers, URL-encodes email lookup values, maps high-confidence abuse flags to `malicious`, risky/low-reputation flags to `suspicious`, high-reputation no-risk responses to `clean`, and empty/unknown reputation to `no_data`.
+- **EmailRep registry/settings contract:** `build_registry()` is the only EmailRep registration path and reads `ConfigStore.get_provider_key("emailrep")`; missing, empty, or failed key lookup leaves EmailRep unconfigured rather than aborting registry composition. `PROVIDER_INFO` exposes EmailRep as key-required and email-only, `/settings` uses generic provider-key storage plus registry rebuild, and `ProviderRegistry.providers_for_type(IOCType.EMAIL)`/Online provider counts remain zero without a key and exactly one with a key.
 - **Status path split:** `EnrichmentOrchestrator.get_status()` remains the mutation-safe full snapshot for history/full-state callers; `get_incremental_status()` is the live polling hot path that returns scalar fields, the requested result tail, aligned cached markers, and `next_since`
 - **Persistence:** SQLite WAL-mode stores (CacheStore for enrichment cache, HistoryStore for analysis history) at `~/.sentinelx/`; WAL and `busy_timeout` remain explicitly re-proved keep-decisions rather than assumed behavior
 - **History:** `HistoryStore.list_recent(limit)` returns lightweight summaries; `/history` renders the full recent list; `/history/<id>` reloads a past analysis without re-querying providers
@@ -31,14 +33,14 @@ M015 redesigned `/` into a fast analyst **Intake Workbench** without changing ex
 - **M015 responsive shell:** the intake workbench uses an index-only wider `.site-main:has(.page-index)` shell so the command card plus recent rail fit on desktop. Avoid `overflow-x: clip` on `.page-index` as an overflow fix because it can interfere with recent-row clickability; constrain decorative pseudo-elements instead.
 - **Results rendering:** `result-application.ts` is the shared stateful apply/flush/finalize coordinator; it caches stable per-IOC DOM handles and one-time provider-count metadata for both live polling and history replay while keeping dynamic summary/detail rows lazy and text-only
 - **Verification surface:** `make verify-fast` is the default routine proof lane, `make verify-deep` is the mocked-online browser/live-results lane, and `make verify` composes both
-- **Security:** CSP, CSRF, SSRF allowlist, localhost host validation, textContent-only DOM construction, Jinja autoescaping for server-rendered user-supplied history snippets
+- **Security:** CSP, CSRF, SSRF allowlist including `emailrep.io`, localhost host validation, textContent-only DOM construction, Jinja autoescaping for server-rendered user-supplied history snippets
 - **Runtime-boundary seam:** `tools/runtime_state_boundary.py` is the authoritative classifier/audit seam for durable vs transient repo-local workflow state, and `tools/runtime_state_repair.py` is the only supported mutating companion
 - **Local dev-server contract:** `tools/dev_server.py` is the single lifecycle implementation, `/api/health` is the exact secret-free readiness probe, status derives from live probe truth rather than PID files alone, and manager-owned runtime metadata remains under `.gsd/runtime/dev-server/**`
 - **Closeout discipline:** milestone/slice validation artifacts must be written through the DB-backed GSD toolchain so the ledger, projections, and disk artifacts stay aligned
 
 ## Capability Contract
 
-See `.gsd/REQUIREMENTS.md` for the explicit capability contract, requirement status, and coverage mapping. M015 validated `R070`–`R076` for the Intake Workbench and preserved the deferred/out-of-scope boundaries for `R077`–`R082`.
+See `.gsd/REQUIREMENTS.md` for the explicit capability contract, requirement status, and coverage mapping. M015 validated `R070`–`R076` for the Intake Workbench and preserved the deferred/out-of-scope boundaries for `R077`–`R082`. M016 is addressing the previously deferred email reputation depth area: S01 proved the adapter-only contract, and S02 advances configured Online email-provider coverage through registry/settings/provider-count wiring.
 
 ## Milestone Sequence
 
@@ -57,6 +59,7 @@ See `.gsd/REQUIREMENTS.md` for the explicit capability contract, requirement sta
 - [x] M013: SentinelX optimization-audit workflow and shipped full-stack pass — S01 established the reusable audit runner and ranked baseline, S02 closed the runtime/provider seam with measured keep-decisions, S03 shipped the request/status cursor hot-path improvement and re-proved WAL persistence as a keep-decision, and S04 shipped coordinator-local frontend/render caching plus the final audit rerun with embedded `verify-fast` / `verify-deep` proof.
 - [x] M014: Local workflow hardening and recovery loop — S01 established the explicit runtime-state boundary, S02 shipped the supported classifier-backed repair entrypoint, S03 shipped the supported local dev-server lifecycle with crash recovery, and S04 closed the milestone with the explicit seam review, shared health-contract single-sourcing, and fresh final-assembly proof.
 - [x] M015: Intake Workbench — Shipped the command-card intake foundation, clarified Offline/Online mode UI, compact fail-open Recent Analyses rail, desktop/mobile responsive polish, history resume, and final integrated route/security/fast-regression/browser proof while preserving extraction/enrichment/history semantics.
+- [ ] M016: Email Reputation Depth — Active. S01 established the tested EmailRep adapter contract; S02 completed registry/settings/Online provider-count wiring; S03–S04 will close compact UI rendering and deterministic mocked Online email enrichment proof.
 
 ---
-*Last updated: 2026-04-26 — M015 complete; Intake Workbench shipped and validated.*
+*Last updated: 2026-05-09 — M016 active; S02 registry/settings/provider-count wiring completed.*

@@ -36,7 +36,7 @@ No registry/settings/UI wiring in this slice. S01 closes only the adapter seam: 
   - Files: `app/enrichment/adapters/emailrep.py`, `tests/test_emailrep.py`
   - Verify: python3 -m pytest tests/test_emailrep.py -q
 
-- [ ] **T03: Add EmailRep to shared adapter contract coverage** `est:45m`
+- [x] **T03: Add EmailRep to shared adapter contract coverage** `est:45m`
   Why: Prove the new adapter obeys the same shared adapter invariants as existing HTTP adapters before downstream slices register it.
   - Files: `tests/test_adapter_contract.py`, `tests/helpers.py`, `app/enrichment/adapters/emailrep.py`
   - Verify: python3 -m pytest tests/test_emailrep.py tests/test_adapter_contract.py -q

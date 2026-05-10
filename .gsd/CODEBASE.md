@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-05-09T11:46:45Z | Files: 180 | Described: 0/180
-<!-- gsd:codebase-meta {"generatedAt":"2026-05-09T11:46:45Z","fingerprint":"9855d5da12a5c270243ad315e7cadcf0f24463dd","fileCount":180,"truncated":false} -->
+Generated: 2026-05-09T18:07:39Z | Files: 183 | Described: 0/183
+<!-- gsd:codebase-meta {"generatedAt":"2026-05-09T18:07:39Z","fingerprint":"e9963ab2a42b7b0a37d2c8c538300307481e56f8","fileCount":183,"truncated":false} -->
 
 ### (root)/
 - `.codex`
@@ -18,6 +18,9 @@ Generated: 2026-05-09T11:46:45Z | Files: 180 | Described: 0/180
 - `tsconfig.json`
 - `tsconfig.test.json`
 - `vitest.config.ts`
+
+### .artifacts/browser/2026-05-09T15-18-28-379Z-session/
+- `.artifacts/browser/2026-05-09T15-18-28-379Z-session/m016-t02-browser-timeline.json`
 
 ### .reports/
 - `.reports/dead-code-analysis.md`
@@ -130,7 +133,7 @@ Generated: 2026-05-09T11:46:45Z | Files: 180 | Described: 0/180
 - `docs/plans/2026-03-04-settings-page-redesign.md`
 
 ### tests/
-- *(53 files: 53 .py)*
+- *(55 files: 55 .py)*
 
 ### tests/e2e/
 - `tests/e2e/__init__.py`

@@ -107,6 +107,7 @@ describe("CONTEXT_PROVIDERS", () => {
   it("does not contain reputation providers", () => {
     expect(CONTEXT_PROVIDERS.has("VirusTotal")).toBe(false);
     expect(CONTEXT_PROVIDERS.has("AbuseIPDB")).toBe(false);
+    expect(CONTEXT_PROVIDERS.has("EmailRep")).toBe(false);
   });
 });
 
@@ -402,6 +403,97 @@ describe("createDetailRow", () => {
     // Should have context fields for the matched stats
     const fields = contextDiv!.querySelectorAll(".provider-context-field");
     expect(fields.length).toBeGreaterThan(0);
+  });
+
+  it("renders compact EmailRep reputation and risk context from flattened raw_stats", () => {
+    const result: EnrichmentItem = resultItem({
+      provider: "EmailRep",
+      ioc_value: "analyst@example.com",
+      ioc_type: "email",
+      verdict: "suspicious",
+      raw_stats: {
+        reputation: "medium",
+        references: 7,
+        risk_flags: ["suspicious_tld", "spoofable"],
+        domain_reputation: "low",
+        profiles: ["github", "twitter"],
+        first_seen: "2023-01-01",
+        last_seen: "2024-06-15",
+        deliverable: true,
+        valid_mx: false,
+        spoofable: true,
+        spf_strict: false,
+        dmarc_enforced: true,
+      },
+    });
+
+    const row = createDetailRow("EmailRep", "suspicious", "7 references", result);
+
+    const contextDiv = row.querySelector(".provider-context");
+    expect(contextDiv).not.toBeNull();
+
+    const fieldText = Array.from(contextDiv!.querySelectorAll(".provider-context-field"))
+      .map((field) => field.textContent);
+    expect(fieldText).toEqual([
+      "Reputation: medium",
+      "Refs: 7",
+      "Risks: suspicious_tldspoofable",
+      "Domain: low",
+      "Profiles: githubtwitter",
+      "First seen: 2023-01-01",
+      "Last seen: 2024-06-15",
+      "Deliverable: true",
+      "MX: false",
+      "Spoofable: true",
+      "SPF: false",
+      "DMARC: true",
+    ]);
+
+    const riskField = fieldText.indexOf("Risks: suspicious_tldspoofable");
+    const profileField = fieldText.indexOf("Profiles: githubtwitter");
+    expect(riskField).toBeGreaterThanOrEqual(0);
+    expect(profileField).toBeGreaterThanOrEqual(0);
+
+    const tags = Array.from(contextDiv!.querySelectorAll(".context-tag")).map((tag) => tag.textContent);
+    expect(tags).toEqual(["suspicious_tld", "spoofable", "github", "twitter"]);
+  });
+
+  it("safely ignores malformed EmailRep nested data without raw dumping or markup creation", () => {
+    const scriptLike = '<script data-provider="emailrep">alert(1)</script>';
+    const result: EnrichmentItem = resultItem({
+      provider: "EmailRep",
+      ioc_value: "malformed@example.com",
+      ioc_type: "email",
+      verdict: "suspicious",
+      raw_stats: {
+        reputation: scriptLike,
+        references: { count: 99 },
+        risk_flags: ["credentials_leaked", { nested: true }, scriptLike],
+        domain_reputation: { nested: "low" },
+        profiles: ["linkedin", { url: "https://example.com" }],
+        first_seen: { value: "2023-01-01" },
+        last_seen: ["2024-06-15"],
+        deliverable: true,
+        valid_mx: false,
+        spoofable: { value: true },
+        spf_strict: false,
+        dmarc_enforced: true,
+        unknown_nested: { should: "not render" },
+      },
+    });
+
+    const row = createDetailRow("EmailRep", "suspicious", "malformed payload", result);
+
+    expect(row.textContent).toContain(scriptLike);
+    expect(row.querySelector("script")).toBeNull();
+    expect(row.innerHTML).not.toContain("<script");
+    expect(row.textContent).not.toContain("[object Object]");
+    expect(row.textContent).not.toContain('{"');
+    expect(row.textContent).not.toContain("unknown_nested");
+    expect(row.textContent).not.toContain("should");
+
+    const tags = Array.from(row.querySelectorAll(".context-tag")).map((tag) => tag.textContent);
+    expect(tags).toEqual(["credentials_leaked", scriptLike, "linkedin"]);
   });
 });
 
