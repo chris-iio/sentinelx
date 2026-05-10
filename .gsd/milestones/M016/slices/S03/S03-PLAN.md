@@ -37,7 +37,7 @@ Upstream surfaces consumed: S01 `app/enrichment/adapters/emailrep.py` flattened 
   - Files: `app/static/src/ts/modules/row-factory.ts`, `app/static/src/ts/modules/row-factory.test.ts`, `app/enrichment/adapters/emailrep.py`, `app/static/src/ts/types/api.ts`
   - Verify: npx vitest run app/static/src/ts/modules/row-factory.test.ts
 
-- [ ] **T02: Prove EmailRep renders through shared result application** `est:45m`
+- [x] **T02: Prove EmailRep renders through shared result application** `est:45m`
   Expected executor skills_used frontmatter: `tdd`, `verify-before-complete`.
   - Files: `app/static/src/ts/modules/result-application.test.ts`, `app/static/src/ts/modules/row-factory.test.ts`, `app/static/src/ts/modules/row-factory.ts`, `app/static/dist/main.js`
   - Verify: npx vitest run app/static/src/ts/modules/row-factory.test.ts app/static/src/ts/modules/result-application.test.ts && npx tsc --noEmit && make js
