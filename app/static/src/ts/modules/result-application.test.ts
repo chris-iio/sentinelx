@@ -353,6 +353,97 @@ describe("result-application coordinator", () => {
     expect(validCard?.querySelector(".detail-link")).not.toBeNull();
   });
 
+  it("renders EmailRep through the shared result application path for email cards", async () => {
+    const email = "analyst@example.com";
+    const scriptLike = '<script data-provider="emailrep">alert(1)</script>';
+    buildDom(buildCard(email, "email"), '{"email":1}');
+    const { createResultApplicationCoordinator } = await import("./result-application");
+    const coordinator = createResultApplicationCoordinator();
+
+    coordinator.apply(
+      resultItem({
+        ioc_value: email,
+        ioc_type: "email",
+        provider: "EmailRep",
+        verdict: "suspicious",
+        detection_count: 1,
+        total_engines: 1,
+        raw_stats: {
+          reputation: "medium",
+          references: 7,
+          risk_flags: ["credentials_leaked", "spoofable", scriptLike],
+          domain_reputation: "low",
+          profiles: ["github", "twitter"],
+          first_seen: "2023-01-01",
+          last_seen: "2024-06-15",
+          deliverable: true,
+          valid_mx: false,
+          spoofable: true,
+          spf_strict: false,
+          dmarc_enforced: true,
+          unknown_nested: { should: "not render" },
+          nested_reputation: { reputation: "raw object must stay hidden" },
+        },
+      })
+    );
+    coordinator.flush();
+    coordinator.finalize();
+    await vi.advanceTimersByTimeAsync(150);
+
+    const card = document.querySelector<HTMLElement>(`.ioc-card[data-ioc-value="${email}"]`);
+    const verdictLabel = card?.querySelector<HTMLElement>(".verdict-label");
+    const summary = card?.querySelector<HTMLElement>(".ioc-summary-row");
+    const repRows = Array.from(
+      document.querySelectorAll<HTMLElement>(
+        ".enrichment-section--reputation .provider-detail-row"
+      )
+    );
+    const contextRows = document.querySelectorAll(
+      ".enrichment-section--context .provider-detail-row"
+    );
+    const noDataRows = document.querySelectorAll(
+      ".enrichment-section--no-data .provider-detail-row"
+    );
+    const emailRepRow = repRows.find(
+      (row) => row.querySelector(".provider-detail-name")?.textContent === "EmailRep"
+    );
+    const fieldText = Array.from(
+      emailRepRow?.querySelectorAll<HTMLElement>(".provider-context-field") ?? []
+    ).map((field) => field.textContent);
+    const renderedText = document.body.textContent ?? "";
+
+    expect(card?.getAttribute("data-verdict")).toBe("suspicious");
+    expect(verdictLabel?.textContent).toBe("SUSPICIOUS");
+    expect(verdictLabel?.classList.contains("verdict-label--suspicious")).toBe(true);
+    expect(summary?.textContent).toContain("SUSPICIOUS");
+    expect(summary?.textContent).toContain("EmailRep: Suspicious");
+    expect(repRows).toHaveLength(1);
+    expect(emailRepRow).not.toBeUndefined();
+    expect(emailRepRow?.getAttribute("data-verdict")).toBe("suspicious");
+    expect(contextRows).toHaveLength(0);
+    expect(noDataRows).toHaveLength(0);
+    expect(fieldText).toEqual([
+      "Reputation: medium",
+      "Refs: 7",
+      "Risks: credentials_leakedspoofable" + scriptLike,
+      "Domain: low",
+      "Profiles: githubtwitter",
+      "First seen: 2023-01-01",
+      "Last seen: 2024-06-15",
+      "Deliverable: true",
+      "MX: false",
+      "Spoofable: true",
+      "SPF: false",
+      "DMARC: true",
+    ]);
+    expect(emailRepRow?.querySelector("script")).toBeNull();
+    expect(emailRepRow?.innerHTML).not.toContain("<script");
+    expect(renderedText).not.toContain("[object Object]");
+    expect(renderedText).not.toContain("unknown_nested");
+    expect(renderedText).not.toContain("raw object must stay hidden");
+    expect(document.querySelector(".enrichment-waiting-text")).toBeNull();
+  });
+
   it("finalize flushes repeated results and updates copy-button worst verdict before link injection", async () => {
     buildDom(buildCard("1.2.3.4"), '{"ipv4":2}');
     const { createResultApplicationCoordinator } = await import("./result-application");
