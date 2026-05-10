@@ -249,6 +249,54 @@ def e2e_history_store(live_server: str) -> HistoryStore:
 # Enrichment route-mocking helpers
 # ---------------------------------------------------------------------------
 
+EMAILREP_E2E_EMAIL = "analyst@example.com"
+
+#: Canned enrichment response for a single Email IOC (analyst@example.com / email).
+#: One EmailRep provider result + complete: true so browser tests can exercise
+#: the real online form/results/polling path without a live EmailRep key.
+#: Includes safe-rendering sentinels: a script-like scalar/list value on allowed
+#: fields and an unsupported nested object under an unknown key.
+MOCK_ENRICHMENT_RESPONSE_EMAILREP = {
+    "total": 1,
+    "done": 1,
+    "complete": True,
+    "next_since": 1,
+    "results": [
+        {
+            "type": "result",
+            "ioc_value": EMAILREP_E2E_EMAIL,
+            "ioc_type": "email",
+            "provider": "EmailRep",
+            "verdict": "suspicious",
+            "detection_count": 2,
+            "total_engines": 1,
+            "scan_date": "2026-04-26T09:15:00Z",
+            "raw_stats": {
+                "reputation": "medium <script>alert('emailrep')</script>",
+                "references": 7,
+                "risk_flags": [
+                    "suspicious",
+                    "credentials_leak",
+                    "<script>alert('risk')</script>",
+                ],
+                "domain_reputation": "low",
+                "profiles": ["github", "gravatar"],
+                "first_seen": "2024-01-15",
+                "last_seen": "2026-04-25",
+                "deliverable": True,
+                "valid_mx": True,
+                "spoofable": False,
+                "spf_strict": True,
+                "dmarc_enforced": False,
+                "unsupported_nested_object": {
+                    "should_not_render": "<img src=x onerror=alert('nested')>",
+                },
+            },
+        },
+    ],
+}
+
+
 #: Canned enrichment response for a single IP IOC (8.8.8.8 / ipv4).
 #: Two provider results + complete: true so enrichment.ts fires the full pipeline
 #: including handleProviderResult(), getOrCreateSummaryRow(), and markEnrichmentComplete().
@@ -319,6 +367,21 @@ def setup_enrichment_route_mock(page, response_body: dict | None = None) -> str:
     )
 
     return fake_job_id
+
+
+def setup_emailrep_enrichment_route_mock(page, email: str = EMAILREP_E2E_EMAIL) -> str:
+    """Intercept enrichment status polling with a single EmailRep email result.
+
+    Mirrors :func:`setup_enrichment_route_mock`: call before online submit so the
+    route is registered before the first polling request, and returns the fake job
+    id rendered into ``.page-results[data-job-id]``. The response body is copied so
+    callers can change the submitted email without mutating the canned fixture.
+    """
+    import copy
+
+    body = copy.deepcopy(MOCK_ENRICHMENT_RESPONSE_EMAILREP)
+    body["results"][0]["ioc_value"] = email
+    return setup_enrichment_route_mock(page, body)
 
 
 @pytest.fixture()

@@ -238,6 +238,14 @@ class ResultsPage:
         """Return the enrichment details panel locator scoped to the card matching *ioc_value*."""
         return self.page.locator(f'.ioc-card[data-ioc-value="{ioc_value}"] .enrichment-details')
 
+    def provider_detail_rows_for_card(self, ioc_value: str) -> Locator:
+        """Return provider detail rows scoped to the card matching *ioc_value*."""
+        return self.page.locator(f'.ioc-card[data-ioc-value="{ioc_value}"] .provider-detail-row')
+
+    def provider_context_fields_for_card(self, ioc_value: str) -> Locator:
+        """Return provider context fields scoped to the card matching *ioc_value*."""
+        return self.page.locator(f'.ioc-card[data-ioc-value="{ioc_value}"] .provider-context-field')
+
     # ---- Expand / Collapse Helpers ----
 
     def expand_row(self, ioc_value: str) -> None:
