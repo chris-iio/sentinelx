@@ -822,16 +822,16 @@ This file is the explicit capability and coverage contract for the project.
 - Validation: unmapped
 - Notes: The user explicitly said preview stays out of scope to preserve a fast flow.
 
-### R078 — Email/phishing enrichment depth is deferred from M015.
-- Class: deferred
-- Status: deferred
-- Description: Email/phishing enrichment depth is deferred from M015.
-- Why it matters: It is a meaningful analyst feature, but it would expand M015 from intake UX into provider strategy and external-service decisions.
-- Source: prior scope
-- Primary owning slice: none
-- Supporting slices: none
-- Validation: unmapped
-- Notes: Email IOCs are already display-capable; provider/API choices for email reputation belong in a separate milestone.
+### R078 — EmailRep-backed email IOC reputation depth is available in Online mode.
+- Class: core-capability
+- Status: validated
+- Description: Configuring an EmailRep key enables email-only Online enrichment for email IOCs, with conservative verdict mapping and compact reputation/risk context in result rows.
+- Why it matters: Email addresses are primary phishing IOCs; analysts need optional reputation depth without broad EML/header triage or unsafe raw provider dumping.
+- Source: prior scope; validated by M016 Email Reputation Depth
+- Primary owning slice: M016/S01
+- Supporting slices: M016/S02, M016/S03, M016/S04, M016/S05
+- Validation: M016 validated the full EmailRep path: S01 added `EmailRepAdapter` with email-only support, API-key gating, safe_request usage, URL encoding, and conservative malicious/suspicious/clean/no_data mapping; S02 proved settings/registry/provider-count coverage with zero email providers without a key and exactly one configured EmailRep email provider with a key; S03 proved compact whitelisted `raw_stats` rendering through safe row-factory/result-application paths; S04 proved a mocked Online browser flow from settings save through email submission and rendered EmailRep verdict/context without a live third-party key; final closeout reran 219 focused pytest tests, 59 Vitest tests, and TypeScript successfully.
+- Notes: M016 deliberately excludes raw EML parsing, header authentication analysis, broad phishing triage, multiple email providers, required live EmailRep smoke tests, and diagnostic-log export (R083/M018).
 
 ### R079 — API/automation polish is deferred from M015.
 - Class: deferred

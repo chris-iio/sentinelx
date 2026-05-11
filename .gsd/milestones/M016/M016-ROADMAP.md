@@ -24,7 +24,7 @@
 - [x] **S04: S04** `risk:high` `depends:[]`
   > After this: After this, a deterministic browser test submits an email IOC in Online mode and sees an EmailRep verdict/context row without requiring a live EmailRep key.
 
-- [ ] **S05: S05** `risk:high` `depends:[]`
+- [x] **S05: S05** `risk:high` `depends:[]`
   > After this: After this: validation round 1 has coherent requirement coverage and acceptance evidence for Email Reputation Depth, with R083/context criteria either explicitly descoped from M016 or implemented/proven if retained.
 
 ## Boundary Map

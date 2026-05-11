@@ -44,7 +44,7 @@ PY
   - Files: `tests/test_emailrep_online_coverage.py`, `tests/e2e/test_emailrep_online.py`, `tests/e2e/test_results_page.py`, `tests/e2e/test_settings.py`, `app/static/src/ts/modules/row-factory.test.ts`, `app/static/src/ts/modules/result-application.test.ts`
   - Verify: python3 -m pytest tests/test_emailrep_online_coverage.py tests/e2e/test_emailrep_online.py tests/e2e/test_results_page.py::test_enrichment_summary_row_created_after_polling tests/e2e/test_settings.py::test_save_key_shows_success_flash -q && npx vitest run app/static/src/ts/modules/row-factory.test.ts app/static/src/ts/modules/result-application.test.ts && npx tsc --noEmit
 
-- [ ] **T03: Produce milestone validation evidence for Email Reputation Depth** `est:45m`
+- [x] **T03: Produce milestone validation evidence for Email Reputation Depth** `est:45m`
   Expected executor skills: `verify-before-complete`, `write-docs`.
   - Files: `.gsd/milestones/M016/M016-VALIDATION.md`
   - Verify: test -s .gsd/milestones/M016/M016-VALIDATION.md && grep -q "Email Reputation Depth" .gsd/milestones/M016/M016-VALIDATION.md && grep -Eq "pass|needs-remediation" .gsd/milestones/M016/M016-VALIDATION.md
