@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T01",
+  "unitId": "M016/S05/T01",
+  "timestamp": 1778526352973,
+  "passed": true,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "python3 - <<'PY'\nfrom pathlib import Path\nctx = Path('.gsd/milestones/M016/M016-CONTEXT.md').read_text()\nreq = Path('.gsd/REQUIREMENTS.md').read_text()\nassert 'Email Reputation Depth' in ctx, 'M016 context must name operative Email Reputation Depth scope'\nassert 'EmailRep' in ctx and 'mocked Online' in ctx, 'M016 context must include EmailRep mocked Online proof scope'\nassert 'Minimal Useful Product Hardening' not in ctx.splitlines()[0], 'M016 title must no longer advertise stale minimal-product scope'\nassert 'R083' in req and 'M018' in req, 'R083 must remain recorded and point at the future M018 diagnostic export scope'\nprint('context/requirement reconciliation checks passed')\nPY",
+      "exitCode": 0,
+      "durationMs": 16,
+      "verdict": "pass"
+    }
+  ]
+}

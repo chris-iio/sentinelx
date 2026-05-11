@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-05-11T18:43:57Z | Files: 183 | Described: 0/183
-<!-- gsd:codebase-meta {"generatedAt":"2026-05-11T18:43:57Z","fingerprint":"e9963ab2a42b7b0a37d2c8c538300307481e56f8","fileCount":183,"truncated":false} -->
+Generated: 2026-05-11T19:05:52Z | Files: 184 | Described: 0/184
+<!-- gsd:codebase-meta {"generatedAt":"2026-05-11T19:05:52Z","fingerprint":"257d25c6c5376de86452a84259bb43ffed92bbc1","fileCount":184,"truncated":false} -->
 
 ### (root)/
 - `.codex`
@@ -139,6 +139,7 @@ Generated: 2026-05-11T18:43:57Z | Files: 183 | Described: 0/183
 - `tests/e2e/__init__.py`
 - `tests/e2e/conftest.py`
 - `tests/e2e/test_copy_buttons.py`
+- `tests/e2e/test_emailrep_online.py`
 - `tests/e2e/test_extraction.py`
 - `tests/e2e/test_homepage.py`
 - `tests/e2e/test_navigation.py`

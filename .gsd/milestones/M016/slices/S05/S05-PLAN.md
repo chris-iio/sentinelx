@@ -39,7 +39,7 @@ assert 'R083' in req and 'M018' in req, 'R083 must remain recorded and point at 
 print('context/requirement reconciliation checks passed')
 PY
 
-- [ ] **T02: Refresh EmailRep acceptance proof against requirement promises** `est:1h`
+- [x] **T02: Refresh EmailRep acceptance proof against requirement promises** `est:1h`
   Expected executor skills: `test`, `verify-before-complete`.
   - Files: `tests/test_emailrep_online_coverage.py`, `tests/e2e/test_emailrep_online.py`, `tests/e2e/test_results_page.py`, `tests/e2e/test_settings.py`, `app/static/src/ts/modules/row-factory.test.ts`, `app/static/src/ts/modules/result-application.test.ts`
   - Verify: python3 -m pytest tests/test_emailrep_online_coverage.py tests/e2e/test_emailrep_online.py tests/e2e/test_results_page.py::test_enrichment_summary_row_created_after_polling tests/e2e/test_settings.py::test_save_key_shows_success_flash -q && npx vitest run app/static/src/ts/modules/row-factory.test.ts app/static/src/ts/modules/result-application.test.ts && npx tsc --noEmit
