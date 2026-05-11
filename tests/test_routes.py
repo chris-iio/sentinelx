@@ -355,6 +355,54 @@ def test_analyze_offline_unchanged(client):
         mock_pool.submit.assert_not_called()
 
 
+def test_analyze_online_rejects_ioc_limit_before_launch(client):
+    """HTML online mode shows a friendly limit diagnostic without background work."""
+    mock_provider = MagicMock()
+    mock_registry = MagicMock()
+    mock_registry.configured.return_value = [mock_provider]
+    mock_registry.all.return_value = [mock_provider]
+    mock_registry.providers_for_type.return_value = [mock_provider]
+    client.application.registry = mock_registry
+    client.application.config["ONLINE_MAX_IOCS"] = 1
+    client.application.config["ONLINE_MAX_DISPATCHES"] = 200
+
+    with patch("app.routes._helpers._enrichment_pool") as mock_pool:
+        response = client.post(
+            "/analyze",
+            data={"text": "192.168.1.1 10.0.0.1", "mode": "online"},
+        )
+
+    assert response.status_code == 200
+    assert b"Online enrichment was not started" in response.data
+    assert b"Current limits" in response.data
+    assert b"data-job-id" not in response.data
+    mock_pool.submit.assert_not_called()
+
+
+def test_analyze_online_rejects_dispatch_limit_before_launch(client):
+    """HTML online mode rejects excessive provider fanout before background work."""
+    providers = [MagicMock(), MagicMock()]
+    mock_registry = MagicMock()
+    mock_registry.configured.return_value = providers
+    mock_registry.all.return_value = providers
+    mock_registry.providers_for_type.return_value = providers
+    client.application.registry = mock_registry
+    client.application.config["ONLINE_MAX_IOCS"] = 50
+    client.application.config["ONLINE_MAX_DISPATCHES"] = 1
+
+    with patch("app.routes._helpers._enrichment_pool") as mock_pool:
+        response = client.post(
+            "/analyze",
+            data={"text": "192.168.1.1", "mode": "online"},
+        )
+
+    assert response.status_code == 200
+    assert b"Online enrichment was not started" in response.data
+    assert b"provider lookup" in response.data
+    assert b"data-job-id" not in response.data
+    mock_pool.submit.assert_not_called()
+
+
 # ---------------------------------------------------------------------------
 # Polling endpoint tests
 # ---------------------------------------------------------------------------

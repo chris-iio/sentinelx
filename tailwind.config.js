@@ -2,7 +2,6 @@
 module.exports = {
   content: [
     "./app/templates/**/*.html",
-    "./app/static/**/*.js",
     "./app/static/src/ts/**/*.ts",
   ],
   darkMode: 'selector',

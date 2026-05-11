@@ -3,33 +3,35 @@ id: T01
 parent: S02
 milestone: M016
 key_files:
-  - tests/test_emailrep_registry_settings.py
-  - app/enrichment/setup.py
+  - (none)
 key_decisions:
-  - Provider key lookup failures are treated as missing keys during registry composition, leaving key-required providers unconfigured instead of aborting startup.
+  - (none)
 duration: 
 verification_result: passed
-completed_at: 2026-05-09T16:42:21.326Z
+completed_at: 2026-05-11T18:45:29.401Z
 blocker_discovered: false
 ---
 
-# T01: Added EmailRep registry/settings contract tests and hardened provider-key reads so EmailRep stays unconfigured when its key lookup fails.
+# T01: Harden EmailRep registry and settings metadata contracts
 
-**Added EmailRep registry/settings contract tests and hardened provider-key reads so EmailRep stays unconfigured when its key lookup fails.**
+****
 
 ## What Happened
 
-Created `tests/test_emailrep_registry_settings.py` to pin the EmailRep settings metadata, SSRF allowlist host, EmailRep-only IOC type boundary, missing/empty key behavior, and exact configured email-provider count when an EmailRep key is present. The tests exercise `build_registry()` and `ProviderRegistry.providers_for_type()` / `provider_count_for_type()` directly with mocked `ConfigStore` responses and no live network calls. The focused red case covered `ConfigStore.get_provider_key("emailrep")` raising an exception. `_get_provider_key_or_empty()` in `app/enrichment/setup.py` routes key-required provider composition through a fail-closed missing-key behavior, preserving the single registration path while treating local provider-key read failures as unconfigured providers.
+No summary recorded.
 
 ## Verification
 
-Focused tests and required task command passed. `python3 -m pytest tests/test_emailrep_registry_settings.py -q` passed with 14 tests. `python3 -m pytest tests/test_emailrep_registry_settings.py tests/test_registry_setup.py tests/test_adapter_contract.py -q` passed as part of fresh slice verification with 235 tests. LSP diagnostics in the original task run reported no issues for `app/enrichment/setup.py` or `tests/test_emailrep_registry_settings.py`.
+No verification recorded.
 
 ## Verification Evidence
 
 | # | Command | Exit Code | Verdict | Duration |
 |---|---------|-----------|---------|----------|
-| 1 | `python3 -m pytest tests/test_emailrep_registry_settings.py tests/test_registry_setup.py tests/test_adapter_contract.py -q` | 0 | ✅ pass (235 passed in 0.34s) | 340ms |
+| 1 | `python3 -m pytest tests/test_emailrep_registry_settings.py -q` | 0 | ✅ pass (14 passed) | 332ms |
+| 2 | `python3 -m pytest tests/test_emailrep_registry_settings.py tests/test_registry_setup.py tests/test_adapter_contract.py -q` | 0 | ✅ pass (235 passed) | 511ms |
+| 3 | `lsp diagnostics app/enrichment/setup.py; lsp diagnostics tests/test_emailrep_registry_settings.py` | 0 | ✅ pass (no diagnostics) | 0ms |
+| 4 | `python3 -m pytest tests/test_emailrep_registry_settings.py tests/test_registry_setup.py tests/test_adapter_contract.py -q` | 0 | ✅ pass (235 passed in 0.34s) | 340ms |
 
 ## Deviations
 
@@ -41,5 +43,4 @@ None.
 
 ## Files Created/Modified
 
-- `tests/test_emailrep_registry_settings.py`
-- `app/enrichment/setup.py`
+None.

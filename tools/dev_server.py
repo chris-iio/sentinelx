@@ -41,7 +41,7 @@ REPO_ROOT = SCRIPT_PATH.parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from app.health_contract import HEALTH_PATH, HEALTH_PAYLOAD
+from app.health_contract import HEALTH_PATH, is_valid_health_payload
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 5000
@@ -554,7 +554,7 @@ def probe_health(
             detail="expected JSON health payload",
         )
 
-    if payload != HEALTH_PAYLOAD:
+    if not is_valid_health_payload(payload):
         return HealthProbeResult(
             status="malformed",
             checked_at=checked_at,
@@ -572,9 +572,17 @@ def probe_health(
 
 
 def process_is_running(pid: int | None) -> bool:
-    """Return whether a process id is currently alive."""
+    """Return whether a process id is currently alive and not a zombie."""
     if pid is None or pid <= 0:
         return False
+    proc_stat = Path(f"/proc/{pid}/stat")
+    try:
+        parts = proc_stat.read_text(encoding="utf-8").split()
+        if len(parts) >= 3 and parts[2] == "Z":
+            return False
+    except OSError:
+        pass
+
     try:
         os.kill(pid, 0)
     except ProcessLookupError:

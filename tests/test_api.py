@@ -6,7 +6,7 @@ import pytest
 
 from app import create_app
 from app.enrichment.models import EnrichmentResult
-from app.health_contract import HEALTH_PATH, HEALTH_PAYLOAD
+from app.health_contract import HEALTH_CHECKS, HEALTH_PATH, is_valid_health_payload
 from app.pipeline.models import IOCType
 
 from tests.helpers import make_ipv4_ioc
@@ -94,28 +94,45 @@ def _build_incremental_snapshot_orchestrator(
 class TestApiHealth:
     """Local liveness/readiness contract for the dev-server manager."""
 
-    def test_health_contract_constants_stay_fixed_and_secret_free(self):
+    def test_health_contract_constants_stay_secret_free(self):
         assert HEALTH_PATH == "/api/health"
-        assert HEALTH_PAYLOAD == {
-            "service": "sentinelx",
-            "status": "ok",
-            "ready": True,
-        }
-        assert "provider_key" not in HEALTH_PAYLOAD
+        assert "provider_key" not in HEALTH_CHECKS
 
-    def test_health_returns_fixed_secret_free_json(self, client):
+    def test_health_returns_secret_free_schema(self, client):
         resp = client.get(HEALTH_PATH)
 
         assert resp.status_code == 200
         assert resp.is_json is True
-        assert resp.get_json() == HEALTH_PAYLOAD
+        payload = resp.get_json()
+        assert is_valid_health_payload(payload)
+        assert payload["service"] == "sentinelx"
+        assert payload["ready"] is True
+        assert set(payload["checks"]) == set(HEALTH_CHECKS)
+        assert "provider_key" not in str(payload)
 
-    def test_health_does_not_touch_provider_configuration(self, client):
+    def test_health_reports_degraded_dependency_without_secret_text(self, client):
+        client.application.cache_store.stats.side_effect = RuntimeError(
+            "secret path /tmp/sentinelx-provider-key"
+        )
+
         resp = client.get(HEALTH_PATH)
 
         assert resp.status_code == 200
-        client.application.registry.configured.assert_not_called()
-        client.application.registry.all.assert_not_called()
+        payload = resp.get_json()
+        assert is_valid_health_payload(payload)
+        assert payload["status"] == "degraded"
+        assert payload["checks"]["cache"] == {
+            "status": "degraded",
+            "detail": "RuntimeError",
+        }
+        assert "sentinelx-provider-key" not in str(payload)
+
+    def test_health_touches_only_aggregate_provider_configuration(self, client):
+        resp = client.get(HEALTH_PATH)
+
+        assert resp.status_code == 200
+        client.application.registry.configured.assert_called_once()
+        client.application.registry.all.assert_called_once()
 
 
 # ---------- POST /api/analyze — validation ----------
@@ -229,6 +246,51 @@ class TestApiAnalyzeOnline:
             assert "status_url" in data
             assert data["status_url"].startswith("/api/status/")
             mock_pool.submit.assert_called_once()
+
+
+    def test_online_rejects_ioc_limit_before_launch(self, client):
+        """Online mode rejects oversized IOC batches before submitting work."""
+        mock_provider = MagicMock()
+        mock_provider.name = "test_provider"
+        mock_provider.supported_types = frozenset({IOCType.IPV4})
+        client.application.registry.configured.return_value = [mock_provider]
+        client.application.registry.all.return_value = [mock_provider]
+        client.application.registry.providers_for_type.return_value = [mock_provider]
+        client.application.config["ONLINE_MAX_IOCS"] = 1
+        client.application.config["ONLINE_MAX_DISPATCHES"] = 200
+
+        with patch("app.routes._helpers._enrichment_pool") as mock_pool:
+            resp = client.post(
+                "/api/analyze",
+                json={"text": "8.8.8.8 and 1.1.1.1", "mode": "online"},
+            )
+
+        assert resp.status_code == 413
+        data = resp.get_json()
+        assert data["code"] == "online_limit_exceeded"
+        assert data["observed"]["ioc_count"] >= 2
+        assert "8.8.8.8" not in str(data)
+        mock_pool.submit.assert_not_called()
+
+    def test_online_rejects_dispatch_limit_before_launch(self, client):
+        """Online mode rejects excessive provider fanout before submitting work."""
+        mock_provider_a = MagicMock()
+        mock_provider_b = MagicMock()
+        providers = [mock_provider_a, mock_provider_b]
+        client.application.registry.configured.return_value = providers
+        client.application.registry.all.return_value = providers
+        client.application.registry.providers_for_type.return_value = providers
+        client.application.config["ONLINE_MAX_IOCS"] = 50
+        client.application.config["ONLINE_MAX_DISPATCHES"] = 1
+
+        with patch("app.routes._helpers._enrichment_pool") as mock_pool:
+            resp = client.post("/api/analyze", json={"text": "8.8.8.8", "mode": "online"})
+
+        assert resp.status_code == 413
+        data = resp.get_json()
+        assert data["code"] == "online_limit_exceeded"
+        assert data["observed"]["dispatch_count"] == 2
+        mock_pool.submit.assert_not_called()
 
 
 # ---------- GET /api/status/<job_id> ----------

@@ -3,28 +3,26 @@ id: T01
 parent: S04
 milestone: M016
 key_files:
-  - tests/e2e/conftest.py
-  - tests/e2e/pages/results_page.py
+  - (none)
 key_decisions:
-  - Kept the existing IP route helper as the canonical fake-job/status-route implementation and made the EmailRep helper delegate to it to preserve route ordering and backwards compatibility.
-  - Used a deep copy of the canned EmailRep payload inside the helper so tests can override the submitted email without mutating shared fixture state.
+  - (none)
 duration: 
 verification_result: passed
-completed_at: 2026-05-10T06:08:29.853Z
+completed_at: 2026-05-11T18:45:29.401Z
 blocker_discovered: false
 ---
 
-# T01: Added a deterministic EmailRep Online E2E fixture and helper for email IOC browser tests.
+# T01: Add an EmailRep-specific mocked Online E2E fixture
 
-**Added a deterministic EmailRep Online E2E fixture and helper for email IOC browser tests.**
+****
 
 ## What Happened
 
-Added `EMAILREP_E2E_EMAIL`, `MOCK_ENRICHMENT_RESPONSE_EMAILREP`, and `setup_emailrep_enrichment_route_mock()` to `tests/e2e/conftest.py`. The new fixture returns a complete single-result EmailRep status payload for `analyst@example.com`, includes suspicious verdict metadata, scalar detection fields, and flattened `raw_stats` for all EmailRep context fields used by the row factory. It also includes script-like strings in allowed scalar/list fields plus an unsupported nested object under an unknown raw_stats key so downstream browser tests can assert safe DOM rendering. The helper deep-copies the canned payload, updates `ioc_value` for custom submitted emails, delegates through the existing fake-job arm/status-route helper, and returns the deterministic fake job id for `.page-results[data-job-id]` assertions. Existing `setup_enrichment_route_mock` and `mocked_enrichment` behavior remain unchanged for IP tests. Added narrow `ResultsPage` card-scoped helper locators for provider detail rows and provider context fields to support clearer T02 assertions without broad selector rewrites.
+No summary recorded.
 
 ## Verification
 
-Ran the required E2E verification covering the existing mocked IP enrichment summary row and settings key-save flow; both passed. Also ran a lightweight Python fixture-contract check confirming the EmailRep mock imports, matches the default email IOC, has complete status counters, includes all planned flattened EmailRep raw_stats fields, includes the safety sentinels, and does not embed API-key or EmailRep URL strings.
+No verification recorded.
 
 ## Verification Evidence
 
@@ -68,5 +66,4 @@ None.
 
 ## Files Created/Modified
 
-- `tests/e2e/conftest.py`
-- `tests/e2e/pages/results_page.py`
+None.

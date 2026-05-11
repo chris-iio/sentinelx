@@ -224,6 +224,63 @@ def _serialize_ioc(ioc: IOC) -> dict:
     }
 
 
+def _online_fanout_diagnostics(
+    iocs: list[IOC],
+    registry: object,
+    *,
+    max_iocs: int,
+    max_dispatches: int,
+) -> dict[str, object]:
+    """Return secret-free admission diagnostics for Online enrichment fan-out."""
+    provider_counts_by_type: dict[str, int] = {}
+    dispatch_count = 0
+
+    for ioc in iocs:
+        type_key = ioc.type.value
+        if type_key not in provider_counts_by_type:
+            try:
+                providers = registry.providers_for_type(ioc.type)  # type: ignore[attr-defined]
+                provider_counts_by_type[type_key] = len(providers)
+            except Exception as exc:
+                logger.warning(
+                    "Online fanout provider-count lookup failed for %s: %s",
+                    type_key,
+                    exc.__class__.__name__,
+                )
+                provider_counts_by_type[type_key] = 0
+        dispatch_count += provider_counts_by_type[type_key]
+
+    ioc_count = len(iocs)
+    over_ioc_limit = ioc_count > max_iocs
+    over_dispatch_limit = dispatch_count > max_dispatches
+    return {
+        "ioc_count": ioc_count,
+        "dispatch_count": dispatch_count,
+        "max_iocs": max_iocs,
+        "max_dispatches": max_dispatches,
+        "over_ioc_limit": over_ioc_limit,
+        "over_dispatch_limit": over_dispatch_limit,
+        "allowed": not over_ioc_limit and not over_dispatch_limit,
+        "provider_counts_by_type": provider_counts_by_type,
+    }
+
+
+def _online_limit_response(diagnostics: dict[str, object]) -> dict[str, object]:
+    """Return a JSON-safe Online limit payload without IOC values or secrets."""
+    return {
+        "error": "Online enrichment limit exceeded. Reduce the submission or use offline mode.",
+        "code": "online_limit_exceeded",
+        "limits": {
+            "max_iocs": diagnostics["max_iocs"],
+            "max_dispatches": diagnostics["max_dispatches"],
+        },
+        "observed": {
+            "ioc_count": diagnostics["ioc_count"],
+            "dispatch_count": diagnostics["dispatch_count"],
+        },
+    }
+
+
 def _run_enrichment_and_save(
     orchestrator: EnrichmentOrchestrator,
     job_id: str,

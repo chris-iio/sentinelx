@@ -54,6 +54,8 @@ def create_app(config_override: dict | None = None) -> Flask:
     app.config["WTF_CSRF_ENABLED"] = config.WTF_CSRF_ENABLED  # SEC-10
     app.config["ALLOWED_API_HOSTS"] = config.ALLOWED_API_HOSTS
     app.config["SESSION_COOKIE_SAMESITE"] = config.SESSION_COOKIE_SAMESITE  # SEC-19
+    app.config["ONLINE_MAX_IOCS"] = config.ONLINE_MAX_IOCS
+    app.config["ONLINE_MAX_DISPATCHES"] = config.ONLINE_MAX_DISPATCHES
 
     # Apply optional test/environment overrides AFTER security defaults are set.
     if config_override:

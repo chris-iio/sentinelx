@@ -12,12 +12,14 @@ Routes:
 from flask import Blueprint, current_app, jsonify, request
 
 from app import limiter
-from app.health_contract import HEALTH_PATH, HEALTH_PAYLOAD
+from app.health_contract import HEALTH_PATH, build_health_payload
 from app.pipeline.extractor import run_pipeline
 from app.pipeline.models import IOCType, group_by_type
 
 from ._helpers import (
     _get_enrichment_status,
+    _online_fanout_diagnostics,
+    _online_limit_response,
     _serialize_ioc,
     _setup_orchestrator,
 )
@@ -27,11 +29,47 @@ bp_api = Blueprint("api", __name__, url_prefix="/api")
 _VALID_MODES = {"offline", "online"}
 
 
+def _health_check_ok(detail: str = "ok") -> dict[str, str]:
+    """Return a normalized healthy check result."""
+    return {"status": "ok", "detail": detail}
+
+
+def _health_check_degraded(exc: Exception) -> dict[str, str]:
+    """Return a bounded degraded check without leaking paths or secrets."""
+    return {"status": "degraded", "detail": exc.__class__.__name__}
+
+
 @bp_api.route(HEALTH_PATH.removeprefix("/api"), methods=["GET"])
 @limiter.limit("240 per minute")
 def api_health():
-    """Return a fixed, secret-free health contract for local probes."""
-    return jsonify(HEALTH_PAYLOAD), 200
+    """Return a cheap, secret-free health contract for local probes."""
+    checks: dict[str, dict[str, str]] = {}
+
+    try:
+        current_app.cache_store.stats()
+        checks["cache"] = _health_check_ok()
+    except Exception as exc:  # pragma: no cover - exercised by route tests
+        current_app.logger.warning("Health cache check failed: %s", exc.__class__.__name__)
+        checks["cache"] = _health_check_degraded(exc)
+
+    try:
+        current_app.history_store.list_recent(limit=1)
+        checks["history"] = _health_check_ok()
+    except Exception as exc:  # pragma: no cover - exercised by route tests
+        current_app.logger.warning("Health history check failed: %s", exc.__class__.__name__)
+        checks["history"] = _health_check_degraded(exc)
+
+    try:
+        all_count = len(current_app.registry.all())
+        configured_count = len(current_app.registry.configured())
+        checks["registry"] = _health_check_ok(
+            f"{configured_count}/{all_count} providers configured"
+        )
+    except Exception as exc:  # pragma: no cover - exercised by route tests
+        current_app.logger.warning("Health registry check failed: %s", exc.__class__.__name__)
+        checks["registry"] = _health_check_degraded(exc)
+
+    return jsonify(build_health_payload(checks)), 200
 
 
 @bp_api.route("/analyze", methods=["POST"])
@@ -95,6 +133,24 @@ def api_analyze():
                     "Configure at least one provider in /settings."
                 ),
             }), 400
+
+        max_iocs = int(current_app.config.get("ONLINE_MAX_IOCS", 50))
+        max_dispatches = int(current_app.config.get("ONLINE_MAX_DISPATCHES", 200))
+        fanout_diagnostics = _online_fanout_diagnostics(
+            iocs,
+            registry,
+            max_iocs=max_iocs,
+            max_dispatches=max_dispatches,
+        )
+        if not fanout_diagnostics["allowed"]:
+            current_app.logger.warning(
+                "API online enrichment rejected by admission guard: iocs=%s dispatches=%s limits=%s/%s",
+                fanout_diagnostics["ioc_count"],
+                fanout_diagnostics["dispatch_count"],
+                fanout_diagnostics["max_iocs"],
+                fanout_diagnostics["max_dispatches"],
+            )
+            return jsonify(_online_limit_response(fanout_diagnostics)), 413
 
         job_id, _, registry = _setup_orchestrator(
             iocs, text, mode, current_app.history_store,

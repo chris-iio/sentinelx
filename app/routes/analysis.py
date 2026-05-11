@@ -11,7 +11,7 @@ from app.pipeline.extractor import run_pipeline
 from app.pipeline.models import IOCType, group_by_type
 
 from . import bp
-from ._helpers import _setup_orchestrator
+from ._helpers import _online_fanout_diagnostics, _setup_orchestrator
 
 
 def _recent_analyses_context(limit: int = 4) -> dict:
@@ -71,33 +71,68 @@ def analyze():
             )
             return redirect(url_for("main.settings_get"))
 
-        job_id, _, registry = _setup_orchestrator(
-            iocs, text, mode, current_app.history_store,
+        max_iocs = int(current_app.config.get("ONLINE_MAX_IOCS", 50))
+        max_dispatches = int(current_app.config.get("ONLINE_MAX_DISPATCHES", 200))
+        fanout_diagnostics = _online_fanout_diagnostics(
+            iocs,
+            registry,
+            max_iocs=max_iocs,
+            max_dispatches=max_dispatches,
         )
+        if not fanout_diagnostics["allowed"]:
+            current_app.logger.warning(
+                "Online enrichment rejected by admission guard: iocs=%s dispatches=%s limits=%s/%s",
+                fanout_diagnostics["ioc_count"],
+                fanout_diagnostics["dispatch_count"],
+                fanout_diagnostics["max_iocs"],
+                fanout_diagnostics["max_dispatches"],
+            )
+            type_providers = {
+                ioc_type: registry.providers_for_type(ioc_type)
+                for ioc_type in IOCType
+                if ioc_type != IOCType.CVE
+            }
+            provider_counts = json.dumps({
+                t.value: len(ps) for t, ps in type_providers.items()
+            })
+            provider_coverage = {
+                "registered": len(registry.all()),
+                "configured": len(registry.configured()),
+                "needs_key": len(registry.all()) - len(registry.configured()),
+            }
+            template_extras = {
+                "online_limit_diagnostics": fanout_diagnostics,
+                "provider_counts": provider_counts,
+                "provider_coverage": provider_coverage,
+            }
+        else:
+            job_id, _, registry = _setup_orchestrator(
+                iocs, text, mode, current_app.history_store,
+            )
 
-        type_providers = {
-            ioc_type: registry.providers_for_type(ioc_type)
-            for ioc_type in IOCType
-            if ioc_type != IOCType.CVE
-        }
-        enrichable_count = sum(
-            len(type_providers.get(ioc.type, []))
-            for ioc in iocs
-        )
-        provider_counts = json.dumps({
-            t.value: len(ps) for t, ps in type_providers.items()
-        })
-        provider_coverage = {
-            "registered": len(registry.all()),
-            "configured": len(registry.configured()),
-            "needs_key": len(registry.all()) - len(registry.configured()),
-        }
-        template_extras = {
-            "job_id": job_id,
-            "enrichable_count": enrichable_count,
-            "provider_counts": provider_counts,
-            "provider_coverage": provider_coverage,
-        }
+            type_providers = {
+                ioc_type: registry.providers_for_type(ioc_type)
+                for ioc_type in IOCType
+                if ioc_type != IOCType.CVE
+            }
+            enrichable_count = sum(
+                len(type_providers.get(ioc.type, []))
+                for ioc in iocs
+            )
+            provider_counts = json.dumps({
+                t.value: len(ps) for t, ps in type_providers.items()
+            })
+            provider_coverage = {
+                "registered": len(registry.all()),
+                "configured": len(registry.configured()),
+                "needs_key": len(registry.all()) - len(registry.configured()),
+            }
+            template_extras = {
+                "job_id": job_id,
+                "enrichable_count": enrichable_count,
+                "provider_counts": provider_counts,
+                "provider_coverage": provider_coverage,
+            }
 
     no_results = total_count == 0
     return render_template(

@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "milestoneId": "M016",
+  "sliceId": "S05",
+  "timestamp": 1778525537146,
+  "status": "fail",
+  "durationMs": 2,
+  "checks": [
+    {
+      "category": "file",
+      "target": "app/enrichment/providers/emailrep.py",
+      "passed": false,
+      "message": "Task T02 references 'app/enrichment/providers/emailrep.py' which doesn't exist and isn't created by prior or same-task outputs",
+      "blocking": true
+    },
+    {
+      "category": "file",
+      "target": "app/enrichment/provider_registry.py",
+      "passed": false,
+      "message": "Task T02 references 'app/enrichment/provider_registry.py' which doesn't exist and isn't created by prior or same-task outputs",
+      "blocking": true
+    }
+  ]
+}

@@ -11,7 +11,7 @@ import time
 from pathlib import Path
 from urllib import request
 
-from app.health_contract import HEALTH_PATH, HEALTH_PAYLOAD
+from app.health_contract import HEALTH_PATH, is_valid_health_payload
 
 SCRIPT = Path("tools/dev_server.py").resolve()
 
@@ -84,7 +84,9 @@ def test_start_status_restart_and_stop_after_crash(tmp_path: Path):
         assert started["restart_count"] == 0
         assert started["probe"]["status"] == "healthy"
         assert started["log_path"].startswith(".gsd/runtime/dev-server/logs/")
-        assert fetch_health(port) == HEALTH_PAYLOAD
+        health = fetch_health(port)
+        assert is_valid_health_payload(health)
+        assert health["service"] == "sentinelx"
 
         os.kill(pid, signal.SIGKILL)
         crashed = wait_for_status(runtime_root, "crashed")
@@ -101,7 +103,9 @@ def test_start_status_restart_and_stop_after_crash(tmp_path: Path):
         assert restarted["port"] == port
         assert restarted["restart_count"] == 1
         assert restarted["probe"]["status"] == "healthy"
-        assert fetch_health(port) == HEALTH_PAYLOAD
+        health = fetch_health(port)
+        assert is_valid_health_payload(health)
+        assert health["service"] == "sentinelx"
 
         stopped_result = run_cli(runtime_root, "stop", "--format", "json", timeout=30.0)
         assert stopped_result.returncode == 0, stopped_result.stderr or stopped_result.stdout

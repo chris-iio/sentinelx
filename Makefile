@@ -17,6 +17,12 @@ AUDIT_TEMPLATE   := .gsd/milestones/M013/M013-AUDIT-TEMPLATE.md
 
 .PHONY: tailwind-install esbuild-install css css-watch js js-dev js-watch typecheck build dev-server-start dev-server-status dev-server-restart dev-server-stop repair-runtime-state verify-runtime-boundary verify-fast verify-deep verify audit-m013-template audit-m013
 
+$(TAILWIND):
+	$(MAKE) tailwind-install
+
+$(ESBUILD):
+	$(MAKE) esbuild-install
+
 ## Download Tailwind standalone CLI binary
 tailwind-install:
 	@mkdir -p tools
@@ -37,15 +43,15 @@ esbuild-install:
 	@echo "esbuild $(ESBUILD_VERSION) installed at $(ESBUILD)"
 
 ## Build CSS (one-shot)
-css:
+css: $(TAILWIND)
 	$(TAILWIND) -i $(INPUT) -o $(OUTPUT) --minify
 
 ## Build CSS (watch mode for development)
-css-watch:
+css-watch: $(TAILWIND)
 	$(TAILWIND) -i $(INPUT) -o $(OUTPUT) --watch
 
 ## Build JS bundle (production — minified IIFE, no source maps)
-js:
+js: $(ESBUILD)
 	$(ESBUILD) $(JS_ENTRY) \
 		--bundle \
 		--format=iife \
@@ -55,7 +61,7 @@ js:
 		--outfile=$(JS_OUT)
 
 ## Build JS bundle (development — unminified, inline source maps)
-js-dev:
+js-dev: $(ESBUILD)
 	$(ESBUILD) $(JS_ENTRY) \
 		--bundle \
 		--format=iife \
@@ -65,7 +71,7 @@ js-dev:
 		--outfile=$(JS_OUT)
 
 ## Build JS bundle (watch mode — recompiles on file change)
-js-watch:
+js-watch: $(ESBUILD)
 	$(ESBUILD) $(JS_ENTRY) \
 		--bundle \
 		--format=iife \

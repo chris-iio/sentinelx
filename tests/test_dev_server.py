@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from app.health_contract import HEALTH_PATH, HEALTH_PAYLOAD
+from app.health_contract import HEALTH_PATH, build_health_payload
 
 SCRIPT = Path("tools/dev_server.py")
 BOUNDARY_SCRIPT = Path("tools/runtime_state_boundary.py")
@@ -45,9 +45,30 @@ class _SilentHandler(BaseHTTPRequestHandler):
         return
 
 
+def healthy_payload(status: str = "ok") -> dict:
+    checks = {
+        "cache": {"status": "ok", "detail": "ok"},
+        "history": {"status": "ok", "detail": "ok"},
+        "registry": {"status": "ok", "detail": "0/0 providers configured"},
+    }
+    if status == "degraded":
+        checks["cache"] = {"status": "degraded", "detail": "RuntimeError"}
+    return build_health_payload(checks)
+
+
 class HealthyHandler(_SilentHandler):
     def do_GET(self):  # noqa: N802
-        payload = json.dumps(HEALTH_PAYLOAD).encode("utf-8")
+        payload = json.dumps(healthy_payload()).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
+
+
+class DegradedHealthHandler(_SilentHandler):
+    def do_GET(self):  # noqa: N802
+        payload = json.dumps(healthy_payload("degraded")).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(payload)))
@@ -58,10 +79,7 @@ class HealthyHandler(_SilentHandler):
 class SecretBearingHealthHandler(_SilentHandler):
     def do_GET(self):  # noqa: N802
         payload = json.dumps(
-            {
-                **HEALTH_PAYLOAD,
-                "provider_key": "sk-local-dev-should-never-appear",
-            }
+            {**healthy_payload(), "provider_key": "sk-local-dev-should-never-appear"}
         ).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
@@ -72,7 +90,7 @@ class SecretBearingHealthHandler(_SilentHandler):
 
 class DriftedHealthHandler(_SilentHandler):
     def do_GET(self):  # noqa: N802
-        payload = json.dumps({**HEALTH_PAYLOAD, "ready": False}).encode("utf-8")
+        payload = json.dumps({**healthy_payload(), "ready": False}).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(payload)))
@@ -83,7 +101,7 @@ class DriftedHealthHandler(_SilentHandler):
 class SlowHealthHandler(_SilentHandler):
     def do_GET(self):  # noqa: N802
         time.sleep(0.2)
-        payload = json.dumps(HEALTH_PAYLOAD).encode("utf-8")
+        payload = json.dumps(healthy_payload()).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(payload)))
@@ -230,7 +248,7 @@ def test_load_status_rejects_malformed_json(tmp_path: Path):
         dev_server.load_status(paths)
 
 
-def test_probe_health_reports_healthy_for_exact_contract():
+def test_probe_health_reports_healthy_for_schema_contract():
     dev_server = load_dev_server_module()
 
     with running_server(HealthyHandler) as port:
@@ -240,6 +258,17 @@ def test_probe_health_reports_healthy_for_exact_contract():
     assert result.http_status == 200
     assert result.detail is None
     assert result.url == f"http://127.0.0.1:{port}{HEALTH_PATH}"
+
+
+def test_probe_health_accepts_degraded_ready_schema():
+    dev_server = load_dev_server_module()
+
+    with running_server(DegradedHealthHandler) as port:
+        result = dev_server.probe_health(port=port, timeout=0.2)
+
+    assert result.status == "healthy"
+    assert result.http_status == 200
+    assert result.detail is None
 
 
 def test_probe_health_reports_refused_timeout_and_malformed():

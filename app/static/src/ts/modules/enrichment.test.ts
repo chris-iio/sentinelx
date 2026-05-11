@@ -125,11 +125,20 @@ function mockFetchSequence(...responses: Array<{ ok: boolean; data: EnrichmentSt
   for (const response of responses) {
     fetchMock.mockResolvedValueOnce({
       ok: response.ok,
+      status: response.ok ? 200 : 404,
       json: vi.fn().mockResolvedValue(response.data),
     });
   }
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
+}
+
+function deferredResponse() {
+  let resolve!: (value: unknown) => void;
+  const promise = new Promise((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
 }
 
 describe("enrichment polling", () => {
@@ -194,6 +203,113 @@ describe("enrichment polling", () => {
 
     await vi.advanceTimersByTimeAsync(1500);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not overlap status requests while a previous poll is in flight", async () => {
+    const first = deferredResponse();
+    const fetchMock = vi.fn().mockReturnValueOnce(first.promise).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: vi.fn().mockResolvedValue({
+        total: 0,
+        done: 0,
+        complete: true,
+        results: [],
+        next_since: 0,
+        status: "complete",
+        terminal: false,
+        terminal_reason: null,
+        error: null,
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { init } = await import("./enrichment");
+    init();
+
+    await vi.advanceTimersByTimeAsync(750);
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    first.resolve({
+      ok: true,
+      status: 200,
+      json: vi.fn().mockResolvedValue({
+        total: 0,
+        done: 0,
+        complete: false,
+        results: [],
+        next_since: 0,
+        status: "running",
+        terminal: false,
+        terminal_reason: null,
+        error: null,
+      }),
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(750);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("bounds repeated polling failures and leaves diagnostic state", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const fetchMock = vi.fn().mockRejectedValue(new TypeError("network down"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { init } = await import("./enrichment");
+    init();
+
+    for (const delay of [750, 1500, 3000, 5000, 5000]) {
+      await vi.advanceTimersByTimeAsync(delay);
+    }
+
+    const warning = document.getElementById("enrich-warning");
+    const progressText = document.getElementById("enrich-progress-text");
+    const root = document.querySelector<HTMLElement>(".page-results");
+
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+    expect(warning?.style.display).toBe("block");
+    expect(warning?.textContent).toBe(
+      "Enrichment polling failed after repeated attempts. Please retry the analysis."
+    );
+    expect(progressText?.textContent).toBe(
+      "Enrichment polling failed after repeated attempts. Please retry the analysis."
+    );
+    expect(root?.getAttribute("data-enrichment-poll-state")).toBe("failed");
+    expect(root?.getAttribute("data-enrichment-poll-failures")).toBe("5");
+    expect(root?.getAttribute("data-enrichment-poll-last-error")).toBe("network_error");
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: "enrichment-poll-terminal-failure",
+        jobId: "job-123",
+        reason: "network_error",
+      })
+    );
+
+    await vi.advanceTimersByTimeAsync(10000);
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+  });
+
+  it("retries malformed non-terminal status JSON instead of silently dropping it", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      json: vi.fn().mockRejectedValue(new SyntaxError("bad json with body contents")),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { init } = await import("./enrichment");
+    init();
+
+    await vi.advanceTimersByTimeAsync(750);
+
+    const root = document.querySelector<HTMLElement>(".page-results");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(root?.getAttribute("data-enrichment-poll-state")).toBe("retrying");
+    expect(root?.getAttribute("data-enrichment-poll-last-error")).toBe("malformed_json");
+    expect(JSON.stringify(warnSpy.mock.calls)).not.toContain("bad json with body contents");
   });
 
   it("preserves next_since continuity while rendering shared-path parity state across multiple polls", async () => {

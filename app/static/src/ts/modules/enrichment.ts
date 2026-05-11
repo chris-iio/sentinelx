@@ -19,6 +19,76 @@ import { createResultApplicationCoordinator } from "./result-application";
 /** Accumulated enrichment results for export */
 const allResults: EnrichmentItem[] = [];
 
+const POLL_BASE_DELAY_MS = 750;
+const POLL_MAX_DELAY_MS = 5000;
+const POLL_MAX_CONSECUTIVE_FAILURES = 5;
+
+type PollFailureReason = "network_error" | "malformed_json" | "http_error" | "runtime_error";
+
+type PollPayload = {
+  ok: boolean;
+  status: number;
+  data: EnrichmentStatus;
+};
+
+function recordPollingState(
+  pageResults: HTMLElement,
+  state: "running" | "retrying" | "failed" | "complete",
+  failures = 0,
+  reason?: PollFailureReason
+): void {
+  pageResults.setAttribute("data-enrichment-poll-state", state);
+  pageResults.setAttribute("data-enrichment-poll-failures", String(failures));
+  if (reason) {
+    pageResults.setAttribute("data-enrichment-poll-last-error", reason);
+  } else {
+    pageResults.removeAttribute("data-enrichment-poll-last-error");
+  }
+}
+
+function warnPollingDecision(
+  event: string,
+  jobId: string,
+  details: Record<string, string | number | boolean | null>
+): void {
+  console.warn({ event, jobId, ...details });
+}
+
+function getPollFailureReason(error: unknown): PollFailureReason {
+  if (error instanceof Error) {
+    const reason = error.message;
+    if (reason === "malformed_json") return "malformed_json";
+    if (reason === "http_error") return "http_error";
+    if (reason === "runtime_error") return "runtime_error";
+  }
+  return "network_error";
+}
+
+function getPollFailureMessage(reason: PollFailureReason): string {
+  if (reason === "malformed_json") {
+    return "Enrichment polling returned an unreadable status response.";
+  }
+  if (reason === "http_error") {
+    return "Enrichment polling returned an unexpected server response.";
+  }
+  return "Enrichment polling failed after repeated attempts. Please retry the analysis.";
+}
+
+async function readPollPayload(resp: Response): Promise<PollPayload> {
+  let data: EnrichmentStatus;
+  try {
+    data = (await resp.json()) as EnrichmentStatus;
+  } catch {
+    throw new Error("malformed_json");
+  }
+
+  return {
+    ok: resp.ok,
+    status: resp.status,
+    data,
+  };
+}
+
 // ---- Private helpers ----
 
 function isLiveResultsPage(pageResults: HTMLElement): boolean {
@@ -187,8 +257,10 @@ export function init(): void {
   if (!pageResults || !isLiveResultsPage(pageResults)) return;
 
   const jobId = attr(pageResults, "data-job-id");
+  if (!jobId) return;
+  const livePageResults: HTMLElement = pageResults;
   allResults.length = 0;
-  wireExpandToggles(pageResults);
+  wireExpandToggles(livePageResults);
 
   let since = 0;
   const coordinator = createResultApplicationCoordinator();
@@ -211,83 +283,135 @@ export function init(): void {
     }
   }
 
-  const intervalId: ReturnType<typeof setInterval> = setInterval(function () {
-    fetch("/enrichment/status/" + jobId + "?since=" + since)
-      .then(function (resp) {
-        return resp
-          .json()
-          .then(function (data) {
-            return {
-              ok: resp.ok,
-              data: data as EnrichmentStatus,
-            };
-          })
-          .catch(function () {
-            if (!resp.ok) return null;
-            throw new Error("Failed to parse enrichment status response.");
-          });
-      })
-      .then(function (payload) {
-        if (!payload) return;
+  let pollTimer: ReturnType<typeof setTimeout> | null = null;
+  let stopped = false;
+  let consecutiveFailures = 0;
 
-        const data = payload.data;
-        updateProgressBar(data.done, data.total);
+  function stopPolling(): void {
+    stopped = true;
+    if (pollTimer !== null) {
+      clearTimeout(pollTimer);
+      pollTimer = null;
+    }
+  }
 
-        const results = data.results;
-        for (let i = 0; i < results.length; i++) {
-          const result = results[i];
-          if (!result) continue;
-          allResults.push(result);
-          coordinator.apply(result);
+  function scheduleNextPoll(delayMs: number): void {
+    if (stopped) return;
+    if (pollTimer !== null) {
+      clearTimeout(pollTimer);
+    }
+    pollTimer = setTimeout(() => {
+      pollTimer = null;
+      void pollOnce();
+    }, delayMs);
+  }
 
-          if (result.type === "error" && result.error) {
-            const errLower = result.error.toLowerCase();
-            if (errLower.indexOf("rate limit") !== -1 || errLower.indexOf("429") !== -1) {
-              showEnrichWarning("Rate limit reached for " + result.provider + ".");
-            } else if (
-              errLower.indexOf("authentication") !== -1 ||
-              errLower.indexOf("401") !== -1 ||
-              errLower.indexOf("403") !== -1
-            ) {
-              showEnrichWarning(
-                "Authentication error for " +
-                  result.provider +
-                  ". Please check your API key in Settings."
-              );
-            }
-          }
-        }
+  function handleRepeatedPollingFailure(reason: PollFailureReason): void {
+    consecutiveFailures += 1;
+    recordPollingState(livePageResults, "retrying", consecutiveFailures, reason);
 
-        if (results.length > 0) {
-          scheduleFlush();
-        }
-
-        since = data.next_since;
-
-        if (data.terminal) {
-          clearInterval(intervalId);
-          clearPendingFlush();
-          const terminalMessage = getTerminalFailureMessage(data);
-          showTerminalFailure(terminalMessage);
-          markEnrichmentTerminalFailure(terminalMessage, coordinator);
-          return;
-        }
-
-        if (!payload.ok) {
-          return;
-        }
-
-        if (data.complete) {
-          clearInterval(intervalId);
-          clearPendingFlush();
-          markEnrichmentComplete(coordinator);
-        }
-      })
-      .catch(function () {
-        // Fetch error — silently continue; retry on next interval tick
+    if (consecutiveFailures >= POLL_MAX_CONSECUTIVE_FAILURES) {
+      stopPolling();
+      clearPendingFlush();
+      const message = getPollFailureMessage(reason);
+      warnPollingDecision("enrichment-poll-terminal-failure", jobId, {
+        reason,
+        consecutiveFailures,
       });
-  }, 750);
+      showTerminalFailure(message);
+      markEnrichmentTerminalFailure(message, coordinator);
+      recordPollingState(livePageResults, "failed", consecutiveFailures, reason);
+      return;
+    }
 
-  pageResults.setAttribute("data-results-runtime", "live");
-  sharedInitExportButton(allResults, pageResults);
+    const nextDelay = Math.min(
+      POLL_BASE_DELAY_MS * Math.pow(2, consecutiveFailures),
+      POLL_MAX_DELAY_MS
+    );
+    warnPollingDecision("enrichment-poll-retry-scheduled", jobId, {
+      reason,
+      consecutiveFailures,
+      nextDelayMs: nextDelay,
+    });
+    scheduleNextPoll(nextDelay);
+  }
+
+  function applyStatusPayload(payload: PollPayload): void {
+    const data = payload.data;
+    updateProgressBar(data.done, data.total);
+
+    const results = data.results;
+    for (let i = 0; i < results.length; i++) {
+      const result = results[i];
+      if (!result) continue;
+      allResults.push(result);
+      coordinator.apply(result);
+
+      if (result.type === "error" && result.error) {
+        const errLower = result.error.toLowerCase();
+        if (errLower.indexOf("rate limit") !== -1 || errLower.indexOf("429") !== -1) {
+          showEnrichWarning("Rate limit reached for " + result.provider + ".");
+        } else if (
+          errLower.indexOf("authentication") !== -1 ||
+          errLower.indexOf("401") !== -1 ||
+          errLower.indexOf("403") !== -1
+        ) {
+          showEnrichWarning(
+            "Authentication error for " +
+              result.provider +
+              ". Please check your API key in Settings."
+          );
+        }
+      }
+    }
+
+    if (results.length > 0) {
+      scheduleFlush();
+    }
+
+    since = data.next_since;
+    consecutiveFailures = 0;
+    recordPollingState(livePageResults, "running");
+
+    if (data.terminal) {
+      stopPolling();
+      clearPendingFlush();
+      const terminalMessage = getTerminalFailureMessage(data);
+      showTerminalFailure(terminalMessage);
+      markEnrichmentTerminalFailure(terminalMessage, coordinator);
+      recordPollingState(livePageResults, "failed", 0, "http_error");
+      return;
+    }
+
+    if (!payload.ok) {
+      throw new Error("http_error");
+    }
+
+    if (data.complete) {
+      stopPolling();
+      clearPendingFlush();
+      markEnrichmentComplete(coordinator);
+      recordPollingState(livePageResults, "complete");
+    }
+  }
+
+  async function pollOnce(): Promise<void> {
+    if (stopped) return;
+
+    try {
+      const resp = await fetch("/enrichment/status/" + jobId + "?since=" + since);
+      const payload = await readPollPayload(resp);
+      applyStatusPayload(payload);
+      if (!stopped) {
+        scheduleNextPoll(POLL_BASE_DELAY_MS);
+      }
+    } catch (error) {
+      handleRepeatedPollingFailure(getPollFailureReason(error));
+    }
+  }
+
+  scheduleNextPoll(POLL_BASE_DELAY_MS);
+
+  livePageResults.setAttribute("data-results-runtime", "live");
+  sharedInitExportButton(allResults, livePageResults);
 }

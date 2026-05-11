@@ -46,6 +46,11 @@ class Config:
         "api.threatminer.org",       # ThreatMiner (zero-auth)
     ]
 
+    # Online enrichment admission controls. These keep one accepted request from
+    # exploding into unbounded provider fan-out and local history/cache writes.
+    ONLINE_MAX_IOCS: int = int(os.environ.get("ONLINE_MAX_IOCS", "50"))
+    ONLINE_MAX_DISPATCHES: int = int(os.environ.get("ONLINE_MAX_DISPATCHES", "200"))
+
     def validate(self) -> None:
         """Validate configuration at startup.
 

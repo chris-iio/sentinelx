@@ -2,6 +2,18 @@
 
 This file is the explicit capability and coverage contract for the project.
 
+## Active
+
+### R083 — Analysts and maintainers can export a robust diagnostic log bundle for a recent analysis or runtime session, with secrets redacted and enough context to debug provider, polling, rendering, and settings failures.
+- Class: operability
+- Status: active
+- Description: Analysts and maintainers can export a robust diagnostic log bundle for a recent analysis or runtime session, with secrets redacted and enough context to debug provider, polling, rendering, and settings failures.
+- Why it matters: Current enrichment/debug failures depend on scattered server logs, browser assertions, and test artifacts. A safe export bundle will make support and future agent debugging faster without exposing provider credentials.
+- Source: user-request-2026-05-10
+- Primary owning slice: M018/TBD
+- Validation: Future M018 proof must show that a deterministic export contains expected diagnostic events/context, excludes configured provider secrets and raw API keys, and is downloadable or retrievable through the intended UI/API path.
+- Notes: Raised by user immediately after M016/S04/T02 and explicitly descoped from M016 by D075/D076. M016 validation should treat R083 as future M018 diagnostic-export ownership, not as an Email Reputation Depth implementation blocker. Scope should include redaction, bounded export size, explicit included sources, and a browser/API proof path before shipping.
+
 ## Validated
 
 ### R001 — IOC results render in a single-column, full-width layout replacing the current 2-column card grid. Each IOC gets the full page width for data presentation.
@@ -962,10 +974,11 @@ This file is the explicit capability and coverage contract for the project.
 | R080 | anti-feature | out-of-scope | none | none | n/a |
 | R081 | anti-feature | out-of-scope | none | none | n/a |
 | R082 | anti-feature | out-of-scope | none | none | n/a |
+| R083 | operability | active | TBD | none | A deterministic test proves the export contains expected diagnostic events/context, excludes configured provider secrets and raw API keys, and is downloadable or retrievable through the intended UI/API path. |
 
 ## Coverage Summary
 
-- Active requirements: 0
-- Mapped to slices: 0
+- Active requirements: 1
+- Mapped to slices: 1
 - Validated: 72 (R001, R002, R003, R004, R005, R006, R007, R008, R009, R010, R011, R012, R013, R014, R015, R016, R017, R018, R019, R020, R021, R022, R023, R024, R025, R026, R027, R028, R029, R030, R031, R032, R033, R035, R036, R037, R038, R039, R040, R041, R042, R043, R044, R045, R046, R047, R048, R049, R050, R051, R052, R053, R054, R055, R056, R057, R058, R059, R060, R061, R062, R063, R064, R065, R069, R070, R071, R072, R073, R074, R075, R076)
 - Unmapped active requirements: 0

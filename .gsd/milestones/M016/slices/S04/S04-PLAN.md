@@ -31,7 +31,7 @@ Consumes S01 EmailRep adapter result shape and flattened `raw_stats`, S02 regist
   - Files: `tests/e2e/conftest.py`, `tests/e2e/pages/results_page.py`
   - Verify: python3 -m pytest tests/e2e/test_results_page.py::test_enrichment_summary_row_created_after_polling tests/e2e/test_settings.py::test_save_key_shows_success_flash -q
 
-- [ ] **T02: Prove Online email submission renders EmailRep verdict and context in Playwright** `est:1h`
+- [x] **T02: Prove Online email submission renders EmailRep verdict and context in Playwright** `est:1h`
   Why: This is the slice demo and final assembly proof: the browser must exercise the real settings page, real analyze form, CSRF-enabled Flask routes, provider-count HTML contract, frontend polling, shared result application, row expansion, and safe EmailRep context rendering.
   - Files: `tests/e2e/test_emailrep_online.py`
   - Verify: python3 -m pytest tests/e2e/test_emailrep_online.py -q && python3 -m pytest tests/test_emailrep_online_coverage.py tests/e2e/test_emailrep_online.py tests/e2e/test_results_page.py tests/e2e/test_settings.py -q && npx vitest run app/static/src/ts/modules/row-factory.test.ts app/static/src/ts/modules/result-application.test.ts && npx tsc --noEmit
