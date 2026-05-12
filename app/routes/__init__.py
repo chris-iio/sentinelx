@@ -12,6 +12,7 @@ bp = Blueprint("main", __name__)
 # Import route modules — each attaches @bp.route() decorators to the shared blueprint.
 from . import analysis  # noqa: E402, F401
 from . import detail  # noqa: E402, F401
+from . import diagnostics  # noqa: E402, F401
 from . import enrichment  # noqa: E402, F401
 from . import history  # noqa: E402, F401
 from . import settings  # noqa: E402, F401

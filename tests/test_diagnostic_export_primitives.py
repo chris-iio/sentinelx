@@ -244,12 +244,9 @@ def test_redaction_then_manifest_contract_preserves_safe_diagnostic_context(tmp_
         assert forbidden not in serialized_bundle
 
 
-def test_flask_does_not_expose_diagnostic_export_route_in_s01(app, client) -> None:  # noqa: ANN001
-    future_routes = {"/diagnostics/export", "/api/diagnostics/export"}
-
+def test_flask_exposes_supported_diagnostic_export_route(app, client) -> None:  # noqa: ANN001
     registered_rules = {rule.rule for rule in app.url_map.iter_rules()}
 
-    assert future_routes.isdisjoint(registered_rules)
-    for route in sorted(future_routes):
-        response = client.get(route)
-        assert response.status_code == 404
+    assert "/diagnostics/export" in registered_rules
+    assert "/api/diagnostics/export" not in registered_rules
+    assert client.get("/api/diagnostics/export").status_code == 404

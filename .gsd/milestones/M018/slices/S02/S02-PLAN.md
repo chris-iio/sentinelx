@@ -30,12 +30,12 @@ Consumes S01 `app/diagnostics/contract.py` and `app/diagnostics/redaction.py`; c
   - Files: `app/diagnostics/assembler.py`, `app/diagnostics/__init__.py`, `tests/test_diagnostic_export_assembler.py`
   - Verify: python3 -m pytest -q tests/test_diagnostic_export_assembler.py
 
-- [ ] **T02: Compose safe runtime diagnostic sources** `est:1h 30m`
+- [x] **T02: Compose safe runtime diagnostic sources** `est:1h 30m`
   Expected executor `skills_used`: `api-design`, `tdd`, `observability`.
   - Files: `app/diagnostics/sources.py`, `app/diagnostics/__init__.py`, `app/routes/_helpers.py`, `tests/test_diagnostic_export_sources.py`
   - Verify: python3 -m pytest -q tests/test_diagnostic_export_sources.py
 
-- [ ] **T03: Prove assembled runtime bundle integration and route boundary** `est:1h`
+- [x] **T03: Prove assembled runtime bundle integration and route boundary** `est:1h`
   Expected executor `skills_used`: `tdd`, `verify-before-complete`, `security-review`, `write-docs`.
   - Files: `tests/test_diagnostic_export_bundle_integration.py`, `docs/diagnostic-export-contract.md`
   - Verify: python3 -m pytest -q tests/test_diagnostic_export_assembler.py tests/test_diagnostic_export_sources.py tests/test_diagnostic_export_bundle_integration.py && python3 -m pytest -q tests/test_diagnostic_redaction.py tests/test_config_store.py tests/test_settings.py

@@ -15,10 +15,10 @@
 - [x] **S01: S01** `risk:high` `depends:[]`
   > After this: After this, the project has a precise log-export contract and tested redaction rules before any downloadable bundle is exposed.
 
-- [ ] **S02: S02** `risk:high` `depends:[]`
+- [x] **S02: S02** `risk:high` `depends:[]`
   > After this: After this, a backend service can assemble a deterministic diagnostic bundle from fixture/runtime sources with manifest, bounds, and safe per-source errors.
 
-- [ ] **S03: App route and analyst affordance** `risk:medium` `depends:[S02]`
+- [ ] **S03: S03** `risk:medium` `depends:[]`
   > After this: After this, analysts can download a diagnostic export from the app and route tests prove headers, redaction, and error responses.
 
 - [ ] **S04: End-to-end proof and documentation** `risk:medium` `depends:[S03]`

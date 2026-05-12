@@ -23,6 +23,7 @@
 <body>
     <nav class="floating-settings">
         <a href="{{ url_for('main.history_list') }}" class="nav-link nav-link--icon" aria-label="History">{{ icon("clock", class="nav-icon nav-icon--lg") }}</a>
+        <a href="{{ url_for('main.diagnostics_export') }}" class="nav-link nav-link--icon" aria-label="Download diagnostic export">{{ icon("arrow-down-tray", class="nav-icon nav-icon--lg") }}</a>
         <a href="{{ url_for('main.settings_get') }}" class="nav-link nav-link--icon" aria-label="Settings">{{ icon("cog-6-tooth", class="nav-icon nav-icon--lg") }}</a>
     </nav>
 
