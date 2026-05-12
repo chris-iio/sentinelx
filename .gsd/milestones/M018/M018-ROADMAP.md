@@ -12,7 +12,7 @@
 
 ## Slices
 
-- [ ] **S01: Contract and redaction primitives** `risk:high` `depends:[]`
+- [ ] **S01: S01** `risk:high` `depends:[]`
   > After this: After this, the project has a precise log-export contract and tested redaction rules before any downloadable bundle is exposed.
 
 - [ ] **S02: Backend export assembler** `risk:high` `depends:[S01]`
