@@ -10,14 +10,28 @@ from app.diagnostics.contract import (
     serialize_manifest,
     serialize_source_record,
 )
+from app.diagnostics.redaction import (
+    REDACTED_TEXT,
+    ConfiguredSecretInventory,
+    RedactionMetadata,
+    collect_configured_secret_inventory,
+    redact_diagnostic_payload,
+    redact_diagnostic_text,
+)
 
 __all__ = [
     "DEFAULT_SOURCE_MAX_BYTES",
     "DIAGNOSTIC_EXPORT_SCHEMA_VERSION",
     "MAX_SAFE_ERROR_SUMMARY_CHARS",
+    "REDACTED_TEXT",
+    "ConfiguredSecretInventory",
     "DiagnosticManifest",
     "DiagnosticSourceRecord",
+    "RedactionMetadata",
+    "collect_configured_secret_inventory",
     "manifest_to_json",
+    "redact_diagnostic_payload",
+    "redact_diagnostic_text",
     "serialize_manifest",
     "serialize_source_record",
 ]
