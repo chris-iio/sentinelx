@@ -175,6 +175,10 @@ def _replace_authorization_bearer(match: re.Match[str]) -> str:
     return f"{match.group('prefix')}Bearer {REDACTED_TEXT}"
 
 
+def _replace_standalone_bearer(match: re.Match[str]) -> str:
+    return f"{match.group('prefix')}Bearer {REDACTED_TEXT}"
+
+
 def _replace_named_secret(match: re.Match[str]) -> str:
     return f"{match.group('prefix')}{REDACTED_TEXT}"
 
@@ -194,6 +198,14 @@ _TEXT_RULES = (
             re.IGNORECASE,
         ),
         replace=_replace_authorization_bearer,
+    ),
+    _TextRule(
+        label="pattern:authorization_bearer",
+        regex=re.compile(
+            r"(?P<prefix>\b)bearer\s+(?P<secret>[^\s,;\"'<>]+)",
+            re.IGNORECASE,
+        ),
+        replace=_replace_standalone_bearer,
     ),
     _TextRule(
         label="pattern:header:x-api-key",
@@ -234,7 +246,7 @@ _TEXT_RULES = (
         _TextRule(
             label=f"pattern:field:{name}",
             regex=re.compile(
-                rf"(?P<prefix>[\"']?{name}[\"']?\s*:\s*)(?P<quote>[\"']?)(?P<secret>[^\s,}}\]\"']+)(?P=quote)",
+                rf"(?P<prefix>(?<![A-Za-z0-9_])[\"']?{name}[\"']?\s*:\s*)(?P<quote>[\"']?)(?P<secret>[^\s,}}\]\"']+)(?P=quote)",
                 re.IGNORECASE,
             ),
             replace=_replace_jsonish_field,
