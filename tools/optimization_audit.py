@@ -34,6 +34,12 @@ DEFAULT_OUTPUT = Path(f".gsd/milestones/{DEFAULT_MILESTONE_ID}/{DEFAULT_MILESTON
 DEFAULT_TEMPLATE_OUTPUT = Path(
     f".gsd/milestones/{DEFAULT_MILESTONE_ID}/{DEFAULT_MILESTONE_ID}-AUDIT-TEMPLATE.md"
 )
+M017_MILESTONE_ID = "M017"
+M017_OUTPUT = Path(f".gsd/milestones/{M017_MILESTONE_ID}/{M017_MILESTONE_ID}-AUDIT.md")
+M017_TEMPLATE_OUTPUT = Path(
+    f".gsd/milestones/{M017_MILESTONE_ID}/{M017_MILESTONE_ID}-AUDIT-TEMPLATE.md"
+)
+PROJECT_MAP_PATH = Path("docs/project-map.md")
 FINDING_BUCKETS = ("do now", "do next", "later", "leave alone")
 RUNTIME_PROVIDER_DIAGNOSTIC_FIELDS = (
     "dispatch_count",
@@ -346,6 +352,61 @@ BASELINE_GUARDRAIL_COVERAGE: tuple[GuardrailCoverage, ...] = (
     GuardrailCoverage("R020", "runtime/provider", "Measured runtime/provider keep-decision", "Persistent adapter-owned sessions stay justified until measured evidence argues otherwise."),
     GuardrailCoverage("R022", "persistence", "Leave-alone WAL store decision", "WAL and persistent connection behavior stay explicit keep-decisions pending contention evidence."),
     GuardrailCoverage("R040", "all seams", "Every ranked finding", "Each future slice must rerun the listed proof lanes before claiming an optimization is safe."),
+)
+
+M017_FINDINGS: tuple[BaselineFinding, ...] = (
+    BaselineFinding(
+        bucket="do now",
+        finding="Audit and optimize the enrichment fan-out/status snapshot path first for SentinelX's analyst IOC triage loop.",
+        seam="enrichment fan-out/status snapshot cost",
+        evidence_kind="project-map grounding + measurement requirement",
+        evidence_summary=(
+            "`docs/project-map.md` ranks enrichment fan-out/status snapshot cost as the #1 optimization priority for the local analyst IOC triage workflow. "
+            "D078 requires starting from the project map, D079 ranks work by SentinelX's analyst identity, and R085 requires identity-grounded optimization rather than generic subsystem cleanup."
+        ),
+        continuity_guardrails="R085, R087, D078, D079, D080",
+        rerun_lanes="`python3 tools/optimization_audit.py --milestone-id M017 --mode baseline`; `make verify-fast`; add `make verify-deep` for browser-visible polling changes",
+        continuity_notes=(
+            "S03 should target this path only with before/after timing when practical or explicit code-path reasoning plus regression proof; do not hide provider, polling, cache, or history failures to look faster."
+        ),
+    ),
+    BaselineFinding(
+        bucket="do next",
+        finding="Measure browser result rendering churn after the status/fan-out target, especially flush-wide recount and sort work during polling/history replay.",
+        seam="browser polling and result application",
+        evidence_kind="project-map priority + code-path reasoning",
+        evidence_summary=(
+            "The S01 seam inventory ranks browser result rendering churn second because it sits directly in the analyst's verdict-first results review path. "
+            "The M013 baseline already narrowed repeated card/slot lookups, so M017 follow-up should focus on remaining flush-wide `updateDashboardCounts()` and `sortCardsBySeverity()` work."
+        ),
+        continuity_guardrails="R085, R087, R008, R009, R010, R019",
+        rerun_lanes="`make verify-fast`, `make verify-deep`",
+        continuity_notes="Preserve live/history parity, filtering/sorting/copy/export/detail links, textContent-safe DOM construction, and deterministic mocked-online browser proof.",
+    ),
+    BaselineFinding(
+        bucket="later",
+        finding="Defer SQLite cache/history access-shape and IOC duplicate-candidate work until the top analyst-loop seams have fresh evidence.",
+        seam="local cache/history; IOC extraction pipeline",
+        evidence_kind="ranked project-map priority",
+        evidence_summary=(
+            "`docs/project-map.md` ranks SQLite access shape third and duplicate IOC pipeline handling fourth. Both matter, but neither outranks the enrichment/results loop for the current M017 do-now target without new contention or duplicate-heavy fixture evidence."
+        ),
+        continuity_guardrails="R085, R087, R022, R040",
+        rerun_lanes="`make verify-fast` plus targeted cache/history or pipeline fixtures when promoted",
+        continuity_notes="Promote only with tempdb/query-count evidence or a representative duplicate-heavy text fixture showing equivalent IOC output with less work.",
+    ),
+    BaselineFinding(
+        bucket="leave alone",
+        finding="Leave provider registration/config diagnostics clarity alone for this optimization pass unless readiness diagnostics become the blocker.",
+        seam="provider registration/config diagnostics",
+        evidence_kind="identity-grounded keep-decision",
+        evidence_summary=(
+            "The S01 project map ranks this fifth: it supports analyst confidence and secret-redaction boundaries, but it is not the best current performance target for the paste → enrich → review loop."
+        ),
+        continuity_guardrails="R085, R087, D080",
+        rerun_lanes="`make verify-fast` if settings/diagnostics code changes",
+        continuity_notes="Do not expose API keys, tokens, or analyst-sensitive IOC data in audit artifacts, settings output, diagnostics, or command captures.",
+    ),
 )
 
 
@@ -1000,7 +1061,87 @@ def render_baseline_guardrail_coverage() -> str:
     return "\n".join(lines)
 
 
+def project_map_grounding(repo_root: Path) -> str:
+    project_map = repo_root / PROJECT_MAP_PATH
+    if not project_map.exists():
+        return (
+            f"⚠️ `{PROJECT_MAP_PATH}` was not found at generation time. "
+            "This artifact cannot truthfully claim full M017 identity grounding until that file is restored; "
+            "ranked findings below are retained from the built-in contract as a fallback note."
+        )
+    return (
+        f"`{PROJECT_MAP_PATH}` is present and anchors this audit to SentinelX as a local analyst IOC triage workbench: "
+        "paste investigation text, extract IOCs, optionally enrich them, then review verdict-first results with history, details, filters, copy/export, and diagnostics."
+    )
+
+
+def render_m017_ranked_findings() -> str:
+    lines: list[str] = []
+    for bucket in FINDING_BUCKETS:
+        lines.append(f"### {bucket}")
+        lines.append("")
+        bucket_findings = [finding for finding in M017_FINDINGS if finding.bucket == bucket]
+        lines.append(render_findings_table(bucket_findings))
+        lines.append("")
+    return "\n".join(lines).rstrip()
+
+
+def render_m017_identity_section(document: AuditDocument) -> str:
+    return "\n".join(
+        [
+            "## M017 identity-grounded contract",
+            "",
+            f"- Project map grounding: {project_map_grounding(document.repo_root)}",
+            "- Analyst identity: SentinelX is optimized as a fast local analyst IOC triage workbench, not as generic subsystem cleanup.",
+            "- Decisions: D078 requires `docs/project-map.md` and `.gsd/PROJECT.md` before target selection; D079 ranks work by the analyst IOC triage loop; D080 allows aggressive/moderate cross-seam optimization only with proof.",
+            "- Requirements: R085 requires product-identity-grounded optimization decisions; R087 requires measurement when practical or explicit code-path reasoning plus regression proof.",
+            "- S01 seam inventory priorities: (1) enrichment fan-out/status snapshot cost, (2) browser result rendering churn, (3) SQLite cache/history access shape, (4) IOC pipeline duplicate candidate handling, (5) provider registration/config diagnostics clarity.",
+            "- S03 target language: the do-now target for S03 is the enrichment fan-out/status snapshot path unless fresh evidence in this artifact proves a better analyst-loop optimization.",
+        ]
+    )
+
+
+def render_m017_rerun_checklist_section() -> str:
+    return "\n".join(
+        [
+            "| Step | Proof surface | Command | Required when | Expected durable evidence |",
+            "| --- | --- | --- | --- | --- |",
+            "| 1 | M017 workflow runner + identity-grounded ranked artifact refresh | `python3 tools/optimization_audit.py --milestone-id M017 --mode baseline --output .gsd/milestones/M017/M017-AUDIT.md` | Every M017 optimization slice before handoff. | Updated M017 audit artifact citing `docs/project-map.md`, R085/R087, D078-D080, S01 seam priorities, and current ranked buckets. |",
+            "| 2 | Fast local regression lane | `make verify-fast` | Every shipped optimization, including keep-decisions that changed code or build/test plumbing. | Fresh command capture or task summary evidence proving unit/integration/frontend/build checks stayed green. |",
+            "| 3 | Deterministic mocked-online browser proof | `make verify-deep` | Any change touching live enrichment orchestration, polling/status flow, shared result application, or analyst-visible DOM/state. | Fresh evidence proving the analyst-visible mocked-online browser seam still passes end-to-end. |",
+            "| 4 | S03 target confirmation | Compare `do now` against project-map priority and fresh measurement captures | Before S03 implementation starts. | Clear do-now/do-next/later/leave-alone decision explaining why the selected optimization is worth doing. |",
+        ]
+    )
+
+
+def render_m017_baseline_sections(document: AuditDocument) -> list[str]:
+    return [
+        render_m017_identity_section(document),
+        "",
+        "## Baseline stance",
+        "",
+        "- Do now: target enrichment fan-out/status snapshot cost because it is the highest-ranked S01 seam in SentinelX's analyst IOC triage loop and has the clearest evidence path for S03.",
+        "- Do next: browser result rendering churn remains important, but should follow the status/fan-out target unless fresh browser-visible evidence outranks it.",
+        "- Later: SQLite cache/history access shape and IOC duplicate-candidate handling need targeted tempdb/query-count or duplicate-fixture evidence before promotion.",
+        "- Leave alone: provider registration/config diagnostics clarity should not distract this optimization pass unless readiness diagnostics become the actual blocker.",
+        "- Evidence standard: every shipped optimization needs before/after measurement when practical, or explicit code-path reasoning plus regression proof, and artifacts must not expose API keys, tokens, or analyst-sensitive IOC data.",
+        "",
+        "## Ranked findings",
+        "",
+        render_m017_ranked_findings(),
+        "",
+        "## M017 audit notes",
+        "",
+        "- This baseline intentionally contains no placeholder rows; each bucket records a current do-now/do-next/later/leave-alone decision.",
+        "- Re-run with `make audit-m017` after each optimization slice so S03/S04 can consume current command-capture rows and target language.",
+        "- Failed optional capture commands are recorded in the measurement table with nonzero exits so unrelated artifact generation remains inspectable.",
+    ]
+
+
 def render_document(document: AuditDocument) -> str:
+    template_output = M017_TEMPLATE_OUTPUT if document.milestone_id == M017_MILESTONE_ID else DEFAULT_TEMPLATE_OUTPUT
+    baseline_output = M017_OUTPUT if document.milestone_id == M017_MILESTONE_ID else DEFAULT_OUTPUT
+    convenience_targets = "`make audit-m017-template` / `make audit-m017`" if document.milestone_id == M017_MILESTONE_ID else "`make audit-m013-template` / `make audit-m013`"
     command_surface = "\n".join(
         [
             "| Entry point | Command | Purpose |",
@@ -1009,13 +1150,13 @@ def render_document(document: AuditDocument) -> str:
                 f"| CLI help | `python3 tools/optimization_audit.py --help` | Show the supported modes, capture options, and output controls. |"
             ),
             (
-                f"| Template scaffold | `python3 tools/optimization_audit.py --mode template --output {DEFAULT_TEMPLATE_OUTPUT}` | Create a reusable milestone-local ranked artifact template. |"
+                f"| Template scaffold | `python3 tools/optimization_audit.py --milestone-id {document.milestone_id} --mode template --output {template_output}` | Create a reusable milestone-local ranked artifact template. |"
             ),
             (
-                f"| Working baseline artifact | `python3 tools/optimization_audit.py --mode baseline --output {DEFAULT_OUTPUT}` | Create/update the current audit document used by later optimization slices. |"
+                f"| Working baseline artifact | `python3 tools/optimization_audit.py --milestone-id {document.milestone_id} --mode baseline --output {baseline_output}` | Create/update the current audit document used by later optimization slices. |"
             ),
             (
-                "| Convenience targets | `make audit-m013-template` / `make audit-m013` | Repo-native wrappers around the same workflow for contributors. |"
+                f"| Convenience targets | {convenience_targets} | Repo-native wrappers around the same workflow for contributors. |"
             ),
         ]
     )
@@ -1045,7 +1186,7 @@ def render_document(document: AuditDocument) -> str:
         "",
         "## Verified rerun checklist",
         "",
-        render_rerun_checklist_section(),
+        render_m017_rerun_checklist_section() if document.milestone_id == M017_MILESTONE_ID else render_rerun_checklist_section(),
         "",
         "## Continuity guardrails",
         "",
@@ -1073,7 +1214,9 @@ def render_document(document: AuditDocument) -> str:
         "",
     ]
 
-    if document.mode == "baseline":
+    if document.mode == "baseline" and document.milestone_id == M017_MILESTONE_ID:
+        lines.extend(render_m017_baseline_sections(document))
+    elif document.mode == "baseline":
         lines.extend(
             [
                 "## Baseline stance",
@@ -1124,7 +1267,10 @@ def render_document(document: AuditDocument) -> str:
 def main() -> int:
     args = parse_args()
     repo_root = Path(args.repo_root).resolve()
-    output_path = Path(args.output)
+    if args.milestone_id == M017_MILESTONE_ID and args.output == str(DEFAULT_OUTPUT):
+        output_path = M017_TEMPLATE_OUTPUT if args.mode == "template" else M017_OUTPUT
+    else:
+        output_path = Path(args.output)
 
     repo_root_str = str(repo_root)
     if repo_root_str not in sys.path:
@@ -1152,13 +1298,11 @@ def main() -> int:
     output_path.write_text(render_document(document), encoding="utf-8")
 
     failed_captures = [capture for capture in captures if capture.exit_code != 0]
-    if failed_captures:
-        for capture in failed_captures:
-            print(
-                f"capture '{capture.label}' failed with exit code {capture.exit_code}: {capture.summary}",
-                file=sys.stderr,
-            )
-        return 1
+    for capture in failed_captures:
+        print(
+            f"capture '{capture.label}' failed with exit code {capture.exit_code}: {capture.summary}",
+            file=sys.stderr,
+        )
     return 0
 
 

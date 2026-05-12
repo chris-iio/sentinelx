@@ -87,6 +87,62 @@ def test_baseline_mode_writes_ranked_findings_and_notes(tmp_path):
     assert "_Fill during the do now pass_" not in content
 
 
+def test_m017_baseline_uses_identity_grounded_contract(tmp_path):
+    output_path = tmp_path / "m017-audit.md"
+
+    result = run_audit(
+        "--milestone-id",
+        "M017",
+        "--mode",
+        "baseline",
+        "--output",
+        str(output_path),
+    )
+
+    assert result.returncode == 0, result.stderr
+    content = output_path.read_text(encoding="utf-8")
+    assert "# M017 Optimization Audit — SentinelX" in content
+    assert "## M017 identity-grounded contract" in content
+    assert "docs/project-map.md" in content
+    assert "local analyst IOC triage workbench" in content
+    assert "D078" in content
+    assert "D079" in content
+    assert "D080" in content
+    assert "R085" in content
+    assert "R087" in content
+    assert "S01 seam inventory priorities" in content
+    assert "S03 should target this path" in content
+    assert "### do now" in content
+    assert "### do next" in content
+    assert "### later" in content
+    assert "### leave alone" in content
+    assert "enrichment fan-out/status snapshot path" in content
+    assert "before/after measurement when practical" in content
+    assert "explicit code-path reasoning plus regression proof" in content
+    assert "_Fill during the do now pass_" not in content
+    assert "_Fill during the do next pass_" not in content
+    assert "_Fill during the later pass_" not in content
+    assert "_Fill during the leave alone pass_" not in content
+
+
+def test_m017_baseline_notes_missing_project_map_without_silent_grounding(tmp_path):
+    audit = load_audit_module()
+    output_path = tmp_path / "m017-audit.md"
+    document = audit.AuditDocument(
+        milestone_id="M017",
+        mode="baseline",
+        repo_name="SentinelX",
+        repo_root=tmp_path,
+        output_path=output_path,
+        generated_at="2026-01-01 00:00:00 UTC",
+    )
+
+    content = audit.render_document(document)
+
+    assert "docs/project-map.md` was not found" in content
+    assert "cannot truthfully claim full M017 identity grounding" in content
+
+
 def test_capture_command_records_measurement_metadata(tmp_path):
     output_path = tmp_path / "audit.md"
 
@@ -106,6 +162,28 @@ def test_capture_command_records_measurement_metadata(tmp_path):
     assert "| 0 |" in content
     assert "ok" in content
     assert "Measurement captures" in content
+
+
+def test_failed_capture_command_is_recorded_without_aborting_generation(tmp_path):
+    output_path = tmp_path / "audit.md"
+
+    result = run_audit(
+        "--milestone-id",
+        "M017",
+        "--mode",
+        "baseline",
+        "--output",
+        str(output_path),
+        "--capture-command",
+        "bad::python3 -c 'import sys; print(\"bad capture\"); sys.exit(7)'",
+    )
+
+    assert result.returncode == 0, result.stderr
+    content = output_path.read_text(encoding="utf-8")
+    assert "| bad |" in content
+    assert "| 7 |" in content
+    assert "bad capture" in content
+    assert "capture 'bad' failed with exit code 7" in result.stderr
 
 
 def test_runtime_provider_summary_rejects_missing_fields():

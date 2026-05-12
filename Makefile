@@ -12,10 +12,14 @@ PLATFORM         := linux-x64
 ESBUILD_VERSION  := 0.27.3
 DEV_SERVER       := python3 tools/dev_server.py
 AUDIT_RUNNER     := python3 tools/optimization_audit.py
-AUDIT_OUTPUT     := .gsd/milestones/M013/M013-AUDIT.md
-AUDIT_TEMPLATE   := .gsd/milestones/M013/M013-AUDIT-TEMPLATE.md
+AUDIT_M013_OUTPUT := .gsd/milestones/M013/M013-AUDIT.md
+AUDIT_M013_TEMPLATE := .gsd/milestones/M013/M013-AUDIT-TEMPLATE.md
+AUDIT_M017_OUTPUT := .gsd/milestones/M017/M017-AUDIT.md
+AUDIT_M017_TEMPLATE := .gsd/milestones/M017/M017-AUDIT-TEMPLATE.md
+AUDIT_OUTPUT     := $(AUDIT_M013_OUTPUT)
+AUDIT_TEMPLATE   := $(AUDIT_M013_TEMPLATE)
 
-.PHONY: tailwind-install esbuild-install css css-watch js js-dev js-watch typecheck build dev-server-start dev-server-status dev-server-restart dev-server-stop repair-runtime-state verify-runtime-boundary verify-fast verify-deep verify audit-m013-template audit-m013
+.PHONY: tailwind-install esbuild-install css css-watch js js-dev js-watch typecheck build dev-server-start dev-server-status dev-server-restart dev-server-stop repair-runtime-state verify-runtime-boundary verify-fast verify-deep verify audit-m013-template audit-m013 audit-m017-template audit-m017
 
 $(TAILWIND):
 	$(MAKE) tailwind-install
@@ -134,9 +138,19 @@ verify:
 ## Write the reusable M013 audit template scaffold
 
 audit-m013-template:
-	$(AUDIT_RUNNER) --mode template --output $(AUDIT_TEMPLATE)
+	$(AUDIT_RUNNER) --milestone-id M013 --mode template --output $(AUDIT_M013_TEMPLATE)
 
 ## Write the current M013 audit artifact scaffold/baseline
 
 audit-m013:
-	$(AUDIT_RUNNER) --mode baseline --output $(AUDIT_OUTPUT)
+	$(AUDIT_RUNNER) --milestone-id M013 --mode baseline --output $(AUDIT_M013_OUTPUT)
+
+## Write the reusable M017 identity-grounded audit template scaffold
+
+audit-m017-template:
+	$(AUDIT_RUNNER) --milestone-id M017 --mode template --output $(AUDIT_M017_TEMPLATE)
+
+## Write the current M017 identity-grounded audit artifact baseline
+
+audit-m017:
+	$(AUDIT_RUNNER) --milestone-id M017 --mode baseline --output $(AUDIT_M017_OUTPUT)
