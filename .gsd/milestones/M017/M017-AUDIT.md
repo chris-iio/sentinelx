@@ -1,7 +1,7 @@
 # M017 Optimization Audit — SentinelX
 
 - Mode: `baseline`
-- Generated at: `2026-05-12 18:06:16 UTC`
+- Generated at: `2026-05-12 18:08:33 UTC`
 - Repo root: `/home/chris/projects/sentinelx`
 - Output path: `.gsd/milestones/M017/M017-AUDIT.md`
 
@@ -57,10 +57,10 @@
 
 | Capture | Command | Exit | Duration (ms) | Summary |
 | --- | --- | ---: | ---: | --- |
-| runtime-provider-diagnostics | `internal benchmark: EnrichmentOrchestrator synthetic runtime/provider diagnostics` | 0 | 90 | provider mix CacheAlpha:2d/0e, RateLimitBeta:2d/1e; dispatch=4; attempts=5; cache-hit ratio 1/5 (20%); retries=1 (429=1); errors=1; latency total=2.25s max=1.00s. |
-| status-snapshot-scaling | `internal benchmark: EnrichmentOrchestrator.get_status() snapshot scaling` | 0 | 2 | 400 polls at 5000 retained results: `get_status()` 1.62ms vs `get_incremental_status(since=4990)` 0.44ms (3.7x faster) while returning 10 tail rows with next_since=5000. |
-| cache-store-tempdb | `internal benchmark: CacheStore temp WAL put/get loop` | 0 | 24 | Temp WAL cache DB: 250 puts in 8.97ms, 250 TTL reads in 1.60ms, 250 hits, 250 retained rows. |
-| history-store-tempdb | `internal benchmark: HistoryStore temp WAL save/list/load loop` | 0 | 19 | Temp WAL history DB: 180 saves in 4.73ms, list_recent(20) in 0.09ms, single load in 0.05ms, latest total_count=1, recent rows=20. |
+| runtime-provider-diagnostics | `internal benchmark: EnrichmentOrchestrator synthetic runtime/provider diagnostics` | 0 | 106 | provider mix CacheAlpha:2d/0e, RateLimitBeta:2d/1e; dispatch=4; attempts=5; cache-hit ratio 1/5 (20%); retries=1 (429=1); errors=1; latency total=2.25s max=1.00s. |
+| status-snapshot-scaling | `internal benchmark: EnrichmentOrchestrator.get_status() snapshot scaling` | 0 | 5 | 400 polls at 5000 retained results: `get_status()` 4.85ms vs `get_incremental_status(since=4990)` 0.58ms (8.4x faster) while returning 10 tail rows with next_since=5000. |
+| cache-store-tempdb | `internal benchmark: CacheStore temp WAL put/get loop` | 0 | 26 | Temp WAL cache DB: 250 puts in 6.03ms, 250 TTL reads in 1.64ms, 250 hits, 250 retained rows. |
+| history-store-tempdb | `internal benchmark: HistoryStore temp WAL save/list/load loop` | 0 | 19 | Temp WAL history DB: 180 saves in 4.86ms, list_recent(20) in 0.06ms, single load in 0.03ms, latest total_count=1, recent rows=20. |
 
 ## Seam checklist
 
@@ -106,8 +106,8 @@ Use the same table shape in every bucket. Required fields per row:
 - Analyst identity: SentinelX is optimized as a fast local analyst IOC triage workbench, not as generic subsystem cleanup.
 - Decisions: D078 requires `docs/project-map.md` and `.gsd/PROJECT.md` before target selection; D079 ranks work by the analyst IOC triage loop; D080 allows aggressive/moderate cross-seam optimization only with proof.
 - Requirements: R085 requires product-identity-grounded optimization decisions; R087 requires measurement when practical or explicit code-path reasoning plus regression proof.
-- S01 seam inventory priorities: (1) enrichment fan-out/status snapshot cost, (2) browser result rendering churn, (3) SQLite cache/history access shape, (4) IOC pipeline duplicate candidate handling, (5) provider registration/config diagnostics clarity.
-- S03 target language: the do-now target for S03 is the enrichment fan-out/status snapshot path unless fresh evidence in this artifact proves a better analyst-loop optimization.
+- S01 seam inventory priorities: (1) enrichment fan-out/status snapshot cost across `app/enrichment` and `app/routes`, (2) browser result rendering churn, (3) SQLite cache/history access shape, (4) IOC pipeline duplicate candidate handling in `app/pipeline`, (5) provider registration/config diagnostics clarity.
+- S03 target language: the do-now target for S03 is the enrichment fan-out/status snapshot path unless fresh evidence in this artifact proves a better analyst-loop optimization; proof should cite concrete seams such as `app/enrichment/orchestrator.py`, `app/routes/_helpers.py`, and `app/pipeline/extractor.py` when those paths are in scope.
 
 ## Baseline stance
 

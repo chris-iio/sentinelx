@@ -111,6 +111,12 @@ def test_m017_baseline_uses_identity_grounded_contract(tmp_path):
     assert "R085" in content
     assert "R087" in content
     assert "S01 seam inventory priorities" in content
+    assert "app/enrichment" in content
+    assert "app/routes" in content
+    assert "app/pipeline" in content
+    assert "app/enrichment/orchestrator.py" in content
+    assert "app/routes/_helpers.py" in content
+    assert "app/pipeline/extractor.py" in content
     assert "S03 should target this path" in content
     assert "### do now" in content
     assert "### do next" in content

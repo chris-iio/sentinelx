@@ -1095,8 +1095,8 @@ def render_m017_identity_section(document: AuditDocument) -> str:
             "- Analyst identity: SentinelX is optimized as a fast local analyst IOC triage workbench, not as generic subsystem cleanup.",
             "- Decisions: D078 requires `docs/project-map.md` and `.gsd/PROJECT.md` before target selection; D079 ranks work by the analyst IOC triage loop; D080 allows aggressive/moderate cross-seam optimization only with proof.",
             "- Requirements: R085 requires product-identity-grounded optimization decisions; R087 requires measurement when practical or explicit code-path reasoning plus regression proof.",
-            "- S01 seam inventory priorities: (1) enrichment fan-out/status snapshot cost, (2) browser result rendering churn, (3) SQLite cache/history access shape, (4) IOC pipeline duplicate candidate handling, (5) provider registration/config diagnostics clarity.",
-            "- S03 target language: the do-now target for S03 is the enrichment fan-out/status snapshot path unless fresh evidence in this artifact proves a better analyst-loop optimization.",
+            "- S01 seam inventory priorities: (1) enrichment fan-out/status snapshot cost across `app/enrichment` and `app/routes`, (2) browser result rendering churn, (3) SQLite cache/history access shape, (4) IOC pipeline duplicate candidate handling in `app/pipeline`, (5) provider registration/config diagnostics clarity.",
+            "- S03 target language: the do-now target for S03 is the enrichment fan-out/status snapshot path unless fresh evidence in this artifact proves a better analyst-loop optimization; proof should cite concrete seams such as `app/enrichment/orchestrator.py`, `app/routes/_helpers.py`, and `app/pipeline/extractor.py` when those paths are in scope.",
         ]
     )
 
