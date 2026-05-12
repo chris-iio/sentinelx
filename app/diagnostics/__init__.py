@@ -1,5 +1,10 @@
 """Backend-only diagnostic export contracts for SentinelX."""
 
+from app.diagnostics.assembler import (
+    DiagnosticBundle,
+    DiagnosticSource,
+    assemble_diagnostic_bundle,
+)
 from app.diagnostics.contract import (
     DEFAULT_SOURCE_MAX_BYTES,
     DIAGNOSTIC_EXPORT_SCHEMA_VERSION,
@@ -25,9 +30,12 @@ __all__ = [
     "MAX_SAFE_ERROR_SUMMARY_CHARS",
     "REDACTED_TEXT",
     "ConfiguredSecretInventory",
+    "DiagnosticBundle",
     "DiagnosticManifest",
+    "DiagnosticSource",
     "DiagnosticSourceRecord",
     "RedactionMetadata",
+    "assemble_diagnostic_bundle",
     "collect_configured_secret_inventory",
     "manifest_to_json",
     "redact_diagnostic_payload",

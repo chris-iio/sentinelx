@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-05-12T05:21:36Z | Files: 184 | Described: 0/184
-<!-- gsd:codebase-meta {"generatedAt":"2026-05-12T05:21:36Z","fingerprint":"257d25c6c5376de86452a84259bb43ffed92bbc1","fileCount":184,"truncated":false} -->
+Generated: 2026-05-12T06:03:14Z | Files: 191 | Described: 0/191
+<!-- gsd:codebase-meta {"generatedAt":"2026-05-12T06:03:14Z","fingerprint":"d1b19e611142c10a7abe8d3c5222e58f2e4ac6dd","fileCount":191,"truncated":false} -->
 
 ### (root)/
 - `.codex`
@@ -33,6 +33,11 @@ Generated: 2026-05-12T05:21:36Z | Files: 184 | Described: 0/184
 ### app/cache/
 - `app/cache/__init__.py`
 - `app/cache/store.py`
+
+### app/diagnostics/
+- `app/diagnostics/__init__.py`
+- `app/diagnostics/contract.py`
+- `app/diagnostics/redaction.py`
 
 ### app/enrichment/
 - `app/enrichment/__init__.py`
@@ -123,6 +128,7 @@ Generated: 2026-05-12T05:21:36Z | Files: 184 | Described: 0/184
 
 ### docs/
 - `docs/code-analysis-launch-deck.html`
+- `docs/diagnostic-export-contract.md`
 - `docs/launch-checklist.md`
 - `docs/optimization-audit.md`
 - `docs/runtime-state-boundary.md`
@@ -133,7 +139,7 @@ Generated: 2026-05-12T05:21:36Z | Files: 184 | Described: 0/184
 - `docs/plans/2026-03-04-settings-page-redesign.md`
 
 ### tests/
-- *(55 files: 55 .py)*
+- *(58 files: 58 .py)*
 
 ### tests/e2e/
 - `tests/e2e/__init__.py`

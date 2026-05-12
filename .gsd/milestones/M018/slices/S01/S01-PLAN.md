@@ -31,12 +31,12 @@ Upstream surfaces consumed: `app/enrichment/config_store.py`, existing orchestra
   - Files: `app/diagnostics/__init__.py`, `app/diagnostics/contract.py`, `docs/diagnostic-export-contract.md`, `tests/test_diagnostic_export_contract.py`
   - Verify: python3 -m pytest -q tests/test_diagnostic_export_contract.py
 
-- [ ] **T02: Implement ConfigStore-backed redaction primitives** `est:2h`
+- [x] **T02: Implement ConfigStore-backed redaction primitives** `est:2h`
   Expected executor `skills_used`: `tdd`, `security-review`, `verify-before-complete`.
   - Files: `app/diagnostics/__init__.py`, `app/diagnostics/redaction.py`, `tests/test_diagnostic_redaction.py`
   - Verify: python3 -m pytest -q tests/test_diagnostic_redaction.py tests/test_config_store.py tests/test_settings.py
 
-- [ ] **T03: Prove contract and redaction compose without exposing a bundle route** `est:1h`
+- [x] **T03: Prove contract and redaction compose without exposing a bundle route** `est:1h`
   Expected executor `skills_used`: `tdd`, `verify-before-complete`.
   - Files: `tests/test_diagnostic_export_primitives.py`, `docs/diagnostic-export-contract.md`
   - Verify: python3 -m pytest -q tests/test_diagnostic_export_contract.py tests/test_diagnostic_redaction.py tests/test_diagnostic_export_primitives.py
