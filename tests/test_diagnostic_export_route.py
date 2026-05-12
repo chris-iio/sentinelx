@@ -61,13 +61,16 @@ def test_diagnostic_export_route_returns_zip_headers_manifest_and_redacted_paylo
 
     assert response.status_code == 200
     assert response.headers["Content-Type"] == "application/zip"
-    assert response.headers["Content-Disposition"] == (
-        'attachment; filename="sentinelx-diagnostic-2026-01-02.zip"'
-    )
+    content_disposition = response.headers["Content-Disposition"]
+    assert "attachment" in content_disposition.lower()
+    assert content_disposition == 'attachment; filename="sentinelx-diagnostic-2026-01-02.zip"'
+    assert ".zip" in content_disposition
 
     entries = _archive_entries(response.data)
     manifest = json.loads(entries["manifest.json"].decode("utf-8"))
-    assert response.headers["X-Diagnostic-Sources"] == str(manifest["source_count"])
+    source_header = response.headers["X-Diagnostic-Sources"]
+    assert source_header.isdecimal()
+    assert source_header == str(manifest["source_count"])
     assert manifest["generated_at"] == "2026-01-02T03:04:05Z"
     assert manifest["source_count"] >= 6
     assert manifest["redaction_count"] >= 1
@@ -94,8 +97,13 @@ def test_diagnostic_export_route_logs_bounded_assembly_error(
 
     assert response.status_code == 500
     assert response.headers["Content-Type"].startswith("text/plain")
-    assert response.get_data(as_text=True) == "Diagnostic export failed. Check server logs."
-    assert ROUTE_SECRET not in response.get_data(as_text=True)
+    body = response.get_data(as_text=True)
+    assert "Diagnostic export failed" in body
+    assert body == "Diagnostic export failed. Check server logs."
+    assert ROUTE_SECRET not in body
+    assert "boom with" not in body
+    assert "RuntimeError" not in body
+    assert "Traceback" not in body
     assert any(record.getMessage() == "Diagnostic export assembly failed" for record in caplog.records)
     assert all(ROUTE_SECRET not in record.getMessage() for record in caplog.records)
     assert any(record.exc_info for record in caplog.records)
