@@ -87,6 +87,12 @@ PermissionError while reading history store
 
 They must not include stack traces, raw secret-bearing configuration, request headers, API keys, tokens, or full user input.
 
+## S01 primitive-composition proof
+
+S01 proves only that diagnostic redaction primitives can run before the manifest/source-record contract is serialized. The composition test builds in-memory orchestrator, history-save, settings/config, provider-error, oversized-log, omitted-source, and error-source examples; redacts configured ConfigStore secrets and common auth patterns first; then wraps the sanitized payload metadata in deterministic source records.
+
+The S01 route-absence guard is intentional: `/diagnostics/export` and `/api/diagnostics/export` must remain unavailable until later slices add bundle assembly and route-level safety tests. S03 is expected to remove or replace that guard with positive tests for the supported local export route.
+
 ## Non-goals for S01
 
 S01 deliberately does not provide:
