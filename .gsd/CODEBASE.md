@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-05-12T11:58:56Z | Files: 198 | Described: 0/198
-<!-- gsd:codebase-meta {"generatedAt":"2026-05-12T11:58:56Z","fingerprint":"0d81a0c689007df314cbc50cb609b1c8bc3526b4","fileCount":198,"truncated":false} -->
+Generated: 2026-05-12T17:43:46Z | Files: 200 | Described: 0/200
+<!-- gsd:codebase-meta {"generatedAt":"2026-05-12T17:43:46Z","fingerprint":"a137ff77a7695e8ef5eb77441e7839022adbbc39","fileCount":200,"truncated":false} -->
 
 ### (root)/
 - `.codex`
@@ -132,6 +132,7 @@ Generated: 2026-05-12T11:58:56Z | Files: 198 | Described: 0/198
 ### docs/
 - `docs/code-analysis-launch-deck.html`
 - `docs/diagnostic-export-contract.md`
+- `docs/diagnostic-export-guide.md`
 - `docs/launch-checklist.md`
 - `docs/optimization-audit.md`
 - `docs/runtime-state-boundary.md`
@@ -142,7 +143,7 @@ Generated: 2026-05-12T11:58:56Z | Files: 198 | Described: 0/198
 - `docs/plans/2026-03-04-settings-page-redesign.md`
 
 ### tests/
-- *(62 files: 62 .py)*
+- *(63 files: 63 .py)*
 
 ### tests/e2e/
 - `tests/e2e/__init__.py`

@@ -4,15 +4,71 @@ This file is the explicit capability and coverage contract for the project.
 
 ## Active
 
-### R083 — Analysts and maintainers can export a robust diagnostic log bundle for a recent analysis or runtime session, with secrets redacted and enough context to debug provider, polling, rendering, and settings failures.
+### R084 — SentinelX has a durable current-state project map that explains what the app is, who it serves, and how its main analyst loop works.
+- Class: core-capability
+- Status: active
+- Description: SentinelX has a durable current-state project map that explains what the app is, who it serves, and how its main analyst loop works.
+- Why it matters: The user explicitly said the project must stop feeling unclear; future optimization and execution need a shared product/codebase identity.
+- Source: user
+- Primary owning slice: M017/S01
+- Supporting slices: M017/S02, M017/S05
+- Validation: mapped
+- Notes: Separate named project map artifact plus refreshed .gsd/PROJECT.md.
+
+### R085 — Optimization decisions are grounded in SentinelX’s product identity, not generic subsystem cleanup.
+- Class: quality-attribute
+- Status: active
+- Description: Optimization decisions are grounded in SentinelX’s product identity, not generic subsystem cleanup.
+- Why it matters: Aggressive optimization should improve what SentinelX actually is: a local analyst IOC triage workflow, not arbitrary code aesthetics.
+- Source: user
+- Primary owning slice: M017/S02
+- Supporting slices: M017/S03, M017/S04
+- Validation: mapped
+- Notes: Audit must rank findings against the project map and analyst loop.
+
+### R086 — The milestone ships the best current optimization opportunity found by the refreshed audit, even if it requires moderate refactoring across existing seams.
+- Class: core-capability
+- Status: active
+- Description: The milestone ships the best current optimization opportunity found by the refreshed audit, even if it requires moderate refactoring across existing seams.
+- Why it matters: The user asked for the best optimization the project can do, aggressively, while preserving behavior.
+- Source: user
+- Primary owning slice: M017/S03
+- Supporting slices: M017/S04
+- Validation: mapped
+- Notes: If the audit proves no code change is justified, that no-change decision must be explicit and evidenced.
+
+### R087 — Every shipped optimization has evidence: before/after measurement when practical, or explicit code-path reasoning plus regression proof.
+- Class: quality-attribute
+- Status: active
+- Description: Every shipped optimization has evidence: before/after measurement when practical, or explicit code-path reasoning plus regression proof.
+- Why it matters: Prevents optimization theater and keeps future agents from inheriting unsupported performance claims.
+- Source: user
+- Primary owning slice: M017/S02
+- Supporting slices: M017/S03, M017/S04, M017/S05
+- Validation: mapped
+- Notes: Audit artifact must record why each change was worth doing.
+
+### R088 — Aggressive optimization preserves analyst-facing IOC intake, enrichment, results, history/detail, diagnostics, and security behavior.
+- Class: continuity
+- Status: active
+- Description: Aggressive optimization preserves analyst-facing IOC intake, enrichment, results, history/detail, diagnostics, and security behavior.
+- Why it matters: The strongest optimization is only useful if the analyst workflow and safety posture remain intact.
+- Source: inferred
+- Primary owning slice: M017/S03
+- Supporting slices: M017/S04, M017/S05
+- Validation: mapped
+- Notes: Continuity includes existing verified browser paths, route/status semantics, local persistence, and no secret leakage.
+
+### R089 — M017 closeout proves the optimized project through the full verification lane, including make verify-fast and make verify-deep.
 - Class: operability
 - Status: active
-- Description: Analysts and maintainers can export a robust diagnostic log bundle for a recent analysis or runtime session, with secrets redacted and enough context to debug provider, polling, rendering, and settings failures.
-- Why it matters: Current enrichment/debug failures depend on scattered server logs, browser assertions, and test artifacts. A safe export bundle will make support and future agent debugging faster without exposing provider credentials.
-- Source: user-request-2026-05-10
-- Primary owning slice: M018/TBD
-- Validation: Future M018 proof must show that a deterministic export contains expected diagnostic events/context, excludes configured provider secrets and raw API keys, and is downloadable or retrievable through the intended UI/API path.
-- Notes: Raised by user immediately after M016/S04/T02 and explicitly descoped from M016 by D075/D076. M016 validation should treat R083 as future M018 diagnostic-export ownership, not as an Email Reputation Depth implementation blocker. Scope should include redaction, bounded export size, explicit included sources, and a browser/API proof path before shipping.
+- Description: M017 closeout proves the optimized project through the full verification lane, including make verify-fast and make verify-deep.
+- Why it matters: The final state must be runnable and trustworthy, not just locally plausible from partial tests.
+- Source: user
+- Primary owning slice: M017/S05
+- Supporting slices: none
+- Validation: mapped
+- Notes: Full lane is required because aggressive optimization may touch browser/results/enrichment behavior.
 
 ## Validated
 
@@ -789,6 +845,16 @@ This file is the explicit capability and coverage contract for the project.
 - Validation: M015/S04 final regression proof passed after the intake redesign: route/security/history command passed 27 tests, focused browser assembly passed 34 tests, `make verify-fast` passed 1026 non-E2E pytest tests, 87 Vitest tests, TypeScript, and generated asset build, and the full E2E suite passed 125 tests. Fresh milestone-close verification re-ran `make verify-fast` successfully with 1026 pytest + 87 Vitest + TypeScript + build. Coverage preserved extraction, offline no-HTTP behavior, online no-provider guard, history reload/resume, CSRF/security headers, TypeScript/build, generated assets, and E2E behavior.
 - Notes: Final proof should include focused backend tests, relevant E2E tests, make verify-fast, and full make verify.
 
+### R083 — Analysts and maintainers can export a robust diagnostic log bundle for a recent analysis or runtime session, with secrets redacted and enough context to debug provider, polling, rendering, and settings failures.
+- Class: operability
+- Status: validated
+- Description: Analysts and maintainers can export a robust diagnostic log bundle for a recent analysis or runtime session, with secrets redacted and enough context to debug provider, polling, rendering, and settings failures.
+- Why it matters: Current enrichment/debug failures depend on scattered server logs, browser assertions, and test artifacts. A safe export bundle will make support and future agent debugging faster without exposing provider credentials.
+- Source: user-request-2026-05-10
+- Primary owning slice: TBD
+- Validation: M018 delivered the diagnostic export contract, bounded/redacted assembler, Flask download route, deterministic E2E proof, and analyst guide. Fresh closeout verification for S04 ran `python3 -m pytest tests/test_diagnostic_export_e2e_proof.py -v && echo 'PROOF PASS'` (3 passed), guide existence/section-count check (`GUIDE PASS`), and the full diagnostic export suite across primitives, contract, sources, assembler, integration, route, and E2E proof files (`39 passed`; `FULL DIAGNOSTIC SUITE PASS`). The proof downloads the ZIP through `/diagnostics/export`, validates manifest/archive consistency, verifies raw ZIP bytes exclude configured secret values, and checks download headers.
+- Notes: Validated by M018/S04 final-assembly proof and all-slice diagnostic export regression suite. Exports are local-first, bounded, deterministic, manifest-backed, redacted, and documented for safe sharing.
+
 ## Deferred
 
 ### R066 — Automatic self-healing of transient runtime state at session start is deferred.
@@ -822,16 +888,16 @@ This file is the explicit capability and coverage contract for the project.
 - Validation: unmapped
 - Notes: The user explicitly said preview stays out of scope to preserve a fast flow.
 
-### R078 — EmailRep-backed email IOC reputation depth is available in Online mode.
-- Class: core-capability
-- Status: validated
-- Description: Configuring an EmailRep key enables email-only Online enrichment for email IOCs, with conservative verdict mapping and compact reputation/risk context in result rows.
-- Why it matters: Email addresses are primary phishing IOCs; analysts need optional reputation depth without broad EML/header triage or unsafe raw provider dumping.
-- Source: prior scope; validated by M016 Email Reputation Depth
-- Primary owning slice: M016/S01
-- Supporting slices: M016/S02, M016/S03, M016/S04, M016/S05
-- Validation: M016 validated the full EmailRep path: S01 added `EmailRepAdapter` with email-only support, API-key gating, safe_request usage, URL encoding, and conservative malicious/suspicious/clean/no_data mapping; S02 proved settings/registry/provider-count coverage with zero email providers without a key and exactly one configured EmailRep email provider with a key; S03 proved compact whitelisted `raw_stats` rendering through safe row-factory/result-application paths; S04 proved a mocked Online browser flow from settings save through email submission and rendered EmailRep verdict/context without a live third-party key; final closeout reran 219 focused pytest tests, 59 Vitest tests, and TypeScript successfully.
-- Notes: M016 deliberately excludes raw EML parsing, header authentication analysis, broad phishing triage, multiple email providers, required live EmailRep smoke tests, and diagnostic-log export (R083/M018).
+### R078 — Email/phishing enrichment depth is deferred from M015.
+- Class: deferred
+- Status: deferred
+- Description: Email/phishing enrichment depth is deferred from M015.
+- Why it matters: It is a meaningful analyst feature, but it would expand M015 from intake UX into provider strategy and external-service decisions.
+- Source: prior scope
+- Primary owning slice: none
+- Supporting slices: none
+- Validation: unmapped
+- Notes: Email IOCs are already display-capable; provider/API choices for email reputation belong in a separate milestone.
 
 ### R079 — API/automation polish is deferred from M015.
 - Class: deferred
@@ -843,6 +909,28 @@ This file is the explicit capability and coverage contract for the project.
 - Supporting slices: none
 - Validation: unmapped
 - Notes: The REST API exists, but M015 is browser intake work, not script automation.
+
+### R090 — Broad future optimization program beyond the best M017 target is deferred.
+- Class: constraint
+- Status: deferred
+- Description: Broad future optimization program beyond the best M017 target is deferred.
+- Why it matters: Keeps M017 focused on clarity plus the best current optimization while preserving future opportunities.
+- Source: inferred
+- Primary owning slice: none
+- Supporting slices: none
+- Validation: unmapped
+- Notes: M017 should leave ranked follow-ups, not attempt every possible optimization now.
+
+### R091 — Major product redesign or new analyst-facing feature expansion is deferred from M017.
+- Class: constraint
+- Status: deferred
+- Description: Major product redesign or new analyst-facing feature expansion is deferred from M017.
+- Why it matters: The user asked to understand and optimize the existing project, not change its product category.
+- Source: inferred
+- Primary owning slice: none
+- Supporting slices: none
+- Validation: unmapped
+- Notes: The milestone may improve clarity and performance of existing surfaces but should not add unrelated product scope.
 
 ## Out of Scope
 
@@ -888,6 +976,28 @@ This file is the explicit capability and coverage contract for the project.
 - Supporting slices: none
 - Validation: n/a
 - Notes: Results/detail surfaces are already mature; M015 focuses on the start page.
+
+### R092 — Optimization theater: speculative rewrites without project-identity grounding or proof are out of scope.
+- Class: anti-feature
+- Status: out-of-scope
+- Description: Optimization theater: speculative rewrites without project-identity grounding or proof are out of scope.
+- Why it matters: This prevents aggressive optimization from becoming churn that makes the project less understandable.
+- Source: user
+- Primary owning slice: none
+- Supporting slices: none
+- Validation: n/a
+- Notes: Changes must tie back to project map, audit evidence, and verification.
+
+### R093 — Speed changes that hide failures, remove diagnostics, leak secrets, or weaken security boundaries are out of scope.
+- Class: constraint
+- Status: out-of-scope
+- Description: Speed changes that hide failures, remove diagnostics, leak secrets, or weaken security boundaries are out of scope.
+- Why it matters: A local security triage app must remain trustworthy and diagnosable even when made faster.
+- Source: inferred
+- Primary owning slice: none
+- Supporting slices: none
+- Validation: n/a
+- Notes: Optimization must preserve or improve error visibility and security posture.
 
 ## Traceability
 
@@ -974,11 +1084,21 @@ This file is the explicit capability and coverage contract for the project.
 | R080 | anti-feature | out-of-scope | none | none | n/a |
 | R081 | anti-feature | out-of-scope | none | none | n/a |
 | R082 | anti-feature | out-of-scope | none | none | n/a |
-| R083 | operability | active | TBD | none | A deterministic test proves the export contains expected diagnostic events/context, excludes configured provider secrets and raw API keys, and is downloadable or retrievable through the intended UI/API path. |
+| R083 | operability | validated | TBD | none | M018 delivered the diagnostic export contract, bounded/redacted assembler, Flask download route, deterministic E2E proof, and analyst guide. Fresh closeout verification for S04 ran `python3 -m pytest tests/test_diagnostic_export_e2e_proof.py -v && echo 'PROOF PASS'` (3 passed), guide existence/section-count check (`GUIDE PASS`), and the full diagnostic export suite across primitives, contract, sources, assembler, integration, route, and E2E proof files (`39 passed`; `FULL DIAGNOSTIC SUITE PASS`). The proof downloads the ZIP through `/diagnostics/export`, validates manifest/archive consistency, verifies raw ZIP bytes exclude configured secret values, and checks download headers. |
+| R084 | core-capability | active | M017/S01 | M017/S02, M017/S05 | mapped |
+| R085 | quality-attribute | active | M017/S02 | M017/S03, M017/S04 | mapped |
+| R086 | core-capability | active | M017/S03 | M017/S04 | mapped |
+| R087 | quality-attribute | active | M017/S02 | M017/S03, M017/S04, M017/S05 | mapped |
+| R088 | continuity | active | M017/S03 | M017/S04, M017/S05 | mapped |
+| R089 | operability | active | M017/S05 | none | mapped |
+| R090 | constraint | deferred | none | none | unmapped |
+| R091 | constraint | deferred | none | none | unmapped |
+| R092 | anti-feature | out-of-scope | none | none | n/a |
+| R093 | constraint | out-of-scope | none | none | n/a |
 
 ## Coverage Summary
 
-- Active requirements: 1
-- Mapped to slices: 1
-- Validated: 72 (R001, R002, R003, R004, R005, R006, R007, R008, R009, R010, R011, R012, R013, R014, R015, R016, R017, R018, R019, R020, R021, R022, R023, R024, R025, R026, R027, R028, R029, R030, R031, R032, R033, R035, R036, R037, R038, R039, R040, R041, R042, R043, R044, R045, R046, R047, R048, R049, R050, R051, R052, R053, R054, R055, R056, R057, R058, R059, R060, R061, R062, R063, R064, R065, R069, R070, R071, R072, R073, R074, R075, R076)
+- Active requirements: 6
+- Mapped to slices: 6
+- Validated: 73 (R001, R002, R003, R004, R005, R006, R007, R008, R009, R010, R011, R012, R013, R014, R015, R016, R017, R018, R019, R020, R021, R022, R023, R024, R025, R026, R027, R028, R029, R030, R031, R032, R033, R035, R036, R037, R038, R039, R040, R041, R042, R043, R044, R045, R046, R047, R048, R049, R050, R051, R052, R053, R054, R055, R056, R057, R058, R059, R060, R061, R062, R063, R064, R065, R069, R070, R071, R072, R073, R074, R075, R076, R083)
 - Unmapped active requirements: 0
