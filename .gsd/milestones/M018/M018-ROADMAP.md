@@ -18,10 +18,10 @@
 - [x] **S02: S02** `risk:high` `depends:[]`
   > After this: After this, a backend service can assemble a deterministic diagnostic bundle from fixture/runtime sources with manifest, bounds, and safe per-source errors.
 
-- [ ] **S03: S03** `risk:medium` `depends:[]`
+- [x] **S03: S03** `risk:medium` `depends:[]`
   > After this: After this, analysts can download a diagnostic export from the app and route tests prove headers, redaction, and error responses.
 
-- [ ] **S04: End-to-end proof and documentation** `risk:medium` `depends:[S03]`
+- [ ] **S04: S04** `risk:medium` `depends:[]`
   > After this: After this, a deterministic app-level proof downloads and inspects the log bundle, and docs describe safe sharing and limits.
 
 ## Boundary Map
