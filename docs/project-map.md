@@ -30,31 +30,25 @@ The project should feel like a fast local workbench, not a heavy enterprise dash
 - TypeScript modules own browser-side polling, result application, filtering, sorting, expansion, copy/export, and DOM-safe rendering.
 - Make targets provide the supported verification lanes and local server workflow.
 
-## Optimization Seams
+## Architecture Seams
 
-### Product clarity
+- **HTTP and page surfaces** — `app/routes/analysis.py`, `app/routes/api.py`, `app/routes/enrichment.py`: accept analyst input, expose programmatic analysis, and serve enrichment status polling.
+- **History/detail/settings/diagnostics surfaces** — `app/routes/history.py`, `app/routes/detail.py`, `app/routes/settings.py`, `app/routes/diagnostics.py`: support replay, drill-down, provider keys/cache controls, and analyst support bundles.
+- **IOC extraction pipeline** — `app/pipeline/extractor.py`, `app/pipeline/normalizer.py`, `app/pipeline/classifier.py`: turn raw pasted text into canonical typed IOC models.
+- **Provider registration seam** — `app/enrichment/setup.py`, `app/enrichment/registry.py`: import/register the 16 enrichment providers and expose configured/provider-for-type lookups.
+- **Enrichment fan-out and status seam** — `app/enrichment/orchestrator.py`: runs provider lookups with `ThreadPoolExecutor`, per-provider semaphores, cache checks, retry/backoff, progress snapshots, and terminal job state.
+- **Local cache seam** — `app/cache/store.py`: stores enrichment results in SQLite with TTL lookup, provider-specific rows, stats, clear, and expiry purge operations.
+- **Browser polling and result application seam** — `app/static/src/ts/modules/enrichment.ts`, `app/static/src/ts/modules/result-application.ts`, `app/static/src/ts/modules/row-factory.ts`: poll online jobs, compute/render verdict-first rows, and keep live/history DOM behavior aligned.
+- **Browser utility surfaces** — `app/static/src/ts/modules/filter.ts`, `app/static/src/ts/modules/export.ts`, `app/static/src/ts/modules/history.ts`, `app/static/src/ts/modules/settings.ts`: provide analyst filtering, export/copy/history/settings interactions after results exist.
+- **Optimization proof loop** — `tools/optimization_audit.py`, `Makefile`: collect seam notes, runtime/provider diagnostics, cache/history probes, ranked findings, and supported verification lanes.
 
-The project identity itself is an optimization seam. Future agents should not need to reverse-engineer what SentinelX is before deciding what matters.
+## Ranked Optimization Priorities
 
-### Intake and results flow
-
-The highest-value user-facing optimization work should preserve and improve the analyst path through intake, enrichment, results scanning, expansion, filtering, and history/detail review.
-
-### Runtime/provider orchestration
-
-Provider fan-out, per-provider caps, cache interaction, retry/backoff, status snapshots, and diagnostics affect perceived speed and correctness. Changes here need strong continuity proof.
-
-### Request/status and persistence
-
-Status endpoints, terminal tombstones, history-save diagnostics, and SQLite WAL stores are central but should only be changed when evidence shows a hot path or meaningful simplification.
-
-### Frontend rendering
-
-Result application, dashboard recounting, card sorting, summary-row rebuilds, section injection, and live/history parity are the most likely browser-side optimization targets.
-
-### Audit and proof loop
-
-`tools/optimization_audit.py`, `make verify-fast`, and `make verify-deep` are part of the optimization system. The audit artifact should explain what changed, what stayed alone, and why.
+1. **Enrichment fan-out/status snapshot cost** — Seam: enrichment fan-out and status. Files: `app/enrichment/orchestrator.py`, `tools/optimization_audit.py`. Opportunity type: redundant status aggregation or lock-protected work during large IOC/provider fan-out. Proof needed: audit/runtime capture showing snapshot or fan-out scaling before/after, plus online enrichment regression proof.
+2. **Browser result rendering churn** — Seam: browser polling and result application. Files: `app/static/src/ts/modules/enrichment.ts`, `app/static/src/ts/modules/result-application.ts`, `app/static/src/ts/modules/row-factory.ts`. Opportunity type: unnecessary DOM rebuilds, recounts, sorting, or repeated per-row computations during polling/history replay. Proof needed: browser-visible parity plus a targeted fixture or timing/count comparison demonstrating less work without hiding failures.
+3. **SQLite cache/history access shape** — Seam: local cache and persistence. Files: `app/cache/store.py`, route callers under `app/routes/`, audit probes in `tools/optimization_audit.py`. Opportunity type: repeated SQLite reads/writes, TTL purges, or missing indexed access on analyst reload/enrichment paths. Proof needed: tempdb/cache audit measurement or query-count reasoning, with continuity proof for cache hit, expiry, clear, and history reload behavior.
+4. **IOC pipeline duplicate candidate handling** — Seam: IOC extraction pipeline. Files: `app/pipeline/extractor.py`, `app/pipeline/normalizer.py`, `app/pipeline/classifier.py`. Opportunity type: redundant normalization/classification for duplicate raw matches in pasted reports. Proof needed: representative text fixture showing same IOC output with fewer normalization/classification passes or lower elapsed time.
+5. **Provider registration/config diagnostics clarity** — Seam: provider registration. Files: `app/enrichment/setup.py`, `app/enrichment/registry.py`, `app/routes/settings.py`. Opportunity type: repeated configured-provider filtering or unclear provider readiness diagnostics. Proof needed: provider-count/configured-provider tests plus diagnostics/settings behavior that preserves secret-redaction boundaries.
 
 ## Current Optimization Posture
 
