@@ -126,6 +126,95 @@ def get_history_save_diagnostics() -> dict[str, object]:
     return _coerce_history_save_diagnostics(snapshot)
 
 
+def get_orchestration_diagnostics_snapshot(job_id: str) -> dict[str, object]:
+    """Return a copied, secret-free orchestration diagnostics snapshot.
+
+    This accessor is intentionally narrow for backend diagnostic exports: it
+    never returns orchestrator instances, live result objects, or mutable job
+    internals.  Missing/evicted jobs are represented as safe snapshots so the
+    diagnostic manifest can show that the optional job context was considered.
+    """
+    normalized_job_id = str(job_id or "").strip()
+    if not normalized_job_id:
+        return {"job_id": "", "found": False, "reason": "job_id_not_provided"}
+
+    with _orch_lock:
+        orchestrator = _orchestrators.get(normalized_job_id)
+        terminal = dict(_terminal_jobs.get(normalized_job_id) or {})
+
+    if orchestrator is None:
+        reason = terminal.get("terminal_reason") or "unknown"
+        return {
+            "job_id": normalized_job_id,
+            "found": False,
+            "reason": str(reason)[:80],
+            "terminal": bool(terminal),
+        }
+
+    status = orchestrator.get_status(normalized_job_id)
+    diagnostics = orchestrator.get_diagnostics(normalized_job_id)
+    if status is None:
+        return {
+            "job_id": normalized_job_id,
+            "found": False,
+            "reason": "job_not_found",
+        }
+
+    return {
+        "job_id": normalized_job_id,
+        "found": True,
+        "status": _coerce_orchestration_status_for_diagnostics(status),
+        "diagnostics": _coerce_orchestration_diagnostics_for_export(diagnostics),
+    }
+
+
+def _coerce_orchestration_status_for_diagnostics(raw: object) -> dict[str, object]:
+    data = raw if isinstance(raw, dict) else {}
+    status: dict[str, object] = {}
+    for field in ("total", "done"):
+        value = data.get(field)
+        if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+            status[field] = value
+    for field in ("complete", "terminal"):
+        value = data.get(field)
+        if isinstance(value, bool):
+            status[field] = value
+    for field in ("status", "terminal_reason", "error"):
+        value = data.get(field)
+        if isinstance(value, str) and value.strip():
+            status[field] = value.strip()[:160]
+    result_count = data.get("results")
+    if isinstance(result_count, list):
+        status["result_count"] = len(result_count)
+    return status
+
+
+def _coerce_orchestration_diagnostics_for_export(raw: object) -> dict[str, object]:
+    data = raw if isinstance(raw, dict) else {}
+    safe: dict[str, object] = {}
+    for key, value in list(data.items())[:40]:
+        key_text = str(key)[:80]
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            safe[key_text] = value[:240] if isinstance(value, str) else value
+        elif isinstance(value, dict):
+            safe[key_text] = {
+                str(child_key)[:80]: (
+                    child_value[:240] if isinstance(child_value, str) else child_value
+                )
+                for child_key, child_value in list(value.items())[:40]
+                if isinstance(child_value, (str, int, float, bool)) or child_value is None
+            }
+        elif isinstance(value, list):
+            safe[key_text] = [
+                item[:240] if isinstance(item, str) else item
+                for item in value[:25]
+                if isinstance(item, (str, int, float, bool)) or item is None
+            ]
+        else:
+            safe[key_text] = repr(value)[:240]
+    return safe
+
+
 def _reset_history_save_diagnostics() -> None:
     """Reset helper-level history save diagnostics for focused tests."""
     with _history_save_diag_lock:
