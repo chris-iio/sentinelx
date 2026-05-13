@@ -373,17 +373,23 @@ M017_FINDINGS: tuple[BaselineFinding, ...] = (
         ),
     ),
     BaselineFinding(
-        bucket="do next",
-        finding="Measure browser result rendering churn after the status/fan-out target, especially flush-wide recount and sort work during polling/history replay.",
+        bucket="do now",
+        finding="Keep S04's shipped frontend/render optimization on the shared result-application severity-change gate.",
         seam="browser polling and result application",
-        evidence_kind="project-map priority + code-path reasoning",
+        evidence_kind="code-path reasoning + focused regression proof",
         evidence_summary=(
-            "The S01 seam inventory ranks browser result rendering churn second because it sits directly in the analyst's verdict-first results review path. "
-            "The M013 baseline already narrowed repeated card/slot lookups, so M017 follow-up should focus on remaining flush-wide `updateDashboardCounts()` and `sortCardsBySeverity()` work."
+            "S04 shipped the remaining high-confidence frontend/render follow-up by removing the duplicate broad `flush()` implementation in "
+            "`app/static/src/ts/modules/result-application.ts` that always called `updateDashboardCounts()` and `sortCardsBySeverity()`. "
+            "The active shared coordinator path now snapshots IOC card verdicts before and after dirty-result application and only runs those global dashboard recount/reorder calls when severity-affecting state changes. "
+            "Focused proof lives in `app/static/src/ts/modules/result-application.test.ts`: provider-only/no-op deltas preserve summaries, provider rows, copy/detail affordances, and skip global recount/reorder, while severity-changing deltas still update counts and order. "
+            "T02 verification also reran the full frontend suite plus mocked-online browser checks for results and EmailRep continuity."
         ),
-        continuity_guardrails="R085, R087, R008, R009, R010, R019",
-        rerun_lanes="`make verify-fast`, `make verify-deep`",
-        continuity_notes="Preserve live/history parity, filtering/sorting/copy/export/detail links, textContent-safe DOM construction, and deterministic mocked-online browser proof.",
+        continuity_guardrails="R085, R086, R087, R088, R008, R009, R010, R019, D078, D079, D080",
+        rerun_lanes="`npm test -- --run app/static/src/ts/modules/result-application.test.ts`; `npm test -- --run`; `python3 -m pytest -q tests/e2e/test_results_page.py tests/e2e/test_emailrep_online.py`; add `make verify-deep` for broader browser-visible polling changes",
+        continuity_notes=(
+            "S04 is no longer an unresolved target: preserve the severity-change gate, live/history shared coordinator parity, filtering/sorting/copy/export/detail links, "
+            "textContent-safe DOM construction, visible enrichment progress/results state, browser-accessible history/detail pages, and deterministic mocked-online browser proof without exposing secrets."
+        ),
     ),
     BaselineFinding(
         bucket="later",
@@ -1111,7 +1117,7 @@ def render_m017_rerun_checklist_section() -> str:
             "| 1 | M017 workflow runner + identity-grounded ranked artifact refresh | `python3 tools/optimization_audit.py --milestone-id M017 --mode baseline --output .gsd/milestones/M017/M017-AUDIT.md` | Every M017 optimization slice before handoff. | Updated M017 audit artifact citing `docs/project-map.md`, R085/R087, D078-D080, S01 seam priorities, and current ranked buckets. |",
             "| 2 | Fast local regression lane | `make verify-fast` | Every shipped optimization, including keep-decisions that changed code or build/test plumbing. | Fresh command capture or task summary evidence proving unit/integration/frontend/build checks stayed green. |",
             "| 3 | Deterministic mocked-online browser proof | `make verify-deep` | Any change touching live enrichment orchestration, polling/status flow, shared result application, or analyst-visible DOM/state. | Fresh evidence proving the analyst-visible mocked-online browser seam still passes end-to-end. |",
-            "| 4 | S03 target confirmation | Compare `do now` against project-map priority and fresh measurement captures | Before S03 implementation starts. | Clear do-now/do-next/later/leave-alone decision explaining why the selected optimization is worth doing. |",
+            "| 4 | S04 frontend/render outcome confirmation | Compare `do now` frontend/render rows against T01/T02 focused proof and mocked-online browser evidence | Before S05 final assembly. | Clear shipped-or-rejected decision explaining why the secondary optimization outcome is durable and evidence-backed. |",
         ]
     )
 
@@ -1123,10 +1129,10 @@ def render_m017_baseline_sections(document: AuditDocument) -> list[str]:
         "## Baseline stance",
         "",
         "- Do now: S03 shipped the enrichment fan-out/status snapshot optimization, the highest-ranked S01 seam in SentinelX's analyst IOC triage loop, with `status-snapshot-scaling` measurement and explicit route/orchestrator code-path proof.",
-        "- Do next: browser result rendering churn remains important, but should follow the status/fan-out target unless fresh browser-visible evidence outranks it.",
+        "- Do now: S04 shipped the secondary frontend/render optimization by keeping shared result application on the severity-change gate, so provider-only/no-op flushes skip global dashboard recount/reorder while severity-changing flushes still update counts and order.",
         "- Later: SQLite cache/history access shape and IOC duplicate-candidate handling need targeted tempdb/query-count or duplicate-fixture evidence before promotion.",
         "- Leave alone: provider registration/config diagnostics clarity should not distract this optimization pass unless readiness diagnostics become the actual blocker.",
-        "- Evidence standard: every shipped optimization needs before/after measurement when practical, or explicit code-path reasoning plus regression proof; S03 now satisfies that standard for status polling, and artifacts must not expose API keys, tokens, or analyst-sensitive IOC data.",
+        "- Evidence standard: every shipped optimization needs before/after measurement when practical, or explicit code-path reasoning plus regression proof; S03 satisfies that standard for status polling and S04 satisfies it for the frontend/render follow-up; artifacts must not expose API keys, tokens, or analyst-sensitive IOC data.",
         "",
         "## Ranked findings",
         "",
@@ -1135,7 +1141,7 @@ def render_m017_baseline_sections(document: AuditDocument) -> list[str]:
         "## M017 audit notes",
         "",
         "- This baseline intentionally contains no placeholder rows; each bucket records a current do-now/do-next/later/leave-alone decision.",
-        "- Re-run with `make audit-m017` after each optimization slice so S03/S04 can consume current command-capture rows and shipped-proof language.",
+        "- Re-run with `make audit-m017` after each optimization slice so S05 can consume current command-capture rows and S03/S04 shipped-proof language.",
         "- Failed optional capture commands are recorded in the measurement table with nonzero exits so unrelated artifact generation remains inspectable.",
     ]
 

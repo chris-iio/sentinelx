@@ -131,6 +131,19 @@ def test_m017_baseline_uses_identity_grounded_contract(tmp_path):
     assert "tail rows plus aligned `cached_markers`" in content
     assert "without falling back to full result-list snapshots" in content
     assert "explicit code-path reasoning plus regression proof" in content
+    assert "Keep S04's shipped frontend/render optimization on the shared result-application severity-change gate." in content
+    assert "duplicate broad `flush()` implementation" in content
+    assert "only runs those global dashboard recount/reorder calls when severity-affecting state changes" in content
+    assert "provider-only/no-op deltas preserve summaries" in content
+    assert "mocked-online browser checks for results and EmailRep continuity" in content
+    assert "S04 is no longer an unresolved target" in content
+    assert "R086" in content
+    assert "R088" in content
+    assert "Measure browser result rendering churn after the status/fan-out target" not in content
+    assert "browser result rendering churn remains important, but should follow" not in content
+    assert "M017 follow-up should focus on remaining flush-wide" not in content
+    assert "unresolved S04 target" not in content
+    assert "do-next S04 target" not in content
     assert "_Fill during the do now pass_" not in content
     assert "_Fill during the do next pass_" not in content
     assert "_Fill during the later pass_" not in content

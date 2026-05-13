@@ -1,7 +1,7 @@
 # M017 Optimization Audit — SentinelX
 
 - Mode: `baseline`
-- Generated at: `2026-05-13 08:41:56 UTC`
+- Generated at: `2026-05-13 17:48:07 UTC`
 - Repo root: `/home/chris/projects/sentinelx`
 - Output path: `.gsd/milestones/M017/M017-AUDIT.md`
 
@@ -36,7 +36,7 @@
 | 1 | M017 workflow runner + identity-grounded ranked artifact refresh | `python3 tools/optimization_audit.py --milestone-id M017 --mode baseline --output .gsd/milestones/M017/M017-AUDIT.md` | Every M017 optimization slice before handoff. | Updated M017 audit artifact citing `docs/project-map.md`, R085/R087, D078-D080, S01 seam priorities, and current ranked buckets. |
 | 2 | Fast local regression lane | `make verify-fast` | Every shipped optimization, including keep-decisions that changed code or build/test plumbing. | Fresh command capture or task summary evidence proving unit/integration/frontend/build checks stayed green. |
 | 3 | Deterministic mocked-online browser proof | `make verify-deep` | Any change touching live enrichment orchestration, polling/status flow, shared result application, or analyst-visible DOM/state. | Fresh evidence proving the analyst-visible mocked-online browser seam still passes end-to-end. |
-| 4 | S03 target confirmation | Compare `do now` against project-map priority and fresh measurement captures | Before S03 implementation starts. | Clear do-now/do-next/later/leave-alone decision explaining why the selected optimization is worth doing. |
+| 4 | S04 frontend/render outcome confirmation | Compare `do now` frontend/render rows against T01/T02 focused proof and mocked-online browser evidence | Before S05 final assembly. | Clear shipped-or-rejected decision explaining why the secondary optimization outcome is durable and evidence-backed. |
 
 ## Continuity guardrails
 
@@ -57,10 +57,10 @@
 
 | Capture | Command | Exit | Duration (ms) | Summary |
 | --- | --- | ---: | ---: | --- |
-| runtime-provider-diagnostics | `internal benchmark: EnrichmentOrchestrator synthetic runtime/provider diagnostics` | 0 | 74 | provider mix CacheAlpha:2d/0e, RateLimitBeta:2d/1e; dispatch=4; attempts=5; cache-hit ratio 1/5 (20%); retries=1 (429=1); errors=1; latency total=2.25s max=1.00s. |
-| status-snapshot-scaling | `internal benchmark: EnrichmentOrchestrator.get_status() snapshot scaling` | 0 | 2 | 400 polls at 5000 retained results: `get_status()` 1.47ms vs `get_incremental_status(since=4990)` 0.48ms (3.1x faster) while returning 10 tail rows with next_since=5000. |
-| cache-store-tempdb | `internal benchmark: CacheStore temp WAL put/get loop` | 0 | 19 | Temp WAL cache DB: 250 puts in 3.33ms, 250 TTL reads in 1.00ms, 250 hits, 250 retained rows. |
-| history-store-tempdb | `internal benchmark: HistoryStore temp WAL save/list/load loop` | 0 | 15 | Temp WAL history DB: 180 saves in 3.26ms, list_recent(20) in 0.04ms, single load in 0.02ms, latest total_count=1, recent rows=20. |
+| runtime-provider-diagnostics | `internal benchmark: EnrichmentOrchestrator synthetic runtime/provider diagnostics` | 0 | 85 | provider mix CacheAlpha:2d/0e, RateLimitBeta:2d/1e; dispatch=4; attempts=5; cache-hit ratio 1/5 (20%); retries=1 (429=1); errors=1; latency total=2.25s max=1.00s. |
+| status-snapshot-scaling | `internal benchmark: EnrichmentOrchestrator.get_status() snapshot scaling` | 0 | 2 | 400 polls at 5000 retained results: `get_status()` 1.45ms vs `get_incremental_status(since=4990)` 0.57ms (2.6x faster) while returning 10 tail rows with next_since=5000. |
+| cache-store-tempdb | `internal benchmark: CacheStore temp WAL put/get loop` | 0 | 21 | Temp WAL cache DB: 250 puts in 4.59ms, 250 TTL reads in 1.34ms, 250 hits, 250 retained rows. |
+| history-store-tempdb | `internal benchmark: HistoryStore temp WAL save/list/load loop` | 0 | 16 | Temp WAL history DB: 180 saves in 2.91ms, list_recent(20) in 0.05ms, single load in 0.03ms, latest total_count=1, recent rows=20. |
 
 ## Seam checklist
 
@@ -112,10 +112,10 @@ Use the same table shape in every bucket. Required fields per row:
 ## Baseline stance
 
 - Do now: S03 shipped the enrichment fan-out/status snapshot optimization, the highest-ranked S01 seam in SentinelX's analyst IOC triage loop, with `status-snapshot-scaling` measurement and explicit route/orchestrator code-path proof.
-- Do next: browser result rendering churn remains important, but should follow the status/fan-out target unless fresh browser-visible evidence outranks it.
+- Do now: S04 shipped the secondary frontend/render optimization by keeping shared result application on the severity-change gate, so provider-only/no-op flushes skip global dashboard recount/reorder while severity-changing flushes still update counts and order.
 - Later: SQLite cache/history access shape and IOC duplicate-candidate handling need targeted tempdb/query-count or duplicate-fixture evidence before promotion.
 - Leave alone: provider registration/config diagnostics clarity should not distract this optimization pass unless readiness diagnostics become the actual blocker.
-- Evidence standard: every shipped optimization needs before/after measurement when practical, or explicit code-path reasoning plus regression proof; S03 now satisfies that standard for status polling, and artifacts must not expose API keys, tokens, or analyst-sensitive IOC data.
+- Evidence standard: every shipped optimization needs before/after measurement when practical, or explicit code-path reasoning plus regression proof; S03 satisfies that standard for status polling and S04 satisfies it for the frontend/render follow-up; artifacts must not expose API keys, tokens, or analyst-sensitive IOC data.
 
 ## Ranked findings
 
@@ -124,12 +124,12 @@ Use the same table shape in every bucket. Required fields per row:
 | Finding | Seam | Evidence kind | Evidence summary | Continuity guardrails | Rerun lanes | Continuity notes |
 | --- | --- | --- | --- | --- | --- | --- |
 | Keep S03's shipped enrichment status polling optimization on the tail-only snapshot path for SentinelX's analyst IOC triage loop. | enrichment fan-out/status snapshot cost | measurement + code-path reasoning | `docs/project-map.md` ranks enrichment fan-out/status snapshot cost as the #1 optimization priority for the local analyst IOC triage workflow. The `status-snapshot-scaling` capture measures the old retained-list snapshot against the shipped tail accessor: `get_status()` scales with retained results while `get_incremental_status(since=4990)` returns only the tail and preserves `next_since`. Code-path proof lives in `app/enrichment/orchestrator.py::get_incremental_status()` and `app/routes/_helpers.py::_get_enrichment_status()`, where the polling route calls the incremental accessor and serializes only returned tail rows plus aligned `cached_markers`. | R085, R087, R008, R010, R018, R019, D078, D079, D080 | `python3 tools/optimization_audit.py --milestone-id M017 --mode baseline`; `make verify-fast`; add `make verify-deep` for browser-visible polling changes | S03 shipped this path with measurement and code-path proof; preserve `status`, `terminal`, `terminal_reason`, `error`, `next_since`, failure tombstones, history-save diagnostics, and redacted diagnostics without falling back to full result-list snapshots on polling. |
+| Keep S04's shipped frontend/render optimization on the shared result-application severity-change gate. | browser polling and result application | code-path reasoning + focused regression proof | S04 shipped the remaining high-confidence frontend/render follow-up by removing the duplicate broad `flush()` implementation in `app/static/src/ts/modules/result-application.ts` that always called `updateDashboardCounts()` and `sortCardsBySeverity()`. The active shared coordinator path now snapshots IOC card verdicts before and after dirty-result application and only runs those global dashboard recount/reorder calls when severity-affecting state changes. Focused proof lives in `app/static/src/ts/modules/result-application.test.ts`: provider-only/no-op deltas preserve summaries, provider rows, copy/detail affordances, and skip global recount/reorder, while severity-changing deltas still update counts and order. T02 verification also reran the full frontend suite plus mocked-online browser checks for results and EmailRep continuity. | R085, R086, R087, R088, R008, R009, R010, R019, D078, D079, D080 | `npm test -- --run app/static/src/ts/modules/result-application.test.ts`; `npm test -- --run`; `python3 -m pytest -q tests/e2e/test_results_page.py tests/e2e/test_emailrep_online.py`; add `make verify-deep` for broader browser-visible polling changes | S04 is no longer an unresolved target: preserve the severity-change gate, live/history shared coordinator parity, filtering/sorting/copy/export/detail links, textContent-safe DOM construction, visible enrichment progress/results state, browser-accessible history/detail pages, and deterministic mocked-online browser proof without exposing secrets. |
 
 ### do next
 
 | Finding | Seam | Evidence kind | Evidence summary | Continuity guardrails | Rerun lanes | Continuity notes |
 | --- | --- | --- | --- | --- | --- | --- |
-| Measure browser result rendering churn after the status/fan-out target, especially flush-wide recount and sort work during polling/history replay. | browser polling and result application | project-map priority + code-path reasoning | The S01 seam inventory ranks browser result rendering churn second because it sits directly in the analyst's verdict-first results review path. The M013 baseline already narrowed repeated card/slot lookups, so M017 follow-up should focus on remaining flush-wide `updateDashboardCounts()` and `sortCardsBySeverity()` work. | R085, R087, R008, R009, R010, R019 | `make verify-fast`, `make verify-deep` | Preserve live/history parity, filtering/sorting/copy/export/detail links, textContent-safe DOM construction, and deterministic mocked-online browser proof. |
 
 ### later
 
@@ -146,5 +146,5 @@ Use the same table shape in every bucket. Required fields per row:
 ## M017 audit notes
 
 - This baseline intentionally contains no placeholder rows; each bucket records a current do-now/do-next/later/leave-alone decision.
-- Re-run with `make audit-m017` after each optimization slice so S03/S04 can consume current command-capture rows and shipped-proof language.
+- Re-run with `make audit-m017` after each optimization slice so S05 can consume current command-capture rows and S03/S04 shipped-proof language.
 - Failed optional capture commands are recorded in the measurement table with nonzero exits so unrelated artifact generation remains inspectable.
