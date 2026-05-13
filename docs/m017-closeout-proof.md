@@ -54,17 +54,17 @@ The generated audit records this as a shipped frontend/render outcome, not a fut
 | --- | --- | --- |
 | R084 | Covered by `docs/project-map.md` and `.gsd/PROJECT.md`, which define what SentinelX is, who it serves, its analyst loop, architecture seams, ranked optimization priorities, and non-negotiable guardrails. | Source artifacts validated before this closeout doc was written. |
 | R087 | Covered by the S03 incremental polling/status proof and S04 result-application severity-gate proof in `.gsd/milestones/M017/M017-AUDIT.md`, with measurement where practical or explicit code-path reasoning plus regression evidence. | S03/S04 are documented as shipped outcomes, not pending targets. |
-| R088 | Covered by analyst-flow regression lanes from S03/S04 and must be reconfirmed by final S05 verification: IOC intake, enrichment polling/status, results, history/detail, diagnostics, and security/redaction behavior must remain intact. | Pending final S05 lane evidence. Do not mark fully satisfied here until T02/T03 evidence is recorded. |
-| R089 | Covered only when final closeout verification includes fresh `make verify-fast` and `make verify-deep` evidence. | Pending T02/T03 command evidence. |
+| R088 | Covered by analyst-flow regression lanes from S03/S04 and reconfirmed by final S05 verification: IOC intake, enrichment polling/status, results, history/detail, diagnostics, and security/redaction behavior remain intact. | Satisfied by focused S05/T02 lanes plus the fresh S05/T03 `make verify-fast` and `make verify-deep` results below. |
+| R089 | Covered by final closeout verification with fresh `make verify-fast` and `make verify-deep` evidence. | Satisfied by S05/T03 full-lane evidence: both commands exited 0 on 2026-05-13 UTC. |
 
-## Final Verification Plan and Evidence Slots
+## Final Verification Evidence — S05/T03
 
-S05 final closeout requires fresh command evidence. These fields are intentionally left pending by T01; do not backfill pass/fail, durations, timestamps, or pass counts without running the commands in T02/T03.
+S05/T03 ran the repo-native full verification lanes fresh on 2026-05-13 UTC. R089 is satisfied because both required commands exited 0 in the current closeout run.
 
-| Lane | Command | Purpose | Result | Evidence owner |
-| --- | --- | --- | --- | --- |
-| Fast verification | `make verify-fast` | Proves repo-native fast checks for backend/frontend logic, audit generator behavior, and non-browser-heavy regressions. | Pending | S05/T02 |
-| Deep verification | `make verify-deep` | Proves browser-heavy mocked-online analyst flows, enrichment/status/result DOM behavior, history/detail continuity, diagnostics, and security/redaction coverage. | Pending | S05/T03 |
+| Lane | Command | Exit status | Time window (UTC) | Duration | Pass-count highlights | Evidence owner |
+| --- | --- | --- | --- | --- | --- | --- |
+| Fast verification | `make verify-fast` | 0 | 2026-05-13T18:03:13Z → 2026-05-13T18:03:27Z | 13.415s | Pytest non-e2e: 1127 passed, 126 deselected in 10.05s; Vitest: 7 files passed, 97 tests passed; `npx tsc --noEmit` passed; `make build` passed. | S05/T03 |
+| Deep verification | `make verify-deep` | 0 | 2026-05-13T18:03:34Z → 2026-05-13T18:04:19Z | 44.795s | Browser/e2e pytest lane: 126 passed in 43.95s. | S05/T03 |
 
 ## Focused Closeout Regression Evidence — S05/T02
 
@@ -88,6 +88,9 @@ This focused evidence keeps R087 tied to the shipped S03 incremental polling/sta
 ## Handoff Notes for Future Agents
 
 - Start with `docs/project-map.md` for product identity and ranked optimization priorities.
+- Use `.gsd/PROJECT.md` for the generated GSD project summary and durable project-map linkage.
 - Use `.gsd/milestones/M017/M017-AUDIT.md` as the generated source of truth for S03/S04 shipped optimization proof.
 - Use `.gsd/REQUIREMENTS.md` to confirm requirement status and validation notes for R084, R087, R088, and R089.
-- Treat this file as the reader-friendly closeout index. It summarizes the proof package but does not replace fresh verification evidence from `make verify-fast` and `make verify-deep`.
+- Treat this file as the reader-friendly closeout index. It summarizes the proof package but does not replace rerunning verification when behavior changes.
+- Rerunnable closeout commands: `make verify-fast` and `make verify-deep`.
+- S05 introduced no product-code wiring or production observability changes; it assembled closeout evidence and verified existing inspection surfaces through the repo-native lanes.
