@@ -117,13 +117,19 @@ def test_m017_baseline_uses_identity_grounded_contract(tmp_path):
     assert "app/enrichment/orchestrator.py" in content
     assert "app/routes/_helpers.py" in content
     assert "app/pipeline/extractor.py" in content
-    assert "S03 should target this path" in content
+    assert "S03 shipped proof" in content
+    assert "S03 shipped the enrichment fan-out/status snapshot optimization" in content
+    assert "S03 should target this path" not in content
     assert "### do now" in content
     assert "### do next" in content
     assert "### later" in content
     assert "### leave alone" in content
     assert "enrichment fan-out/status snapshot path" in content
-    assert "before/after measurement when practical" in content
+    assert "status-snapshot-scaling" in content
+    assert "measurement + code-path reasoning" in content
+    assert "get_incremental_status(since=4990)" in content
+    assert "tail rows plus aligned `cached_markers`" in content
+    assert "without falling back to full result-list snapshots" in content
     assert "explicit code-path reasoning plus regression proof" in content
     assert "_Fill during the do now pass_" not in content
     assert "_Fill during the do next pass_" not in content

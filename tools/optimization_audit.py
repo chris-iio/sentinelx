@@ -357,17 +357,19 @@ BASELINE_GUARDRAIL_COVERAGE: tuple[GuardrailCoverage, ...] = (
 M017_FINDINGS: tuple[BaselineFinding, ...] = (
     BaselineFinding(
         bucket="do now",
-        finding="Audit and optimize the enrichment fan-out/status snapshot path first for SentinelX's analyst IOC triage loop.",
+        finding="Keep S03's shipped enrichment status polling optimization on the tail-only snapshot path for SentinelX's analyst IOC triage loop.",
         seam="enrichment fan-out/status snapshot cost",
-        evidence_kind="project-map grounding + measurement requirement",
+        evidence_kind="measurement + code-path reasoning",
         evidence_summary=(
             "`docs/project-map.md` ranks enrichment fan-out/status snapshot cost as the #1 optimization priority for the local analyst IOC triage workflow. "
-            "D078 requires starting from the project map, D079 ranks work by SentinelX's analyst identity, and R085 requires identity-grounded optimization rather than generic subsystem cleanup."
+            "The `status-snapshot-scaling` capture measures the old retained-list snapshot against the shipped tail accessor: "
+            "`get_status()` scales with retained results while `get_incremental_status(since=4990)` returns only the tail and preserves `next_since`. "
+            "Code-path proof lives in `app/enrichment/orchestrator.py::get_incremental_status()` and `app/routes/_helpers.py::_get_enrichment_status()`, where the polling route calls the incremental accessor and serializes only returned tail rows plus aligned `cached_markers`."
         ),
-        continuity_guardrails="R085, R087, D078, D079, D080",
+        continuity_guardrails="R085, R087, R008, R010, R018, R019, D078, D079, D080",
         rerun_lanes="`python3 tools/optimization_audit.py --milestone-id M017 --mode baseline`; `make verify-fast`; add `make verify-deep` for browser-visible polling changes",
         continuity_notes=(
-            "S03 should target this path only with before/after timing when practical or explicit code-path reasoning plus regression proof; do not hide provider, polling, cache, or history failures to look faster."
+            "S03 shipped this path with measurement and code-path proof; preserve `status`, `terminal`, `terminal_reason`, `error`, `next_since`, failure tombstones, history-save diagnostics, and redacted diagnostics without falling back to full result-list snapshots on polling."
         ),
     ),
     BaselineFinding(
@@ -1096,7 +1098,7 @@ def render_m017_identity_section(document: AuditDocument) -> str:
             "- Decisions: D078 requires `docs/project-map.md` and `.gsd/PROJECT.md` before target selection; D079 ranks work by the analyst IOC triage loop; D080 allows aggressive/moderate cross-seam optimization only with proof.",
             "- Requirements: R085 requires product-identity-grounded optimization decisions; R087 requires measurement when practical or explicit code-path reasoning plus regression proof.",
             "- S01 seam inventory priorities: (1) enrichment fan-out/status snapshot cost across `app/enrichment` and `app/routes`, (2) browser result rendering churn, (3) SQLite cache/history access shape, (4) IOC pipeline duplicate candidate handling in `app/pipeline`, (5) provider registration/config diagnostics clarity.",
-            "- S03 target language: the do-now target for S03 is the enrichment fan-out/status snapshot path unless fresh evidence in this artifact proves a better analyst-loop optimization; proof should cite concrete seams such as `app/enrichment/orchestrator.py`, `app/routes/_helpers.py`, and `app/pipeline/extractor.py` when those paths are in scope.",
+            "- S03 shipped proof: the do-now M017 optimization is the enrichment fan-out/status snapshot path, with measurement from `status-snapshot-scaling` and code-path proof in `app/enrichment/orchestrator.py::get_incremental_status()` plus `app/routes/_helpers.py::_get_enrichment_status()`; downstream seam inventory still cites `app/pipeline/extractor.py` for later IOC-pipeline work.",
         ]
     )
 
@@ -1120,11 +1122,11 @@ def render_m017_baseline_sections(document: AuditDocument) -> list[str]:
         "",
         "## Baseline stance",
         "",
-        "- Do now: target enrichment fan-out/status snapshot cost because it is the highest-ranked S01 seam in SentinelX's analyst IOC triage loop and has the clearest evidence path for S03.",
+        "- Do now: S03 shipped the enrichment fan-out/status snapshot optimization, the highest-ranked S01 seam in SentinelX's analyst IOC triage loop, with `status-snapshot-scaling` measurement and explicit route/orchestrator code-path proof.",
         "- Do next: browser result rendering churn remains important, but should follow the status/fan-out target unless fresh browser-visible evidence outranks it.",
         "- Later: SQLite cache/history access shape and IOC duplicate-candidate handling need targeted tempdb/query-count or duplicate-fixture evidence before promotion.",
         "- Leave alone: provider registration/config diagnostics clarity should not distract this optimization pass unless readiness diagnostics become the actual blocker.",
-        "- Evidence standard: every shipped optimization needs before/after measurement when practical, or explicit code-path reasoning plus regression proof, and artifacts must not expose API keys, tokens, or analyst-sensitive IOC data.",
+        "- Evidence standard: every shipped optimization needs before/after measurement when practical, or explicit code-path reasoning plus regression proof; S03 now satisfies that standard for status polling, and artifacts must not expose API keys, tokens, or analyst-sensitive IOC data.",
         "",
         "## Ranked findings",
         "",
@@ -1133,7 +1135,7 @@ def render_m017_baseline_sections(document: AuditDocument) -> list[str]:
         "## M017 audit notes",
         "",
         "- This baseline intentionally contains no placeholder rows; each bucket records a current do-now/do-next/later/leave-alone decision.",
-        "- Re-run with `make audit-m017` after each optimization slice so S03/S04 can consume current command-capture rows and target language.",
+        "- Re-run with `make audit-m017` after each optimization slice so S03/S04 can consume current command-capture rows and shipped-proof language.",
         "- Failed optional capture commands are recorded in the measurement table with nonzero exits so unrelated artifact generation remains inspectable.",
     ]
 
