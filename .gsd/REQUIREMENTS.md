@@ -4,28 +4,6 @@ This file is the explicit capability and coverage contract for the project.
 
 ## Active
 
-### R084 — SentinelX has a durable current-state project map that explains what the app is, who it serves, and how its main analyst loop works.
-- Class: core-capability
-- Status: active
-- Description: SentinelX has a durable current-state project map that explains what the app is, who it serves, and how its main analyst loop works.
-- Why it matters: The user explicitly said the project must stop feeling unclear; future optimization and execution need a shared product/codebase identity.
-- Source: user
-- Primary owning slice: M017/S01
-- Supporting slices: M017/S02, M017/S05
-- Validation: mapped
-- Notes: Separate named project map artifact plus refreshed .gsd/PROJECT.md.
-
-### R085 — Optimization decisions are grounded in SentinelX’s product identity, not generic subsystem cleanup.
-- Class: quality-attribute
-- Status: active
-- Description: Optimization decisions are grounded in SentinelX’s product identity, not generic subsystem cleanup.
-- Why it matters: Aggressive optimization should improve what SentinelX actually is: a local analyst IOC triage workflow, not arbitrary code aesthetics.
-- Source: user
-- Primary owning slice: M017/S02
-- Supporting slices: M017/S03, M017/S04
-- Validation: mapped
-- Notes: Audit must rank findings against the project map and analyst loop.
-
 ### R086 — The milestone ships the best current optimization opportunity found by the refreshed audit, even if it requires moderate refactoring across existing seams.
 - Class: core-capability
 - Status: active
@@ -46,7 +24,7 @@ This file is the explicit capability and coverage contract for the project.
 - Primary owning slice: M017/S02
 - Supporting slices: M017/S03, M017/S04, M017/S05
 - Validation: mapped
-- Notes: Audit artifact must record why each change was worth doing.
+- Notes: Advanced by S02: the M017 audit artifact names proof requirements for the S03 do-now optimization target and preserves measurement/capture rows for downstream code changes. Remains active until an optimization is shipped with before/after measurement or explicit code-path reasoning plus regression proof.
 
 ### R088 — Aggressive optimization preserves analyst-facing IOC intake, enrichment, results, history/detail, diagnostics, and security behavior.
 - Class: continuity
@@ -855,6 +833,28 @@ This file is the explicit capability and coverage contract for the project.
 - Validation: M018 delivered the diagnostic export contract, bounded/redacted assembler, Flask download route, deterministic E2E proof, and analyst guide. Fresh closeout verification for S04 ran `python3 -m pytest tests/test_diagnostic_export_e2e_proof.py -v && echo 'PROOF PASS'` (3 passed), guide existence/section-count check (`GUIDE PASS`), and the full diagnostic export suite across primitives, contract, sources, assembler, integration, route, and E2E proof files (`39 passed`; `FULL DIAGNOSTIC SUITE PASS`). The proof downloads the ZIP through `/diagnostics/export`, validates manifest/archive consistency, verifies raw ZIP bytes exclude configured secret values, and checks download headers.
 - Notes: Validated by M018/S04 final-assembly proof and all-slice diagnostic export regression suite. Exports are local-first, bounded, deterministic, manifest-backed, redacted, and documented for safe sharing.
 
+### R084 — SentinelX has a durable current-state project map that explains what the app is, who it serves, and how its main analyst loop works.
+- Class: core-capability
+- Status: validated
+- Description: SentinelX has a durable current-state project map that explains what the app is, who it serves, and how its main analyst loop works.
+- Why it matters: The user explicitly said the project must stop feeling unclear; future optimization and execution need a shared product/codebase identity.
+- Source: user
+- Primary owning slice: M017/S01
+- Supporting slices: M017/S02, M017/S05
+- Validation: S01 closeout verification passed: docs/project-map.md exists with 8 section headings, explains product/analyst loop, includes concrete app/enrichment/app/routes/app/pipeline seam references and ranked optimization priorities, and .gsd/PROJECT.md references the project map/seam inventory with required paths; both artifacts are non-empty and contain no TBD/TODO placeholders.
+- Notes: Validated by M017/S01 artifact-driven contract verification.
+
+### R085 — Optimization decisions are grounded in SentinelX’s product identity, not generic subsystem cleanup.
+- Class: quality-attribute
+- Status: validated
+- Description: Optimization decisions are grounded in SentinelX’s product identity, not generic subsystem cleanup.
+- Why it matters: Aggressive optimization should improve what SentinelX actually is: a local analyst IOC triage workflow, not arbitrary code aesthetics.
+- Source: user
+- Primary owning slice: M017/S02
+- Supporting slices: M017/S03, M017/S04
+- Validation: S02 closeout verification passed: the M017 optimization audit runner regenerates .gsd/milestones/M017/M017-AUDIT.md from the identity-grounded contract, references docs/project-map.md, includes ranked do now/do next/later/leave alone buckets, names S03, includes concrete app/enrichment, app/routes, and app/pipeline seam markers, and contains no TBD/TODO placeholders. Focused pytest coverage passed with 9 tests.
+- Notes: Audit must rank findings against the project map and analyst loop.
+
 ## Deferred
 
 ### R066 — Automatic self-healing of transient runtime state at session start is deferred.
@@ -1085,8 +1085,8 @@ This file is the explicit capability and coverage contract for the project.
 | R081 | anti-feature | out-of-scope | none | none | n/a |
 | R082 | anti-feature | out-of-scope | none | none | n/a |
 | R083 | operability | validated | TBD | none | M018 delivered the diagnostic export contract, bounded/redacted assembler, Flask download route, deterministic E2E proof, and analyst guide. Fresh closeout verification for S04 ran `python3 -m pytest tests/test_diagnostic_export_e2e_proof.py -v && echo 'PROOF PASS'` (3 passed), guide existence/section-count check (`GUIDE PASS`), and the full diagnostic export suite across primitives, contract, sources, assembler, integration, route, and E2E proof files (`39 passed`; `FULL DIAGNOSTIC SUITE PASS`). The proof downloads the ZIP through `/diagnostics/export`, validates manifest/archive consistency, verifies raw ZIP bytes exclude configured secret values, and checks download headers. |
-| R084 | core-capability | active | M017/S01 | M017/S02, M017/S05 | mapped |
-| R085 | quality-attribute | active | M017/S02 | M017/S03, M017/S04 | mapped |
+| R084 | core-capability | validated | M017/S01 | M017/S02, M017/S05 | S01 closeout verification passed: docs/project-map.md exists with 8 section headings, explains product/analyst loop, includes concrete app/enrichment/app/routes/app/pipeline seam references and ranked optimization priorities, and .gsd/PROJECT.md references the project map/seam inventory with required paths; both artifacts are non-empty and contain no TBD/TODO placeholders. |
+| R085 | quality-attribute | validated | M017/S02 | M017/S03, M017/S04 | S02 closeout verification passed: the M017 optimization audit runner regenerates .gsd/milestones/M017/M017-AUDIT.md from the identity-grounded contract, references docs/project-map.md, includes ranked do now/do next/later/leave alone buckets, names S03, includes concrete app/enrichment, app/routes, and app/pipeline seam markers, and contains no TBD/TODO placeholders. Focused pytest coverage passed with 9 tests. |
 | R086 | core-capability | active | M017/S03 | M017/S04 | mapped |
 | R087 | quality-attribute | active | M017/S02 | M017/S03, M017/S04, M017/S05 | mapped |
 | R088 | continuity | active | M017/S03 | M017/S04, M017/S05 | mapped |
@@ -1098,7 +1098,7 @@ This file is the explicit capability and coverage contract for the project.
 
 ## Coverage Summary
 
-- Active requirements: 6
-- Mapped to slices: 6
-- Validated: 73 (R001, R002, R003, R004, R005, R006, R007, R008, R009, R010, R011, R012, R013, R014, R015, R016, R017, R018, R019, R020, R021, R022, R023, R024, R025, R026, R027, R028, R029, R030, R031, R032, R033, R035, R036, R037, R038, R039, R040, R041, R042, R043, R044, R045, R046, R047, R048, R049, R050, R051, R052, R053, R054, R055, R056, R057, R058, R059, R060, R061, R062, R063, R064, R065, R069, R070, R071, R072, R073, R074, R075, R076, R083)
+- Active requirements: 4
+- Mapped to slices: 4
+- Validated: 75 (R001, R002, R003, R004, R005, R006, R007, R008, R009, R010, R011, R012, R013, R014, R015, R016, R017, R018, R019, R020, R021, R022, R023, R024, R025, R026, R027, R028, R029, R030, R031, R032, R033, R035, R036, R037, R038, R039, R040, R041, R042, R043, R044, R045, R046, R047, R048, R049, R050, R051, R052, R053, R054, R055, R056, R057, R058, R059, R060, R061, R062, R063, R064, R065, R069, R070, R071, R072, R073, R074, R075, R076, R083, R084, R085)
 - Unmapped active requirements: 0

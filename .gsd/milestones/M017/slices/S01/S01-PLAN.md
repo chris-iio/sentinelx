@@ -21,12 +21,12 @@ Upstream: existing docs/project-map.md (partial), .gsd/PROJECT.md, app/ codebase
 
 ## Tasks
 
-- [ ] **T01: Enrich docs/project-map.md with concrete file-path seams and ranked optimization priorities** `est:45m`
+- [x] **T01: Enrich docs/project-map.md with concrete file-path seams and ranked optimization priorities** `est:45m`
   The existing docs/project-map.md is high-level and lacks concrete file paths for each architecture seam and a ranked optimization priority list. This task reads the actual codebase modules and rewrites/enriches the project map so S02 has an identity-grounded, code-specific anchor rather than abstract categories.
   - Files: `docs/project-map.md`, `app/enrichment/setup.py`, `app/enrichment/registry.py`, `app/pipeline/extractor.py`, `app/static/src/ts/modules/`, `app/cache/store.py`, `app/routes/`
   - Verify: grep -c '^## ' docs/project-map.md | awk '$1>=6{exit 0} {exit 1}' && grep -q 'app/enrichment\|app/routes\|app/pipeline' docs/project-map.md && grep -qi 'ranked\|optimization priorities\|priority' docs/project-map.md && ! grep -q 'TBD\|TODO' docs/project-map.md
 
-- [ ] **T02: Refresh .gsd/PROJECT.md to align with enriched project map and current M017 state** `est:20m`
+- [x] **T02: Refresh .gsd/PROJECT.md to align with enriched project map and current M017 state** `est:20m`
   After T01 enriches docs/project-map.md with concrete seam details and optimization priorities, this task updates .gsd/PROJECT.md to: (1) reference the enriched project map as the authoritative seam inventory, (2) add a brief **Seam Inventory** pointer section naming the canonical seams and their files, and (3) confirm M017 state reflects in-progress with project-map produced.
   - Files: `.gsd/PROJECT.md`, `docs/project-map.md`
   - Verify: grep -q 'project-map\|seam' .gsd/PROJECT.md && grep -q 'app/enrichment\|app/routes\|app/pipeline' .gsd/PROJECT.md && test -s .gsd/PROJECT.md

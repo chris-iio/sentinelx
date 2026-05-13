@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T03",
+  "unitId": "M017/S02/T03",
+  "timestamp": 1778609367950,
+  "passed": true,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "python3 -m pytest -q tests/test_optimization_audit.py",
+      "exitCode": 0,
+      "durationMs": 1047,
+      "verdict": "pass"
+    },
+    {
+      "command": "python3 tools/optimization_audit.py --mode baseline --milestone-id M017 --output .gsd/milestones/M017/M017-AUDIT.md",
+      "exitCode": 0,
+      "durationMs": 201,
+      "verdict": "pass"
+    },
+    {
+      "command": "python3 - <<'PY'\nfrom pathlib import Path\np = Path('.gsd/milestones/M017/M017-AUDIT.md')\ntext = p.read_text(encoding='utf-8')\nrequired = ['docs/project-map.md', '### do now', '### do next', '### later', '### leave alone', 'S03', 'app/enrichment', 'app/routes', 'app/pipeline']\nmissing = [item for item in required if item not in text]\nif missing:\n    raise SystemExit(f'missing required audit markers: {missing}')\nif any(token in text for token in ['TBD', 'TODO', '_Fill during']):\n    raise SystemExit('unresolved placeholder present')\nprint('PASS M017 audit workflow')\nPY",
+      "exitCode": 0,
+      "durationMs": 15,
+      "verdict": "pass"
+    }
+  ]
+}

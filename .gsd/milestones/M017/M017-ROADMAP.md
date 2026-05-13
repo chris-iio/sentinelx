@@ -12,13 +12,13 @@
 
 ## Slices
 
-- [ ] **S01: Current-State Project Map** `risk:high` `depends:[]`
+- [x] **S01: S01** `risk:high` `depends:[]`
   > After this: SentinelX has a separate project map plus refreshed project summary that explains what it is, who it serves, main analyst loop, architecture seams, and optimization priorities.
 
-- [ ] **S02: Identity-Grounded Optimization Audit** `risk:high` `depends:[S01]`
+- [x] **S02: S02** `risk:high` `depends:[]`
   > After this: The audit runner/artifact is refreshed for M017, grounded in the project map, with ranked current findings and explicit do-now/do-next/later/leave-alone decisions.
 
-- [ ] **S03: Best Optimization Implementation** `risk:high` `depends:[S02]`
+- [ ] **S03: S03** `risk:high` `depends:[]`
   > After this: The highest-value optimization from the M017 audit is shipped with measurement or code-path proof and behavior-preserving tests.
 
 - [ ] **S04: Analyst Flow Regression + Secondary Optimization** `risk:medium` `depends:[S03]`

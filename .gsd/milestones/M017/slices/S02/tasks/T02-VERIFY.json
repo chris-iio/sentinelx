@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T02",
+  "unitId": "M017/S02/T02",
+  "timestamp": 1778609223875,
+  "passed": true,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "python3 tools/optimization_audit.py --mode baseline --milestone-id M017 --output .gsd/milestones/M017/M017-AUDIT.md",
+      "exitCode": 0,
+      "durationMs": 171,
+      "verdict": "pass"
+    },
+    {
+      "command": "test -s .gsd/milestones/M017/M017-AUDIT.md",
+      "exitCode": 0,
+      "durationMs": 2,
+      "verdict": "pass"
+    },
+    {
+      "command": "grep -q \"docs/project-map.md\" .gsd/milestones/M017/M017-AUDIT.md",
+      "exitCode": 0,
+      "durationMs": 3,
+      "verdict": "pass"
+    },
+    {
+      "command": "grep -q \"### do now\" .gsd/milestones/M017/M017-AUDIT.md",
+      "exitCode": 0,
+      "durationMs": 2,
+      "verdict": "pass"
+    },
+    {
+      "command": "grep -q \"### do next\" .gsd/milestones/M017/M017-AUDIT.md",
+      "exitCode": 0,
+      "durationMs": 2,
+      "verdict": "pass"
+    },
+    {
+      "command": "grep -q \"### later\" .gsd/milestones/M017/M017-AUDIT.md",
+      "exitCode": 0,
+      "durationMs": 2,
+      "verdict": "pass"
+    },
+    {
+      "command": "grep -q \"### leave alone\" .gsd/milestones/M017/M017-AUDIT.md",
+      "exitCode": 0,
+      "durationMs": 2,
+      "verdict": "pass"
+    },
+    {
+      "command": "grep -qi \"S03\" .gsd/milestones/M017/M017-AUDIT.md",
+      "exitCode": 0,
+      "durationMs": 2,
+      "verdict": "pass"
+    }
+  ]
+}
