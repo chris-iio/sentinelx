@@ -18,10 +18,10 @@
 - [x] **S02: S02** `risk:high` `depends:[]`
   > After this: The audit runner/artifact is refreshed for M017, grounded in the project map, with ranked current findings and explicit do-now/do-next/later/leave-alone decisions.
 
-- [ ] **S03: S03** `risk:high` `depends:[]`
+- [x] **S03: S03** `risk:high` `depends:[]`
   > After this: The highest-value optimization from the M017 audit is shipped with measurement or code-path proof and behavior-preserving tests.
 
-- [ ] **S04: Analyst Flow Regression + Secondary Optimization** `risk:medium` `depends:[S03]`
+- [ ] **S04: S04** `risk:medium` `depends:[]`
   > After this: Any remaining high-confidence optimization tied to intake/results/history/diagnostics is shipped or explicitly rejected, with browser-visible analyst flow proof if touched.
 
 - [ ] **S05: Final Integrated Proof + Durable Handoff** `risk:medium` `depends:[S04]`

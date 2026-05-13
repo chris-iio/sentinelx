@@ -101,6 +101,25 @@ function errorItem(overrides: Partial<EnrichmentItem> & { provider: string; erro
   } as EnrichmentItem;
 }
 
+async function importCoordinatorWithCardSpies(): Promise<{
+  createResultApplicationCoordinator: typeof import("./result-application").createResultApplicationCoordinator;
+  updateDashboardCountsSpy: ReturnType<typeof vi.fn>;
+  sortCardsBySeveritySpy: ReturnType<typeof vi.fn>;
+}> {
+  const actualCards = await vi.importActual<typeof import("./cards")>("./cards");
+  const updateDashboardCountsSpy = vi.fn(actualCards.updateDashboardCounts);
+  const sortCardsBySeveritySpy = vi.fn(actualCards.sortCardsBySeverity);
+
+  vi.doMock("./cards", () => ({
+    ...actualCards,
+    updateDashboardCounts: updateDashboardCountsSpy,
+    sortCardsBySeverity: sortCardsBySeveritySpy,
+  }));
+
+  const { createResultApplicationCoordinator } = await import("./result-application");
+  return { createResultApplicationCoordinator, updateDashboardCountsSpy, sortCardsBySeveritySpy };
+}
+
 describe("result-application coordinator", () => {
   beforeEach(() => {
     vi.resetModules();
@@ -480,5 +499,149 @@ describe("result-application coordinator", () => {
     expect(summary?.textContent).toContain("MALICIOUS");
     expect(detailLink).not.toBeNull();
     expect(waiting).toBeNull();
+  });
+
+  it("does not run global dashboard recount or card reorder for provider-only deltas with unchanged severity", async () => {
+    buildDom(buildCard("1.2.3.4"), '{"ipv4":2}');
+    const { createResultApplicationCoordinator, updateDashboardCountsSpy, sortCardsBySeveritySpy } =
+      await importCoordinatorWithCardSpies();
+    const coordinator = createResultApplicationCoordinator();
+
+    coordinator.apply(
+      resultItem({
+        provider: "ThreatFox",
+        verdict: "malicious",
+        detection_count: 1,
+        total_engines: 1,
+      })
+    );
+    coordinator.flush();
+
+    expect(updateDashboardCountsSpy).toHaveBeenCalled();
+    expect(sortCardsBySeveritySpy).toHaveBeenCalled();
+    updateDashboardCountsSpy.mockClear();
+    sortCardsBySeveritySpy.mockClear();
+
+    coordinator.apply(
+      resultItem({
+        provider: "GreyNoise",
+        verdict: "clean",
+        detection_count: 0,
+        total_engines: 1,
+      })
+    );
+    coordinator.flush();
+
+    const summary = document.querySelector<HTMLElement>(".ioc-summary-row");
+    const providerNames = Array.from(
+      document.querySelectorAll<HTMLElement>(".provider-detail-name")
+    ).map((node) => node.textContent);
+
+    expect(document.querySelector('[data-verdict-count="malicious"]')?.textContent).toBe("1");
+    expect(document.querySelector('[data-verdict-count="clean"]')?.textContent).toBe("0");
+    expect(document.querySelector('.ioc-card')?.getAttribute("data-verdict")).toBe("malicious");
+    expect(summary?.textContent).toContain("ThreatFox: 1/1 engines");
+    expect(providerNames).toEqual(["ThreatFox", "GreyNoise"]);
+  });
+
+  it("runs global recount and reorder when a delta changes card severity/order state", async () => {
+    buildDom(buildCard("1.2.3.4") + buildCard("5.6.7.8"), '{"ipv4":1}');
+    const { createResultApplicationCoordinator, updateDashboardCountsSpy, sortCardsBySeveritySpy } =
+      await importCoordinatorWithCardSpies();
+    const coordinator = createResultApplicationCoordinator();
+
+    coordinator.apply(resultItem({ provider: "VirusTotal", verdict: "clean", ioc_value: "1.2.3.4" }));
+    coordinator.apply(resultItem({ provider: "VirusTotal", verdict: "clean", ioc_value: "5.6.7.8" }));
+    coordinator.flush();
+    await vi.advanceTimersByTimeAsync(150);
+
+    expect(updateDashboardCountsSpy).toHaveBeenCalled();
+    expect(sortCardsBySeveritySpy).toHaveBeenCalled();
+    updateDashboardCountsSpy.mockClear();
+    sortCardsBySeveritySpy.mockClear();
+
+    coordinator.apply(
+      resultItem({
+        provider: "ThreatFox",
+        verdict: "malicious",
+        detection_count: 1,
+        total_engines: 1,
+        ioc_value: "5.6.7.8",
+      })
+    );
+    coordinator.flush();
+    await vi.advanceTimersByTimeAsync(150);
+
+    const orderedIocs = Array.from(document.querySelectorAll<HTMLElement>(".ioc-card")).map((card) =>
+      card.getAttribute("data-ioc-value")
+    );
+
+    expect(updateDashboardCountsSpy).toHaveBeenCalledTimes(1);
+    expect(sortCardsBySeveritySpy).toHaveBeenCalledTimes(1);
+    expect(orderedIocs).toEqual(["5.6.7.8", "1.2.3.4"]);
+    expect(document.querySelector('[data-verdict-count="malicious"]')?.textContent).toBe("1");
+    expect(document.querySelector('[data-verdict-count="clean"]')?.textContent).toBe("1");
+  });
+
+  it("preserves history-replay copy, export, and detail-link affordances without extra global work on unchanged severity", async () => {
+    buildDom(buildCard("1.2.3.4"), '{"ipv4":2}');
+    const { createResultApplicationCoordinator, updateDashboardCountsSpy, sortCardsBySeveritySpy } =
+      await importCoordinatorWithCardSpies();
+    const coordinator = createResultApplicationCoordinator();
+
+    coordinator.apply(
+      resultItem({
+        provider: "ThreatFox",
+        verdict: "malicious",
+        detection_count: 1,
+        total_engines: 1,
+      })
+    );
+    coordinator.flush();
+    expect(updateDashboardCountsSpy).toHaveBeenCalled();
+    expect(sortCardsBySeveritySpy).toHaveBeenCalled();
+    updateDashboardCountsSpy.mockClear();
+    sortCardsBySeveritySpy.mockClear();
+    coordinator.apply(
+      resultItem({
+        provider: "VirusTotal",
+        verdict: "clean",
+        detection_count: 0,
+        total_engines: 70,
+      })
+    );
+    coordinator.finalize();
+    await vi.advanceTimersByTimeAsync(150);
+
+    const copyBtn = document.querySelector<HTMLElement>(".copy-btn");
+    const detailLink = document.querySelector<HTMLAnchorElement>(".detail-link");
+    const noDataSummary = document.querySelector(".no-data-summary-row");
+
+    expect(document.querySelector('[data-verdict-count="malicious"]')?.textContent).toBe("1");
+    expect(document.querySelector('[data-verdict-count="clean"]')?.textContent).toBe("0");
+    expect(copyBtn?.textContent).toBe("Copy");
+    expect(copyBtn?.getAttribute("data-value")).toBe("1.2.3.4");
+    expect(copyBtn?.getAttribute("data-enrichment")).toBe("ThreatFox: malicious (1/1 engines)");
+    expect(detailLink?.getAttribute("href")).toBe("/ioc/ipv4/1.2.3.4");
+    expect(detailLink?.textContent).toContain("View full detail");
+    expect(noDataSummary).toBeNull();
+  });
+
+  it("renders malicious-looking provider text as inert text on the real detail row path", async () => {
+    const provider = '<img src=x onerror="alert(1)">Provider';
+    buildDom(buildCard("1.2.3.4"), '{"ipv4":1}');
+    const { createResultApplicationCoordinator } = await import("./result-application");
+    const coordinator = createResultApplicationCoordinator();
+
+    coordinator.apply(resultItem({ provider, verdict: "clean" }));
+    coordinator.finalize();
+
+    const providerName = document.querySelector<HTMLElement>(".provider-detail-name");
+
+    expect(providerName?.textContent).toBe(provider);
+    expect(providerName?.querySelector("img")).toBeNull();
+    expect(document.querySelector("img")).toBeNull();
+    expect(providerName?.innerHTML).not.toContain("<img");
+    expect(document.body.innerHTML).not.toContain('<img src=x onerror="alert(1)">');
   });
 });

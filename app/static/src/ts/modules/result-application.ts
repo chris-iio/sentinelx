@@ -150,12 +150,36 @@ export function createResultApplicationCoordinator(): ResultApplicationCoordinat
     const handles = getCachedHandles(iocValue);
     if (!handles) return;
 
+    const worstVerdict = computeWorstVerdict(entries);
+
     updateSummaryRow(handles.slot, iocValue, iocVerdicts);
-    updateCardVerdictLabel(handles.card, computeWorstVerdict(entries));
+    updateCardVerdictLabel(handles.card, worstVerdict);
     updateCopyButtonWorstVerdict(handles.copyButton, entries);
 
     if (handles.reputationSection) {
       sortDetailRows(handles.reputationSection);
+    }
+  }
+  function flush(): void {
+    if (dirtyIocs.size === 0) return;
+
+    const beforeVerdicts = Array.from(document.querySelectorAll<HTMLElement>(".ioc-card"))
+      .map((card) => attr(card, "data-verdict", "no_data"));
+
+    for (const iocValue of dirtyIocs) {
+      flushIoc(iocValue);
+    }
+    dirtyIocs.clear();
+
+    const afterVerdicts = Array.from(document.querySelectorAll<HTMLElement>(".ioc-card"))
+      .map((card) => attr(card, "data-verdict", "no_data"));
+    const severityChanged =
+      beforeVerdicts.length !== afterVerdicts.length ||
+      beforeVerdicts.some((verdict, index) => verdict !== afterVerdicts[index]);
+
+    if (severityChanged) {
+      updateDashboardCounts();
+      sortCardsBySeverity();
     }
   }
 

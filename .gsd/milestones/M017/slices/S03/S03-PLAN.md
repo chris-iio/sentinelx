@@ -47,7 +47,7 @@ Upstream surfaces consumed: S02’s M017 audit target, `docs/project-map.md`, `a
   - Files: `app/enrichment/orchestrator.py`, `app/routes/_helpers.py`
   - Verify: python3 -m pytest -q tests/test_orchestrator.py tests/test_routes.py
 
-- [ ] **T03: Refresh M017 audit evidence for the shipped optimization** `est:30m`
+- [x] **T03: Refresh M017 audit evidence for the shipped optimization** `est:30m`
   ---
   estimated_steps: 5
   estimated_files: 3
@@ -58,7 +58,7 @@ Upstream surfaces consumed: S02’s M017 audit target, `docs/project-map.md`, `a
   - Files: `tools/optimization_audit.py`, `tests/test_optimization_audit.py`, `.gsd/milestones/M017/M017-AUDIT.md`
   - Verify: python3 -m pytest -q tests/test_optimization_audit.py && python3 tools/optimization_audit.py --mode baseline --milestone-id M017 --output .gsd/milestones/M017/M017-AUDIT.md
 
-- [ ] **T04: Run integrated regression proof for analyst continuity** `est:45m`
+- [x] **T04: Run integrated regression proof for analyst continuity** `est:45m`
   ---
   estimated_steps: 4
   estimated_files: 0
