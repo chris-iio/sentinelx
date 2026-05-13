@@ -30,17 +30,17 @@ Upstream surfaces consumed: S03 incremental polling route proof, M017 audit gene
   - Files: `app/static/src/ts/modules/result-application.test.ts`, `app/static/src/ts/modules/result-application.ts`, `app/static/src/ts/modules/cards.ts`, `package.json`, `vitest.config.ts`
   - Verify: npm test -- --run
 
-- [ ] **T02: Implement or reject the narrow frontend render optimization** `est:1h30m`
+- [x] **T02: Implement or reject the narrow frontend render optimization** `est:1h30m`
   Why: S04 must either ship the remaining high-confidence optimization tied to the analyst results path or explicitly reject it with evidence. The preferred implementation target is reducing unnecessary flush-wide dashboard recount/reorder work after S03's backend polling optimization.
   - Files: `app/static/src/ts/modules/result-application.ts`, `app/static/src/ts/modules/cards.ts`, `app/static/src/ts/modules/enrichment.ts`, `app/static/src/ts/modules/row-factory.ts`, `app/static/src/ts/modules/result-application.test.ts`
   - Verify: npm test -- --run && python3 -m pytest -q tests/e2e/test_results_page.py tests/e2e/test_emailrep_online.py
 
-- [ ] **T03: Encode the S04 secondary optimization outcome in the audit generator** `est:45m`
+- [x] **T03: Encode the S04 secondary optimization outcome in the audit generator** `est:45m`
   Why: M017 requires optimization decisions to be durable and evidence-backed. S04 must update the generated audit source so future agents see whether the frontend/render follow-up shipped or was rejected, and why.
   - Files: `tools/optimization_audit.py`, `tests/test_optimization_audit.py`, `.gsd/milestones/M017/M017-AUDIT.md`
   - Verify: python3 tools/optimization_audit.py --mode baseline --milestone-id M017 --output .gsd/milestones/M017/M017-AUDIT.md && python3 -m pytest -q tests/test_optimization_audit.py
 
-- [ ] **T04: Run integrated analyst-flow regression proof for S04** `est:1h`
+- [x] **T04: Run integrated analyst-flow regression proof for S04** `est:1h`
   Why: Because S04 touches or formally evaluates analyst-visible frontend/render behavior, closeout must prove IOC intake, enrichment, results, history/detail, diagnostics, and security/redaction behavior still hold after the secondary optimization decision.
   - Files: `Makefile`, `tests/e2e/test_results_page.py`, `tests/e2e/test_emailrep_online.py`, `tests/test_optimization_audit.py`, `app/static/src/ts/modules/result-application.test.ts`
   - Verify: npm test -- --run && python3 -m pytest -q tests/test_optimization_audit.py tests/e2e/test_results_page.py tests/e2e/test_emailrep_online.py && make verify-fast && make verify-deep

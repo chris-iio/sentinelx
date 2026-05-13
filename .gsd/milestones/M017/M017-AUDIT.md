@@ -1,7 +1,7 @@
 # M017 Optimization Audit — SentinelX
 
 - Mode: `baseline`
-- Generated at: `2026-05-13 17:48:07 UTC`
+- Generated at: `2026-05-13 17:48:41 UTC`
 - Repo root: `/home/chris/projects/sentinelx`
 - Output path: `.gsd/milestones/M017/M017-AUDIT.md`
 
@@ -57,10 +57,10 @@
 
 | Capture | Command | Exit | Duration (ms) | Summary |
 | --- | --- | ---: | ---: | --- |
-| runtime-provider-diagnostics | `internal benchmark: EnrichmentOrchestrator synthetic runtime/provider diagnostics` | 0 | 85 | provider mix CacheAlpha:2d/0e, RateLimitBeta:2d/1e; dispatch=4; attempts=5; cache-hit ratio 1/5 (20%); retries=1 (429=1); errors=1; latency total=2.25s max=1.00s. |
-| status-snapshot-scaling | `internal benchmark: EnrichmentOrchestrator.get_status() snapshot scaling` | 0 | 2 | 400 polls at 5000 retained results: `get_status()` 1.45ms vs `get_incremental_status(since=4990)` 0.57ms (2.6x faster) while returning 10 tail rows with next_since=5000. |
-| cache-store-tempdb | `internal benchmark: CacheStore temp WAL put/get loop` | 0 | 21 | Temp WAL cache DB: 250 puts in 4.59ms, 250 TTL reads in 1.34ms, 250 hits, 250 retained rows. |
-| history-store-tempdb | `internal benchmark: HistoryStore temp WAL save/list/load loop` | 0 | 16 | Temp WAL history DB: 180 saves in 2.91ms, list_recent(20) in 0.05ms, single load in 0.03ms, latest total_count=1, recent rows=20. |
+| runtime-provider-diagnostics | `internal benchmark: EnrichmentOrchestrator synthetic runtime/provider diagnostics` | 0 | 81 | provider mix CacheAlpha:2d/0e, RateLimitBeta:2d/1e; dispatch=4; attempts=5; cache-hit ratio 1/5 (20%); retries=1 (429=1); errors=1; latency total=2.25s max=1.00s. |
+| status-snapshot-scaling | `internal benchmark: EnrichmentOrchestrator.get_status() snapshot scaling` | 0 | 1 | 400 polls at 5000 retained results: `get_status()` 1.40ms vs `get_incremental_status(since=4990)` 0.44ms (3.2x faster) while returning 10 tail rows with next_since=5000. |
+| cache-store-tempdb | `internal benchmark: CacheStore temp WAL put/get loop` | 0 | 51 | Temp WAL cache DB: 250 puts in 3.49ms, 250 TTL reads in 1.08ms, 250 hits, 250 retained rows. |
+| history-store-tempdb | `internal benchmark: HistoryStore temp WAL save/list/load loop` | 0 | 19 | Temp WAL history DB: 180 saves in 4.01ms, list_recent(20) in 0.05ms, single load in 0.03ms, latest total_count=1, recent rows=20. |
 
 ## Seam checklist
 

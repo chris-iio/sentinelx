@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-05-13T17:10:34Z | Files: 201 | Described: 0/201
-<!-- gsd:codebase-meta {"generatedAt":"2026-05-13T17:10:34Z","fingerprint":"21e1b683c5ce735600dfdcaf3aa1329579c069b0","fileCount":201,"truncated":false} -->
+Generated: 2026-05-13T18:00:12Z | Files: 202 | Described: 0/202
+<!-- gsd:codebase-meta {"generatedAt":"2026-05-13T18:00:12Z","fingerprint":"28dbe67d59e0df007c1d24268967b167eda5e545","fileCount":202,"truncated":false} -->
 
 ### (root)/
 - `.codex`
@@ -134,6 +134,7 @@ Generated: 2026-05-13T17:10:34Z | Files: 201 | Described: 0/201
 - `docs/diagnostic-export-contract.md`
 - `docs/diagnostic-export-guide.md`
 - `docs/launch-checklist.md`
+- `docs/m017-closeout-proof.md`
 - `docs/optimization-audit.md`
 - `docs/project-map.md`
 - `docs/runtime-state-boundary.md`

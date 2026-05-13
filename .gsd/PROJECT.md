@@ -15,9 +15,11 @@ The one thing that must work even if everything else is cut: an analyst can move
 
 ## Current State
 
-The project already has a broad local triage workflow: intake workbench, offline/online extraction, multiple enrichment adapters, provider settings, result cards, expandable details, history reload, diagnostic export surfaces, a managed local dev-server path, and explicit verification lanes. Prior optimization milestones shipped per-provider runtime guardrails, cursor-based/incremental status behavior, persistent HTTP sessions, WAL-backed local stores, shared live/history result application, and frontend handle caching.
+The project has a broad local triage workflow: intake workbench, offline/online extraction, multiple enrichment adapters, provider settings, result cards, expandable details, history reload, diagnostic export surfaces, a managed local dev-server path, and explicit verification lanes. Prior optimization milestones shipped per-provider runtime guardrails, cursor-based/incremental status behavior, persistent HTTP sessions, WAL-backed local stores, shared live/history result application, and frontend handle caching.
 
-M017 reframes optimization around a fresh current-state project map. The project now also has `docs/project-map.md` as a durable guide to what SentinelX is, who it serves, its primary analyst loop, its concrete architecture seams, and its optimization guardrails. Produced by M017/S01, that project map includes a file-path-specific seam inventory and ranked optimization priorities for enrichment fan-out/status cost, browser rendering churn, SQLite cache/history access shape, IOC pipeline duplicate handling, and provider registration/config diagnostics clarity.
+M017 completed the project-clarity and aggressive-optimization pass. `docs/project-map.md` is now the durable current-state guide to what SentinelX is, who it serves, the primary analyst loop, concrete architecture seams, optimization guardrails, and ranked optimization priorities. `.gsd/milestones/M017/M017-AUDIT.md` is the identity-grounded optimization audit for this milestone, and `docs/m017-closeout-proof.md` is the durable closeout proof tying the project map, audit, shipped optimizations, requirements, and verification lanes together.
+
+M017 shipped two focused optimizations without changing SentinelX's product scope: live enrichment status polling uses the tail-only incremental status path for normal cursor polling, and result application gates global dashboard recount/reorder work to severity/order-relevant deltas. Final verification passed the repo-native `make verify-fast` and `make verify-deep` lanes, including browser-heavy mocked-online analyst flow coverage.
 
 ## Architecture / Key Patterns
 
@@ -31,7 +33,7 @@ M017 reframes optimization around a fresh current-state project map. The project
 
 ## Seam Inventory
 
-`docs/project-map.md` is the authoritative seam inventory for M017 optimization work. Its canonical seams include:
+`docs/project-map.md` is the authoritative seam inventory for current optimization work. Its canonical seams include:
 
 - **HTTP/page and support surfaces:** `app/routes/analysis.py`, `app/routes/api.py`, `app/routes/enrichment.py`, plus history/detail/settings/diagnostics routes under `app/routes/`.
 - **IOC extraction pipeline:** `app/pipeline/extractor.py`, `app/pipeline/normalizer.py`, `app/pipeline/classifier.py`.
@@ -50,4 +52,4 @@ See `.gsd/REQUIREMENTS.md` for the explicit capability contract, requirement sta
 - [x] M014: Local workflow hardening and recovery loop — Hardened repo-local runtime workflow and recovery behavior.
 - [x] M015: Intake Workbench — Refined the home/intake experience while preserving extraction flow.
 - [x] M016: Email Reputation Depth — Added key-gated EmailRep enrichment for email IOCs with deterministic proof.
-- [ ] M017: Project Clarity & Aggressive Optimization — In progress; M017/S01 has produced `docs/project-map.md` with concrete seams and ranked optimization priorities before shipping the best project-grounded optimization with full proof.
+- [x] M017: Project Clarity & Aggressive Optimization — Completed durable project mapping, an identity-grounded optimization audit, tail-only enrichment status polling, result-application severity-gate optimization, and full fast/deep verification proof.

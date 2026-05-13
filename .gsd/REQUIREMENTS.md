@@ -4,28 +4,6 @@ This file is the explicit capability and coverage contract for the project.
 
 ## Active
 
-### R088 — Aggressive optimization preserves analyst-facing IOC intake, enrichment, results, history/detail, diagnostics, and security behavior.
-- Class: continuity
-- Status: active
-- Description: Aggressive optimization preserves analyst-facing IOC intake, enrichment, results, history/detail, diagnostics, and security behavior.
-- Why it matters: The strongest optimization is only useful if the analyst workflow and safety posture remain intact.
-- Source: inferred
-- Primary owning slice: M017/S03
-- Supporting slices: M017/S04, M017/S05
-- Validation: mapped
-- Notes: Continuity includes existing verified browser paths, route/status semantics, local persistence, and no secret leakage.
-
-### R089 — M017 closeout proves the optimized project through the full verification lane, including make verify-fast and make verify-deep.
-- Class: operability
-- Status: active
-- Description: M017 closeout proves the optimized project through the full verification lane, including make verify-fast and make verify-deep.
-- Why it matters: The final state must be runnable and trustworthy, not just locally plausible from partial tests.
-- Source: user
-- Primary owning slice: M017/S05
-- Supporting slices: none
-- Validation: mapped
-- Notes: Full lane is required because aggressive optimization may touch browser/results/enrichment behavior.
-
 ## Validated
 
 ### R001 — IOC results render in a single-column, full-width layout replacing the current 2-column card grid. Each IOC gets the full page width for data presentation.
@@ -855,6 +833,28 @@ This file is the explicit capability and coverage contract for the project.
 - Validation: S03 closeout verification passed with explicit code-path proof and regression evidence: tests cover tail-only deltas, cursor compatibility, terminal/unknown/evicted behavior, cached marker alignment, and no full status snapshot call on normal polling; the regenerated M017 audit records the shipped proof.
 - Notes: Validated for the shipped S03 optimization; future optimizations should preserve this evidence standard.
 
+### R088 — Aggressive optimization preserves analyst-facing IOC intake, enrichment, results, history/detail, diagnostics, and security behavior.
+- Class: continuity
+- Status: validated
+- Description: Aggressive optimization preserves analyst-facing IOC intake, enrichment, results, history/detail, diagnostics, and security behavior.
+- Why it matters: The strongest optimization is only useful if the analyst workflow and safety posture remain intact.
+- Source: inferred
+- Primary owning slice: M017/S03
+- Supporting slices: M017/S04, M017/S05
+- Validation: S03 closeout verification passed: focused enrichment status tests, route/orchestrator/audit tests, make verify-fast, make verify-deep with 126 e2e tests, and regenerated M017 audit all passed, preserving analyst IOC intake, enrichment polling, results/history continuity, diagnostics, cache markers, retry/backoff, and redaction/security behavior.
+- Notes: Validated by M017/S03 integrated regression proof.
+
+### R089 — M017 closeout proves the optimized project through the full verification lane, including make verify-fast and make verify-deep.
+- Class: operability
+- Status: validated
+- Description: M017 closeout proves the optimized project through the full verification lane, including make verify-fast and make verify-deep.
+- Why it matters: The final state must be runnable and trustworthy, not just locally plausible from partial tests.
+- Source: user
+- Primary owning slice: M017/S05
+- Supporting slices: none
+- Validation: S05 closeout verification passed: docs/m017-closeout-proof.md maps R084/R087/R088/R089 to project/audit/evidence artifacts, npm test -- --run passed, focused pytest passed for tests/test_optimization_audit.py tests/e2e/test_results_page.py tests/e2e/test_emailrep_online.py, make verify-fast passed, and make verify-deep passed with 126 e2e tests.
+- Notes: Validated during M017/S05 final integrated proof and durable handoff.
+
 ## Deferred
 
 ### R066 — Automatic self-healing of transient runtime state at session start is deferred.
@@ -1089,8 +1089,8 @@ This file is the explicit capability and coverage contract for the project.
 | R085 | quality-attribute | validated | M017/S02 | M017/S03, M017/S04 | S02 closeout verification passed: the M017 optimization audit runner regenerates .gsd/milestones/M017/M017-AUDIT.md from the identity-grounded contract, references docs/project-map.md, includes ranked do now/do next/later/leave alone buckets, names S03, includes concrete app/enrichment, app/routes, and app/pipeline seam markers, and contains no TBD/TODO placeholders. Focused pytest coverage passed with 9 tests. |
 | R086 | core-capability | validated | M017/S03 | M017/S04 | S03 closeout verification passed: the M017 do-now optimization for enrichment status polling is shipped through the tail-only EnrichmentOrchestrator.get_incremental_status() route path, with focused route/orchestrator tests proving live polling does not call the full get_status() snapshot and integrated make verify-fast/make verify-deep proof passing. |
 | R087 | quality-attribute | validated | M017/S02 | M017/S03, M017/S04, M017/S05 | S03 closeout verification passed with explicit code-path proof and regression evidence: tests cover tail-only deltas, cursor compatibility, terminal/unknown/evicted behavior, cached marker alignment, and no full status snapshot call on normal polling; the regenerated M017 audit records the shipped proof. |
-| R088 | continuity | active | M017/S03 | M017/S04, M017/S05 | mapped |
-| R089 | operability | active | M017/S05 | none | mapped |
+| R088 | continuity | validated | M017/S03 | M017/S04, M017/S05 | S03 closeout verification passed: focused enrichment status tests, route/orchestrator/audit tests, make verify-fast, make verify-deep with 126 e2e tests, and regenerated M017 audit all passed, preserving analyst IOC intake, enrichment polling, results/history continuity, diagnostics, cache markers, retry/backoff, and redaction/security behavior. |
+| R089 | operability | validated | M017/S05 | none | S05 closeout verification passed: docs/m017-closeout-proof.md maps R084/R087/R088/R089 to project/audit/evidence artifacts, npm test -- --run passed, focused pytest passed for tests/test_optimization_audit.py tests/e2e/test_results_page.py tests/e2e/test_emailrep_online.py, make verify-fast passed, and make verify-deep passed with 126 e2e tests. |
 | R090 | constraint | deferred | none | none | unmapped |
 | R091 | constraint | deferred | none | none | unmapped |
 | R092 | anti-feature | out-of-scope | none | none | n/a |
@@ -1098,7 +1098,7 @@ This file is the explicit capability and coverage contract for the project.
 
 ## Coverage Summary
 
-- Active requirements: 2
-- Mapped to slices: 2
-- Validated: 77 (R001, R002, R003, R004, R005, R006, R007, R008, R009, R010, R011, R012, R013, R014, R015, R016, R017, R018, R019, R020, R021, R022, R023, R024, R025, R026, R027, R028, R029, R030, R031, R032, R033, R035, R036, R037, R038, R039, R040, R041, R042, R043, R044, R045, R046, R047, R048, R049, R050, R051, R052, R053, R054, R055, R056, R057, R058, R059, R060, R061, R062, R063, R064, R065, R069, R070, R071, R072, R073, R074, R075, R076, R083, R084, R085, R086, R087)
+- Active requirements: 0
+- Mapped to slices: 0
+- Validated: 79 (R001, R002, R003, R004, R005, R006, R007, R008, R009, R010, R011, R012, R013, R014, R015, R016, R017, R018, R019, R020, R021, R022, R023, R024, R025, R026, R027, R028, R029, R030, R031, R032, R033, R035, R036, R037, R038, R039, R040, R041, R042, R043, R044, R045, R046, R047, R048, R049, R050, R051, R052, R053, R054, R055, R056, R057, R058, R059, R060, R061, R062, R063, R064, R065, R069, R070, R071, R072, R073, R074, R075, R076, R083, R084, R085, R086, R087, R088, R089)
 - Unmapped active requirements: 0

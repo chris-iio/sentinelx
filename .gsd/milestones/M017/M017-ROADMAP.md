@@ -21,10 +21,10 @@
 - [x] **S03: S03** `risk:high` `depends:[]`
   > After this: The highest-value optimization from the M017 audit is shipped with measurement or code-path proof and behavior-preserving tests.
 
-- [ ] **S04: S04** `risk:medium` `depends:[]`
+- [x] **S04: S04** `risk:medium` `depends:[]`
   > After this: Any remaining high-confidence optimization tied to intake/results/history/diagnostics is shipped or explicitly rejected, with browser-visible analyst flow proof if touched.
 
-- [ ] **S05: Final Integrated Proof + Durable Handoff** `risk:medium` `depends:[S04]`
+- [x] **S05: S05** `risk:medium` `depends:[]`
   > After this: The project map, audit artifact, requirements coverage, and full verification evidence show SentinelX is clearer and measurably/defensibly optimized.
 
 ## Boundary Map
