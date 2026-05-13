@@ -66,6 +66,17 @@ S05 final closeout requires fresh command evidence. These fields are intentional
 | Fast verification | `make verify-fast` | Proves repo-native fast checks for backend/frontend logic, audit generator behavior, and non-browser-heavy regressions. | Pending | S05/T02 |
 | Deep verification | `make verify-deep` | Proves browser-heavy mocked-online analyst flows, enrichment/status/result DOM behavior, history/detail continuity, diagnostics, and security/redaction coverage. | Pending | S05/T03 |
 
+## Focused Closeout Regression Evidence — S05/T02
+
+These focused lanes were run fresh for S05/T02 to protect the shipped M017 optimization claims before the broader repo-native verification lanes are filled by S05/T03.
+
+| Command | Result | Summary |
+| --- | --- | --- |
+| `npm test -- --run` | Passed, exit 0 | Vitest reported 7 test files passed and 97 tests passed. |
+| `python3 -m pytest -q tests/test_optimization_audit.py tests/e2e/test_results_page.py tests/e2e/test_emailrep_online.py` | Passed, exit 0 | Pytest reported 41 passed in 15.88s across the audit generator, results page, and mocked-online EmailRep analyst-flow suites. |
+
+This focused evidence keeps R087 tied to the shipped S03 incremental polling/status and S04 result-application severity-gate optimization themes, and reconfirms the R088 analyst-flow coverage lane without requiring external provider credentials.
+
 ## Guardrails for Remaining S05 Work
 
 - Do not change product code in S05 just to create a stronger-looking closeout. If final verification fails, debug the failing behavior and replan only if the slice contract is invalid.
