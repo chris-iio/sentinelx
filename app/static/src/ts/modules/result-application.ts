@@ -238,18 +238,6 @@ export function createResultApplicationCoordinator(): ResultApplicationCoordinat
     updatePendingIndicator(handles, receivedCount);
   }
 
-  function flush(): void {
-    if (dirtyIocs.size === 0) return;
-
-    for (const iocValue of dirtyIocs) {
-      flushIoc(iocValue);
-    }
-    dirtyIocs.clear();
-
-    updateDashboardCounts();
-    sortCardsBySeverity();
-  }
-
   function finalize(): void {
     flush();
 
