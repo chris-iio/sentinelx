@@ -339,6 +339,30 @@ def test_analyze_deduplicates(client):
     assert count < 20  # Sanity: not repeated many times as separate rows (richer M002/M003 template produces ~12 occurrences)
 
 
+def test_analyze_public_template_preserves_grouped_ioc_cards(client, monkeypatch):
+    """Rendered analysis results should expose grouped IOC cards without leaking raw HTML."""
+    from app.pipeline.models import IOC
+    from app.routes import analysis as analysis_routes
+
+    iocs = [
+        IOC(type=IOCType.IPV4, value="8.8.8.8", raw_match="8[.]8[.]8[.]8"),
+        IOC(type=IOCType.DOMAIN, value="evil.example", raw_match="<script>alert(1)</script>"),
+        IOC(type=IOCType.IPV4, value="1.1.1.1", raw_match="1[.]1[.]1[.]1"),
+    ]
+    monkeypatch.setattr(analysis_routes, "run_pipeline", lambda _text: iocs)
+
+    response = client.post("/analyze", data={"text": "synthetic grouped indicators", "mode": "offline"})
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "Found 3 unique IOCs" in html
+    assert "8.8.8.8" in html
+    assert "1.1.1.1" in html
+    assert "evil.example" in html
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
+    assert "<script>alert(1)</script>" not in html
+
+
 # ---------------------------------------------------------------------------
 # Online mode tests
 # ---------------------------------------------------------------------------

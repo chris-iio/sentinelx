@@ -376,6 +376,34 @@ class TestHistoryDetailRoute:
         assert response.status_code == 200
         assert b"2 unique IOCs" in response.data
 
+    def test_history_replay_preserves_grouping_empty_payload_and_escaped_rows(self, client, history_store):
+        """History replay should render grouped cards and an empty replay JSON payload safely."""
+        iocs = [
+            {"type": "ipv4", "value": "10.0.0.1", "raw_match": "10[.]0[.]0[.]1"},
+            {"type": "domain", "value": "evil.example", "raw_match": "<script>alert(1)</script>"},
+            {"type": "ipv4", "value": "10.0.0.2", "raw_match": "10[.]0[.]0[.]2"},
+        ]
+        analysis_id = history_store.save_analysis(
+            input_text="persisted grouped indicators",
+            mode="online",
+            iocs=iocs,
+            results=[],
+            analysis_id="grouped-history-safe",
+        )
+        client.application.history_store = history_store
+
+        response = client.get(f"/history/{analysis_id}")
+        html = response.get_data(as_text=True)
+
+        assert response.status_code == 200
+        assert "Found 3 unique IOCs" in html
+        assert "10.0.0.1" in html
+        assert "10.0.0.2" in html
+        assert "evil.example" in html
+        assert "data-history-results='[]'" in html
+        assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
+        assert "<script>alert(1)</script>" not in html
+
     def test_history_groups_iocs_while_rebuilding_models(self, client, seeded_store, monkeypatch):
         """History reload should not rescan rebuilt IOC objects just to group them."""
         import app.routes.history as history_module

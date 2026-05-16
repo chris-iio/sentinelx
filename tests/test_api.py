@@ -539,6 +539,34 @@ class TestApiAnalyzeOffline:
             assert "value" in ioc
             assert "raw_match" in ioc
 
+    def test_serialized_response_public_shape_preserves_duplicates_by_type_order(self, client, monkeypatch):
+        """API responses should keep flat rows and grouped rows in the same route-visible shape."""
+        from app.pipeline.models import IOC
+        from app.routes import api as api_routes
+
+        iocs = [
+            IOC(type=IOCType.IPV4, value="8.8.8.8", raw_match="8[.]8[.]8[.]8"),
+            IOC(type=IOCType.DOMAIN, value="evil.example", raw_match="evil[.]example"),
+            IOC(type=IOCType.IPV4, value="1.1.1.1", raw_match="1[.]1[.]1[.]1"),
+        ]
+        monkeypatch.setattr(api_routes, "run_pipeline", lambda _text: iocs)
+
+        resp = client.post("/api/analyze", json={"text": "synthetic grouped indicators"})
+        data = resp.get_json()
+
+        assert resp.status_code == 200
+        assert data["mode"] == "offline"
+        assert data["total_count"] == 3
+        assert data["iocs"] == [
+            {"type": "ipv4", "value": "8.8.8.8", "raw_match": "8[.]8[.]8[.]8"},
+            {"type": "domain", "value": "evil.example", "raw_match": "evil[.]example"},
+            {"type": "ipv4", "value": "1.1.1.1", "raw_match": "1[.]1[.]1[.]1"},
+        ]
+        assert data["grouped"] == {
+            "ipv4": [data["iocs"][0], data["iocs"][2]],
+            "domain": [data["iocs"][1]],
+        }
+
 
 # ---------- POST /api/analyze — online mode ----------
 
