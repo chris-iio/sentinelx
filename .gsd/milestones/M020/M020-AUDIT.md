@@ -1,7 +1,7 @@
 # M020 Optimization Audit — SentinelX
 
 - Mode: `baseline`
-- Generated at: `2026-05-16 08:56:36 UTC`
+- Generated at: `2026-05-16 08:58:44 UTC`
 - Repo root: `/home/chris/projects/sentinelx`
 - Output path: `.gsd/milestones/M020/M020-AUDIT.md`
 
@@ -58,12 +58,12 @@
 
 | Capture | Command | Exit | Duration (ms) | Summary |
 | --- | --- | ---: | ---: | --- |
-| runtime-provider-diagnostics | `internal benchmark: EnrichmentOrchestrator synthetic runtime/provider diagnostics` | 0 | 5 | provider mix CacheAlpha:2d/0e, RateLimitBeta:2d/1e; dispatch=4; attempts=5; cache-hit ratio 1/5 (20%); retries=1 (429=1); errors=1; latency total=2.25s max=1.00s. |
-| status-snapshot-scaling | `internal benchmark: EnrichmentOrchestrator.get_status() snapshot scaling` | 0 | 34 | 400 polls at 5000 retained results: `get_status()` 30.97ms vs `get_incremental_status(since=4990)` 3.20ms (9.7x faster) while returning 10 tail rows with next_since=5000. |
-| cache-store-tempdb | `internal benchmark: CacheStore temp WAL put/get loop` | 0 | 30 | Temp WAL cache DB: 250 puts in 6.75ms, 250 TTL reads in 1.28ms, 250 hits, 250 retained rows. |
-| cache-stats-query-count | `internal benchmark: CacheStore.stats aggregate query count` | 0 | 15 | CacheStore.stats() executed 1 SELECT for total_entries=1 and oldest_present=True: SELECT COUNT(*), MIN(cached_at) FROM enrichment_cache. |
-| history-store-tempdb | `internal benchmark: HistoryStore temp WAL save/list/load loop` | 0 | 24 | Temp WAL history DB: 180 saves in 3.37ms, list_recent(20) in 0.06ms, single load in 0.03ms, latest total_count=1, recent rows=20. |
-| pipeline-duplicate-candidates | `internal benchmark: run_pipeline normalized duplicate candidate gate` | 0 | 79 | 7 raw URL variants normalize to 1 IOC value(s); classify calls=1; output values=http://evil.com. |
+| runtime-provider-diagnostics | `internal benchmark: EnrichmentOrchestrator synthetic runtime/provider diagnostics` | 0 | 4 | provider mix CacheAlpha:2d/0e, RateLimitBeta:2d/1e; dispatch=4; attempts=5; cache-hit ratio 1/5 (20%); retries=1 (429=1); errors=1; latency total=2.25s max=1.00s. |
+| status-snapshot-scaling | `internal benchmark: EnrichmentOrchestrator.get_status() snapshot scaling` | 0 | 35 | 400 polls at 5000 retained results: `get_status()` 32.66ms vs `get_incremental_status(since=4990)` 2.75ms (11.9x faster) while returning 10 tail rows with next_since=5000. |
+| cache-store-tempdb | `internal benchmark: CacheStore temp WAL put/get loop` | 0 | 19 | Temp WAL cache DB: 250 puts in 3.97ms, 250 TTL reads in 1.20ms, 250 hits, 250 retained rows. |
+| cache-stats-query-count | `internal benchmark: CacheStore.stats aggregate query count` | 0 | 13 | CacheStore.stats() executed 1 SELECT for total_entries=1 and oldest_present=True: SELECT COUNT(*), MIN(cached_at) FROM enrichment_cache. |
+| history-store-tempdb | `internal benchmark: HistoryStore temp WAL save/list/load loop` | 0 | 17 | Temp WAL history DB: 180 saves in 4.22ms, list_recent(20) in 0.11ms, single load in 0.06ms, latest total_count=1, recent rows=20. |
+| pipeline-duplicate-candidates | `internal benchmark: run_pipeline normalized duplicate candidate gate` | 0 | 74 | 7 raw URL variants normalize to 1 IOC value(s); classify calls=1; output values=http://evil.com. |
 
 ## Seam checklist
 
