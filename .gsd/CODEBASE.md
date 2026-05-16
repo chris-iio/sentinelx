@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-05-16T08:30:45Z | Files: 202 | Described: 0/202
-<!-- gsd:codebase-meta {"generatedAt":"2026-05-16T08:30:45Z","fingerprint":"28dbe67d59e0df007c1d24268967b167eda5e545","fileCount":202,"truncated":false} -->
+Generated: 2026-05-16T09:20:19Z | Files: 221 | Described: 0/221
+<!-- gsd:codebase-meta {"generatedAt":"2026-05-16T09:20:19Z","fingerprint":"0b426398c715bacae2f30d33da095f708369dd03","fileCount":221,"truncated":false} -->
 
 ### (root)/
 - `.codex`
@@ -29,6 +29,10 @@ Generated: 2026-05-16T08:30:45Z | Files: 202 | Described: 0/202
 - `app/__init__.py`
 - `app/config.py`
 - `app/health_contract.py`
+- `app/json_utils.py`
+- `app/sqlite.py`
+- `app/text_utils.py`
+- `app/time_utils.py`
 
 ### app/cache/
 - `app/cache/__init__.py`
@@ -38,6 +42,7 @@ Generated: 2026-05-16T08:30:45Z | Files: 202 | Described: 0/202
 - `app/diagnostics/__init__.py`
 - `app/diagnostics/assembler.py`
 - `app/diagnostics/contract.py`
+- `app/diagnostics/policy.py`
 - `app/diagnostics/redaction.py`
 - `app/diagnostics/sources.py`
 
@@ -102,13 +107,15 @@ Generated: 2026-05-16T08:30:45Z | Files: 202 | Described: 0/202
 - `app/static/src/ts/main.ts`
 
 ### app/static/src/ts/modules/
-- *(21 files: 21 .ts)*
+- *(29 files: 29 .ts)*
 
 ### app/static/src/ts/types/
 - `app/static/src/ts/types/api.ts`
+- `app/static/src/ts/types/ioc.test.ts`
 - `app/static/src/ts/types/ioc.ts`
 
 ### app/static/src/ts/utils/
+- `app/static/src/ts/utils/dom.test.ts`
 - `app/static/src/ts/utils/dom.ts`
 
 ### app/templates/
@@ -145,7 +152,7 @@ Generated: 2026-05-16T08:30:45Z | Files: 202 | Described: 0/202
 - `docs/plans/2026-03-04-settings-page-redesign.md`
 
 ### tests/
-- *(63 files: 63 .py)*
+- *(67 files: 67 .py)*
 
 ### tests/e2e/
 - `tests/e2e/__init__.py`

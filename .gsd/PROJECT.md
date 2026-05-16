@@ -15,17 +15,19 @@ SentinelX must remain a fast local analyst workbench that turns raw security tex
 
 ## Current State
 
-Prior milestones have delivered the analyst results workflow, enrichment depth, diagnostic export surfaces, project clarity artifacts, and multiple evidence-backed optimization passes. `.gsd/STATE.md` reports all prior milestones complete through M017. `docs/project-map.md` is the current product and seam inventory, and `tools/optimization_audit.py` plus Makefile audit/verification targets form the existing optimization proof loop.
+Milestones are complete through M020. M020 broadened the optimization audit, generated `.gsd/milestones/M020/M020-AUDIT.md` from `tools/optimization_audit.py`, shipped or preserved high-confidence refactor outcomes with strict proof, explicitly deferred risky broad rewrites, and reran final `make verify` successfully. `docs/project-map.md` remains the current product and seam inventory, and `tools/optimization_audit.py` plus Makefile audit/verification targets form the optimization proof loop.
 
 ## Architecture / Key Patterns
 
 - Flask routes own request handling, intake/results/history/detail/settings/diagnostics surfaces, and enrichment status endpoints.
+- `app.routes._helpers` owns shared route IOC grouping/template/API payload helpers while route modules preserve compatibility seams and route-specific response behavior.
 - `app.pipeline` extracts, normalizes, and classifies IOCs.
 - `app.enrichment` owns provider registry, adapter contracts, orchestration, rate limits, retry/backoff, cache hits, and diagnostics.
-- SQLite-backed cache and history stores preserve enrichment responses and prior analyses locally.
-- TypeScript modules own browser-side polling, result application, filtering, sorting, expansion, copy/export, and DOM-safe rendering.
-- Make targets provide supported verification lanes: `make verify-fast`, `make verify-deep`, and `make verify`.
-- Optimization work follows an audit-led proof bar: measurement when practical, explicit code-path reasoning when measurement is awkward, and regression proof before completion claims.
+- SQLite-backed cache and history stores preserve enrichment responses and prior analyses locally; major storage redesign remains deferred until measurements justify it.
+- Diagnostics sanitization caps are centralized in `app/diagnostics/policy.py` and consumed by assembler, source, and redaction modules.
+- TypeScript modules own browser-side polling, result application, filtering, sorting, expansion, copy/export, and DOM-safe rendering; large-result virtualization remains deferred behind measured severity-change-gate proof.
+- Make targets provide supported verification lanes: `make audit-m020`, `make verify-fast`, `make verify-deep`, and `make verify`.
+- Optimization work follows an audit-led proof bar: measurement when practical, explicit code-path reasoning when measurement is awkward, generated audit documentation, and regression proof before completion claims.
 
 ## Capability Contract
 
@@ -34,4 +36,4 @@ See `.gsd/REQUIREMENTS.md` for the explicit capability contract, requirement sta
 ## Milestone Sequence
 
 - [x] M017: Project Clarity & Aggressive Optimization — refreshed project identity, generated audit proof, and shipped focused optimization wins.
-- [ ] M020: Audit-Led Aggressive Refactor and Deep Optimization — broaden the audit, rank rewrite targets, ship or reject the highest-confidence aggressive optimizations with strict proof, and preserve the analyst IOC triage loop.
+- [x] M020: Audit-Led Aggressive Refactor and Deep Optimization — generated the M020 audit, ranked aggressive rewrite candidates, shipped/preserved route and diagnostics centralization outcomes, deferred frontend virtualization and broad scope expansions with evidence, and preserved the analyst IOC triage loop with final `make verify` proof.

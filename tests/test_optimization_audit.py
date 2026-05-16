@@ -930,6 +930,17 @@ def test_m020_baseline_uses_aggressive_rewrite_contract(tmp_path):
     assert "R095" in content
     assert "R099" in content
     assert "R100" in content
+    assert "R101" in content
+    assert "R102" in content
+    assert "R103" in content
+    assert "deferred-scope" in content
+    assert "storage redesign" in content
+    assert "major UI/product redesign" in content
+    assert "external provider integration" in content
+    assert "constraints, not shipped optimizations" in content
+    assert "No new storage redesign" in content
+    assert "No broad UI/product redesign" in content
+    assert "No external provider integration" in content
     assert "S01 produces this generated audit artifact" in content
     assert "S02 consumed the highest-confidence route-helper candidate" in content
     assert "S05 refreshes final shipped/rejected outcomes" in content
@@ -938,6 +949,8 @@ def test_m020_baseline_uses_aggressive_rewrite_contract(tmp_path):
     assert "### later" in content
     assert "### leave alone" in content
     assert "Keep S02's duplicate route IOC grouping rewrite on the shared route helper seam" in content
+    assert "S02 route/API/history contract" in content
+    assert "analyst-visible route/API/history contract" in content
     assert "app/routes/analysis.py" in content
     assert "app/routes/api.py" in content
     assert "app/routes/history.py" in content
@@ -950,6 +963,7 @@ def test_m020_baseline_uses_aggressive_rewrite_contract(tmp_path):
     assert "capture-command failure visibility" in content
     assert "secret redaction" in content
     assert "Keep S03's diagnostics sanitization caps behind the shared immutable policy object" in content
+    assert "S03 diagnostics/redaction contract" in content
     assert "diagnostic export/sanitization" in content
     assert "app/diagnostics/policy.py" in content
     assert "app/diagnostics/assembler.py" in content
@@ -966,6 +980,7 @@ def test_m020_baseline_uses_aggressive_rewrite_contract(tmp_path):
     assert "no raw provider keys, bearer tokens, secrets" in content
     assert "`.gsd`/`.planning`/`.audits`/`.git` contents" in content
     assert "Keep large-result frontend rendering on the severity-change gate and defer virtualization" in content
+    assert "S04 browser-visible deferment" in content
     assert "measures large-result render pressure at the severity-change gate" in content
     assert "240-card results fixture" in content
     assert "zero `.ioc-card` whole-grid scans, zero dashboard recounts, and zero sort calls" in content

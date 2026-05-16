@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T01",
+  "unitId": "M020/S06/T01",
+  "timestamp": 1778923046175,
+  "passed": false,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "python3 -m pytest -q tests/test_optimization_audit.py",
+      "exitCode": 1,
+      "durationMs": 2599,
+      "verdict": "fail"
+    }
+  ],
+  "retryAttempt": 1,
+  "maxRetries": 2
+}

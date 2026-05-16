@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T01",
+  "unitId": "M020/S04/T01",
+  "timestamp": 1778921750951,
+  "passed": true,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "npx vitest run app/static/src/ts/modules/result-application.test.ts",
+      "exitCode": 0,
+      "durationMs": 1469,
+      "verdict": "pass"
+    }
+  ],
+  "postExecutionChecks": [
+    {
+      "category": "pattern",
+      "target": "app/static/src/ts/modules/result-application.test.ts",
+      "passed": true,
+      "message": "File app/static/src/ts/modules/result-application.test.ts mixes async/await with .then() promise chaining — consider using consistent async style",
+      "blocking": false
+    }
+  ]
+}

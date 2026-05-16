@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T03",
+  "unitId": "M020/S04/T03",
+  "timestamp": 1778922095183,
+  "passed": true,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "make verify-deep",
+      "exitCode": 0,
+      "durationMs": 47316,
+      "verdict": "pass"
+    }
+  ],
+  "postExecutionChecks": [
+    {
+      "category": "pattern",
+      "target": "app/static/src/ts/modules/result-application.test.ts",
+      "passed": true,
+      "message": "File app/static/src/ts/modules/result-application.test.ts mixes async/await with .then() promise chaining — consider using consistent async style",
+      "blocking": false
+    }
+  ]
+}

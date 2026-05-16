@@ -12,20 +12,23 @@
 
 ## Slices
 
-- [ ] **S01: S01** `risk:high` `depends:[]`
+- [x] **S01: S01** `risk:high` `depends:[]`
   > After this: A generated M020 audit artifact exists, ranks aggressive rewrite candidates across SentinelX seams, and distinguishes do-now, do-next, later, and leave-alone outcomes with proof requirements.
 
-- [ ] **S02: Highest-Risk Rewrite Target** `risk:high` `depends:[S01]`
+- [x] **S02: S02** `risk:high` `depends:[]`
   > After this: The top audit-ranked rewrite or optimization is shipped or explicitly rejected with evidence, focused regression tests, and make verify-fast proof.
 
-- [ ] **S03: Cross-Seam Refactor Target** `risk:high` `depends:[S01,S02]`
+- [x] **S03: S03** `risk:high` `depends:[]`
   > After this: A second audit-ranked target that crosses module boundaries is completed or rejected, with the audit updated to record the outcome and behavior-preservation proof.
 
-- [ ] **S04: Analyst-Visible Optimization Target** `risk:medium` `depends:[S01,S02]`
+- [x] **S04: S04** `risk:medium` `depends:[]`
   > After this: A browser-visible or live-enrichment-visible optimization is shipped or rejected with focused tests and make verify-deep proof.
 
-- [ ] **S05: Final Integration and Closeout Proof** `risk:medium` `depends:[S02,S03,S04]`
+- [x] **S05: S05** `risk:medium` `depends:[]`
   > After this: The M020 audit reflects shipped/rejected outcomes, final make verify passes, and closeout proof confirms SentinelX’s analyst loop still works end-to-end.
+
+- [x] **S06: S06** `risk:medium` `depends:[]`
+  > After this: After this: Generated audit and closeout evidence explicitly cover deferred storage redesign R101, major UI/product redesign R102, external provider integration R103, and the S02 to S04 analyst-visible contract handoff, with audit tests and final verification rerun.
 
 ## Boundary Map
 
