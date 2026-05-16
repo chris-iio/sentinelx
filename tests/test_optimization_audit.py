@@ -944,6 +944,11 @@ def test_m020_baseline_uses_aggressive_rewrite_contract(tmp_path):
     assert "_ioc_template_context()" in content
     assert "_history_ioc_template_context()" in content
     assert "_serialized_ioc_response_payload()" in content
+    assert "code-path reasoning + focused regression proof" in content
+    assert "python3 -m pytest -q tests/test_routes.py tests/test_api.py tests/test_history_routes.py" in content
+    assert "Preserve online-admission error visibility" in content
+    assert "capture-command failure visibility" in content
+    assert "secret redaction" in content
     assert "Defer frontend DOM virtualization" in content
     assert "Leave provider concurrency/backoff semantics alone" in content
     assert "make verify-fast" in content

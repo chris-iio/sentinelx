@@ -321,7 +321,7 @@ M020_FINDINGS: tuple[BaselineFinding, ...] = (
         continuity_guardrails="R008, R009, R010, R040, R094, R095, R096, R097, R098, R099",
         rerun_lanes="`python3 -m pytest -q tests/test_routes.py tests/test_api.py tests/test_history_routes.py`; `make verify-fast`",
         continuity_notes=(
-            "Preserve online admission, missing-provider redirects, grouped template IOC data, JSON API shape, empty history replay, diagnostics, CSRF/DOM safety, and secret redaction while keeping duplicate route-owned IOC grouping and serialization code behind the shared helper seam."
+            "Preserve online-admission error visibility, missing-provider redirects, grouped template IOC data, JSON API shape, empty history replay states, diagnostics proof language, CSRF/DOM safety, capture-command failure visibility, and secret redaction while keeping duplicate route-owned IOC grouping and serialization code behind the shared helper seam."
         ),
     ),
     BaselineFinding(
