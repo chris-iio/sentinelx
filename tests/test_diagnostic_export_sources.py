@@ -403,3 +403,58 @@ def test_recent_history_payload_accumulates_without_list_comprehension_frame():
         if hasattr(const, "co_name")
     }
     assert "<listcomp>" not in nested_code_names
+
+
+def test_runtime_source_descriptors_use_shared_cap_for_truncation_boundary():
+    policy = DIAGNOSTIC_SANITIZATION_POLICY
+
+    sources = build_default_diagnostic_sources(
+        job_id="job-large",
+        job_diagnostics_accessor=lambda _job_id: {"blob": "x"},
+        generated_at=GENERATED_AT,
+    )
+
+    orchestration = next(
+        source for source in sources if source.source_id == "orchestration-diagnostics"
+    )
+    assert orchestration.max_bytes == policy.runtime_source_max_bytes
+
+    bundle = assemble_diagnostic_bundle(
+        [
+            sources_module.DiagnosticSource(
+                source_id="runtime.large",
+                name="Large runtime payload",
+                category="runtime",
+                payload="x" * (policy.runtime_source_max_bytes + 1),
+                relative_path="runtime/large.txt",
+                max_bytes=orchestration.max_bytes,
+            )
+        ],
+        generated_at=GENERATED_AT,
+    )
+
+    record = bundle.manifest.sources[0]
+    assert record.status == "truncated"
+    assert record.max_bytes == policy.runtime_source_max_bytes
+    assert record.included_bytes == policy.runtime_source_max_bytes
+
+
+def test_nested_runtime_payloads_stop_at_shared_depth_cap():
+    policy = DIAGNOSTIC_SANITIZATION_POLICY
+    payload = {"level": "root"}
+    cursor = payload
+    for index in range(policy.max_jsonish_depth + 3):
+        child = {"level": index}
+        cursor["child"] = child
+        cursor = child
+
+    safe = sources_module._safe_jsonish(payload)
+    cursor = safe
+    for _index in range(policy.max_jsonish_depth):
+        if not isinstance(cursor, dict) or cursor.get("child") == "<max-depth>":
+            break
+        cursor = cursor["child"]
+
+    dumped = json.dumps(safe)
+    assert "<max-depth>" in dumped
+    assert f'"level": {policy.max_jsonish_depth + 2}' not in dumped

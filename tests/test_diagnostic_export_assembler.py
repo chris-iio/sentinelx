@@ -627,5 +627,48 @@ def test_json_safe_skips_iteration_for_exact_empty_single_or_pair_containers() -
     assert _json_safe_sequence(NoIterList([])) == []
     assert _json_safe_sequence(NoIterList(["value"])) == ["value"]
     assert _json_safe_sequence(NoIterList(["first", "second"])) == ["first", "second"]
+
+
+def test_source_default_max_bytes_tracks_shared_policy_default_cap() -> None:
+    policy = DIAGNOSTIC_SANITIZATION_POLICY
+    source = DiagnosticSource(
+        source_id="runtime.default-cap",
+        name="Runtime default cap",
+        category="runtime",
+        payload="x" * (policy.default_source_max_bytes + 1),
+        relative_path="sources/default-cap.txt",
+    )
+
+    bundle = assemble_diagnostic_bundle(
+        [source],
+        generated_at="2026-01-02T03:04:05Z",
+    )
+
+    record = bundle.manifest.sources[0]
+    assert source.max_bytes == policy.default_source_max_bytes
+    assert record.status == "truncated"
+    assert record.max_bytes == policy.default_source_max_bytes
+    assert record.included_bytes == policy.default_source_max_bytes
+
+
+def test_generated_archive_filename_bound_comes_from_shared_policy() -> None:
+    policy = DIAGNOSTIC_SANITIZATION_POLICY
+    source_id = "runtime." + ("segment-" * 40)
+
+    bundle = assemble_diagnostic_bundle(
+        [
+            DiagnosticSource(
+                source_id=source_id,
+                name="Generated filename bound",
+                category="runtime",
+                payload={"ok": True},
+            )
+        ],
+        generated_at="2026-01-02T03:04:05Z",
+    )
+
+    generated_name = bundle.archive_paths[1].removeprefix("sources/").removesuffix(".json")
+    assert len(generated_name) == policy.max_generated_filename_chars
+    assert bundle.archive_paths[1] == f"sources/{_safe_source_filename(source_id)}.json"
     assert "len" in _json_safe.__code__.co_names
     assert "len" in _json_safe_sequence.__code__.co_names

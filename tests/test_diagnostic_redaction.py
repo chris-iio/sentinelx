@@ -658,3 +658,26 @@ def test_payload_field_redaction_trims_keys_and_scalars_without_strip() -> None:
     }
     assert "pattern:field:api_key" in metadata.redaction_labels
     assert "pattern:authorization_bearer" in metadata.redaction_labels
+
+
+def test_config_read_error_metadata_is_secret_free_and_label_bounded() -> None:
+    class FailingStore:
+        def get_vt_api_key(self) -> str | None:
+            raise RuntimeError("failed reading vt-secret-value-should-not-leak")
+
+        def all_provider_keys(self) -> dict[str, str]:
+            raise AssertionError("should not read provider keys after VT failure")
+
+    redacted, metadata = redact_diagnostic_text(
+        "authorization: Bearer runtime-token-value",
+        config_store=FailingStore(),
+    )
+
+    assert "runtime-token-value" not in redacted
+    assert "vt-secret-value-should-not-leak" not in json.dumps(metadata.__dict__ if hasattr(metadata, "__dict__") else repr(metadata))
+    assert metadata.config_error == "config_read_failed"
+    assert "config:read_failed" in metadata.redaction_labels
+    assert all(
+        len(label) <= DIAGNOSTIC_SANITIZATION_POLICY.max_redaction_label_chars
+        for label in metadata.redaction_labels
+    )
