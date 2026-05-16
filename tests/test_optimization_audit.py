@@ -976,9 +976,24 @@ def test_m020_baseline_uses_aggressive_rewrite_contract(tmp_path):
     assert "failure visibility through DOM state, mocked-online browser failures" in content
     assert "without logging secrets or provider payloads" in content
     assert "Defer frontend DOM virtualization" in content
+    assert "virtualization remains deferred until measured browser-visible pressure justifies it" in content
+    assert "virtualization shipped" not in content.lower()
+    assert "virtualization is shipped" not in content.lower()
     assert "Leave provider concurrency/backoff semantics alone" in content
+    assert "Refresh S05's final closeout audit after every shipped, rejected, or deferred rewrite" in content
+    assert "Final `make verify` remains the S05 closeout proof lane" in content
+    assert "full app verification lane passes" in content
+    assert "failure-visibility and redaction guardrails" in content
+    assert "route/API responses for missing-provider and empty-path behavior" in content
+    assert "diagnostic bundle manifest status/error/omitted/truncated metadata" in content
+    assert "redaction metadata without raw secrets" in content
+    assert "generated audit command-capture rows, including failed-capture visibility" in content
+    assert "S02 shipped route helper centralization" in content
+    assert "S03 shipped diagnostics policy centralization" in content
+    assert "S04 rejected virtualization promotion" in content
     assert "make verify-fast" in content
     assert "make verify-deep" in content
+    assert "make verify` plus refreshed generated M020 audit" in content
     assert "_Fill during the do now pass_" not in content
     assert "_Fill during the do next pass_" not in content
     assert "_Fill during the later pass_" not in content

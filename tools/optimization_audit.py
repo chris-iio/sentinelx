@@ -358,16 +358,20 @@ M020_FINDINGS: tuple[BaselineFinding, ...] = (
     ),
     BaselineFinding(
         bucket="do next",
-        finding="Refresh S05's closeout audit after every shipped or rejected rewrite so downstream proof stays current.",
+        finding="Refresh S05's final closeout audit after every shipped, rejected, or deferred rewrite so downstream proof stays current.",
         seam="audit/proof handoff",
         evidence_kind="code-path reasoning + generated artifact proof",
         evidence_summary=(
-            "S05 depends on the generated M020 audit being the DB-independent handoff for shipped, rejected, deferred, and leave-alone outcomes. The runner already records command-surface rows, measurement captures, rerun lanes, and ranked finding rows, so the next optimization step is to keep refreshing `make audit-m020` after each implementation slice rather than letting S02-S04 proof drift from the final closeout artifact."
+            "S05 depends on the generated M020 audit being the DB-independent handoff for shipped, rejected, deferred, and leave-alone outcomes. "
+            "The closeout contract records that S02 shipped route helper centralization, S03 shipped diagnostics policy centralization, and S04 rejected virtualization promotion by keeping the severity-change gate while virtualization remains deferred until measured browser-visible pressure justifies it. "
+            "Final `make verify` remains the S05 closeout proof lane, paired with a refreshed generated audit, so downstream agents can see both the ranked outcome table and the full app verification lane passes instead of relying on hand-edited `.gsd` prose. "
+            "The runner already records command-surface rows, measurement captures, rerun lanes, and ranked finding rows, so the next optimization step is to keep refreshing `make audit-m020` after each implementation slice rather than letting S02-S04 proof drift from the final closeout artifact."
         ),
         continuity_guardrails="R040, R094, R095, R096, R097, R098, R099, R100",
-        rerun_lanes="`make audit-m020`; `python3 -m pytest -q tests/test_optimization_audit.py`; `make verify-fast`",
+        rerun_lanes="`make audit-m020`; `python3 -m pytest -q tests/test_optimization_audit.py`; `make verify-fast`; final closeout must run `make verify`",
         continuity_notes=(
-            "Preserve the generated artifact as the inspection surface for future agents: every closeout update must keep command-surface rows, failed-capture visibility, proof lanes, and ranked shipped/rejected/deferred/leave-alone outcomes synchronized."
+            "Preserve the generated artifact as the inspection surface for future agents: every closeout update must keep command-surface rows, failed-capture visibility, proof lanes, and ranked shipped/rejected/deferred/leave-alone outcomes synchronized. "
+            "Keep failure-visibility and redaction guardrails explicit: route/API responses for missing-provider and empty-path behavior, diagnostic bundle manifest status/error/omitted/truncated metadata, redaction metadata without raw secrets, and generated audit command-capture rows, including failed-capture visibility, all remain part of the S05 proof surface."
         ),
     ),
     BaselineFinding(
