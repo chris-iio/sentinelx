@@ -965,6 +965,16 @@ def test_m020_baseline_uses_aggressive_rewrite_contract(tmp_path):
     assert "exact-secret longest-first replacement" in content
     assert "no raw provider keys, bearer tokens, secrets" in content
     assert "`.gsd`/`.planning`/`.audits`/`.git` contents" in content
+    assert "Keep large-result frontend rendering on the severity-change gate and defer virtualization" in content
+    assert "measures large-result render pressure at the severity-change gate" in content
+    assert "240-card results fixture" in content
+    assert "zero `.ioc-card` whole-grid scans, zero dashboard recounts, and zero sort calls" in content
+    assert "exactly one document-level card scan" in content
+    assert "Current evidence supports preserving the severity-change gate rather than promoting DOM virtualization" in content
+    assert "`make verify-deep` for browser-visible/live-enrichment-visible proof" in content
+    assert "Preserve filtering, sorting, copy/export, detail links, expansion state, live/history parity" in content
+    assert "failure visibility through DOM state, mocked-online browser failures" in content
+    assert "without logging secrets or provider payloads" in content
     assert "Defer frontend DOM virtualization" in content
     assert "Leave provider concurrency/backoff semantics alone" in content
     assert "make verify-fast" in content

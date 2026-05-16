@@ -351,9 +351,9 @@ M020_FINDINGS: tuple[BaselineFinding, ...] = (
             "After the initial clean verdict, a second provider result with the same severity performs zero `.ioc-card` whole-grid scans, zero dashboard recounts, and zero sort calls. A later malicious severity change performs exactly one document-level card scan for dashboard counts and one grid-level card scan for the debounced sort. Current evidence supports preserving the severity-change gate rather than promoting DOM virtualization."
         ),
         continuity_guardrails="R008, R009, R010, R019, R040, R096, R097, R098",
-        rerun_lanes="`npx vitest run app/static/src/ts/modules/result-application.test.ts`; `make verify-fast`; `make verify-deep` if virtualization is reconsidered",
+        rerun_lanes="`npx vitest run app/static/src/ts/modules/result-application.test.ts`; `make verify-fast`; `make verify-deep` for browser-visible/live-enrichment-visible proof",
         continuity_notes=(
-            "Preserve filtering, sorting, copy/export, detail links, expansion state, textContent-safe rendering, and the severity-change gate. Reconsider virtualization only with evidence beyond this 240-card work-count fixture."
+            "Preserve filtering, sorting, copy/export, detail links, expansion state, live/history parity, textContent-safe rendering, failure visibility through DOM state, mocked-online browser failures, and the severity-change gate without logging secrets or provider payloads. Reconsider virtualization only with evidence beyond this 240-card work-count fixture."
         ),
     ),
     BaselineFinding(
