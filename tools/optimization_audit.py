@@ -327,16 +327,18 @@ M020_FINDINGS: tuple[BaselineFinding, ...] = (
     BaselineFinding(
         bucket="do now",
         finding="Keep S03's diagnostics sanitization caps behind the shared immutable policy object.",
-        seam="request/status",
+        seam="diagnostic export/sanitization",
         evidence_kind="code-path reasoning + focused regression proof",
         evidence_summary=(
             "`app/diagnostics/policy.py` now owns `DiagnosticSanitizationPolicy` and `DIAGNOSTIC_SANITIZATION_POLICY`, an immutable caps object shared by `app/diagnostics/assembler.py`, `app/diagnostics/redaction.py`, and `app/diagnostics/sources.py`. "
-            "Assembler archive-path and generated-filename bounds, runtime source byte/string/list/dict/depth caps, and redaction depth/label caps now derive from that policy while the existing optimized helper names remain stable. Focused proof is `python3 -m pytest -q tests/test_diagnostic_export_assembler.py tests/test_diagnostic_redaction.py tests/test_diagnostic_export_sources.py`."
+            "Assembler archive-path and generated-filename bounds, runtime source byte/string/list/dict/depth caps, and redaction depth/label caps now derive from that policy while the existing optimized helper names remain stable. "
+            "T02 inspected the production modules and left behavior alone because the shared policy extraction was already complete; the S03 outcome is therefore shipped as a centralization keep-decision, not rejected. "
+            "Focused proof is `python3 -m pytest -q tests/test_diagnostic_export_assembler.py tests/test_diagnostic_redaction.py tests/test_diagnostic_export_sources.py`."
         ),
         continuity_guardrails="R009, R040, R096, R097, R098, R099",
         rerun_lanes="`python3 -m pytest -q tests/test_diagnostic_export_assembler.py tests/test_diagnostic_redaction.py tests/test_diagnostic_export_sources.py`; `make verify-fast`",
         continuity_notes=(
-            "Preserve exact-secret longest-first replacement, configured-secret inventory labels, archive path rejection, manifest collision checks, truncation caps, and secret-free diagnostic bundles while keeping diagnostics caps centralized."
+            "Preserve diagnostic source status/error/omitted/truncated manifest states, archive validation errors, config read errors as secret-free metadata, failed audit capture visibility, exact-secret longest-first replacement, configured-secret inventory labels, archive path rejection, manifest collision checks, truncation caps, and secret-free diagnostic bundles with no raw provider keys, bearer tokens, secrets, or `.gsd`/`.planning`/`.audits`/`.git` contents while keeping diagnostics caps centralized."
         ),
     ),
     BaselineFinding(

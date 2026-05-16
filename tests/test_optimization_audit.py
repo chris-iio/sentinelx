@@ -949,6 +949,22 @@ def test_m020_baseline_uses_aggressive_rewrite_contract(tmp_path):
     assert "Preserve online-admission error visibility" in content
     assert "capture-command failure visibility" in content
     assert "secret redaction" in content
+    assert "Keep S03's diagnostics sanitization caps behind the shared immutable policy object" in content
+    assert "diagnostic export/sanitization" in content
+    assert "app/diagnostics/policy.py" in content
+    assert "app/diagnostics/assembler.py" in content
+    assert "app/diagnostics/redaction.py" in content
+    assert "app/diagnostics/sources.py" in content
+    assert "T02 inspected the production modules and left behavior alone" in content
+    assert "shipped as a centralization keep-decision, not rejected" in content
+    assert "python3 -m pytest -q tests/test_diagnostic_export_assembler.py tests/test_diagnostic_redaction.py tests/test_diagnostic_export_sources.py" in content
+    assert "diagnostic source status/error/omitted/truncated manifest states" in content
+    assert "archive validation errors" in content
+    assert "config read errors as secret-free metadata" in content
+    assert "failed audit capture visibility" in content
+    assert "exact-secret longest-first replacement" in content
+    assert "no raw provider keys, bearer tokens, secrets" in content
+    assert "`.gsd`/`.planning`/`.audits`/`.git` contents" in content
     assert "Defer frontend DOM virtualization" in content
     assert "Leave provider concurrency/backoff semantics alone" in content
     assert "make verify-fast" in content
