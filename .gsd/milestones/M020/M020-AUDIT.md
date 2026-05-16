@@ -1,7 +1,7 @@
 # M020 Optimization Audit — SentinelX
 
 - Mode: `baseline`
-- Generated at: `2026-05-16 08:58:44 UTC`
+- Generated at: `2026-05-16 09:06:46 UTC`
 - Repo root: `/home/chris/projects/sentinelx`
 - Output path: `.gsd/milestones/M020/M020-AUDIT.md`
 
@@ -59,11 +59,11 @@
 | Capture | Command | Exit | Duration (ms) | Summary |
 | --- | --- | ---: | ---: | --- |
 | runtime-provider-diagnostics | `internal benchmark: EnrichmentOrchestrator synthetic runtime/provider diagnostics` | 0 | 4 | provider mix CacheAlpha:2d/0e, RateLimitBeta:2d/1e; dispatch=4; attempts=5; cache-hit ratio 1/5 (20%); retries=1 (429=1); errors=1; latency total=2.25s max=1.00s. |
-| status-snapshot-scaling | `internal benchmark: EnrichmentOrchestrator.get_status() snapshot scaling` | 0 | 35 | 400 polls at 5000 retained results: `get_status()` 32.66ms vs `get_incremental_status(since=4990)` 2.75ms (11.9x faster) while returning 10 tail rows with next_since=5000. |
-| cache-store-tempdb | `internal benchmark: CacheStore temp WAL put/get loop` | 0 | 19 | Temp WAL cache DB: 250 puts in 3.97ms, 250 TTL reads in 1.20ms, 250 hits, 250 retained rows. |
+| status-snapshot-scaling | `internal benchmark: EnrichmentOrchestrator.get_status() snapshot scaling` | 0 | 37 | 400 polls at 5000 retained results: `get_status()` 33.64ms vs `get_incremental_status(since=4990)` 3.61ms (9.3x faster) while returning 10 tail rows with next_since=5000. |
+| cache-store-tempdb | `internal benchmark: CacheStore temp WAL put/get loop` | 0 | 21 | Temp WAL cache DB: 250 puts in 7.38ms, 250 TTL reads in 1.29ms, 250 hits, 250 retained rows. |
 | cache-stats-query-count | `internal benchmark: CacheStore.stats aggregate query count` | 0 | 13 | CacheStore.stats() executed 1 SELECT for total_entries=1 and oldest_present=True: SELECT COUNT(*), MIN(cached_at) FROM enrichment_cache. |
-| history-store-tempdb | `internal benchmark: HistoryStore temp WAL save/list/load loop` | 0 | 17 | Temp WAL history DB: 180 saves in 4.22ms, list_recent(20) in 0.11ms, single load in 0.06ms, latest total_count=1, recent rows=20. |
-| pipeline-duplicate-candidates | `internal benchmark: run_pipeline normalized duplicate candidate gate` | 0 | 74 | 7 raw URL variants normalize to 1 IOC value(s); classify calls=1; output values=http://evil.com. |
+| history-store-tempdb | `internal benchmark: HistoryStore temp WAL save/list/load loop` | 0 | 16 | Temp WAL history DB: 180 saves in 3.36ms, list_recent(20) in 0.06ms, single load in 0.04ms, latest total_count=1, recent rows=20. |
+| pipeline-duplicate-candidates | `internal benchmark: run_pipeline normalized duplicate candidate gate` | 0 | 87 | 7 raw URL variants normalize to 1 IOC value(s); classify calls=1; output values=http://evil.com. |
 
 ## Seam checklist
 
@@ -133,7 +133,7 @@ Use the same table shape in every bucket. Required fields per row:
 
 | Finding | Seam | Evidence kind | Evidence summary | Continuity guardrails | Rerun lanes | Continuity notes |
 | --- | --- | --- | --- | --- | --- | --- |
-| Refresh S05's closeout audit after every shipped or rejected rewrite so downstream proof stays current. | audit/proof handoff | code-path reasoning + generated artifact proof | S05 depends on the generated M020 audit being the DB-independent handoff for shipped, rejected, deferred, and leave-alone outcomes. The runner already records command-surface rows, measurement captures, rerun lanes, and ranked finding rows, so the next optimization step is to keep refreshing `make audit-m020` after each implementation slice rather than letting S02-S04 proof drift from the final closeout artifact. | R040, R094, R095, R096, R097, R098, R099, R100 | `make audit-m020`; `python3 -m pytest -q tests/test_optimization_audit.py`; `make verify-fast` | Preserve the generated artifact as the inspection surface for future agents: every closeout update must keep command-surface rows, failed-capture visibility, proof lanes, and ranked shipped/rejected/deferred/leave-alone outcomes synchronized. |
+| Refresh S05's final closeout audit after every shipped, rejected, or deferred rewrite so downstream proof stays current. | audit/proof handoff | code-path reasoning + generated artifact proof | S05 depends on the generated M020 audit being the DB-independent handoff for shipped, rejected, deferred, and leave-alone outcomes. The closeout contract records that S02 shipped route helper centralization, S03 shipped diagnostics policy centralization, and S04 rejected virtualization promotion by keeping the severity-change gate while virtualization remains deferred until measured browser-visible pressure justifies it. Final `make verify` remains the S05 closeout proof lane, paired with a refreshed generated audit, so downstream agents can see both the ranked outcome table and the full app verification lane passes instead of relying on hand-edited `.gsd` prose. The runner already records command-surface rows, measurement captures, rerun lanes, and ranked finding rows, so the next optimization step is to keep refreshing `make audit-m020` after each implementation slice rather than letting S02-S04 proof drift from the final closeout artifact. | R040, R094, R095, R096, R097, R098, R099, R100 | `make audit-m020`; `python3 -m pytest -q tests/test_optimization_audit.py`; `make verify-fast`; final closeout must run `make verify` | Preserve the generated artifact as the inspection surface for future agents: every closeout update must keep command-surface rows, failed-capture visibility, proof lanes, and ranked shipped/rejected/deferred/leave-alone outcomes synchronized. Keep failure-visibility and redaction guardrails explicit: route/API responses for missing-provider and empty-path behavior, diagnostic bundle manifest status/error/omitted/truncated metadata, redaction metadata without raw secrets, and generated audit command-capture rows, including failed-capture visibility, all remain part of the S05 proof surface. |
 
 ### later
 
