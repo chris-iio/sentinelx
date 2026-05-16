@@ -13,7 +13,7 @@ from whois.exceptions import (
     WhoisQuotaExceededError,
 )
 
-from app.enrichment.models import EnrichmentError, EnrichmentResult
+from app.enrichment.models import EnrichmentError, EnrichmentResult, error_result, no_data_result
 from app.pipeline.models import IOC, IOCType
 
 logger = logging.getLogger(__name__)
@@ -33,6 +33,38 @@ def _normalise_datetime(value: datetime | list[datetime] | str | None) -> str | 
     return str(value)
 
 
+def _normalise_name_servers(value: object) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    if isinstance(value, tuple):
+        value_count = len(value)
+        if value_count == 0:
+            return []
+        if value_count == 1:
+            return [value[0]]
+        if value_count == 2:
+            return [value[0], value[1]]
+        if value_count == 3:
+            return [value[0], value[1], value[2]]
+    name_servers: list[str] = []
+    for item in value:
+        name_servers.append(item)
+    return name_servers
+
+
+def _empty_whois_raw_stats(lookup_errors: list[str] | None = None) -> dict:
+    return {
+        "registrar": None,
+        "creation_date": None,
+        "expiration_date": None,
+        "name_servers": [],
+        "org": None,
+        "lookup_errors": [] if lookup_errors is None else lookup_errors,
+    }
+
+
 class WhoisAdapter:
     """WHOIS domain registration data — port 43, not HTTP.
 
@@ -40,7 +72,7 @@ class WhoisAdapter:
     """
 
     name = "WHOIS"
-    supported_types: frozenset[IOCType] = frozenset({IOCType.DOMAIN})
+    supported_types: frozenset[IOCType] = frozenset((IOCType.DOMAIN,))
     requires_api_key = False
 
     def __init__(self, allowed_hosts: list[str]) -> None:
@@ -53,72 +85,34 @@ class WhoisAdapter:
 
     def lookup(self, ioc: IOC) -> EnrichmentResult | EnrichmentError:
         if ioc.type not in self.supported_types:
-            return EnrichmentError(
-                ioc=ioc,
-                provider=self.name,
-                error="Unsupported type",
-            )
+            return error_result(ioc, self.name, "Unsupported type")
 
         try:
             w = whois.whois(ioc.value)
         except WhoisDomainNotFoundError:
             # Domain not found in WHOIS — expected outcome, not an error.
-            return EnrichmentResult(
+            return _whois_result(
                 ioc=ioc,
                 provider=self.name,
-                verdict="no_data",
-                detection_count=0,
-                total_engines=0,
-                scan_date=None,
-                raw_stats={
-                    "registrar": None,
-                    "creation_date": None,
-                    "expiration_date": None,
-                    "name_servers": [],
-                    "org": None,
-                    "lookup_errors": [],
-                },
+                raw_stats=_empty_whois_raw_stats(),
             )
         except (FailedParsingWhoisOutputError, UnknownTldError) as exc:
             # Parse/TLD issues — return result with error noted, not a hard failure.
-            return EnrichmentResult(
+            return _whois_result(
                 ioc=ioc,
                 provider=self.name,
-                verdict="no_data",
-                detection_count=0,
-                total_engines=0,
-                scan_date=None,
-                raw_stats={
-                    "registrar": None,
-                    "creation_date": None,
-                    "expiration_date": None,
-                    "name_servers": [],
-                    "org": None,
-                    "lookup_errors": [str(exc)],
-                },
+                raw_stats=_empty_whois_raw_stats([str(exc)]),
             )
         except WhoisQuotaExceededError:
-            return EnrichmentError(
-                ioc=ioc,
-                provider=self.name,
-                error="WHOIS quota exceeded",
-            )
+            return error_result(ioc, self.name, "WHOIS quota exceeded")
         except WhoisCommandFailedError:
-            return EnrichmentError(
-                ioc=ioc,
-                provider=self.name,
-                error="WHOIS command failed",
-            )
+            return error_result(ioc, self.name, "WHOIS command failed")
         except Exception:
             logger.exception(
                 "Unexpected error during WHOIS lookup for %s",
                 ioc.value,
             )
-            return EnrichmentError(
-                ioc=ioc,
-                provider=self.name,
-                error="Unexpected WHOIS lookup error",
-            )
+            return error_result(ioc, self.name, "Unexpected WHOIS lookup error")
 
         lookup_errors: list[str] = []
 
@@ -143,7 +137,7 @@ class WhoisAdapter:
 
         try:
             raw_ns = w.name_servers
-            name_servers = list(raw_ns) if raw_ns is not None else []
+            name_servers = _normalise_name_servers(raw_ns)
         except Exception:
             name_servers = []
             lookup_errors.append("name_servers: parse error")
@@ -163,12 +157,12 @@ class WhoisAdapter:
             "lookup_errors": lookup_errors,
         }
 
-        return EnrichmentResult(
+        return _whois_result(
             ioc=ioc,
             provider=self.name,
-            verdict="no_data",
-            detection_count=0,
-            total_engines=0,
-            scan_date=None,
             raw_stats=raw_stats,
         )
+
+
+def _whois_result(*, ioc: IOC, provider: str, raw_stats: dict) -> EnrichmentResult:
+    return no_data_result(ioc, provider, raw_stats)

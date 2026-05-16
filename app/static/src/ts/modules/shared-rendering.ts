@@ -12,6 +12,7 @@
 import type { EnrichmentItem } from "../types/api";
 import type { VerdictKey } from "../types/ioc";
 import { verdictSeverityIndex } from "../types/ioc";
+import { pageResultsElement } from "../utils/dom";
 import { formatDate } from "./row-factory";
 import { exportJSON, exportCSV, copyAllIOCs } from "./export";
 
@@ -91,14 +92,18 @@ export function computeResultDisplay(result: EnrichmentItem): ResultDisplay {
  * Idempotent: no-op if .detail-link-footer already exists in the panel.
  * All DOM construction uses createElement + textContent + setAttribute (SEC-08).
  */
-export function injectDetailLink(slot: HTMLElement): void {
-  const details = slot.querySelector<HTMLElement>(".enrichment-details");
+export function injectDetailLink(
+  slot: HTMLElement,
+  cachedCard: HTMLElement | null = null,
+  cachedDetails: HTMLElement | null = null
+): void {
+  const details = cachedDetails ?? slot.querySelector<HTMLElement>(".enrichment-details");
   if (!details) return;
 
   // Idempotency guard — only inject once per panel
   if (details.querySelector(".detail-link-footer")) return;
 
-  const card = slot.closest<HTMLElement>(".ioc-card");
+  const card = cachedCard ?? slot.closest<HTMLElement>(".ioc-card");
   if (!card) return;
 
   const iocType = card.getAttribute("data-ioc-type") ?? "";
@@ -125,18 +130,67 @@ export function injectDetailLink(slot: HTMLElement): void {
  * history.ts calls it directly after replay.
  */
 export function sortDetailRows(container: HTMLElement): void {
-  const rows = Array.from(
-    container.querySelectorAll<HTMLElement>(".provider-detail-row")
-  );
-  rows.sort((a, b) => {
-    const aVerdict = a.getAttribute("data-verdict") as VerdictKey | null;
-    const bVerdict = b.getAttribute("data-verdict") as VerdictKey | null;
-    const aIdx = aVerdict ? verdictSeverityIndex(aVerdict) : -1;
-    const bIdx = bVerdict ? verdictSeverityIndex(bVerdict) : -1;
-    return bIdx - aIdx; // descending: malicious first
-  });
-  for (const row of rows) {
-    container.appendChild(row);
+  const rowNodes = container.querySelectorAll<HTMLElement>(".provider-detail-row");
+  if (rowNodes.length <= 1) return;
+  const rows: Array<{ row: HTMLElement; severity: number }> = [];
+  for (let i = 0; i < rowNodes.length; i += 1) {
+    const row = rowNodes[i];
+    if (!row) continue;
+    const verdict = row.getAttribute("data-verdict") as VerdictKey | null;
+    rows.push({
+      row,
+      severity: verdict ? verdictSeverityIndex(verdict) : -1,
+    });
+  }
+  if (rows.length === 2) {
+    const first = rows[0];
+    const second = rows[1];
+    if (first && second && first.severity < second.severity) {
+      rows[0] = second;
+      rows[1] = first;
+    }
+  } else if (rows.length === 3) {
+    let first = rows[0];
+    let second = rows[1];
+    let third = rows[2];
+    if (first && second && third) {
+      if (first.severity < second.severity) {
+        const previousFirst = first;
+        first = second;
+        second = previousFirst;
+      }
+      if (second.severity < third.severity) {
+        const previousSecond = second;
+        second = third;
+        third = previousSecond;
+        if (first.severity < second.severity) {
+          const previousFirst = first;
+          first = second;
+          second = previousFirst;
+        }
+      }
+      rows[0] = first;
+      rows[1] = second;
+      rows[2] = third;
+    }
+  } else {
+    rows.sort((a, b) => {
+      return b.severity - a.severity; // descending: malicious first
+    });
+  }
+  let orderChanged = false;
+  for (let i = 0; i < rows.length; i += 1) {
+    if (rows[i]?.row !== rowNodes[i]) {
+      orderChanged = true;
+      break;
+    }
+  }
+  if (!orderChanged) return;
+
+  for (let i = 0; i < rows.length; i += 1) {
+    const item = rows[i];
+    if (!item) continue;
+    container.appendChild(item.row);
   }
 }
 
@@ -148,13 +202,17 @@ export function sortDetailRows(container: HTMLElement): void {
  */
 export function initExportButton(
   allResults: EnrichmentItem[],
-  pageResults: HTMLElement | null = document.querySelector<HTMLElement>(".page-results")
+  pageResults: HTMLElement | null = pageResultsElement(),
+  cachedElements: {
+    exportButton?: HTMLElement | null;
+    dropdown?: HTMLElement | null;
+  } = {}
 ): void {
   if (!pageResults) return;
   if (pageResults.getAttribute("data-results-export-wired") === "true") return;
 
-  const exportBtn = document.getElementById("export-btn");
-  const dropdown = document.getElementById("export-dropdown");
+  const exportBtn = cachedElements.exportButton ?? document.getElementById("export-btn");
+  const dropdown = cachedElements.dropdown ?? document.getElementById("export-dropdown");
   if (!exportBtn || !dropdown) return;
 
   exportBtn.addEventListener("click", function () {
@@ -170,19 +228,22 @@ export function initExportButton(
     }
   });
 
-  const buttons = dropdown.querySelectorAll<HTMLElement>("[data-export]");
-  buttons.forEach(function (btn) {
-    btn.addEventListener("click", function () {
-      const action = btn.getAttribute("data-export");
-      if (action === "json") {
-        exportJSON(allResults);
-      } else if (action === "csv") {
-        exportCSV(allResults);
-      } else if (action === "iocs") {
-        copyAllIOCs(btn);
-      }
-      dropdown.style.display = "none";
-    });
+  dropdown.addEventListener("click", function (event) {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+
+    const btn = target.closest<HTMLElement>("[data-export]");
+    if (!btn) return;
+
+    const action = btn.getAttribute("data-export");
+    if (action === "json") {
+      exportJSON(allResults);
+    } else if (action === "csv") {
+      exportCSV(allResults);
+    } else if (action === "iocs") {
+      copyAllIOCs(btn, allResults);
+    }
+    dropdown.style.display = "none";
   });
 
   pageResults.setAttribute("data-results-export-wired", "true");

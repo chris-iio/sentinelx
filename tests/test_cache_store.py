@@ -5,11 +5,14 @@ and no-error-caching contract.
 """
 from __future__ import annotations
 
+import datetime
 import threading
+from unittest.mock import patch
 from pathlib import Path
 
 import pytest
 
+import app.cache.store as cache_store_module
 from app.cache.store import CacheStore
 
 
@@ -50,6 +53,74 @@ class TestPutAndGet:
         assert vt is not None and vt["verdict"] == "malicious"
         assert tf is not None and tf["verdict"] == "clean"
 
+    def test_empty_payload_skips_json_encoding(self, cache: CacheStore) -> None:
+        """Empty cache payloads should use the JSON literal without encoder work."""
+        with patch("app.json_utils.json.dumps") as dumps:
+            dumps.side_effect = AssertionError("empty cache payloads should skip json.dumps")
+            cache.put("1.2.3.4", "ipv4", "EmptyProvider", {})
+
+        result = cache.get("1.2.3.4", "ipv4", "EmptyProvider", ttl_seconds=3600)
+        detail_results = cache.get_all_for_ioc("1.2.3.4", "ipv4")
+
+        assert result is not None
+        assert result == {"cached_at": result["cached_at"]}
+        assert detail_results[0]["provider"] == "EmptyProvider"
+        assert detail_results[0]["cached_at"] == result["cached_at"]
+
+    def test_empty_payload_skips_json_decoding(self, cache: CacheStore) -> None:
+        """Empty cache payloads should load from the JSON literal without decoder work."""
+        cache.put("1.2.3.4", "ipv4", "EmptyProvider", {})
+
+        with patch("app.json_utils.json.loads") as loads:
+            loads.side_effect = AssertionError("empty cache payloads should skip json.loads")
+            result = cache.get("1.2.3.4", "ipv4", "EmptyProvider", ttl_seconds=3600)
+            detail_results = cache.get_all_for_ioc("1.2.3.4", "ipv4")
+
+        assert result is not None
+        assert result == {"cached_at": result["cached_at"]}
+        assert detail_results[0]["provider"] == "EmptyProvider"
+        assert detail_results[0]["cached_at"] == result["cached_at"]
+
+    def test_empty_payload_uses_shared_json_literal_constant(self) -> None:
+        """Empty cache payload paths should share one literal constant."""
+        source = Path("app/cache/store.py").read_text(encoding="utf-8")
+
+        assert cache_store_module._EMPTY_JSON_OBJECT == "{}"
+        assert source.count('_EMPTY_JSON_OBJECT') == 1
+        assert "encode_json_object" in source
+        assert "decode_json_object" in source
+        assert 'result_json == "{}"' not in source
+        assert 'result_json = "{}"' not in source
+
+    def test_payload_encoding_and_decoding_share_empty_fast_path(self) -> None:
+        """Cache payload helpers should centralize empty JSON fast paths."""
+        assert cache_store_module._encode_result_json({}) == cache_store_module._EMPTY_JSON_OBJECT
+        assert cache_store_module._decode_result_json(cache_store_module._EMPTY_JSON_OBJECT) == {}
+        assert "_encode_result_json" in CacheStore.put.__code__.co_names
+        assert "_cache_entry" in CacheStore.get.__code__.co_names
+        assert "_cache_entry" in CacheStore.get_all_for_ioc.__code__.co_names
+
+    def test_cache_entry_hydrates_metadata_in_one_helper(self) -> None:
+        """Cache get paths should share decoded-payload metadata hydration."""
+        payload = cache_store_module._encode_result_json({"verdict": "clean"})
+
+        get_entry = cache_store_module._cache_entry(payload, "2026-05-01T00:00:00Z")
+        detail_entry = cache_store_module._cache_entry(
+            payload,
+            "2026-05-01T00:00:00Z",
+            "VirusTotal",
+        )
+
+        assert get_entry == {
+            "verdict": "clean",
+            "cached_at": "2026-05-01T00:00:00Z",
+        }
+        assert detail_entry == {
+            "verdict": "clean",
+            "provider": "VirusTotal",
+            "cached_at": "2026-05-01T00:00:00Z",
+        }
+
 
 class TestTTL:
     def test_expired_entry_returns_none(self, cache: CacheStore) -> None:
@@ -59,11 +130,48 @@ class TestTTL:
         result = cache.get("1.2.3.4", "ipv4", "VT", ttl_seconds=0)
         assert result is None
 
+    def test_nonpositive_ttl_skips_cache_lookup(self, cache: CacheStore) -> None:
+        """TTL values that cannot be fresh return before reading SQLite."""
+        cache.put("1.2.3.4", "ipv4", "VT", {"verdict": "clean"})
+        statements: list[str] = []
+        cache._conn.set_trace_callback(statements.append)
+
+        try:
+            result = cache.get("1.2.3.4", "ipv4", "VT", ttl_seconds=0)
+        finally:
+            cache._conn.set_trace_callback(None)
+
+        assert result is None
+        assert [
+            statement
+            for statement in statements
+            if statement.lstrip().upper().startswith("SELECT")
+        ] == []
+
     def test_fresh_entry_returns_data(self, cache: CacheStore) -> None:
         """get() returns data for entries within TTL."""
         cache.put("1.2.3.4", "ipv4", "VT", {"verdict": "clean"})
         result = cache.get("1.2.3.4", "ipv4", "VT", ttl_seconds=86400)
         assert result is not None
+
+    def test_cache_clock_is_shared_across_ttl_paths(self) -> None:
+        """Cache freshness paths should use one timezone-aware clock helper."""
+        now = cache_store_module._utc_now()
+
+        assert now.tzinfo is datetime.timezone.utc
+        assert "utc_now" in cache_store_module._utc_now.__code__.co_names
+        assert "_is_cache_fresh" in CacheStore.get.__code__.co_names
+        assert "_utc_now" in CacheStore.put.__code__.co_names
+        assert "_utc_now" in CacheStore.purge_expired.__code__.co_names
+
+    def test_cache_freshness_helper_handles_boundary(self) -> None:
+        """TTL freshness should be centralized and inclusive at the boundary."""
+        now = cache_store_module._utc_now()
+        cached_at = (now - datetime.timedelta(seconds=60)).isoformat()
+
+        with patch("app.cache.store._utc_now", return_value=now):
+            assert cache_store_module._is_cache_fresh(cached_at, 60) is True
+            assert cache_store_module._is_cache_fresh(cached_at, 59) is False
 
 
 class TestClear:
@@ -90,6 +198,34 @@ class TestStats:
         s = cache.stats()
         assert s["total_entries"] == 2
         assert s["oldest"] is not None
+
+    def test_stats_uses_single_aggregate_query(self, cache: CacheStore) -> None:
+        """stats() reads count and oldest timestamp in one SQLite query."""
+        cache.put("1.2.3.4", "ipv4", "VT", {"verdict": "clean"})
+        cache.put("evil.com", "domain", "TF", {"verdict": "malicious"})
+        statements: list[str] = []
+        cache._conn.set_trace_callback(statements.append)
+
+        try:
+            assert cache.stats()["total_entries"] == 2
+        finally:
+            cache._conn.set_trace_callback(None)
+
+        select_statements = [
+            statement
+            for statement in statements
+            if statement.lstrip().upper().startswith("SELECT")
+        ]
+        assert select_statements == [cache_store_module._CACHE_STATS_QUERY]
+
+    def test_sql_statements_are_shared_constants(self) -> None:
+        """CacheStore methods should use shared SQL statement constants."""
+        assert "_GET_ENTRY_QUERY" in CacheStore.get.__code__.co_names
+        assert "_PUT_ENTRY_QUERY" in CacheStore.put.__code__.co_names
+        assert "_CLEAR_QUERY" in CacheStore.clear.__code__.co_names
+        assert "_GET_ALL_FOR_IOC_QUERY" in CacheStore.get_all_for_ioc.__code__.co_names
+        assert "_CACHE_STATS_QUERY" in CacheStore.stats.__code__.co_names
+        assert "_PURGE_EXPIRED_QUERY" in CacheStore.purge_expired.__code__.co_names
 
 
 class TestThreadSafety:
@@ -159,6 +295,39 @@ class TestGetAllForIoc:
         """get_all_for_ioc returns empty list for non-existent IOC."""
         results = cache.get_all_for_ioc("9.9.9.9", "ipv4")
         assert results == []
+
+    def test_get_all_for_ioc_empty_single_and_pair_paths_use_row_count(
+        self, cache: CacheStore
+    ) -> None:
+        """Short detail-cache reads should return before accumulator looping."""
+        assert cache.get_all_for_ioc("9.9.9.9", "ipv4") == []
+
+        cache.put("1.2.3.4", "ipv4", "VT", {"verdict": "clean"})
+        results = cache.get_all_for_ioc("1.2.3.4", "ipv4")
+
+        assert results[0]["provider"] == "VT"
+
+        class NoIterRows(list):
+            def __iter__(self):
+                raise AssertionError("pair cache detail rows should not iterate")
+
+        class FakeCursor:
+            def fetchall(self):
+                return NoIterRows([
+                    ("VT", '{"verdict":"clean"}', "2026-01-01T00:00:00Z"),
+                    ("OTX", '{"verdict":"no_data"}', "2026-01-01T00:00:01Z"),
+                ])
+
+        class FakeConn:
+            def execute(self, *_args, **_kwargs):
+                return FakeCursor()
+
+        cache._conn = FakeConn()  # type: ignore[assignment]
+        pair_results = cache.get_all_for_ioc("1.2.3.4", "ipv4")
+
+        assert [result["provider"] for result in pair_results] == ["VT", "OTX"]
+        assert [result["verdict"] for result in pair_results] == ["clean", "no_data"]
+        assert "len" in CacheStore.get_all_for_ioc.__code__.co_names
 
     def test_get_all_for_ioc_includes_cached_at_and_provider(
         self, cache: CacheStore

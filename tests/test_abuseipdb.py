@@ -13,7 +13,7 @@ All HTTP calls are mocked using unittest.mock.patch -- no real API calls.
 from __future__ import annotations
 
 from app.enrichment.models import EnrichmentError, EnrichmentResult
-from app.enrichment.adapters.abuseipdb import AbuseIPDBAdapter
+from app.enrichment.adapters.abuseipdb import AbuseIPDBAdapter, _abuseipdb_result, _parse_response
 from tests.helpers import (
     make_mock_response,
     mock_adapter_session,
@@ -202,6 +202,45 @@ class TestAbuseIPDBLookup:
         assert result.raw_stats["countryCode"] == data["countryCode"]
         assert result.raw_stats["isp"] == data["isp"]
 
+    def test_result_helper_preserves_provider_envelope(self) -> None:
+        """AbuseIPDB result construction should keep the provider envelope centralized."""
+        ioc = make_ipv4_ioc("1.2.3.4")
+        raw_stats = {"abuseConfidenceScore": 90, "totalReports": 50}
+
+        result = _abuseipdb_result(
+            ioc=ioc,
+            provider="AbuseIPDB",
+            verdict="malicious",
+            detection_count=50,
+            total_engines=15,
+            scan_date="2024-01-15T09:00:00+00:00",
+            raw_stats=raw_stats,
+        )
+
+        assert result.ioc is ioc
+        assert result.provider == "AbuseIPDB"
+        assert result.verdict == "malicious"
+        assert result.detection_count == 50
+        assert result.total_engines == 15
+        assert result.scan_date == "2024-01-15T09:00:00+00:00"
+        assert result.raw_stats is raw_stats
+
+    def test_missing_data_envelope_reuses_static_empty_mapping(self) -> None:
+        """Missing data envelopes should not allocate a per-call default dict."""
+        ioc = make_ipv4_ioc("1.2.3.4")
+
+        class NoDefaultBody(dict):
+            def get(self, key, default=None):
+                if key == "data" and default is not None:
+                    raise AssertionError("missing AbuseIPDB data should use the shared empty mapping")
+                return super().get(key, default)
+
+        result = _parse_response(ioc, NoDefaultBody(), "AbuseIPDB")
+
+        assert result.verdict == "no_data"
+        assert result.detection_count == 0
+        assert result.total_engines == 0
+
     def test_ipv6_lookup_works(self) -> None:
         """IPv6 IOC with high confidence score -> verdict 'malicious'."""
         ipv6 = "2001:db8::bad"
@@ -303,4 +342,3 @@ class TestAbuseIPDBErrors:
         assert result.provider == "AbuseIPDB"
         assert "429" in result.error
         assert "rate limit" in result.error.lower() or "Rate limit" in result.error
-

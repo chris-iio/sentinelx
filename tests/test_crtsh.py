@@ -6,12 +6,22 @@ All HTTP calls are mocked using unittest.mock.patch -- no real API calls.
 """
 from __future__ import annotations
 
+import builtins
+import inspect
 from unittest.mock import MagicMock, patch
 
 import requests
 import requests.exceptions
 
-from app.enrichment.adapters.crtsh import CrtShAdapter
+from app.enrichment.adapters.crtsh import (
+    CrtShAdapter,
+    _capped_sorted_subdomains,
+    _clean_name_value,
+    _crtsh_result,
+    _iter_name_values,
+    _parse_response,
+    _trim_wildcard_prefix,
+)
 from tests.helpers import (
     make_mock_response,
     mock_adapter_session,
@@ -51,6 +61,24 @@ SAMPLE_CERTS = [
         "entry_timestamp": "2024-02-01T01:23:45",
     },
 ]
+
+
+class _SinglePassCertBody:
+    def __init__(self, rows):
+        self._rows = rows
+        self.iterations = 0
+
+    def __bool__(self) -> bool:
+        return bool(self._rows)
+
+    def __len__(self) -> int:
+        return len(self._rows)
+
+    def __iter__(self):
+        self.iterations += 1
+        if self.iterations > 1:
+            raise AssertionError("crt.sh parsing should scan certificate rows once")
+        return iter(self._rows)
 
 
 def _make_adapter(allowed_hosts: list[str] | None = None) -> CrtShAdapter:
@@ -194,6 +222,60 @@ class TestCertDataExtraction:
         f"Expected 50 subdomains (cap), got {len(result.raw_stats['subdomains'])}"
         )
 
+    def test_subdomain_cap_avoids_full_sorted_list(self, monkeypatch) -> None:
+        """Oversized subdomain sets should select the first 50 without full sorting."""
+        values = {f"sub{i:03d}.example.com" for i in range(60)}
+
+        def fail_sorted(*_args, **_kwargs):
+            raise AssertionError("oversized crt.sh subdomain caps should not sort the full set")
+
+        monkeypatch.setattr(builtins, "sorted", fail_sorted)
+
+        subdomains = _capped_sorted_subdomains(values)
+
+        assert len(subdomains) == 50
+        assert subdomains[0] == "sub000.example.com"
+        assert subdomains[-1] == "sub049.example.com"
+
+    def test_empty_or_single_subdomain_sets_skip_sorting(self, monkeypatch) -> None:
+        """Empty and single-value subdomain sets do not need deterministic sorting."""
+        def fail_sorted(*_args, **_kwargs):
+            raise AssertionError("empty/single crt.sh subdomain sets should not sort")
+
+        monkeypatch.setattr(builtins, "sorted", fail_sorted)
+
+        assert _capped_sorted_subdomains(set()) == []
+        assert _capped_sorted_subdomains({"only.example.com"}) == ["only.example.com"]
+
+    def test_two_subdomain_sets_skip_sorting(self, monkeypatch) -> None:
+        """Two-value subdomain sets can be ordered by direct comparison."""
+        def fail_sorted(*_args, **_kwargs):
+            raise AssertionError("two-value crt.sh subdomain sets should not sort")
+
+        monkeypatch.setattr(builtins, "sorted", fail_sorted)
+
+        assert _capped_sorted_subdomains({"z.example.com", "a.example.com"}) == [
+            "a.example.com",
+            "z.example.com",
+        ]
+
+    def test_three_subdomain_sets_skip_sorting(self, monkeypatch) -> None:
+        """Three-value subdomain sets can be ordered by direct comparisons."""
+        def fail_sorted(*_args, **_kwargs):
+            raise AssertionError("three-value crt.sh subdomain sets should not sort")
+
+        monkeypatch.setattr(builtins, "sorted", fail_sorted)
+
+        assert _capped_sorted_subdomains({
+            "z.example.com",
+            "a.example.com",
+            "m.example.com",
+        }) == [
+            "a.example.com",
+            "m.example.com",
+            "z.example.com",
+        ]
+
     def test_null_not_before_skipped_in_date_range(self) -> None:
         """Cert entries with null/missing not_before are skipped when computing date range."""
         ioc = make_domain_ioc("example.com")
@@ -220,6 +302,47 @@ class TestCertDataExtraction:
         # Only the cert with valid date should contribute
         assert result.raw_stats["earliest"] == "2024-01-01"
         assert result.raw_stats["latest"] == "2024-01-01"
+
+    def test_date_range_and_subdomains_computed_in_one_body_scan(self) -> None:
+        """Date range and SAN extraction should share one certificate scan."""
+        ioc = make_domain_ioc("example.com")
+        body = _SinglePassCertBody(SAMPLE_CERTS)
+
+        result = _parse_response(ioc, body, "Cert History")  # type: ignore[arg-type]
+
+        assert isinstance(result, EnrichmentResult)
+        assert body.iterations == 1
+        assert result.raw_stats["earliest"] == "2023-06-01"
+        assert result.raw_stats["latest"] == "2024-02-01"
+        assert "www.example.com" in result.raw_stats["subdomains"]
+
+    def test_name_value_parsing_does_not_allocate_split_list(self) -> None:
+        """SAN name parsing should stream newline-delimited values."""
+        class NoSplitName(str):
+            def split(self, *_args, **_kwargs):
+                raise AssertionError("crt.sh SAN parsing should not allocate split lists")
+
+        assert list(_iter_name_values(NoSplitName("a.example\n\n*.b.example"))) == [
+            "a.example",
+            "",
+            "*.b.example",
+        ]
+
+    def test_name_value_cleanup_uses_index_trim_without_strip(self) -> None:
+        """SAN value cleanup should avoid direct strip allocation."""
+        class NoStripName(str):
+            def strip(self, *_args, **_kwargs):
+                raise AssertionError("crt.sh SAN cleanup should avoid direct strip allocation")
+
+        class NoLStripName(str):
+            def lstrip(self, *_args, **_kwargs):
+                raise AssertionError("crt.sh wildcard cleanup should scan directly")
+
+        assert _clean_name_value(NoStripName("  *.Example.COM  ")) == "example.com"
+        assert _clean_name_value(NoStripName(" \n\t ")) is None
+        assert _trim_wildcard_prefix(NoLStripName("...*.example.com")) == "example.com"
+        assert "lstrip" not in _clean_name_value.__code__.co_names
+        assert "lstrip" not in _trim_wildcard_prefix.__code__.co_names
 
     def test_null_name_value_cert_skipped(self) -> None:
         """Cert entries with null/missing name_value are skipped without error."""
@@ -279,6 +402,31 @@ class TestCertDataExtraction:
         assert result.detection_count == 0, "informational adapter — detection_count must be 0"
         assert result.total_engines == 0, "informational adapter — total_engines must be 0"
         assert result.scan_date is None, "informational adapter — scan_date must be None"
+
+    def test_result_helper_preserves_provider_envelope(self) -> None:
+        """crt.sh result construction should keep the informational envelope centralized."""
+        ioc = make_domain_ioc("example.com")
+        raw_stats = {
+            "cert_count": 3,
+            "earliest": "2023-06-01",
+            "latest": "2024-02-01",
+            "subdomains": ["example.com"],
+        }
+
+        result = _crtsh_result(
+            ioc=ioc,
+            provider="Cert History",
+            raw_stats=raw_stats,
+        )
+
+        assert result.ioc is ioc
+        assert result.provider == "Cert History"
+        assert result.verdict == "no_data"
+        assert result.detection_count == 0
+        assert result.total_engines == 0
+        assert result.scan_date is None
+        assert result.raw_stats is raw_stats
+        assert "no_data_result(ioc, provider, raw_stats)" in inspect.getsource(_crtsh_result)
 
 
 class TestEmptyResponse:
@@ -400,4 +548,3 @@ class TestHTTPSafetyControls:
         assert "evil.com" in called_url
         assert "output=json" in called_url
         assert "crt.sh" in called_url
-

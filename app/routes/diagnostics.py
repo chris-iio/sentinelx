@@ -2,13 +2,14 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 
 from flask import Response, current_app
 
 from app import limiter
 from app.diagnostics import assemble_diagnostic_bundle, build_default_diagnostic_sources
 from app.enrichment.config_store import ConfigStore
+from app.time_utils import utc_iso, utc_now
 
 from . import bp
 
@@ -18,12 +19,12 @@ _FAILURE_BODY = "Diagnostic export failed. Check server logs."
 
 def _utcnow() -> datetime:
     """Return current UTC time for diagnostic export timestamps."""
-    return datetime.now(timezone.utc)
+    return utc_now()
 
 
 def _utc_iso(timestamp: datetime) -> str:
     """Return an ISO-8601 UTC timestamp using the app's Zulu convention."""
-    return timestamp.isoformat().replace("+00:00", "Z")
+    return utc_iso(timestamp)
 
 
 @bp.route("/diagnostics/export", methods=["GET"])

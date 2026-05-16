@@ -26,13 +26,50 @@ function computeVerdictCounts(entries: VerdictEntry[]): {
   malicious: number; suspicious: number; clean: number; noData: number; total: number;
 } {
   let malicious = 0, suspicious = 0, clean = 0, noData = 0;
-  for (const e of entries) {
+  for (let i = 0; i < entries.length; i++) {
+    const e = entries[i];
+    if (!e) continue;
     if (e.verdict === "malicious") malicious++;
     else if (e.verdict === "suspicious") suspicious++;
     else if (e.verdict === "clean") clean++;
     else noData++;
   }
   return { malicious, suspicious, clean, noData, total: entries.length };
+}
+
+export function oldestCachedAt(entries: VerdictEntry[]): string | undefined {
+  let oldest: string | undefined;
+  for (let i = 0; i < entries.length; i++) {
+    const entry = entries[i];
+    if (!entry) continue;
+    if (!entry.cachedAt) continue;
+    if (oldest === undefined || entry.cachedAt < oldest) {
+      oldest = entry.cachedAt;
+    }
+  }
+  return oldest;
+}
+
+export function formatAsnContext(asn: unknown, prefix: unknown): string {
+  let text = "";
+  if (asn && (typeof asn === "string" || typeof asn === "number")) text = String(asn);
+  if (prefix && typeof prefix === "string") text += (text ? " · " : "") + prefix;
+  return text;
+}
+
+export function formatDnsAContext(aRecords: unknown): string {
+  if (!Array.isArray(aRecords) || aRecords.length === 0) return "";
+
+  let text = "";
+  let ipCount = 0;
+  for (let i = 0; i < aRecords.length; i++) {
+    const ip = aRecords[i];
+    if (typeof ip !== "string") continue;
+    text += (text ? ", " : "") + ip;
+    ipCount += 1;
+    if (ipCount === 3) break;
+  }
+  return text;
 }
 
 /**
@@ -54,18 +91,18 @@ export function formatDate(iso: string | null): string {
  * Falls back to the raw ISO string if parsing fails.
  */
 function formatRelativeTime(iso: string): string {
-  try {
-    const diffMs = Date.now() - new Date(iso).getTime();
-    const diffMin = Math.floor(diffMs / 60000);
-    if (diffMin < 1) return "just now";
-    if (diffMin < 60) return diffMin + "m ago";
-    const diffHr = Math.floor(diffMin / 60);
-    if (diffHr < 24) return diffHr + "h ago";
-    const diffDay = Math.floor(diffHr / 24);
-    return diffDay + "d ago";
-  } catch {
+  const timestamp = Date.parse(iso);
+  if (Number.isNaN(timestamp)) {
     return iso;
   }
+  const diffMs = Date.now() - timestamp;
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return "just now";
+  if (diffMin < 60) return diffMin + "m ago";
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return diffHr + "h ago";
+  const diffDay = Math.floor(diffHr / 24);
+  return diffDay + "d ago";
 }
 
 // ---- Provider context field definitions ----
@@ -180,7 +217,8 @@ const PROVIDER_CONTEXT_FIELDS: Record<string, ContextFieldDef[]> = {
  * Providers that use the context row rendering path (no verdict badge, pinned to top).
  * Extend this set when adding new context-only providers.
  */
-export const CONTEXT_PROVIDERS = new Set(["IP Context", "DNS Records", "Cert History", "ThreatMiner", "ASN Intel", "WHOIS"]);
+const CONTEXT_PROVIDER_NAMES = ["IP Context", "DNS Records", "Cert History", "ThreatMiner", "ASN Intel", "WHOIS"] as const;
+export const CONTEXT_PROVIDERS = new Set<string>(CONTEXT_PROVIDER_NAMES);
 
 /**
  * Create a labeled context field element with the provider-context-field class.
@@ -196,6 +234,34 @@ function createLabeledField(label: string): HTMLElement {
   fieldEl.appendChild(labelEl);
 
   return fieldEl;
+}
+
+function createProviderNameSpan(provider: string): HTMLElement {
+  const nameSpan = document.createElement("span");
+  nameSpan.className = "provider-detail-name";
+  nameSpan.textContent = provider;
+  return nameSpan;
+}
+
+function createCacheBadge(cachedAt: string): HTMLElement {
+  const cacheBadge = document.createElement("span");
+  cacheBadge.className = "cache-badge";
+  cacheBadge.textContent = "cached " + formatRelativeTime(cachedAt);
+  return cacheBadge;
+}
+
+function upsertContextSpan(contextLine: HTMLElement, providerName: string, text: string): void {
+  const existing = contextLine.querySelector<HTMLElement>(`span[data-context-provider="${providerName}"]`);
+  if (existing) {
+    existing.textContent = text;
+    return;
+  }
+
+  const span = document.createElement("span");
+  span.className = "context-field";
+  span.setAttribute("data-context-provider", providerName);
+  span.textContent = text;
+  contextLine.appendChild(span);
 }
 
 /**
@@ -215,13 +281,16 @@ function createContextFields(result: EnrichmentResultItem): HTMLElement | null {
 
   let hasFields = false;
 
-  for (const def of fieldDefs) {
+  for (let i = 0; i < fieldDefs.length; i++) {
+    const def = fieldDefs[i];
+    if (!def) continue;
     const value = stats[def.key];
     if (value === undefined || value === null || value === "") continue;
 
     if (def.type === "tags" && Array.isArray(value) && value.length > 0) {
       const fieldEl = createLabeledField(def.label);
-      for (const tag of value) {
+      for (let j = 0; j < value.length; j++) {
+        const tag = value[j];
         if (typeof tag !== "string" && typeof tag !== "number") continue;
         const tagEl = document.createElement("span");
         tagEl.className = "context-tag";
@@ -251,8 +320,12 @@ function createContextFields(result: EnrichmentResultItem): HTMLElement | null {
  * Injects chevron SVG icon into the summary row on creation (SEC-08: no innerHTML).
  * Sets role="button", tabindex="0", aria-expanded="false" for accessibility.
  */
-function getOrCreateSummaryRow(slot: HTMLElement): HTMLElement {
-  const existing = slot.querySelector<HTMLElement>(".ioc-summary-row");
+function getOrCreateSummaryRow(
+  slot: HTMLElement,
+  cachedSummaryRow: HTMLElement | null = null,
+  cachedDetails: HTMLElement | null = null
+): HTMLElement {
+  const existing = cachedSummaryRow ?? slot.querySelector<HTMLElement>(".ioc-summary-row");
   if (existing) return existing;
 
   const row = document.createElement("div");
@@ -262,7 +335,7 @@ function getOrCreateSummaryRow(slot: HTMLElement): HTMLElement {
   row.setAttribute("aria-expanded", "false");
 
   // Insert before .enrichment-details if present; fallback to append
-  const details = slot.querySelector(".enrichment-details");
+  const details = cachedDetails ?? slot.querySelector(".enrichment-details");
   if (details) {
     slot.insertBefore(row, details);
   } else {
@@ -302,15 +375,17 @@ function getOrCreateSummaryRow(slot: HTMLElement): HTMLElement {
 export function updateSummaryRow(
   slot: HTMLElement,
   iocValue: string,
-  iocVerdicts: Record<string, VerdictEntry[]>
-): void {
+  iocVerdicts: Record<string, VerdictEntry[]>,
+  cachedSummaryRow: HTMLElement | null = null,
+  cachedDetails: HTMLElement | null = null
+): HTMLElement | null {
   const entries = iocVerdicts[iocValue];
-  if (!entries || entries.length === 0) return;
+  if (!entries || entries.length === 0) return null;
 
   const worstVerdict = computeWorstVerdict(entries);
   const attribution = computeAttribution(entries);
 
-  const summaryRow = getOrCreateSummaryRow(slot);
+  const summaryRow = getOrCreateSummaryRow(slot, cachedSummaryRow, cachedDetails);
 
   // Preserve the chevron wrapper (injected once by getOrCreateSummaryRow, but cleared below)
   const chevronWrapper = summaryRow.querySelector<HTMLElement>(".chevron-icon-wrapper");
@@ -344,7 +419,11 @@ export function updateSummaryRow(
     [counts.clean, "clean"],
     [counts.noData, "no_data"],
   ];
-  for (const [count, verdict] of segments) {
+  for (let i = 0; i < segments.length; i++) {
+    const segment = segments[i];
+    if (!segment) continue;
+    const count = segment[0];
+    const verdict = segment[1];
     if (count === 0) continue;
     const seg = document.createElement("div");
     seg.className = "micro-bar-segment micro-bar-segment--" + verdict;
@@ -354,22 +433,20 @@ export function updateSummaryRow(
   summaryRow.appendChild(microBar);
 
   // d. Staleness badge — show oldest cached_at if any entries were cached (CTX-02)
-  const cachedEntries = entries.filter(e => e.cachedAt);
-  if (cachedEntries.length > 0) {
-    // ISO 8601 strings sort lexicographically, so the first element is the oldest
-    const oldestCachedAt = cachedEntries.map(e => e.cachedAt!).sort()[0];
-    if (oldestCachedAt) {
-      const staleBadge = document.createElement("span");
-      staleBadge.className = "staleness-badge";
-      staleBadge.textContent = "cached " + formatRelativeTime(oldestCachedAt);
-      summaryRow.appendChild(staleBadge);
-    }
+  const cachedAt = oldestCachedAt(entries);
+  if (cachedAt) {
+    const staleBadge = document.createElement("span");
+    staleBadge.className = "staleness-badge";
+    staleBadge.textContent = "cached " + formatRelativeTime(cachedAt);
+    summaryRow.appendChild(staleBadge);
   }
 
   // e. Re-append chevron wrapper (always last — floated right via margin-left:auto)
   if (chevronWrapper) {
     summaryRow.appendChild(chevronWrapper);
   }
+
+  return summaryRow;
 }
 
 /**
@@ -383,10 +460,7 @@ export function createContextRow(result: EnrichmentResultItem): HTMLElement {
   row.className = "provider-detail-row provider-context-row";
   row.setAttribute("data-verdict", "context"); // sentinel for sort pinning
 
-  const nameSpan = document.createElement("span");
-  nameSpan.className = "provider-detail-name";
-  nameSpan.textContent = result.provider;
-  row.appendChild(nameSpan);
+  row.appendChild(createProviderNameSpan(result.provider));
 
   // NO verdict badge — IP Context is purely informational
 
@@ -398,10 +472,7 @@ export function createContextRow(result: EnrichmentResultItem): HTMLElement {
 
   // Cache badge if result was served from cache
   if (result.cached_at) {
-    const cacheBadge = document.createElement("span");
-    cacheBadge.className = "cache-badge";
-    cacheBadge.textContent = "cached " + formatRelativeTime(result.cached_at);
-    row.appendChild(cacheBadge);
+    row.appendChild(createCacheBadge(result.cached_at));
   }
 
   return row;
@@ -422,10 +493,6 @@ export function createDetailRow(
   row.className = "provider-detail-row" + (isNoData ? " provider-row--no-data" : "");
   row.setAttribute("data-verdict", verdict);
 
-  const nameSpan = document.createElement("span");
-  nameSpan.className = "provider-detail-name";
-  nameSpan.textContent = provider;
-
   const badge = document.createElement("span");
   badge.className = "verdict-badge verdict-" + verdict;
   badge.textContent = VERDICT_LABELS[verdict];
@@ -434,17 +501,13 @@ export function createDetailRow(
   statSpan.className = "provider-detail-stat";
   statSpan.textContent = statText;
 
-  row.appendChild(nameSpan);
+  row.appendChild(createProviderNameSpan(provider));
   row.appendChild(badge);
   row.appendChild(statSpan);
 
   // Cache badge — show relative time if result was served from cache
   if (result && result.type === "result" && result.cached_at) {
-    const cacheBadge = document.createElement("span");
-    cacheBadge.className = "cache-badge";
-    const ago = formatRelativeTime(result.cached_at);
-    cacheBadge.textContent = "cached " + ago;
-    row.appendChild(cacheBadge);
+    row.appendChild(createCacheBadge(result.cached_at));
   }
 
   // Context fields — provider-specific intelligence from raw_stats
@@ -469,27 +532,17 @@ export function createDetailRow(
  *
  * All DOM construction uses createElement + textContent (SEC-08).
  */
-export function updateContextLine(card: HTMLElement, result: EnrichmentResultItem): void {
-  const contextLine = card.querySelector<HTMLElement>(".ioc-context-line");
+export function updateContextLine(
+  card: HTMLElement,
+  result: EnrichmentResultItem,
+  cachedContextLine: HTMLElement | null = null
+): void {
+  const contextLine = cachedContextLine ?? card.querySelector<HTMLElement>(".ioc-context-line");
   if (!contextLine) return;
 
   const { provider } = result;
   const stats = result.raw_stats;
   if (!stats) return;
-
-  /** Upsert a data-context-provider span — update text if existing, else append. */
-  function upsertContextSpan(providerName: string, text: string): void {
-    const existing = contextLine!.querySelector<HTMLElement>(`span[data-context-provider="${providerName}"]`);
-    if (existing) {
-      existing.textContent = text;
-      return;
-    }
-    const span = document.createElement("span");
-    span.className = "context-field";
-    span.setAttribute("data-context-provider", providerName);
-    span.textContent = text;
-    contextLine!.appendChild(span);
-  }
 
   if (provider === "IP Context") {
     const geo = stats.geo;
@@ -499,7 +552,7 @@ export function updateContextLine(card: HTMLElement, result: EnrichmentResultIte
     const asnSpan = contextLine.querySelector<HTMLElement>('span[data-context-provider="ASN Intel"]');
     if (asnSpan) contextLine.removeChild(asnSpan);
 
-    upsertContextSpan("IP Context", geo);
+    upsertContextSpan(contextLine, "IP Context", geo);
   } else if (provider === "ASN Intel") {
     // Only populate if IP Context hasn't already provided richer data
     if (contextLine.querySelector('span[data-context-provider="IP Context"]')) return;
@@ -508,20 +561,15 @@ export function updateContextLine(card: HTMLElement, result: EnrichmentResultIte
     const prefix = stats.prefix;
     if (!asn && !prefix) return;
 
-    const parts: string[] = [];
-    if (asn && (typeof asn === "string" || typeof asn === "number")) parts.push(String(asn));
-    if (prefix && typeof prefix === "string") parts.push(prefix);
-    if (parts.length === 0) return;
+    const text = formatAsnContext(asn, prefix);
+    if (!text) return;
 
-    upsertContextSpan("ASN Intel", parts.join(" · "));
+    upsertContextSpan(contextLine, "ASN Intel", text);
   } else if (provider === "DNS Records") {
-    const aRecords = stats.a;
-    if (!Array.isArray(aRecords) || aRecords.length === 0) return;
+    const text = formatDnsAContext(stats.a);
+    if (!text) return;
 
-    const ips = aRecords.slice(0, 3).filter((ip): ip is string => typeof ip === "string");
-    if (ips.length === 0) return;
-
-    upsertContextSpan("DNS Records", "A: " + ips.join(", "));
+    upsertContextSpan(contextLine, "DNS Records", "A: " + text);
   }
   // All other providers — do nothing
 }
@@ -542,17 +590,27 @@ export function updateContextLine(card: HTMLElement, result: EnrichmentResultIte
  *
  * All DOM construction uses createElement + textContent (SEC-08).
  */
-export function injectSectionHeadersAndNoDataSummary(slot: HTMLElement): void {
+export function injectSectionHeadersAndNoDataSummary(
+  slot: HTMLElement,
+  cachedNoDataSection: HTMLElement | null = null
+): void {
   // Headers are now in the template (GRP-01). Only no-data collapse logic remains.
-  const noDataSection = slot.querySelector<HTMLElement>(".enrichment-section--no-data");
+  const noDataSection =
+    cachedNoDataSection ?? slot.querySelector<HTMLElement>(".enrichment-section--no-data");
   if (!noDataSection) return;
 
-  const noDataRows = noDataSection.querySelectorAll<HTMLElement>(
-    ".provider-row--no-data"
-  );
-  if (noDataRows.length === 0) return;
+  let count = 0;
+  let firstNoData: Element | null = null;
+  for (let i = 0; i < noDataSection.children.length; i++) {
+    const child = noDataSection.children[i];
+    if (!child) continue;
+    if (child.classList.contains("no-data-summary-row")) return;
+    if (!child.classList.contains("provider-row--no-data")) continue;
+    count += 1;
+    firstNoData ??= child;
+  }
+  if (count === 0 || !firstNoData) return;
 
-  const count = noDataRows.length;
   const summaryRow = document.createElement("div");
   summaryRow.className = "no-data-summary-row";
   summaryRow.setAttribute("role", "button");
@@ -561,10 +619,7 @@ export function injectSectionHeadersAndNoDataSummary(slot: HTMLElement): void {
   summaryRow.textContent = count + " provider" + (count !== 1 ? "s" : "") + " had no record";
 
   // Insert summary row before the first no-data row within the no-data section
-  const firstNoData = noDataRows[0];
-  if (firstNoData) {
-    noDataSection.insertBefore(summaryRow, firstNoData);
-  }
+  noDataSection.insertBefore(summaryRow, firstNoData);
 
   // Wire click → toggle .no-data-expanded on noDataSection
   summaryRow.addEventListener("click", () => {

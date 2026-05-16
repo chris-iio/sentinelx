@@ -6,6 +6,7 @@
  * exclusive live-owner guard that prevents history pages from polling.
  */
 
+import { readFile } from "node:fs/promises";
 import type { EnrichmentItem, EnrichmentStatus } from "../types/api";
 
 function installCssEscape(): void {
@@ -170,6 +171,26 @@ describe("enrichment polling", () => {
     expect(document.querySelector(".page-results")?.getAttribute("data-results-runtime")).toBeNull();
   });
 
+  it("caches details panel lookups across repeated summary-row toggles", async () => {
+    const { wireExpandToggles } = await import("./enrichment");
+    const root = document.querySelector<HTMLElement>(".page-results")!;
+    const slot = document.querySelector<HTMLElement>(".enrichment-slot")!;
+    const details = document.querySelector<HTMLElement>(".enrichment-details")!;
+    const summaryRow = document.createElement("div");
+    summaryRow.className = "ioc-summary-row";
+    summaryRow.setAttribute("tabindex", "0");
+    slot.insertBefore(summaryRow, details);
+    const slotQuerySelectorSpy = vi.spyOn(slot, "querySelector");
+
+    wireExpandToggles(root);
+    summaryRow.click();
+    summaryRow.click();
+
+    expect(slotQuerySelectorSpy.mock.calls.filter(([selector]) => selector === ".enrichment-details")).toHaveLength(1);
+    expect(summaryRow.getAttribute("aria-expanded")).toBe("false");
+    expect(details.classList.contains("is-open")).toBe(false);
+  });
+
   it("surfaces terminal 404 polling failures and stops retrying", async () => {
     const fetchMock = mockFetchSequence({
       ok: false,
@@ -250,6 +271,103 @@ describe("enrichment polling", () => {
     await vi.advanceTimersByTimeAsync(750);
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("reuses progress bar element handles across polling updates", async () => {
+    const fetchMock = mockFetchSequence({
+      ok: true,
+      data: {
+        total: 4,
+        done: 1,
+        complete: false,
+        results: [],
+        next_since: 0,
+        status: "running",
+        terminal: false,
+        terminal_reason: null,
+        error: null,
+      },
+    });
+    const getElementByIdSpy = vi.spyOn(document, "getElementById");
+
+    const { init } = await import("./enrichment");
+    init();
+    const exportLookupsAfterInit = getElementByIdSpy.mock.calls.filter(
+      ([id]) => id === "export-btn"
+    ).length;
+
+    await vi.advanceTimersByTimeAsync(750);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(document.querySelector("#enrich-progress-text")?.textContent).toBe(
+      "1/4 providers complete"
+    );
+    expect(
+      getElementByIdSpy.mock.calls.filter(([id]) => id === "enrich-progress-fill")
+    ).toHaveLength(1);
+    expect(
+      getElementByIdSpy.mock.calls.filter(([id]) => id === "enrich-progress-text")
+    ).toHaveLength(1);
+  });
+
+  it("reuses the warning banner handle across repeated provider warnings", async () => {
+    const fetchMock = mockFetchSequence({
+      ok: true,
+      data: {
+        total: 2,
+        done: 2,
+        complete: true,
+        results: [
+          {
+            type: "error",
+            ioc_value: "1.2.3.4",
+            ioc_type: "ipv4",
+            provider: "ProviderA",
+            error: "rate limit 429",
+          },
+          {
+            type: "error",
+            ioc_value: "1.2.3.4",
+            ioc_type: "ipv4",
+            provider: "ProviderB",
+            error: "authentication 403",
+          },
+        ],
+        next_since: 2,
+        status: "complete",
+        terminal: false,
+        terminal_reason: null,
+        error: null,
+      },
+    });
+    const getElementByIdSpy = vi.spyOn(document, "getElementById");
+
+    const { init } = await import("./enrichment");
+    init();
+    const exportLookupsAfterInit = getElementByIdSpy.mock.calls.filter(
+      ([id]) => id === "export-btn"
+    ).length;
+
+    await vi.advanceTimersByTimeAsync(750);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(getElementByIdSpy.mock.calls.filter(([id]) => id === "enrich-warning")).toHaveLength(1);
+    expect(getElementByIdSpy.mock.calls.filter(([id]) => id === "enrich-progress")).toHaveLength(1);
+    expect(exportLookupsAfterInit).toBe(1);
+    expect(getElementByIdSpy.mock.calls.filter(([id]) => id === "export-btn")).toHaveLength(
+      exportLookupsAfterInit
+    );
+    expect(getElementByIdSpy.mock.calls.filter(([id]) => id === "export-dropdown")).toHaveLength(1);
+    expect(document.getElementById("enrich-warning")?.textContent).toContain(
+      "Authentication error for ProviderB"
+    );
+  });
+
+  it("keeps provider and terminal warning rendering on one DOM mutation path", async () => {
+    const source = await readFile("app/static/src/ts/modules/enrichment.ts", "utf8");
+
+    expect(source).toContain("function showWarningBanner(");
+    expect(source.match(/banner\.style\.display = "block"/g) ?? []).toHaveLength(1);
   });
 
   it("bounds repeated polling failures and leaves diagnostic state", async () => {

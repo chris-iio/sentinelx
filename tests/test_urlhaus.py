@@ -6,8 +6,10 @@ All HTTP calls are mocked using unittest.mock.patch -- no real API calls.
 """
 from __future__ import annotations
 
+from types import MappingProxyType
+
 from app.enrichment.models import EnrichmentError, EnrichmentResult
-from app.enrichment.adapters.urlhaus import URLhausAdapter
+from app.enrichment.adapters.urlhaus import URLhausAdapter, _parse_response
 from tests.helpers import (
     make_mock_response,
     mock_adapter_session,
@@ -97,6 +99,14 @@ def _make_adapter(api_key: str = "test-api-key", allowed_hosts: list[str] | None
     if allowed_hosts is None:
         allowed_hosts = ALLOWED_HOSTS
     return URLhausAdapter(api_key=api_key, allowed_hosts=allowed_hosts)
+
+
+def test_supported_types_derive_from_endpoint_map() -> None:
+    """Supported URLhaus types should stay locked to the endpoint map keys."""
+    from app.enrichment.adapters.urlhaus import _ENDPOINT_MAP
+
+    assert isinstance(_ENDPOINT_MAP, MappingProxyType)
+    assert URLhausAdapter.supported_types == frozenset(_ENDPOINT_MAP)
 
 
 class TestURLhausLookup:
@@ -216,6 +226,45 @@ class TestURLhausLookup:
         for key in ("query_status", "urls_count", "tags", "blacklists"):
             assert key in result.raw_stats, f"raw_stats missing key: {key!r}"
 
+    def test_result_helper_preserves_provider_envelope(self) -> None:
+        """Parsed URLhaus results should keep the provider envelope centralized."""
+        from app.enrichment.adapters.urlhaus import _urlhaus_result
+
+        ioc = make_url_ioc("http://malicious.example.com/payload.exe")
+        raw_stats = {"query_status": "is_listed", "urls_count": 1}
+
+        result = _urlhaus_result(
+            ioc=ioc,
+            provider="URLhaus",
+            verdict="malicious",
+            detection_count=1,
+            raw_stats=raw_stats,
+        )
+
+        assert result.ioc is ioc
+        assert result.provider == "URLhaus"
+        assert result.verdict == "malicious"
+        assert result.detection_count == 1
+        assert result.total_engines == 1
+        assert result.scan_date is None
+        assert result.raw_stats is raw_stats
+
+    def test_missing_blacklists_avoids_eager_default_dict(self) -> None:
+        """Missing blacklist data should not allocate through body.get's default argument."""
+        ioc = make_url_ioc("http://clean.example.com/")
+
+        class NoDefaultBody(dict):
+            def get(self, key, default=None):
+                if key == "blacklists" and default is not None:
+                    raise AssertionError("URLhaus blacklist parsing should avoid eager default dict allocation")
+                return super().get(key, default)
+
+        result = _parse_response(ioc, NoDefaultBody({"query_status": "no_results"}), "URLhaus")
+
+        assert result.verdict == "no_data"
+        assert result.raw_stats["blacklists"] == {}
+        assert type(result.raw_stats["blacklists"]) is dict
+
     def test_url_endpoint_uses_data_not_json(self) -> None:
         """URLhaus POST must use data= (form-encoded), not json=."""
         ioc = make_url_ioc("http://malicious.example.com/payload.exe")
@@ -291,4 +340,3 @@ class TestURLhausErrors:
         assert isinstance(result, EnrichmentError)
         assert result.provider == "URLhaus"
         assert "403" in result.error
-

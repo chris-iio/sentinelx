@@ -12,7 +12,7 @@
  */
 
 import type { EnrichmentItem } from "../types/api";
-import { attr } from "../utils/dom";
+import { pageResultsElement, resolveResultsSurfaceOwner } from "../utils/dom";
 import { wireExpandToggles } from "./enrichment";
 import { initExportButton } from "./shared-rendering";
 import { createResultApplicationCoordinator } from "./result-application";
@@ -22,28 +22,38 @@ import { createResultApplicationCoordinator } from "./result-application";
 /** All replayed results — used for export functionality. */
 const allResults: EnrichmentItem[] = [];
 
+type HistoryReplayElements = {
+  progressContainer: HTMLElement | null;
+  progressText: HTMLElement | null;
+  exportButton: HTMLElement | null;
+  exportDropdown: HTMLElement | null;
+};
+
 function isHistoryResultsPage(pageResults: HTMLElement): boolean {
-  const explicitOwner = attr(pageResults, "data-results-owner");
-
-  if (explicitOwner) {
-    return explicitOwner === "history";
-  }
-
-  return pageResults.hasAttribute("data-history-results");
+  return resolveResultsSurfaceOwner(pageResults) === "history";
 }
 
-function markHistoryReplayComplete(results: EnrichmentItem[]): void {
-  const container = document.getElementById("enrich-progress");
+function getHistoryReplayElements(): HistoryReplayElements {
+  return {
+    progressContainer: document.getElementById("enrich-progress"),
+    progressText: document.getElementById("enrich-progress-text"),
+    exportButton: document.getElementById("export-btn"),
+    exportDropdown: document.getElementById("export-dropdown"),
+  };
+}
+
+function markHistoryReplayComplete(results: EnrichmentItem[], elements: HistoryReplayElements): void {
+  const container = elements.progressContainer;
   if (container) {
     container.classList.add("complete");
   }
 
-  const progressText = document.getElementById("enrich-progress-text");
+  const progressText = elements.progressText;
   if (progressText) {
     progressText.textContent = "Enrichment complete";
   }
 
-  const exportBtn = document.getElementById("export-btn");
+  const exportBtn = elements.exportButton;
   if (exportBtn && results.length > 0) {
     exportBtn.removeAttribute("disabled");
   }
@@ -52,12 +62,24 @@ function markHistoryReplayComplete(results: EnrichmentItem[]): void {
 // ---- Public API ----
 
 export function init(): void {
-  const pageResults = document.querySelector<HTMLElement>(".page-results");
+  const pageResults = pageResultsElement();
   if (!pageResults || !isHistoryResultsPage(pageResults)) return;
 
   const historyAttr = pageResults.getAttribute("data-history-results");
+  const elements = getHistoryReplayElements();
   if (!historyAttr) {
-    markHistoryReplayComplete([]);
+    markHistoryReplayComplete([], elements);
+    pageResults.setAttribute("data-results-runtime", "history");
+    return;
+  }
+
+  allResults.length = 0;
+  if (historyAttr === "[]") {
+    initExportButton(allResults, pageResults, {
+      exportButton: elements.exportButton,
+      dropdown: elements.exportDropdown,
+    });
+    markHistoryReplayComplete(allResults, elements);
     pageResults.setAttribute("data-results-runtime", "history");
     return;
   }
@@ -70,11 +92,12 @@ export function init(): void {
     return;
   }
 
-  allResults.length = 0;
   const coordinator = createResultApplicationCoordinator();
 
   if (Array.isArray(results)) {
-    for (const result of results) {
+    for (let i = 0; i < results.length; i += 1) {
+      const result = results[i];
+      if (!result) continue;
       allResults.push(result);
       coordinator.apply(result);
     }
@@ -82,7 +105,10 @@ export function init(): void {
 
   coordinator.finalize();
   wireExpandToggles(pageResults);
-  initExportButton(allResults, pageResults);
-  markHistoryReplayComplete(allResults);
+  initExportButton(allResults, pageResults, {
+    exportButton: elements.exportButton,
+    dropdown: elements.exportDropdown,
+  });
+  markHistoryReplayComplete(allResults, elements);
   pageResults.setAttribute("data-results-runtime", "history");
 }

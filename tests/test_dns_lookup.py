@@ -148,6 +148,62 @@ class TestSuccessfulLookup:
             f"DNS records are informational, verdict must be 'no_data', got: {result.verdict!r}"
         )
 
+    def test_result_helper_preserves_provider_envelope(self) -> None:
+        """DNS result construction should keep the informational envelope centralized."""
+        import inspect
+
+        from app.enrichment.adapters.dns_lookup import _dns_result
+
+        raw_stats = {
+            "a": ["93.184.216.34"],
+            "mx": [],
+            "ns": [],
+            "txt": [],
+            "lookup_errors": [],
+        }
+
+        result = _dns_result(
+            ioc=DOMAIN_IOC,
+            provider="DNS Records",
+            raw_stats=raw_stats,
+        )
+
+        assert result.ioc is DOMAIN_IOC
+        assert result.provider == "DNS Records"
+        assert result.verdict == "no_data"
+        assert result.detection_count == 0
+        assert result.total_engines == 0
+        assert result.scan_date is None
+        assert result.raw_stats is raw_stats
+        assert "no_data_result(ioc, provider, raw_stats)" in inspect.getsource(_dns_result)
+
+    def test_lookup_uses_record_table_extractors(self, monkeypatch) -> None:
+        """Record-type dispatch should use table extractors instead of an rdtype branch chain."""
+        import app.enrichment.adapters.dns_lookup as dns_module
+
+        mock_resolver = MagicMock()
+        answers = [object()]
+        mock_resolver.resolve.return_value = answers
+        extractor_calls: list[object] = []
+
+        def custom_extractor(received_answers):
+            extractor_calls.append(received_answers)
+            return ["custom-value"]
+
+        monkeypatch.setattr(
+            dns_module,
+            "_RECORD_TYPES",
+            (("CUSTOM", "custom", custom_extractor),),
+        )
+
+        with patch("dns.resolver.Resolver", return_value=mock_resolver):
+            result = _make_adapter().lookup(DOMAIN_IOC)
+
+        assert isinstance(result, EnrichmentResult)
+        mock_resolver.resolve.assert_called_once_with("example.com", "CUSTOM")
+        assert extractor_calls == [answers]
+        assert result.raw_stats["custom"] == ["custom-value"]
+
 
 # ---------------------------------------------------------------------------
 # A record extraction
@@ -329,6 +385,136 @@ class TestTXTRecords:
 
         # to_text should not be called on TXT rdata
         mock_rdata.to_text.assert_not_called()
+
+    def test_short_chunk_txt_records_skip_join_iteration(self) -> None:
+        """One- and two-chunk TXT records should decode directly instead of joining."""
+        from app.enrichment.adapters.dns_lookup import _extract_txt_records
+
+        class ShortChunkStrings:
+            def __init__(self, chunks: tuple[bytes, ...]) -> None:
+                self.chunks = chunks
+
+            def __len__(self) -> int:
+                return len(self.chunks)
+
+            def __getitem__(self, index: int) -> bytes:
+                if index >= len(self.chunks):
+                    raise IndexError(index)
+                return self.chunks[index]
+
+            def __iter__(self):
+                raise AssertionError("short TXT chunks should not be joined through iteration")
+
+        record = MagicMock()
+        record.strings = ShortChunkStrings((b"v=spf1 ~all",))
+        pair_record = MagicMock()
+        pair_record.strings = ShortChunkStrings((b"google-site-", b"verification=abc"))
+
+        assert _extract_txt_records([record]) == ["v=spf1 ~all"]
+        assert _extract_txt_records([pair_record]) == ["google-site-verification=abc"]
+
+
+# ---------------------------------------------------------------------------
+# Extractor implementation shape
+# ---------------------------------------------------------------------------
+
+
+class TestRecordExtractorImplementation:
+
+    def test_record_extractors_do_not_allocate_list_comprehension_frames(self) -> None:
+        """Record extractors should use direct loops, not per-call list comprehensions."""
+        from app.enrichment.adapters.dns_lookup import (
+            _extract_mx_records,
+            _extract_text_records,
+            _extract_txt_records,
+        )
+
+        for extractor in (_extract_text_records, _extract_mx_records, _extract_txt_records):
+            nested_code_names = {
+                const.co_name
+                for const in extractor.__code__.co_consts
+                if hasattr(const, "co_name")
+            }
+            assert "<listcomp>" not in nested_code_names
+
+    def test_record_extractors_skip_iteration_for_empty_single_pair_or_three_answers(self) -> None:
+        from app.enrichment.adapters.dns_lookup import (
+            _extract_mx_records,
+            _extract_text_records,
+            _extract_txt_records,
+        )
+
+        class ShortAnswers:
+            def __init__(self, *records) -> None:
+                self.records = records
+
+            def __len__(self) -> int:
+                return len(self.records)
+
+            def __getitem__(self, index: int):
+                if index >= len(self.records):
+                    raise IndexError(index)
+                return self.records[index]
+
+            def __iter__(self):
+                raise AssertionError("short-answer extraction should not iterate")
+
+        class EmptyAnswers:
+            def __len__(self) -> int:
+                return 0
+
+            def __getitem__(self, index: int):
+                raise IndexError(index)
+
+            def __iter__(self):
+                raise AssertionError("empty-answer extraction should not iterate")
+
+        text_record = _make_a_rdata("93.184.216.34")
+        second_text_record = _make_a_rdata("93.184.216.35")
+        third_text_record = _make_a_rdata("93.184.216.36")
+        mx_record = _make_mx_rdata(10, "mail.example.com.")
+        second_mx_record = _make_mx_rdata(20, "backup.example.com.")
+        third_mx_record = _make_mx_rdata(30, "fallback.example.com.")
+        txt_record = _make_txt_rdata(b"v=spf1 ~all")
+        second_txt_record = _make_txt_rdata(b"google-site-verification=abc")
+        third_txt_record = _make_txt_rdata(b"apple-domain-verification=xyz")
+
+        assert _extract_text_records(EmptyAnswers()) == []
+        assert _extract_mx_records(EmptyAnswers()) == []
+        assert _extract_txt_records(EmptyAnswers()) == []
+        assert _extract_text_records(ShortAnswers(text_record)) == ["93.184.216.34"]
+        assert _extract_mx_records(ShortAnswers(mx_record)) == ["10 mail.example.com."]
+        assert _extract_txt_records(ShortAnswers(txt_record)) == ["v=spf1 ~all"]
+        assert _extract_text_records(ShortAnswers(text_record, second_text_record)) == [
+            "93.184.216.34",
+            "93.184.216.35",
+        ]
+        assert _extract_mx_records(ShortAnswers(mx_record, second_mx_record)) == [
+            "10 mail.example.com.",
+            "20 backup.example.com.",
+        ]
+        assert _extract_txt_records(ShortAnswers(txt_record, second_txt_record)) == [
+            "v=spf1 ~all",
+            "google-site-verification=abc",
+        ]
+        assert _extract_text_records(ShortAnswers(text_record, second_text_record, third_text_record)) == [
+            "93.184.216.34",
+            "93.184.216.35",
+            "93.184.216.36",
+        ]
+        assert _extract_mx_records(ShortAnswers(mx_record, second_mx_record, third_mx_record)) == [
+            "10 mail.example.com.",
+            "20 backup.example.com.",
+            "30 fallback.example.com.",
+        ]
+        assert _extract_txt_records(ShortAnswers(txt_record, second_txt_record, third_txt_record)) == [
+            "v=spf1 ~all",
+            "google-site-verification=abc",
+            "apple-domain-verification=xyz",
+        ]
+        assert "len" in _extract_text_records.__code__.co_names
+        assert "len" in _extract_mx_records.__code__.co_names
+        assert "len" in _extract_txt_records.__code__.co_names
 
 
 # ---------------------------------------------------------------------------

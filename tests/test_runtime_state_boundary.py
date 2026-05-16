@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import importlib.util
+import inspect
 import json
 import subprocess
 import sys
@@ -45,6 +46,19 @@ def init_temp_repo(repo_root: Path) -> None:
         capture_output=True,
         check=True,
     )
+
+
+def test_audit_parser_reuses_static_default_roots(monkeypatch):
+    """Default audit roots should reuse the immutable tuple instead of building a list."""
+    boundary = load_boundary_module()
+
+    monkeypatch.setattr(sys, "argv", ["runtime_state_boundary.py", "audit"])
+
+    args = boundary.parse_args()
+
+    assert args.paths is boundary.DEFAULT_AUDIT_ROOTS
+    assert args.paths == (".gsd", ".planning", ".bg-shell")
+    assert "list(DEFAULT_AUDIT_ROOTS)" not in SCRIPT.read_text(encoding="utf-8")
 
 
 def test_classify_reports_representative_repo_paths():
@@ -91,15 +105,64 @@ def test_classify_accepts_absolute_paths_and_fails_closed_for_unknown_root():
     assert unknown.issue_code == "unknown-root"
 
 
+def test_empty_classify_paths_skips_normalization(monkeypatch):
+    boundary = load_boundary_module()
+
+    def fail_normalize(*_args, **_kwargs):
+        raise AssertionError("empty classification should not normalize paths")
+
+    monkeypatch.setattr(boundary, "normalize_repo_relative_path", fail_normalize)
+
+    assert boundary.classify_paths((), Path.cwd()) == ()
+
+
+def test_classification_result_tuple_helper_skips_iteration_for_short_sequences() -> None:
+    boundary = load_boundary_module()
+    result = boundary.ClassificationResult(
+        input_path=".gsd/state-manifest.json",
+        normalized_path=".gsd/state-manifest.json",
+        classification=boundary.CLASS_TRANSIENT,
+        issue_code=boundary.ISSUE_UNIGNORED_TRANSIENT,
+        matched_rules=("gsd-runtime-files",),
+        rationale="runtime state",
+    )
+
+    class NoIterResults:
+        def __init__(self, items):
+            self.items = items
+
+        def __len__(self):
+            return len(self.items)
+
+        def __getitem__(self, index):
+            return self.items[index]
+
+        def __iter__(self):
+            raise AssertionError("short classification result tuple conversion should not iterate")
+
+    results = (result, result)
+
+    assert boundary.classification_results_tuple(results) is results
+    assert boundary.classification_results_tuple(NoIterResults([])) == ()
+    assert boundary.classification_results_tuple(NoIterResults([result])) == (result,)
+    assert boundary.classification_results_tuple(NoIterResults([result, result])) == (result, result)
+    assert "classification_results_tuple" in boundary.classify_paths.__code__.co_names
+
+
 def test_empty_and_outside_repo_paths_raise_clear_errors():
     boundary = load_boundary_module()
     repo_root = Path.cwd().resolve()
 
+    class NoStripPath(str):
+        def strip(self, *_args, **_kwargs):
+            raise AssertionError("path normalization should trim by index")
+
     with pytest.raises(boundary.BoundaryPathError, match="must not be empty"):
-        boundary.normalize_repo_relative_path("   ", repo_root)
+        boundary.normalize_repo_relative_path(NoStripPath("   "), repo_root)
 
     with pytest.raises(boundary.BoundaryPathError, match="outside repo root"):
         boundary.normalize_repo_relative_path("/tmp/runtime-boundary-outside", repo_root)
+    assert "stripped_text_or_none" in boundary.normalize_repo_relative_path.__code__.co_names
 
 
 def test_conflicting_highest_priority_rules_fail_closed_to_manual_review():
@@ -126,6 +189,392 @@ def test_conflicting_highest_priority_rules_fail_closed_to_manual_review():
     assert result.classification == boundary.CLASS_MANUAL_REVIEW
     assert result.issue_code == "conflicting-rule-match"
     assert result.matched_rules == ("durable-match", "transient-match")
+
+
+def test_rule_names_skips_list_for_empty_single_or_pair_rules() -> None:
+    boundary = load_boundary_module()
+    rule = boundary.PolicyRule(
+        name="single",
+        classification=boundary.CLASS_DURABLE,
+        priority=10,
+        patterns=("README.md",),
+        rationale="test",
+    )
+
+    class NoIterRules:
+        def __init__(self, items):
+            self.items = items
+
+        def __len__(self):
+            return len(self.items)
+
+        def __getitem__(self, index):
+            return self.items[index]
+
+        def __iter__(self):
+            raise AssertionError("short rule name extraction should not iterate")
+
+    assert boundary.rule_names(()) == ()
+    assert boundary.rule_names(NoIterRules([rule])) == ("single",)
+    assert boundary.rule_names(NoIterRules([rule, rule])) == ("single", "single")
+
+
+def test_matched_rule_formatting_skips_join_for_empty_single_or_pair_rules() -> None:
+    boundary = load_boundary_module()
+
+    class NoIterRules:
+        def __init__(self, items):
+            self.items = items
+
+        def __len__(self):
+            return len(self.items)
+
+        def __getitem__(self, index):
+            return self.items[index]
+
+        def __iter__(self):
+            raise AssertionError("short matched-rule formatting should not iterate")
+
+    assert boundary.format_matched_rules(()) == "-"
+    assert boundary.format_matched_rules(NoIterRules(["single"])) == "single"
+    assert boundary.format_matched_rules(NoIterRules(["first", "second"])) == "first,second"
+    assert "_classification_text_line" in boundary.render_classify_text.__code__.co_names
+    assert "format_matched_rules" in boundary._classification_text_line.__code__.co_names
+    assert "format_matched_rules" in boundary.render_audit_text.__code__.co_names
+
+    source = SCRIPT.read_text(encoding="utf-8")
+    classify_source = source[source.index("def render_classify_text") : source.index("def render_audit_text")]
+    audit_source = source[source.index("def render_audit_text") : source.index("def classification_to_dict")]
+    assert "\",\".join" not in classify_source
+    assert "\",\".join" not in audit_source
+
+
+def test_classify_text_rendering_skips_iteration_for_empty_single_or_pair_results() -> None:
+    boundary = load_boundary_module()
+    result = boundary.ClassificationResult(
+        input_path=".gsd/state.json",
+        normalized_path=".gsd/state.json",
+        classification=boundary.CLASS_TRANSIENT,
+        issue_code=boundary.ISSUE_UNIGNORED_TRANSIENT,
+        matched_rules=("gsd-runtime-files",),
+        rationale="runtime state",
+    )
+    second = boundary.ClassificationResult(
+        input_path=".planning/notes.md",
+        normalized_path=".planning/notes.md",
+        classification=boundary.CLASS_MANUAL_REVIEW,
+        issue_code=boundary.ISSUE_MANUAL_REVIEW,
+        matched_rules=("planning-legacy",),
+        rationale="manual review",
+    )
+
+    class NoIterResults:
+        def __init__(self, items):
+            self.items = items
+
+        def __len__(self):
+            return len(self.items)
+
+        def __getitem__(self, index):
+            return self.items[index]
+
+        def __iter__(self):
+            raise AssertionError("short classify text rendering should not iterate")
+
+    assert boundary.render_classify_text(NoIterResults([])) == ""
+    assert boundary.render_classify_text(NoIterResults([result])) == (
+        "transient\t.gsd/state.json\tissue=unignored-transient\trules=gsd-runtime-files"
+    )
+    assert boundary.render_classify_text(NoIterResults([result, second])) == (
+        "transient\t.gsd/state.json\tissue=unignored-transient\trules=gsd-runtime-files\n"
+        "manual-review\t.planning/notes.md\tissue=manual-review-path\trules=planning-legacy"
+    )
+    assert "_classification_text_line" in boundary.render_classify_text.__code__.co_names
+
+
+def test_repo_path_root_scans_without_split_list() -> None:
+    """Boundary root checks should avoid allocating split path parts."""
+    boundary = load_boundary_module()
+
+    class NoSplitPath(str):
+        def split(self, *_args, **_kwargs):
+            raise AssertionError("repo path root extraction should scan directly")
+
+    assert boundary.repo_path_root(NoSplitPath(".gsd/runtime/state.json")) == ".gsd"
+    assert boundary.repo_path_root(NoSplitPath("README.md")) == "README.md"
+    assert "repo_path_root" in boundary.classify_relative_path.__code__.co_names
+    assert "split" not in boundary.repo_path_root.__code__.co_names
+
+
+def test_highest_priority_rule_selection_uses_direct_scan(monkeypatch):
+    """Policy selection should avoid generator and comprehension scans."""
+    boundary = load_boundary_module()
+    policy = (
+        boundary.PolicyRule(
+            name="lower-match",
+            classification=boundary.CLASS_TRANSIENT,
+            priority=10,
+            patterns=(".gsd/runtime/state.json",),
+            rationale="lower priority",
+        ),
+        boundary.PolicyRule(
+            name="highest-a",
+            classification=boundary.CLASS_DURABLE,
+            priority=50,
+            patterns=(".gsd/runtime/state.json",),
+            rationale="highest priority",
+        ),
+        boundary.PolicyRule(
+            name="highest-b",
+            classification=boundary.CLASS_DURABLE,
+            priority=50,
+            patterns=(".gsd/runtime/state.json",),
+            rationale="also highest priority",
+        ),
+    )
+
+    def fail_max(*_args, **_kwargs):
+        raise AssertionError("highest-priority selection should scan directly")
+
+    def fail_set(*_args, **_kwargs):
+        raise AssertionError("highest-priority selection should not allocate a class set")
+
+    def fail_any(*_args, **_kwargs):
+        raise AssertionError("rule matching should scan patterns directly")
+
+    monkeypatch.setattr("builtins.max", fail_max)
+    monkeypatch.setattr("builtins.set", fail_set)
+    monkeypatch.setattr("builtins.any", fail_any)
+
+    result = boundary.classify_relative_path(".gsd/runtime/state.json", policy=policy)
+
+    assert result.classification == boundary.CLASS_DURABLE
+    assert result.matched_rules == ("highest-a", "highest-b")
+    assert boundary.highest_priority_matches(()) == ()
+    assert boundary.highest_priority_matches((policy[0],)) == (policy[0],)
+    assert boundary.highest_priority_matches(policy) == policy[1:]
+    assert "policy_rules_tuple" in boundary.highest_priority_matches.__code__.co_names
+    assert boundary.rule_matches_path(".gsd/runtime/state.json", policy[0]) is True
+    assert boundary.rule_names(policy[1:]) == ("highest-a", "highest-b")
+    classify_source = SCRIPT.read_text(encoding="utf-8")
+    classify_source = classify_source[
+        classify_source.index("def classify_relative_path") : classify_source.index("def rule_names")
+    ]
+    assert "\n    matches: list[PolicyRule]" not in classify_source
+    assert "highest_priority_matches(matches)" not in classify_source
+    assert "<listcomp>" not in {
+        const.co_name
+        for const in boundary.highest_priority_matches.__code__.co_consts
+        if hasattr(const, "co_name")
+    }
+    assert "<listcomp>" not in {
+        const.co_name
+        for const in boundary.classify_relative_path.__code__.co_consts
+        if hasattr(const, "co_name")
+    }
+    assert "<genexpr>" not in {
+        const.co_name
+        for const in boundary.rule_matches_path.__code__.co_consts
+        if hasattr(const, "co_name")
+    }
+    assert "<genexpr>" not in {
+        const.co_name
+        for const in boundary.rule_names.__code__.co_consts
+        if hasattr(const, "co_name")
+    }
+    assert "<setcomp>" not in {
+        const.co_name
+        for const in boundary.classify_relative_path.__code__.co_consts
+        if hasattr(const, "co_name")
+    }
+
+
+def test_policy_rules_tuple_helper_skips_iteration_for_short_sequences() -> None:
+    boundary = load_boundary_module()
+    rule = boundary.PolicyRule(
+        name="single",
+        classification=boundary.CLASS_DURABLE,
+        priority=10,
+        patterns=("README.md",),
+        rationale="test",
+    )
+
+    class NoIterRules:
+        def __init__(self, items):
+            self.items = items
+
+        def __len__(self):
+            return len(self.items)
+
+        def __getitem__(self, index):
+            return self.items[index]
+
+        def __iter__(self):
+            raise AssertionError("short policy rule tuple conversion should not iterate")
+
+    rules = (rule, rule)
+
+    assert boundary.policy_rules_tuple(rules) is rules
+    assert boundary.policy_rules_tuple(NoIterRules([])) == ()
+    assert boundary.policy_rules_tuple(NoIterRules([rule])) == (rule,)
+    assert boundary.policy_rules_tuple(NoIterRules([rule, rule])) == (rule, rule)
+
+
+def test_format_command_args_shell_quotes_display_values():
+    boundary = load_boundary_module()
+
+    assert (
+        boundary.format_command_args(("rm", "--cached", "--", ".gsd/a path.json"))
+        == "rm --cached -- '.gsd/a path.json'"
+    )
+    assert "tuple(args)" not in SCRIPT.read_text(encoding="utf-8")
+
+
+def test_first_non_empty_output_decodes_and_strips_streams():
+    boundary = load_boundary_module()
+
+    class NoStripText(str):
+        def strip(self, *_args, **_kwargs):
+            raise AssertionError("boundary output trimming should scan by index")
+
+    assert boundary.first_non_empty_output(NoStripText("   "), b"  bad utf8: \xff  ") == "bad utf8: �"
+    assert boundary.first_non_empty_output(None, NoStripText(""), b"  ") is None
+    assert boundary.stripped_text_or_none(NoStripText("  git failed  ")) == "git failed"
+    assert "stripped_text_or_none" in boundary.first_non_empty_output.__code__.co_names
+    assert "strip" not in boundary.stripped_text_or_none.__code__.co_names
+
+
+def test_nul_delimited_path_parser_accumulates_directly():
+    """Git NUL-delimited path parsing should avoid split-list and set-comprehension frames."""
+    boundary = load_boundary_module()
+
+    parsed = boundary.parse_nul_delimited_paths(
+        b".gsd/state-manifest.json\0\0.planning/STATE.md\0"
+    )
+
+    assert parsed == {".gsd/state-manifest.json", ".planning/STATE.md"}
+    assert ".split(" not in inspect.getsource(boundary.parse_nul_delimited_paths)
+    assert "<setcomp>" not in {
+        const.co_name
+        for const in boundary.parse_nul_delimited_paths.__code__.co_consts
+        if hasattr(const, "co_name")
+    }
+
+
+def test_format_json_payload_uses_repo_tooling_pretty_json():
+    boundary = load_boundary_module()
+
+    assert boundary.format_json_payload({"b": 1, "a": 2}, sort_keys=True) == '{\n  "a": 2,\n  "b": 1\n}'
+
+
+def test_boundary_json_serialization_uses_direct_accumulation():
+    """Boundary JSON helpers should avoid comprehension frames and recursive asdict walks."""
+    boundary = load_boundary_module()
+    result = boundary.ClassificationResult(
+        input_path=".gsd/state-manifest.json",
+        normalized_path=".gsd/state-manifest.json",
+        classification=boundary.CLASS_TRANSIENT,
+        issue_code=boundary.ISSUE_UNIGNORED_TRANSIENT,
+        matched_rules=("gsd-runtime-files",),
+        rationale="runtime state",
+    )
+    finding = boundary.AuditFinding(
+        path=".gsd/state-manifest.json",
+        classification=boundary.CLASS_TRANSIENT,
+        issue_code=boundary.ISSUE_UNIGNORED_TRANSIENT,
+        matched_rules=("gsd-runtime-files",),
+        rationale="runtime state",
+        tracked=False,
+        ignored=False,
+    )
+    report = boundary.AuditReport(
+        repo_root="/tmp/repo",
+        scanned_paths=1,
+        findings=(finding,),
+    )
+    class NoIterSequence:
+        def __init__(self, items):
+            self.items = items
+
+        def __len__(self):
+            return len(self.items)
+
+        def __getitem__(self, index):
+            return self.items[index]
+
+        def __iter__(self):
+            raise AssertionError("short boundary JSON serialization should not iterate")
+
+    assert boundary.classifications_to_dicts(NoIterSequence([result])) == [
+        boundary.classification_to_dict(result)
+    ]
+    assert boundary.classifications_to_dicts(()) == []
+    assert boundary.classifications_to_dicts(NoIterSequence([result, result])) == [
+        boundary.classification_to_dict(result),
+        boundary.classification_to_dict(result),
+    ]
+    assert boundary.audit_report_to_dict(report)["findings"] == [
+        boundary.audit_finding_to_dict(finding)
+    ]
+    assert boundary.audit_findings_to_dicts(()) == []
+    assert boundary.audit_findings_to_dicts(NoIterSequence([finding, finding])) == [
+        boundary.audit_finding_to_dict(finding),
+        boundary.audit_finding_to_dict(finding),
+    ]
+    assert "asdict" not in boundary.classification_to_dict.__code__.co_names
+    assert "asdict" not in boundary.audit_finding_to_dict.__code__.co_names
+    assert "asdict" not in SCRIPT.read_text(encoding="utf-8")
+    assert "<listcomp>" not in {
+        const.co_name
+        for const in boundary.classifications_to_dicts.__code__.co_consts
+        if hasattr(const, "co_name")
+    }
+    assert "<listcomp>" not in {
+        const.co_name
+        for const in boundary.audit_findings_to_dicts.__code__.co_consts
+        if hasattr(const, "co_name")
+    }
+    assert "audit_findings_to_dicts" in boundary.audit_report_to_dict.__code__.co_names
+    assert "len" in boundary.classifications_to_dicts.__code__.co_names
+    assert "len" in boundary.audit_findings_to_dicts.__code__.co_names
+
+
+def test_boundary_records_use_slots_to_avoid_instance_dict() -> None:
+    boundary = load_boundary_module()
+    rule = boundary.PolicyRule(
+        name="single",
+        classification=boundary.CLASS_DURABLE,
+        priority=10,
+        patterns=("README.md",),
+        rationale="test",
+    )
+    result = boundary.ClassificationResult(
+        input_path=".gsd/state-manifest.json",
+        normalized_path=".gsd/state-manifest.json",
+        classification=boundary.CLASS_TRANSIENT,
+        issue_code=boundary.ISSUE_UNIGNORED_TRANSIENT,
+        matched_rules=("gsd-runtime-files",),
+        rationale="runtime state",
+    )
+    finding = boundary.AuditFinding(
+        path=".gsd/state-manifest.json",
+        classification=boundary.CLASS_TRANSIENT,
+        issue_code=boundary.ISSUE_UNIGNORED_TRANSIENT,
+        matched_rules=("gsd-runtime-files",),
+        rationale="runtime state",
+        tracked=False,
+        ignored=False,
+    )
+    report = boundary.AuditReport(
+        repo_root="/tmp/repo",
+        scanned_paths=1,
+        findings=(finding,),
+    )
+
+    assert not hasattr(rule, "__dict__")
+    assert not hasattr(result, "__dict__")
+    assert not hasattr(finding, "__dict__")
+    assert not hasattr(report, "__dict__")
 
 
 def test_audit_reports_tracked_transient_unignored_transient_and_manual_review(tmp_path):
@@ -226,6 +675,249 @@ def test_audit_can_fail_only_on_selected_issue_codes(tmp_path):
     findings = {(row["issue_code"], row["path"]) for row in json.loads(blocker.stdout)["findings"]}
     assert ("unignored-transient", ".gsd/state-manifest.json") in findings
     assert ("manual-review-path", ".planning/STATE.md") in findings
+
+
+def test_report_issue_code_selection_scans_directly(monkeypatch):
+    """Fail-on-code selection should avoid set materialization and generator frames."""
+    boundary = load_boundary_module()
+    report = boundary.AuditReport(
+        repo_root="/tmp/repo",
+        scanned_paths=2,
+        findings=(
+            boundary.AuditFinding(
+                path=".planning/STATE.md",
+                classification=boundary.CLASS_MANUAL_REVIEW,
+                issue_code=boundary.ISSUE_MANUAL_REVIEW,
+                matched_rules=("planning-legacy",),
+                rationale="manual review",
+            ),
+            boundary.AuditFinding(
+                path=".gsd/state-manifest.json",
+                classification=boundary.CLASS_TRANSIENT,
+                issue_code=boundary.ISSUE_UNIGNORED_TRANSIENT,
+                matched_rules=("gsd-runtime-files",),
+                rationale="unignored transient",
+            ),
+        ),
+    )
+
+    def fail_set(*_args, **_kwargs):
+        raise AssertionError("fail-on-code selection should not materialize selected-code sets")
+
+    monkeypatch.setattr("builtins.set", fail_set)
+
+    assert boundary.report_has_issue_codes(report, (boundary.ISSUE_UNIGNORED_TRANSIENT,)) is True
+    assert boundary.report_has_issue_codes(report, (boundary.ISSUE_TRACKED_TRANSIENT,)) is False
+    assert "<genexpr>" not in {
+        const.co_name
+        for const in boundary.report_has_issue_codes.__code__.co_consts
+        if hasattr(const, "co_name")
+    }
+
+
+def test_audit_text_renders_issue_counts_without_sorting(monkeypatch):
+    """Audit text count rendering should use the canonical issue-code order."""
+    boundary = load_boundary_module()
+    report = boundary.AuditReport(
+        repo_root="/tmp/repo",
+        scanned_paths=2,
+        findings=(
+            boundary.AuditFinding(
+                path=".planning/STATE.md",
+                classification=boundary.CLASS_MANUAL_REVIEW,
+                issue_code=boundary.ISSUE_MANUAL_REVIEW,
+                matched_rules=("planning-legacy",),
+                rationale="manual review",
+            ),
+            boundary.AuditFinding(
+                path=".gsd/state-manifest.json",
+                classification=boundary.CLASS_TRANSIENT,
+                issue_code=boundary.ISSUE_UNIGNORED_TRANSIENT,
+                matched_rules=("gsd-runtime-files",),
+                rationale="unignored transient",
+            ),
+        ),
+    )
+
+    def fail_sorted(*_args, **_kwargs):
+        raise AssertionError("audit text issue counts should not sort per render")
+
+    monkeypatch.setattr("builtins.sorted", fail_sorted)
+
+    text = boundary.render_audit_text(report)
+
+    assert text.index("- unignored-transient: 1") < text.index("- manual-review-path: 1")
+    assert "- tracked-transient:" not in text
+    assert "ALL_ISSUE_CODES" in boundary.render_audit_text.__code__.co_names
+
+
+def test_audit_candidate_discovery_skips_sort_for_zero_one_two_or_three_paths(monkeypatch, tmp_path):
+    """Targeted boundary audits should not sort small candidate sets."""
+    boundary = load_boundary_module()
+    repo_root = tmp_path
+    single = repo_root / ".gsd" / "state-manifest.json"
+    second = repo_root / ".gsd" / "runtime" / "state.json"
+    third = repo_root / ".bg-shell" / "manifest.json"
+    single.parent.mkdir(parents=True)
+    second.parent.mkdir(parents=True)
+    third.parent.mkdir(parents=True)
+    single.write_text("{}\n", encoding="utf-8")
+    second.write_text("{}\n", encoding="utf-8")
+    third.write_text("{}\n", encoding="utf-8")
+
+    def fail_sorted(*_args, **_kwargs):
+        raise AssertionError("small audit candidate discovery should not sort")
+
+    monkeypatch.setattr("builtins.sorted", fail_sorted)
+
+    assert boundary.iter_audit_candidate_paths((), repo_root) == ()
+    assert boundary.iter_audit_candidate_paths((".gsd/missing.json",), repo_root) == ()
+    assert boundary.iter_audit_candidate_paths((".gsd/state-manifest.json",), repo_root) == (
+        ".gsd/state-manifest.json",
+    )
+    assert boundary.iter_audit_candidate_paths((".gsd/state-manifest.json", ".gsd/runtime/state.json"), repo_root) == (
+        ".gsd/runtime/state.json",
+        ".gsd/state-manifest.json",
+    )
+    assert boundary.iter_audit_candidate_paths(
+        (".gsd/state-manifest.json", ".gsd/runtime/state.json", ".bg-shell/manifest.json"),
+        repo_root,
+    ) == (
+        ".bg-shell/manifest.json",
+        ".gsd/runtime/state.json",
+        ".gsd/state-manifest.json",
+    )
+    assert boundary.ordered_discovered_paths(
+        {".gsd/state-manifest.json", ".gsd/runtime/state.json"},
+        ".gsd/state-manifest.json",
+    ) == (
+        ".gsd/runtime/state.json",
+        ".gsd/state-manifest.json",
+    )
+    assert boundary.ordered_discovered_paths(
+        {".gsd/state-manifest.json", ".gsd/runtime/state.json", ".bg-shell/manifest.json"},
+        ".gsd/state-manifest.json",
+    ) == (
+        ".bg-shell/manifest.json",
+        ".gsd/runtime/state.json",
+        ".gsd/state-manifest.json",
+    )
+    source = SCRIPT.read_text(encoding="utf-8")
+    helper_source = source[
+        source.index("def iter_audit_candidate_paths") : source.index("def run_git_command")
+    ]
+    assert "next(iter(discovered))" not in helper_source
+    assert "ordered_discovered_paths" in boundary.iter_audit_candidate_paths.__code__.co_names
+
+
+def test_empty_audit_candidate_discovery_skips_normalization_and_set(monkeypatch, tmp_path):
+    """Empty targeted audits should return before path normalization or set allocation."""
+    boundary = load_boundary_module()
+
+    def fail_normalize(*_args, **_kwargs):
+        raise AssertionError("empty audit candidate discovery should not normalize paths")
+
+    def fail_set(*_args, **_kwargs):
+        raise AssertionError("empty audit candidate discovery should not allocate a discovery set")
+
+    monkeypatch.setattr(boundary, "normalize_repo_relative_path", fail_normalize)
+    monkeypatch.setattr("builtins.set", fail_set)
+
+    assert boundary.iter_audit_candidate_paths((), tmp_path) == ()
+
+
+def test_audit_paths_skips_finding_sort_for_zero_one_two_or_three_findings(monkeypatch, tmp_path):
+    """Targeted boundary audits should not sort small finding collections."""
+    boundary = load_boundary_module()
+    repo_root = tmp_path
+    single = repo_root / ".gsd" / "state-manifest.json"
+    manual = repo_root / ".planning" / "notes.md"
+    bg_shell = repo_root / ".bg-shell" / "manifest.json"
+    single.parent.mkdir(parents=True)
+    manual.parent.mkdir(parents=True)
+    bg_shell.parent.mkdir(parents=True)
+    single.write_text("{}\n", encoding="utf-8")
+    manual.write_text("notes\n", encoding="utf-8")
+    bg_shell.write_text("{}\n", encoding="utf-8")
+
+    def fail_sorted(*_args, **_kwargs):
+        raise AssertionError("small audit finding sets should not sort")
+
+    monkeypatch.setattr("builtins.sorted", fail_sorted)
+    monkeypatch.setattr(boundary, "git_tracked_paths", lambda _repo_root, _paths: set())
+    monkeypatch.setattr(boundary, "git_ignored_paths", lambda _repo_root, _paths: set())
+
+    empty_report = boundary.audit_paths((".gsd/missing.json",), repo_root)
+    single_report = boundary.audit_paths((".gsd/state-manifest.json",), repo_root)
+    pair_report = boundary.audit_paths((".gsd/state-manifest.json", ".planning/notes.md"), repo_root)
+    triple_report = boundary.audit_paths(
+        (".gsd/state-manifest.json", ".planning/notes.md", ".bg-shell/manifest.json"),
+        repo_root,
+    )
+
+    assert empty_report.findings == ()
+    assert len(single_report.findings) == 1
+    assert single_report.findings[0].issue_code == boundary.ISSUE_UNIGNORED_TRANSIENT
+    assert [finding.issue_code for finding in pair_report.findings] == [
+        boundary.ISSUE_MANUAL_REVIEW,
+        boundary.ISSUE_UNIGNORED_TRANSIENT,
+    ]
+    assert [(finding.issue_code, finding.path) for finding in triple_report.findings] == [
+        (boundary.ISSUE_MANUAL_REVIEW, ".planning/notes.md"),
+        (boundary.ISSUE_UNIGNORED_TRANSIENT, ".bg-shell/manifest.json"),
+        (boundary.ISSUE_UNIGNORED_TRANSIENT, ".gsd/state-manifest.json"),
+    ]
+    assert "ordered_audit_findings" in boundary.audit_paths.__code__.co_names
+
+
+def test_empty_git_path_sets_reuse_shared_empty_without_set_allocation(monkeypatch, tmp_path):
+    """Empty git/path parsing paths should not allocate throwaway mutable sets."""
+    boundary = load_boundary_module()
+
+    def fail_set(*_args, **_kwargs):
+        raise AssertionError("empty path helpers should reuse EMPTY_PATH_SET")
+
+    def fail_git(*_args, **_kwargs):
+        raise AssertionError("empty path helpers should not invoke git")
+
+    monkeypatch.setattr("builtins.set", fail_set)
+    monkeypatch.setattr(boundary, "run_git_command", fail_git)
+
+    assert boundary.parse_nul_delimited_paths(b"") is boundary.EMPTY_PATH_SET
+    assert boundary.git_tracked_paths(tmp_path, ()) is boundary.EMPTY_PATH_SET
+    assert boundary.git_ignored_paths(tmp_path, ()) is boundary.EMPTY_PATH_SET
+
+    source = SCRIPT.read_text(encoding="utf-8")
+    parser_source = source[source.index("def parse_nul_delimited_paths") : source.index("def git_tracked_paths")]
+    git_tracked_source = source[source.index("def git_tracked_paths") : source.index("def git_ignored_paths")]
+    git_ignored_source = source[source.index("def git_ignored_paths") : source.index("def audit_paths")]
+    assert "blob_length = len(blob)" in parser_source
+    assert "while start < len(blob)" not in parser_source
+    assert "return set()" not in git_tracked_source
+    assert "return set()" not in git_ignored_source
+
+
+def test_git_inspection_return_codes_use_shared_static_membership(monkeypatch, tmp_path):
+    """Git inspection should accept diff-style 0/1 exits without inline tuple checks."""
+    boundary = load_boundary_module()
+    calls: list[tuple[str, ...]] = []
+
+    def fake_run(args, **_kwargs):  # noqa: ANN001
+        calls.append(tuple(args))
+        return subprocess.CompletedProcess(args=args, returncode=1, stdout=b"changed\0", stderr=b"")
+
+    monkeypatch.setattr(boundary.subprocess, "run", fake_run)
+
+    assert boundary.GIT_INSPECTION_OK_RETURN_CODES == frozenset((0, 1))
+    assert boundary.run_git_command(tmp_path, ["diff", "--name-only"]) == b"changed\0"
+    assert calls == [("git", "diff", "--name-only")]
+
+    source = SCRIPT.read_text(encoding="utf-8")
+    helper_source = source[
+        source.index("def run_git_command") : source.index("def parse_nul_delimited_paths")
+    ]
+    assert "GIT_INSPECTION_OK_RETURN_CODES" in boundary.run_git_command.__code__.co_names
+    assert "not in (0, 1)" not in helper_source
 
 
 def test_cli_rejects_unsupported_subcommand():

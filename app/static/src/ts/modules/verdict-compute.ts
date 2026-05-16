@@ -34,12 +34,18 @@ export interface VerdictEntry {
  * Source: main.js computeWorstVerdict() (lines 542-551).
  */
 export function computeWorstVerdict(entries: VerdictEntry[]): VerdictKey {
-  // known_good from any provider overrides everything at summary level
-  if (entries.some((e) => e.verdict === "known_good")) {
-    return "known_good";
+  let worst: VerdictKey = "no_data";
+  for (let i = 0; i < entries.length; i++) {
+    const entry = entries[i];
+    if (!entry) continue;
+    if (entry.verdict === "known_good") {
+      return "known_good";
+    }
+    if (verdictSeverityIndex(entry.verdict) > verdictSeverityIndex(worst)) {
+      worst = entry.verdict;
+    }
   }
-  const worst = findWorstEntry(entries);
-  return worst ? worst.verdict : "no_data";
+  return worst;
 }
 
 /**
@@ -48,22 +54,27 @@ export function computeWorstVerdict(entries: VerdictEntry[]): VerdictKey {
  * Providers with no_data or error are excluded as candidates.
  */
 export function computeAttribution(entries: VerdictEntry[]): { provider: string; text: string } {
-  // Only candidates with actual data (not no_data or error)
-  const candidates = entries.filter(
-    (e) => e.verdict !== "no_data" && e.verdict !== "error"
-  );
-
-  if (candidates.length === 0) {
-    return { provider: "", text: "No providers returned data for this IOC" };
+  let best: VerdictEntry | undefined;
+  for (let i = 0; i < entries.length; i++) {
+    const entry = entries[i];
+    if (!entry) continue;
+    if (entry.verdict === "no_data" || entry.verdict === "error") continue;
+    if (!best) {
+      best = entry;
+      continue;
+    }
+    if (entry.totalEngines > best.totalEngines) {
+      best = entry;
+      continue;
+    }
+    if (
+      entry.totalEngines === best.totalEngines &&
+      verdictSeverityIndex(entry.verdict) > verdictSeverityIndex(best.verdict)
+    ) {
+      best = entry;
+    }
   }
 
-  // Sort: highest totalEngines first. Ties broken by severity descending.
-  const sorted = [...candidates].sort((a, b) => {
-    if (b.totalEngines !== a.totalEngines) return b.totalEngines - a.totalEngines;
-    return verdictSeverityIndex(b.verdict) - verdictSeverityIndex(a.verdict);
-  });
-
-  const best = sorted[0];
   if (!best) return { provider: "", text: "No providers returned data for this IOC" };
 
   return { provider: best.provider, text: best.provider + ": " + best.statText };
@@ -76,13 +87,28 @@ export function computeAttribution(entries: VerdictEntry[]): { provider: string;
 export function findWorstEntry(entries: VerdictEntry[]): VerdictEntry | undefined {
   const first = entries[0];
   if (!first) return undefined;
+  if (entries.length === 1) return first;
+
+  const second = entries[1];
+  if (entries.length === 2) {
+    if (!second) return first;
+    return verdictSeverityIndex(second.verdict) > verdictSeverityIndex(first.verdict)
+      ? second
+      : first;
+  }
 
   let worst = first;
+  let worstSeverity = verdictSeverityIndex(first.verdict);
   for (let i = 1; i < entries.length; i++) {
     const current = entries[i];
     if (!current) continue;
-    if (verdictSeverityIndex(current.verdict) > verdictSeverityIndex(worst.verdict)) {
+    const currentSeverity = verdictSeverityIndex(current.verdict);
+    if (currentSeverity > worstSeverity) {
       worst = current;
+      worstSeverity = currentSeverity;
+      if (current.verdict === "malicious") {
+        return current;
+      }
     }
   }
   return worst;

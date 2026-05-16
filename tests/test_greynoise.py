@@ -94,6 +94,28 @@ def _make_adapter(
 class TestGreyNoiseLookup:
     """Tests for GreyNoiseAdapter.lookup() verdict logic."""
 
+    def test_result_helper_preserves_provider_envelope(self) -> None:
+        """GreyNoise response branches should share one provider envelope."""
+        from app.enrichment.adapters.greynoise import _greynoise_result
+
+        ioc = make_ipv4_ioc("8.8.8.8")
+        result = _greynoise_result(
+            ioc=ioc,
+            provider_name="GreyNoise",
+            verdict="suspicious",
+            detection_count=1,
+            scan_date="2024-01-13",
+            raw_stats={"noise": True},
+        )
+
+        assert result.ioc is ioc
+        assert result.provider == "GreyNoise"
+        assert result.verdict == "suspicious"
+        assert result.detection_count == 1
+        assert result.total_engines == 1
+        assert result.scan_date == "2024-01-13"
+        assert result.raw_stats == {"noise": True}
+
     def test_riot_true_returns_clean(self) -> None:
         """riot=True IP -> verdict 'clean' with detection_count=0 (known benign service like Google DNS)."""
         ioc = make_ipv4_ioc("8.8.8.8")
@@ -220,5 +242,4 @@ class TestGreyNoiseLookup:
         assert headers["key"] == "myapikey"
         assert "Key" not in headers, "Header must be lowercase 'key', not capital 'Key'"
         assert "Authorization" not in headers, "Header must be 'key', not 'Authorization'"
-
 

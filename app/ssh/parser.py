@@ -30,10 +30,14 @@ import io
 import ipaddress
 import logging
 import re
+from collections.abc import Iterator
 from datetime import datetime, timedelta
+from functools import lru_cache
+from types import MappingProxyType
 from typing import IO
 
 from app.ssh.models import LoginEvent, ParseSummary
+from app.text_utils import decode_utf8_replace
 
 logger = logging.getLogger(__name__)
 
@@ -63,12 +67,28 @@ _RFC3339_ACCEPTED_RE = re.compile(
 # extraction. Triggers a logger.warning with line number and content (D-06).
 _PARTIAL_SSH_RE = re.compile(r'sshd\[\d+\]:\s+Accepted\s+')
 
+_BSD_MONTHS = MappingProxyType({
+    "Jan": 1,
+    "Feb": 2,
+    "Mar": 3,
+    "Apr": 4,
+    "May": 5,
+    "Jun": 6,
+    "Jul": 7,
+    "Aug": 8,
+    "Sep": 9,
+    "Oct": 10,
+    "Nov": 11,
+    "Dec": 12,
+})
+
 
 # ---------------------------------------------------------------------------
 # Private helpers
 # ---------------------------------------------------------------------------
 
 
+@lru_cache(maxsize=4096)
 def _classify_source(source: str) -> tuple[str | None, str | None]:
     """Classify a source string as IP address or hostname.
 
@@ -105,38 +125,44 @@ def _parse_bsd_timestamp(month: str, day: str, time_str: str, now: datetime) -> 
     Returns:
         A naive datetime with year inferred from *now*.
     """
-    dt = datetime.strptime(f"{now.year} {month} {day.strip()} {time_str}", "%Y %b %d %H:%M:%S")
+    dt = datetime(
+        now.year,
+        _BSD_MONTHS[month],
+        int(day),
+        int(time_str[0:2]),
+        int(time_str[3:5]),
+        int(time_str[6:8]),
+    )
     if dt > now + timedelta(hours=24):
         dt = dt.replace(year=now.year - 1)
     return dt
 
 
-def _iter_lines(stream: IO[bytes] | IO[str]) -> list[str]:
-    """Read all lines from a bytes or text stream.
+def _iter_lines(stream: IO[bytes] | IO[str]) -> Iterator[str]:
+    """Yield lines from a bytes or text stream.
 
     Bytes streams are decoded as UTF-8 with errors='replace' (T-06-09).
-    The trailing newline, if any, is preserved in split results but stripped
+    The trailing newline, if any, is preserved by iteration and stripped
     per-line during processing.
-
-    Returns:
-        List of raw line strings.
     """
-    # Detect bytes vs text stream by attempting to read a byte (BytesIO) or
-    # by checking the type annotation at runtime.
     if isinstance(stream, (io.RawIOBase, io.BufferedIOBase, io.BytesIO)):
-        raw = stream.read()
-        if isinstance(raw, (bytes, bytearray)):
-            content = raw.decode("utf-8", errors="replace")
-        else:
-            content = str(raw)
-    else:
-        content = stream.read()
+        for raw_line in stream:
+            if isinstance(raw_line, (bytes, bytearray)):
+                yield decode_utf8_replace(raw_line)
+            else:
+                yield str(raw_line)
+        return
 
-    # Split into lines, preserving empty trailing lines from trailing newline
-    if not content:
-        return []
-    lines = content.splitlines()
-    return lines
+    for raw_line in stream:
+        yield raw_line
+
+
+def _strip_line_ending(value: str) -> str:
+    """Return *value* without trailing CR/LF characters."""
+    end = len(value)
+    while end > 0 and value[end - 1] in "\r\n":
+        end -= 1
+    return value[:end]
 
 
 # ---------------------------------------------------------------------------
@@ -169,16 +195,15 @@ def parse_auth_log(
     if now is None:
         now = datetime.now()
 
-    lines = _iter_lines(stream)
-
     events: list[LoginEvent] = []
     parsed_count = 0
     skipped_count = 0
     warning_count = 0
-    total_lines = len(lines)
+    total_lines = 0
 
-    for line_number, raw_line in enumerate(lines, start=1):
-        line = raw_line.rstrip("\r\n")
+    for line_number, raw_line in enumerate(_iter_lines(stream), start=1):
+        total_lines += 1
+        line = _strip_line_ending(raw_line)
 
         # -- BSD syslog format -----------------------------------------------
         bsd_match = _BSD_ACCEPTED_RE.match(line)

@@ -7,8 +7,9 @@ import logging
 import dns.exception
 import dns.resolver
 
-from app.enrichment.models import EnrichmentError, EnrichmentResult
+from app.enrichment.models import EnrichmentError, EnrichmentResult, error_result, no_data_result
 from app.pipeline.models import IOC, IOCType
+from app.text_utils import decode_utf8_replace
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +27,7 @@ class CymruASNAdapter:
     """Team Cymru IP-to-ASN lookup via DNS TXT queries — verdict always no_data."""
 
     name = "ASN Intel"
-    supported_types: frozenset[IOCType] = frozenset({IOCType.IPV4, IOCType.IPV6})
+    supported_types: frozenset[IOCType] = frozenset((IOCType.IPV4, IOCType.IPV6))
     requires_api_key = False
 
     def __init__(self, allowed_hosts: list[str]) -> None:
@@ -39,20 +40,12 @@ class CymruASNAdapter:
 
     def lookup(self, ioc: IOC) -> EnrichmentResult | EnrichmentError:
         if ioc.type not in self.supported_types:
-            return EnrichmentError(
-                ioc=ioc,
-                provider=self.name,
-                error="Unsupported type",
-            )
+            return error_result(ioc, self.name, "Unsupported type")
 
         try:
             ip = ipaddress.ip_address(ioc.value)
         except ValueError:
-            return EnrichmentError(
-                ioc=ioc,
-                provider=self.name,
-                error="Invalid IP address",
-            )
+            return error_result(ioc, self.name, "Invalid IP address")
 
         if ip.version == 4:
             query = ip.reverse_pointer.replace(_IPV4_SUFFIX, _CYMRU_ZONE_V4)
@@ -64,55 +57,89 @@ class CymruASNAdapter:
 
         try:
             answers = resolver.resolve(query, "TXT")
-            txt = b"".join(list(answers)[0].strings).decode("utf-8", errors="replace")
+            txt = _decode_txt_strings(next(iter(answers)).strings)
             return _parse_response(ioc, txt, self.name)
         except dns.resolver.NXDOMAIN:
             # Private/RFC-1918 IPs or unrouted space have no BGP route — expected.
-            return EnrichmentResult(
-                ioc=ioc,
-                provider=self.name,
-                verdict="no_data",
-                detection_count=0,
-                total_engines=0,
-                scan_date=None,
-                raw_stats={},
-            )
+            return _no_data_result(ioc, self.name)
         except (dns.resolver.NoAnswer, dns.resolver.NoNameservers, dns.exception.Timeout):
             # Expected DNS conditions — no data available, not an error.
-            return EnrichmentResult(
-                ioc=ioc,
-                provider=self.name,
-                verdict="no_data",
-                detection_count=0,
-                total_engines=0,
-                scan_date=None,
-                raw_stats={},
-            )
+            return _no_data_result(ioc, self.name)
         except Exception:
             logger.exception("Unexpected error during Cymru ASN lookup for %s", ioc.value)
-            return EnrichmentError(
-                ioc=ioc,
-                provider=self.name,
-                error="Unexpected error",
-            )
+            return error_result(ioc, self.name, "Unexpected error")
 
 
 def _parse_response(ioc: IOC, txt: str, provider_name: str) -> EnrichmentResult:
     """Parse a pipe-delimited Cymru TXT record: "ASN | prefix | cc | rir | allocated"."""
     # Verdict always no_data — ASN context is informational, not a threat signal.
-    parts = [p.strip() for p in txt.split("|")]
+    asn, prefix, _country, rir, allocated = _parse_txt_fields(txt)
     raw_stats = {
-        "asn":       parts[0] if len(parts) > 0 else "",
-        "prefix":    parts[1] if len(parts) > 1 else "",
-        "rir":       parts[3] if len(parts) > 3 else "",
-        "allocated": parts[4] if len(parts) > 4 else "",
+        "asn": asn,
+        "prefix": prefix,
+        "rir": rir,
+        "allocated": allocated,
     }
-    return EnrichmentResult(
+    return _no_data_result(
         ioc=ioc,
-        provider=provider_name,
-        verdict="no_data",
-        detection_count=0,
-        total_engines=0,
-        scan_date=None,
+        provider_name=provider_name,
         raw_stats=raw_stats,
     )
+
+
+def _decode_txt_strings(strings) -> str:
+    string_count = len(strings)
+    if string_count == 1:
+        raw_text = strings[0]
+    elif string_count == 2:
+        raw_text = strings[0] + strings[1]
+    elif string_count == 3:
+        raw_text = strings[0] + strings[1] + strings[2]
+    else:
+        raw_text = b"".join(strings)
+    return decode_utf8_replace(raw_text)
+
+
+def _no_data_result(
+    ioc: IOC,
+    provider_name: str,
+    raw_stats: dict | None = None,
+) -> EnrichmentResult:
+    return no_data_result(ioc, provider_name, raw_stats)
+
+
+def _parse_txt_fields(txt: str) -> tuple[str, str, str, str, str]:
+    """Extract up to five pipe-delimited fields without allocating field lists."""
+    asn, start, found = _next_txt_field(txt, 0)
+    if not found:
+        return asn, "", "", "", ""
+
+    prefix, start, found = _next_txt_field(txt, start)
+    if not found:
+        return asn, prefix, "", "", ""
+
+    country, start, found = _next_txt_field(txt, start)
+    if not found:
+        return asn, prefix, country, "", ""
+
+    rir, start, found = _next_txt_field(txt, start)
+    if not found:
+        return asn, prefix, country, rir, ""
+
+    allocated = _strip_txt_field(txt, start, len(txt))
+    return asn, prefix, country, rir, allocated
+
+
+def _strip_txt_field(txt: str, start: int, end: int) -> str:
+    while start < end and txt[start].isspace():
+        start += 1
+    while end > start and txt[end - 1].isspace():
+        end -= 1
+    return txt[start:end]
+
+
+def _next_txt_field(txt: str, start: int) -> tuple[str, int, bool]:
+    separator = txt.find("|", start)
+    if separator < 0:
+        return _strip_txt_field(txt, start, len(txt)), len(txt), False
+    return _strip_txt_field(txt, start, separator), separator + 1, True

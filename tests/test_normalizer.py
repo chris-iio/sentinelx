@@ -3,6 +3,9 @@
 Covers 30+ defanging variants documented in the plan spec.
 """
 
+from pathlib import Path
+
+import app.pipeline.normalizer as normalizer_module
 from app.pipeline.normalizer import normalize
 
 
@@ -139,3 +142,23 @@ class TestEdgeCases:
     def test_bracket_colon_slash_variant(self):
         """http[:/]example.com variant"""
         assert normalize("http[:/]example.com") == "http://example.com"
+
+    def test_clean_input_skips_defang_pattern_loop(self, monkeypatch):
+        """Already-clean values should return before running regex substitutions."""
+
+        class FailingPattern:
+            def sub(self, _replacement, _text):
+                raise AssertionError("clean input should not run defang regex substitutions")
+
+        monkeypatch.setattr(normalizer_module, "_DEFANG_PATTERNS", [(FailingPattern(), ".")])
+
+        assert normalize("example.com") == "example.com"
+
+    def test_defang_patterns_are_static_tuple(self):
+        """The static pattern table should not be a mutable list."""
+        source = Path("app/pipeline/normalizer.py").read_text(encoding="utf-8")
+
+        assert isinstance(normalizer_module._DEFANG_PATTERNS, tuple)
+        assert "_DEFANG_PATTERNS: tuple[" in source
+        assert "_DEFANG_PATTERNS: list[" not in source
+        assert normalize("hxxps://example[.]com") == "https://example.com"

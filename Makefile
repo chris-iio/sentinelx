@@ -16,10 +16,12 @@ AUDIT_M013_OUTPUT := .gsd/milestones/M013/M013-AUDIT.md
 AUDIT_M013_TEMPLATE := .gsd/milestones/M013/M013-AUDIT-TEMPLATE.md
 AUDIT_M017_OUTPUT := .gsd/milestones/M017/M017-AUDIT.md
 AUDIT_M017_TEMPLATE := .gsd/milestones/M017/M017-AUDIT-TEMPLATE.md
+AUDIT_M020_OUTPUT := .gsd/milestones/M020/M020-AUDIT.md
+AUDIT_M020_TEMPLATE := .gsd/milestones/M020/M020-AUDIT-TEMPLATE.md
 AUDIT_OUTPUT     := $(AUDIT_M013_OUTPUT)
 AUDIT_TEMPLATE   := $(AUDIT_M013_TEMPLATE)
 
-.PHONY: tailwind-install esbuild-install css css-watch js js-dev js-watch typecheck build dev-server-start dev-server-status dev-server-restart dev-server-stop repair-runtime-state verify-runtime-boundary verify-fast verify-deep verify audit-m013-template audit-m013 audit-m017-template audit-m017
+.PHONY: tailwind-install esbuild-install css css-watch js js-dev js-watch typecheck build dev-server-start dev-server-status dev-server-restart dev-server-stop repair-runtime-state verify-runtime-boundary verify-fast verify-deep verify audit-m013-template audit-m013 audit-m017-template audit-m017 audit-m020-template audit-m020
 
 $(TAILWIND):
 	$(MAKE) tailwind-install
@@ -154,3 +156,13 @@ audit-m017-template:
 
 audit-m017:
 	$(AUDIT_RUNNER) --milestone-id M017 --mode baseline --output $(AUDIT_M017_OUTPUT)
+
+## Write the reusable M020 aggressive rewrite audit template scaffold
+
+audit-m020-template:
+	$(AUDIT_RUNNER) --milestone-id M020 --mode template --output $(AUDIT_M020_TEMPLATE)
+
+## Write the current M020 aggressive rewrite audit artifact baseline
+
+audit-m020:
+	$(AUDIT_RUNNER) --milestone-id M020 --mode baseline --output $(AUDIT_M020_OUTPUT)

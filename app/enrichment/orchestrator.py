@@ -24,12 +24,14 @@ import random
 import time
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from itertools import islice
 from threading import Lock, Semaphore
 from typing import Any
 
 from app.cache.store import CacheStore
 from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.pipeline.models import IOC
+from app.text_utils import stripped_text_or_none
 
 logger = logging.getLogger(__name__)
 
@@ -75,12 +77,24 @@ def _job_diagnostics_defaults() -> dict[str, Any]:
     }
 
 
+def _provider_diagnostics_bucket(
+    providers: dict[str, dict[str, int | float]],
+    provider_name: str,
+) -> dict[str, int | float]:
+    """Return a provider diagnostics bucket without setdefault's eager defaults."""
+    provider = providers.get(provider_name)
+    if provider is None:
+        provider = _provider_diagnostics_defaults()
+        providers[provider_name] = provider
+    return provider
+
+
 def _normalize_provider_name(raw_name: object) -> str:
     """Return a bounded provider bucket name, falling back to ``unknown``."""
     if not isinstance(raw_name, str):
         return _UNKNOWN_PROVIDER
-    provider_name = raw_name.strip()
-    if not provider_name:
+    provider_name = stripped_text_or_none(raw_name)
+    if provider_name is None:
         return _UNKNOWN_PROVIDER
     return provider_name[:64]
 
@@ -116,6 +130,19 @@ def _merge_provider_diagnostics(
     )
 
 
+def _cached_enrichment_result(ioc: IOC, cached: dict) -> EnrichmentResult:
+    """Hydrate an enrichment result from cache without mutating the cached payload."""
+    return EnrichmentResult(
+        ioc=ioc,
+        provider=cached["provider"],
+        verdict=cached["verdict"],
+        detection_count=cached["detection_count"],
+        total_engines=cached["total_engines"],
+        scan_date=cached.get("scan_date"),
+        raw_stats=cached.get("raw_stats", {}),
+    )
+
+
 def _coerce_job_diagnostics(raw: object) -> dict[str, Any]:
     """Return a safe job diagnostics snapshot even if state is malformed."""
     data = raw if isinstance(raw, dict) else {}
@@ -134,7 +161,8 @@ def _coerce_job_diagnostics(raw: object) -> dict[str, Any]:
     raw_providers = data.get("providers")
     if isinstance(raw_providers, dict):
         providers: dict[str, dict[str, int | float]] = {}
-        for raw_name, raw_provider in raw_providers.items():
+        for raw_name in raw_providers:
+            raw_provider = raw_providers[raw_name]
             provider_name = _normalize_provider_name(raw_name)
             provider_snapshot = _coerce_provider_diagnostics(raw_provider)
             if provider_name not in providers:
@@ -236,8 +264,8 @@ class EnrichmentOrchestrator:
                 "total": len(dispatch_pairs),
                 "done": 0,
                 "results": [],
-                "complete": False,
-                "status": "running",
+                "complete": not dispatch_pairs,
+                "status": "complete" if not dispatch_pairs else "running",
                 "terminal": False,
                 "terminal_reason": None,
                 "error": None,
@@ -245,6 +273,9 @@ class EnrichmentOrchestrator:
             }
             self._terminal_jobs.pop(job_id, None)
             self._evict_if_needed()
+
+        if not dispatch_pairs:
+            return
 
         try:
             with ThreadPoolExecutor(max_workers=self._max_workers) as pool:
@@ -336,14 +367,21 @@ class EnrichmentOrchestrator:
         worker threads are simultaneously updating _cached_markers.
         """
         with self._lock:
-            return dict(self._cached_markers)
+            snapshot: dict[str, str] = {}
+            for key in self._cached_markers:
+                snapshot[key] = self._cached_markers[key]
+            return snapshot
 
     def _status_fields_snapshot(self, job: dict[str, Any]) -> dict[str, Any]:
         """Return scalar status fields without live results or diagnostics state."""
         return {
-            key: value
-            for key, value in job.items()
-            if key not in {"_diagnostics", "results"}
+            "total": job.get("total", 0),
+            "done": job.get("done", 0),
+            "complete": job.get("complete", False),
+            "status": job.get("status"),
+            "terminal": job.get("terminal", False),
+            "terminal_reason": job.get("terminal_reason"),
+            "error": job.get("error"),
         }
 
     def _status_snapshot(self, job: dict[str, Any]) -> dict[str, Any]:
@@ -351,17 +389,41 @@ class EnrichmentOrchestrator:
         raw_results = job.get("results")
         results = raw_results if isinstance(raw_results, list) else []
         snapshot = self._status_fields_snapshot(job)
-        snapshot["results"] = list(results)
+        snapshot["results"] = self._copy_results_tail(results, 0)
         return snapshot
+
+    def _copy_results_tail(self, results: list[Any], start: int) -> list[Any]:
+        """Copy retained results from *start* without slicing or constructor-copying."""
+        result_count = len(results)
+        if start >= result_count:
+            return []
+        if start == result_count - 1:
+            return [results[start]]
+        if start == result_count - 2:
+            return [results[start], results[start + 1]]
+
+        copied_results: list[Any] = []
+        for result in islice(results, start, None):
+            copied_results.append(result)
+        return copied_results
 
     def _incremental_status_snapshot(self, job: dict[str, Any], since: int) -> dict[str, Any]:
         """Return a safe tail-only status snapshot plus aligned cached markers."""
         raw_results = job.get("results")
         results = raw_results if isinstance(raw_results, list) else []
-        tail_results = list(results[since:])
+        result_count = len(results)
+        if since < 0:
+            start = result_count + since
+            if start < 0:
+                start = 0
+            tail_results = self._copy_results_tail(results, start)
+        elif since >= result_count:
+            tail_results = []
+        else:
+            tail_results = self._copy_results_tail(results, since)
         snapshot = self._status_fields_snapshot(job)
         snapshot["results"] = tail_results
-        snapshot["next_since"] = since if snapshot.get("terminal", False) else len(results)
+        snapshot["next_since"] = since if snapshot.get("terminal", False) else result_count
 
         cached_markers: dict[str, str] = {}
         for result in tail_results:
@@ -381,10 +443,7 @@ class EnrichmentOrchestrator:
         diagnostics = _job_diagnostics_defaults()
         for adapter, _ioc in dispatch_pairs:
             provider_name = _normalize_provider_name(getattr(adapter, "name", ""))
-            provider = diagnostics["providers"].setdefault(
-                provider_name,
-                _provider_diagnostics_defaults(),
-            )
+            provider = _provider_diagnostics_bucket(diagnostics["providers"], provider_name)
             diagnostics["dispatch_count"] += 1
             provider["dispatch_count"] += 1
         return diagnostics
@@ -621,19 +680,11 @@ class EnrichmentOrchestrator:
                 )
                 if cached is not None:
                     self._record_cache(job_id, provider_name, hit=True)
-                    cached_at = cached.pop("cached_at", "")
+                    cached_at = cached.get("cached_at", "")
                     cache_key = ioc.value + "|" + provider_name
                     with self._lock:
                         self._cached_markers[cache_key] = cached_at
-                    return EnrichmentResult(
-                        ioc=ioc,
-                        provider=cached["provider"],
-                        verdict=cached["verdict"],
-                        detection_count=cached["detection_count"],
-                        total_engines=cached["total_engines"],
-                        scan_date=cached.get("scan_date"),
-                        raw_stats=cached.get("raw_stats", {}),
-                    )
+                    return _cached_enrichment_result(ioc, cached)
                 self._record_cache(job_id, provider_name, hit=False)
 
             try:

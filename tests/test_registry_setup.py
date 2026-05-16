@@ -11,11 +11,26 @@ from app.enrichment.registry import ProviderRegistry
 def _make_config_store(
     vt_key: str | None = "test-api-key",
     provider_key: str | None = None,
+    provider_keys: dict[str, str | None] | None = None,
 ) -> MagicMock:
-    """Return a mock ConfigStore with get_vt_api_key() and get_provider_key() configured."""
+    """Return a mock ConfigStore with VT and provider keys configured."""
     mock_store = MagicMock()
     mock_store.get_vt_api_key.return_value = vt_key
     mock_store.get_provider_key.return_value = provider_key
+    if provider_keys is not None:
+        mock_store.all_provider_keys.return_value = provider_keys
+    elif provider_key is not None:
+        mock_store.all_provider_keys.return_value = {
+            "malwarebazaar": provider_key,
+            "threatfox": provider_key,
+            "urlhaus": provider_key,
+            "otx": provider_key,
+            "greynoise": provider_key,
+            "abuseipdb": provider_key,
+            "emailrep": provider_key,
+        }
+    else:
+        mock_store.all_provider_keys.return_value = {}
     return mock_store
 
 
@@ -293,12 +308,7 @@ class TestBuildRegistry:
         """URLhausAdapter is_configured() returns True when a key is provided."""
         from app.enrichment.setup import build_registry
 
-        config_store = _make_config_store(None)
-        # Return a key only for "urlhaus"
-        def _get_provider_key(name: str) -> str | None:
-            return "my-urlhaus-key" if name == "urlhaus" else None
-
-        config_store.get_provider_key.side_effect = _get_provider_key
+        config_store = _make_config_store(None, provider_keys={"urlhaus": "my-urlhaus-key"})
         registry = build_registry(
             allowed_hosts=_make_allowed_hosts(),
             config_store=config_store,
@@ -307,8 +317,8 @@ class TestBuildRegistry:
         urlhaus = next(p for p in registry.all() if p.name == "URLhaus")
         assert urlhaus.is_configured() is True
 
-    def test_config_store_get_provider_key_called_for_each_new_provider(self):
-        """build_registry() calls get_provider_key() once per new key-requiring provider."""
+    def test_config_store_all_provider_keys_called_once_for_key_providers(self):
+        """build_registry() reads the provider-key map once for key-requiring providers."""
         from app.enrichment.setup import build_registry
 
         config_store = _make_config_store("vt-key")
@@ -317,14 +327,139 @@ class TestBuildRegistry:
             config_store=config_store,
         )
 
-        # Should be called for malwarebazaar, threatfox, urlhaus, otx, greynoise,
-        # abuseipdb, emailrep = 7 times
-        assert config_store.get_provider_key.call_count == 7
-        called_names = {c.args[0] for c in config_store.get_provider_key.call_args_list}
-        assert called_names == {
-            "malwarebazaar", "threatfox", "urlhaus", "otx",
-            "greynoise", "abuseipdb", "emailrep",
-        }
+        config_store.all_provider_keys.assert_called_once_with()
+        config_store.get_provider_key.assert_not_called()
+
+    def test_build_registry_reuses_allowed_host_membership_snapshot(self):
+        """Provider setup should snapshot the allowlist once and share it across HTTP adapters."""
+        from app.enrichment.setup import build_registry
+
+        allowed_hosts = _make_allowed_hosts()
+        registry = build_registry(
+            allowed_hosts=allowed_hosts,
+            config_store=_make_config_store("vt-key", provider_key="shared-key"),
+        )
+        allowed_hosts.append("late-added.example")
+
+        memberships = [
+            provider._allowed_hosts
+            for provider in registry.all()
+            if hasattr(provider, "_allowed_hosts")
+        ]
+
+        assert memberships
+        assert len({id(membership) for membership in memberships}) == 1
+        assert "late-added.example" not in memberships[0]
+        assert isinstance(memberships[0], frozenset)
+
+    def test_key_required_providers_share_registration_helper(self, monkeypatch):
+        """Key-requiring non-VT providers should share one registration path."""
+        import app.enrichment.setup as setup_module
+
+        calls: list[tuple[str, str]] = []
+        original = setup_module._register_keyed_provider
+
+        def register_keyed_provider(
+            registry,
+            adapter_cls,
+            provider_keys,
+            provider_id,
+            allowed_hosts,
+        ):
+            calls.append((provider_id, adapter_cls.__name__))
+            original(registry, adapter_cls, provider_keys, provider_id, allowed_hosts)
+
+        monkeypatch.setattr(setup_module, "_register_keyed_provider", register_keyed_provider)
+
+        registry = setup_module.build_registry(
+            allowed_hosts=_make_allowed_hosts(),
+            config_store=_make_config_store("vt-key", provider_key="shared-key"),
+        )
+
+        assert len(registry.all()) == 16
+        assert calls == [
+            ("malwarebazaar", "MBAdapter"),
+            ("threatfox", "TFAdapter"),
+            ("urlhaus", "URLhausAdapter"),
+            ("otx", "OTXAdapter"),
+            ("greynoise", "GreyNoiseAdapter"),
+            ("abuseipdb", "AbuseIPDBAdapter"),
+            ("emailrep", "EmailRepAdapter"),
+        ]
+
+    def test_zero_auth_providers_share_registration_helper(self, monkeypatch):
+        """Zero-auth providers should share one registration path."""
+        import app.enrichment.setup as setup_module
+
+        calls: list[str] = []
+        original = setup_module._register_zero_auth_provider
+
+        def register_zero_auth_provider(registry, adapter_cls, allowed_hosts):
+            calls.append(adapter_cls.__name__)
+            original(registry, adapter_cls, allowed_hosts)
+
+        monkeypatch.setattr(
+            setup_module,
+            "_register_zero_auth_provider",
+            register_zero_auth_provider,
+        )
+
+        registry = setup_module.build_registry(
+            allowed_hosts=_make_allowed_hosts(),
+            config_store=_make_config_store("vt-key", provider_key="shared-key"),
+        )
+
+        assert len(registry.all()) == 16
+        assert calls == [
+            "HashlookupAdapter",
+            "IPApiAdapter",
+            "DnsAdapter",
+            "CrtShAdapter",
+            "ThreatMinerAdapter",
+            "CymruASNAdapter",
+            "WhoisAdapter",
+        ]
+
+    def test_provider_registration_tables_preserve_order_without_slices(self):
+        """Provider setup should scan static registration tables in provider order."""
+        import dis
+
+        import app.enrichment.setup as setup_module
+
+        keyed = (
+            setup_module._PRE_SHODAN_KEYED_PROVIDER_REGISTRATIONS
+            + setup_module._POST_SHODAN_KEYED_PROVIDER_REGISTRATIONS
+        )
+        keyed_names = [
+            (provider_id, adapter_cls.__name__)
+            for provider_id, adapter_cls in keyed
+        ]
+        assert keyed_names == [
+            ("malwarebazaar", "MBAdapter"),
+            ("threatfox", "TFAdapter"),
+            ("urlhaus", "URLhausAdapter"),
+            ("otx", "OTXAdapter"),
+            ("greynoise", "GreyNoiseAdapter"),
+            ("abuseipdb", "AbuseIPDBAdapter"),
+            ("emailrep", "EmailRepAdapter"),
+        ]
+        zero_auth_names = [
+            adapter_cls.__name__
+            for adapter_cls in setup_module._ZERO_AUTH_PROVIDER_CLASSES
+        ]
+        assert zero_auth_names == [
+            "HashlookupAdapter",
+            "IPApiAdapter",
+            "DnsAdapter",
+            "CrtShAdapter",
+            "ThreatMinerAdapter",
+            "CymruASNAdapter",
+            "WhoisAdapter",
+        ]
+        assert {
+            instruction.opname
+            for instruction in dis.get_instructions(setup_module.build_registry)
+        }.isdisjoint({"BUILD_SLICE", "BINARY_SLICE"})
 
     def test_registry_contains_dns_records(self):
         """build_registry() registers a provider named 'DNS Records'."""

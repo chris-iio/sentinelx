@@ -13,7 +13,7 @@ import json
 import posixpath
 import re
 import zipfile
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -29,23 +29,31 @@ from app.diagnostics.contract import (
     SOURCE_STATUS_OMITTED,
     SOURCE_STATUS_TRUNCATED,
     manifest_to_json,
+    manifest_to_json_bytes,
 )
+from app.diagnostics.policy import DIAGNOSTIC_SANITIZATION_POLICY
 from app.diagnostics.redaction import (
     ConfigSecretStore,
     RedactionMetadata,
     redact_diagnostic_payload,
     redact_diagnostic_text,
 )
+from app.text_utils import decode_utf8_replace, stripped_bounded_text
 
 MANIFEST_ARCHIVE_PATH = "manifest.json"
 DEFAULT_SOURCE_PREFIX = "sources"
 ZIP_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
-_FORBIDDEN_PATH_SEGMENTS = frozenset({".gsd", ".planning", ".audits", ".git"})
+_FORBIDDEN_PATH_SEGMENTS = frozenset((".gsd", ".planning", ".audits", ".git"))
+_DOT_PATH_SEGMENTS = frozenset(("", ".", ".."))
+_JSON_SAFE_SEQUENCE_TYPES = (tuple, list)
 _SAFE_SOURCE_ID_CHARS = re.compile(r"[^A-Za-z0-9_.-]+")
+_SOURCE_FILENAME_TRIM_CHARS = frozenset("._-")
+_ARCHIVE_PATH_MAX_CHARS = DIAGNOSTIC_SANITIZATION_POLICY.max_archive_path_chars
+_SAFE_SOURCE_FILENAME_MAX_CHARS = DIAGNOSTIC_SANITIZATION_POLICY.max_generated_filename_chars
 _UNSET = object()
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class DiagnosticSource:
     """Caller-supplied diagnostic source descriptor.
 
@@ -68,7 +76,7 @@ class DiagnosticSource:
     omitted_reason: str | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class DiagnosticBundle:
     """Assembled diagnostic ZIP bytes and safe inspection metadata."""
 
@@ -84,21 +92,37 @@ class DiagnosticBundle:
     @property
     def summary(self) -> dict[str, int | str | None]:
         """Return secret-free aggregate fields useful to routes/tests."""
-        manifest_dict = self.manifest.to_dict()
+        sources = self.manifest.sorted_sources
+        included_count = 0
+        truncated_count = 0
+        omitted_count = 0
+        error_count = 0
+        redaction_count = 0
+        for source in sources:
+            if source.status == SOURCE_STATUS_INCLUDED:
+                included_count += 1
+            elif source.status == SOURCE_STATUS_TRUNCATED:
+                truncated_count += 1
+            elif source.status == SOURCE_STATUS_OMITTED:
+                omitted_count += 1
+            elif source.status == SOURCE_STATUS_ERROR:
+                error_count += 1
+            redaction_count += source.redaction_count
+
         return {
-            "schema_version": manifest_dict["schema_version"],
-            "generated_at": manifest_dict["generated_at"],
-            "source_count": manifest_dict["source_count"],
-            "included_count": manifest_dict["included_count"],
-            "truncated_count": manifest_dict["truncated_count"],
-            "omitted_count": manifest_dict["omitted_count"],
-            "error_count": manifest_dict["error_count"],
-            "redaction_count": manifest_dict["redaction_count"],
+            "schema_version": self.manifest.schema_version,
+            "generated_at": self.manifest.generated_at,
+            "source_count": len(sources),
+            "included_count": included_count,
+            "truncated_count": truncated_count,
+            "omitted_count": omitted_count,
+            "error_count": error_count,
+            "redaction_count": redaction_count,
             "archive_size_bytes": self.archive_size_bytes,
         }
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class _PreparedSource:
     source: DiagnosticSource
     source_id: str
@@ -131,12 +155,14 @@ def assemble_diagnostic_bundle(
     callable is evaluated.  Individual source collection failures are captured as
     manifest ``error`` records and do not abort unrelated sources.
     """
-    prepared_sources = _prepare_sources(tuple(sources))
+    prepared_sources = _prepare_sources(sources)
 
     records: list[DiagnosticSourceRecord] = []
     payload_entries: list[tuple[str, bytes]] = []
 
-    for prepared in sorted(prepared_sources, key=lambda item: item.source_id):
+    ordered_sources = _ordered_prepared_sources(prepared_sources)
+
+    for prepared in ordered_sources:
         if prepared.should_omit_without_collection:
             records.append(_omitted_record(prepared))
             continue
@@ -178,18 +204,72 @@ def assemble_diagnostic_bundle(
             payload_entries.append((prepared.relative_path, included))
 
     manifest = DiagnosticManifest(sources=tuple(records), generated_at=generated_at)
-    manifest_bytes = (manifest_to_json(manifest, indent=2) + "\n").encode("utf-8")
-    archive_entries = [(MANIFEST_ARCHIVE_PATH, manifest_bytes), *sorted(payload_entries)]
+    manifest_bytes = manifest_to_json_bytes(manifest, indent=2)
+    archive_entries = [(MANIFEST_ARCHIVE_PATH, manifest_bytes)]
+    archive_entries.extend(_ordered_payload_entries(payload_entries))
     archive_bytes = _write_stable_zip(archive_entries)
+    archive_paths: list[str] = []
+    for path, _ in archive_entries:
+        archive_paths.append(path)
 
     return DiagnosticBundle(
         archive_bytes=archive_bytes,
         manifest=manifest,
-        archive_paths=tuple(path for path, _ in archive_entries),
+        archive_paths=tuple(archive_paths),
     )
 
 
-def _prepare_sources(sources: tuple[DiagnosticSource, ...]) -> tuple[_PreparedSource, ...]:
+def _ordered_prepared_sources(sources: tuple[_PreparedSource, ...]) -> tuple[_PreparedSource, ...]:
+    source_count = len(sources)
+    if source_count <= 1:
+        return sources
+    if source_count == 2:
+        first = sources[0]
+        second = sources[1]
+        if first.source_id <= second.source_id:
+            return (first, second)
+        return (second, first)
+    if source_count == 3:
+        first = sources[0]
+        second = sources[1]
+        third = sources[2]
+        if second.source_id < first.source_id:
+            first, second = second, first
+        if third.source_id < second.source_id:
+            second, third = third, second
+            if second.source_id < first.source_id:
+                first, second = second, first
+        return (first, second, third)
+    return tuple(sorted(sources, key=lambda item: item.source_id))
+
+
+def _ordered_payload_entries(entries: list[tuple[str, bytes]]) -> tuple[tuple[str, bytes], ...]:
+    entry_count = len(entries)
+    if entry_count == 0:
+        return ()
+    if entry_count == 1:
+        return (entries[0],)
+    if entry_count == 2:
+        first = entries[0]
+        second = entries[1]
+        if first[0] <= second[0]:
+            return (first, second)
+        return (second, first)
+    if entry_count == 3:
+        first = entries[0]
+        second = entries[1]
+        third = entries[2]
+        if second[0] < first[0]:
+            first, second = second, first
+        if third[0] < second[0]:
+            second, third = third, second
+            if second[0] < first[0]:
+                first, second = second, first
+        return (first, second, third)
+    return tuple(sorted(entries))
+
+
+def _prepare_sources(sources: Iterable[DiagnosticSource]) -> tuple[_PreparedSource, ...]:
     prepared: list[_PreparedSource] = []
     seen_source_ids: set[str] = set()
     seen_archive_paths: set[str] = {MANIFEST_ARCHIVE_PATH}
@@ -258,24 +338,33 @@ def _source_relative_path(
 
 
 def _safe_source_filename(source_id: str) -> str:
-    filename = _SAFE_SOURCE_ID_CHARS.sub("_", source_id).strip("._-")
+    filename = _trim_source_filename(_SAFE_SOURCE_ID_CHARS.sub("_", source_id))
     if not filename:
         raise ValueError(f"source_id {source_id!r} does not produce a safe archive filename")
-    return filename[:120]
+    return filename[:_SAFE_SOURCE_FILENAME_MAX_CHARS]
+
+
+def _trim_source_filename(value: str) -> str:
+    """Trim generated filename punctuation that is unsafe at path boundaries."""
+    start = 0
+    end = len(value)
+    while start < end and value[start] in _SOURCE_FILENAME_TRIM_CHARS:
+        start += 1
+    while end > start and value[end - 1] in _SOURCE_FILENAME_TRIM_CHARS:
+        end -= 1
+    return value[start:end]
 
 
 def _validate_archive_path(path: str) -> str:
-    raw_path = _required_text(path, "relative_path", max_chars=240)
+    raw_path = _required_text(path, "relative_path", max_chars=_ARCHIVE_PATH_MAX_CHARS)
     if "\\" in raw_path:
         raise ValueError(f"unsafe diagnostic archive path: {raw_path}")
     if raw_path.startswith("/") or raw_path.startswith("//") or re.match(r"^[A-Za-z]:", raw_path):
         raise ValueError(f"unsafe diagnostic archive path: {raw_path}")
 
-    parts = raw_path.split("/")
-    if any(part in {"", ".", ".."} for part in parts):
-        raise ValueError(f"unsafe diagnostic archive path: {raw_path}")
-    if any(part.lower() in _FORBIDDEN_PATH_SEGMENTS for part in parts):
-        raise ValueError(f"unsafe diagnostic archive path: {raw_path}")
+    for part in _iter_archive_path_segments(raw_path):
+        if part in _DOT_PATH_SEGMENTS or part.lower() in _FORBIDDEN_PATH_SEGMENTS:
+            raise ValueError(f"unsafe diagnostic archive path: {raw_path}")
 
     normalized = posixpath.normpath(raw_path)
     if normalized == "." or normalized.startswith("../") or normalized == "..":
@@ -283,6 +372,17 @@ def _validate_archive_path(path: str) -> str:
     if normalized == MANIFEST_ARCHIVE_PATH:
         raise ValueError("diagnostic source path cannot collide with manifest.json")
     return normalized
+
+
+def _iter_archive_path_segments(raw_path: str) -> Iterator[str]:
+    start = 0
+    while True:
+        separator = raw_path.find("/", start)
+        if separator < 0:
+            yield raw_path[start:]
+            return
+        yield raw_path[start:separator]
+        start = separator + 1
 
 
 def _collect_source_payload(source: DiagnosticSource) -> object:
@@ -298,7 +398,7 @@ def _redact_and_encode_payload(
     config_store: ConfigSecretStore | None,
 ) -> tuple[bytes, RedactionMetadata]:
     if isinstance(payload, bytes):
-        text = payload.decode("utf-8", errors="replace")
+        text = decode_utf8_replace(payload)
         redacted, metadata = redact_diagnostic_text(text, config_store=config_store)
         return redacted.encode("utf-8"), metadata
 
@@ -320,14 +420,37 @@ def _redact_and_encode_payload(
 
 def _json_safe(value: object) -> object:
     if isinstance(value, Mapping):
-        return {str(key): _json_safe(child) for key, child in value.items()}
-    if isinstance(value, tuple):
-        return [_json_safe(child) for child in value]
-    if isinstance(value, list):
-        return [_json_safe(child) for child in value]
+        if type(value) is dict:
+            value_count = len(value)
+            if value_count == 0:
+                return {}
+            if value_count == 1:
+                for key in value:
+                    return {str(key): _json_safe(value[key])}
+        safe: dict[str, object] = {}
+        for key in value:
+            safe[str(key)] = _json_safe(value[key])
+        return safe
+    if isinstance(value, _JSON_SAFE_SEQUENCE_TYPES):
+        return _json_safe_sequence(value)
     if isinstance(value, (str, int, float, bool)) or value is None:
         return value
     return _safe_json_default(value)
+
+
+def _json_safe_sequence(value: tuple[object, ...] | list[object]) -> list[object]:
+    value_count = len(value)
+    if value_count == 0:
+        return []
+    if value_count == 1:
+        return [_json_safe(value[0])]
+    if value_count == 2:
+        return [_json_safe(value[0]), _json_safe(value[1])]
+
+    safe_items: list[object] = []
+    for child in value:
+        safe_items.append(_json_safe(child))
+    return safe_items
 
 
 def _safe_json_default(value: object) -> str:
@@ -396,10 +519,10 @@ def _write_stable_zip(entries: Iterable[tuple[str, bytes]]) -> bytes:
 def _required_text(value: object, field_name: str, *, max_chars: int = 160) -> str:
     if not isinstance(value, str):
         raise ValueError(f"{field_name} must be a non-empty string")
-    stripped = value.strip()
-    if not stripped:
+    stripped = stripped_bounded_text(value, max_chars=max_chars)
+    if stripped is None:
         raise ValueError(f"{field_name} must be a non-empty string")
-    return stripped[:max_chars]
+    return stripped
 
 
 def _optional_text(value: object, *, max_chars: int = 160) -> str | None:
@@ -407,10 +530,7 @@ def _optional_text(value: object, *, max_chars: int = 160) -> str | None:
         return None
     if not isinstance(value, str):
         value = str(value)
-    stripped = value.strip()
-    if not stripped:
-        return None
-    return stripped[:max_chars]
+    return stripped_bounded_text(value, max_chars=max_chars)
 
 
 def _nonnegative_int(value: object, field_name: str) -> int:

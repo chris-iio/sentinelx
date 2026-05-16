@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-05-13T18:00:12Z | Files: 202 | Described: 0/202
-<!-- gsd:codebase-meta {"generatedAt":"2026-05-13T18:00:12Z","fingerprint":"28dbe67d59e0df007c1d24268967b167eda5e545","fileCount":202,"truncated":false} -->
+Generated: 2026-05-16T08:30:45Z | Files: 202 | Described: 0/202
+<!-- gsd:codebase-meta {"generatedAt":"2026-05-16T08:30:45Z","fingerprint":"28dbe67d59e0df007c1d24268967b167eda5e545","fileCount":202,"truncated":false} -->
 
 ### (root)/
 - `.codex`

@@ -299,6 +299,9 @@ describe("history replay", () => {
 
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
+    const jsonParseSpy = vi.spyOn(JSON, "parse").mockImplementation(() => {
+      throw new Error("empty history replay should skip JSON.parse");
+    });
 
     const { init } = await import("./history");
     init();
@@ -310,11 +313,59 @@ describe("history replay", () => {
     const summaryRow = document.querySelector(".ioc-summary-row");
 
     expect(fetchMock).not.toHaveBeenCalled();
+    expect(jsonParseSpy).not.toHaveBeenCalled();
     expect(root?.getAttribute("data-results-runtime")).toBe("history");
     expect(progress?.classList.contains("complete")).toBe(true);
     expect(progressText?.textContent).toBe("Enrichment complete");
     expect(exportBtn?.hasAttribute("disabled")).toBe(true);
     expect(summaryRow).toBeNull();
+  });
+
+  it("reuses cached completion and export handles while replaying history results", async () => {
+    buildResultsDom({ historyResults: JSON.stringify(PARITY_RESULTS) });
+
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const getElementByIdSpy = vi.spyOn(document, "getElementById");
+
+    const { init } = await import("./history");
+    init();
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(getElementByIdSpy.mock.calls.filter(([id]) => id === "enrich-progress")).toHaveLength(1);
+    expect(getElementByIdSpy.mock.calls.filter(([id]) => id === "enrich-progress-text")).toHaveLength(1);
+    expect(getElementByIdSpy.mock.calls.filter(([id]) => id === "export-btn")).toHaveLength(1);
+    expect(getElementByIdSpy.mock.calls.filter(([id]) => id === "export-dropdown")).toHaveLength(1);
+    expect(document.querySelector<HTMLElement>(".page-results")?.getAttribute("data-results-runtime")).toBe(
+      "history"
+    );
+  });
+
+  it("replays parsed history results with indexed iteration", async () => {
+    const historyResults = JSON.stringify(PARITY_RESULTS);
+    buildResultsDom({ historyResults });
+
+    const parsedResults = PARITY_RESULTS.slice();
+    Object.defineProperty(parsedResults, Symbol.iterator, {
+      value() {
+        throw new Error("history replay should not allocate an array iterator");
+      },
+    });
+    const originalParse = JSON.parse;
+    const jsonParseSpy = vi.spyOn(JSON, "parse").mockImplementation((text, reviver) => {
+      if (text === historyResults) return parsedResults;
+      return originalParse(text, reviver);
+    });
+
+    const { init } = await import("./history");
+    init();
+
+    const state = readVisibleState();
+
+    expect(jsonParseSpy).toHaveBeenCalledWith(historyResults);
+    expect(state.runtime).toBe("history");
+    expect(state.cardVerdict).toBe("malicious");
+    expect(state.reputationRows).toHaveLength(2);
   });
 
   it("fails loudly on malformed history JSON instead of polling or showing a false terminal banner", async () => {

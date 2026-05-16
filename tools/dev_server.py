@@ -31,7 +31,7 @@ import tempfile
 import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 from urllib import error, request
@@ -42,6 +42,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from app.health_contract import HEALTH_PATH, is_valid_health_payload
+from app.time_utils import utc_iso_seconds, utc_now as utc_datetime_now, utc_timestamp_slug
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 5000
@@ -51,9 +52,12 @@ DEFAULT_PROBE_TIMEOUT = 0.5
 DEFAULT_PROBE_INTERVAL = 0.1
 DEFAULT_STARTING_GRACE_SECONDS = 2.0
 
-VALID_MANAGER_STATUSES = {"stopped", "starting", "running", "stale", "crashed"}
-VALID_PROBE_STATUSES = {"healthy", "refused", "timeout", "malformed"}
-ALLOWED_LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
+VALID_MANAGER_STATUSES = frozenset(("stopped", "starting", "running", "stale", "crashed"))
+VALID_PROBE_STATUSES = frozenset(("healthy", "refused", "timeout", "malformed"))
+ALLOWED_LOCAL_HOSTS = frozenset(("127.0.0.1", "localhost", "::1"))
+ALLOWED_LOCAL_HOSTS_DISPLAY = "127.0.0.1, ::1, localhost"
+CONNECTION_REFUSED_ERRNOS = frozenset((61, 111))
+ACTIVE_MANAGER_STATUSES = frozenset(("starting", "running", "stale"))
 
 
 class DevServerError(Exception):
@@ -76,7 +80,95 @@ class StatusFileMissingError(StatusContractError):
     """Raised when the managed status file does not exist yet."""
 
 
-@dataclass(frozen=True)
+_PROBE_PAYLOAD_ALLOWED_KEYS = frozenset(("status", "checked_at", "url", "http_status", "detail"))
+_PROBE_PAYLOAD_REQUIRED_KEYS = frozenset(("status", "checked_at", "url"))
+_STATUS_PAYLOAD_ALLOWED_KEYS = frozenset((
+    "status",
+    "host",
+    "port",
+    "updated_at",
+    "restart_count",
+    "pid",
+    "log_path",
+    "started_at",
+    "last_failure_at",
+    "last_failure_reason",
+    "probe",
+))
+_STATUS_PAYLOAD_REQUIRED_KEYS = frozenset((
+    "status",
+    "host",
+    "port",
+    "updated_at",
+    "restart_count",
+    "probe",
+))
+
+
+def validate_payload_keys(
+    payload: Mapping[str, Any],
+    *,
+    allowed_keys: frozenset[str],
+    required_keys: frozenset[str],
+    payload_name: str,
+) -> None:
+    """Validate mapping keys without materializing full key sets."""
+    unexpected_keys: list[str] = []
+    for key in payload:
+        if key not in allowed_keys:
+            unexpected_keys.append(key)
+    if unexpected_keys:
+        unexpected = format_key_names(unexpected_keys)
+        raise StatusContractError(f"{payload_name} payload has unexpected keys: {unexpected}.")
+
+    missing_keys: list[str] = []
+    for key in required_keys:
+        if key not in payload:
+            missing_keys.append(key)
+    if missing_keys:
+        missing = format_key_names(missing_keys)
+        raise StatusContractError(f"{payload_name} payload is missing required keys: {missing}.")
+
+
+def format_key_names(keys: Sequence[str]) -> str:
+    key_count = len(keys)
+    if key_count == 0:
+        return ""
+    if key_count == 1:
+        return keys[0]
+    if key_count == 2:
+        first = keys[0]
+        second = keys[1]
+        if first <= second:
+            return first + ", " + second
+        return second + ", " + first
+    if key_count == 3:
+        first = keys[0]
+        second = keys[1]
+        third = keys[2]
+        if first > second:
+            first, second = second, first
+        if second > third:
+            second, third = third, second
+            if first > second:
+                first, second = second, first
+        return first + ", " + second + ", " + third
+    return ", ".join(sorted(keys))
+
+
+def stripped_text_or_none(text: str) -> str | None:
+    start = 0
+    end = len(text)
+    while start < end and text[start].isspace():
+        start += 1
+    if start == end:
+        return None
+    while end > start and text[end - 1].isspace():
+        end -= 1
+    return text[start:end]
+
+
+@dataclass(frozen=True, slots=True)
 class DevServerPaths:
     """Manager-owned filesystem paths for the dev-server runtime state."""
 
@@ -98,7 +190,7 @@ class DevServerPaths:
         return resolved
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class HealthProbeResult:
     """A bounded, secret-free outcome for the local health probe."""
 
@@ -119,17 +211,12 @@ class HealthProbeResult:
 
     @classmethod
     def from_payload(cls, payload: Mapping[str, Any]) -> "HealthProbeResult":
-        allowed_keys = {"status", "checked_at", "url", "http_status", "detail"}
-        unexpected_keys = set(payload) - allowed_keys
-        if unexpected_keys:
-            unexpected = ", ".join(sorted(unexpected_keys))
-            raise StatusContractError(f"Probe payload has unexpected keys: {unexpected}.")
-
-        required_keys = {"status", "checked_at", "url"}
-        missing_keys = required_keys - set(payload)
-        if missing_keys:
-            missing = ", ".join(sorted(missing_keys))
-            raise StatusContractError(f"Probe payload is missing required keys: {missing}.")
+        validate_payload_keys(
+            payload,
+            allowed_keys=_PROBE_PAYLOAD_ALLOWED_KEYS,
+            required_keys=_PROBE_PAYLOAD_REQUIRED_KEYS,
+            payload_name="Probe",
+        )
 
         status = payload["status"]
         if status not in VALID_PROBE_STATUSES:
@@ -160,7 +247,7 @@ class HealthProbeResult:
         )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class DevServerStatus:
     """Persisted runtime metadata for the supported local dev loop."""
 
@@ -193,29 +280,12 @@ class DevServerStatus:
 
     @classmethod
     def from_payload(cls, payload: Mapping[str, Any]) -> "DevServerStatus":
-        allowed_keys = {
-            "status",
-            "host",
-            "port",
-            "updated_at",
-            "restart_count",
-            "pid",
-            "log_path",
-            "started_at",
-            "last_failure_at",
-            "last_failure_reason",
-            "probe",
-        }
-        unexpected_keys = set(payload) - allowed_keys
-        if unexpected_keys:
-            unexpected = ", ".join(sorted(unexpected_keys))
-            raise StatusContractError(f"Status payload has unexpected keys: {unexpected}.")
-
-        required_keys = {"status", "host", "port", "updated_at", "restart_count", "probe"}
-        missing_keys = required_keys - set(payload)
-        if missing_keys:
-            missing = ", ".join(sorted(missing_keys))
-            raise StatusContractError(f"Status payload is missing required keys: {missing}.")
+        validate_payload_keys(
+            payload,
+            allowed_keys=_STATUS_PAYLOAD_ALLOWED_KEYS,
+            required_keys=_STATUS_PAYLOAD_REQUIRED_KEYS,
+            payload_name="Status",
+        )
 
         status = payload["status"]
         if status not in VALID_MANAGER_STATUSES:
@@ -281,7 +351,7 @@ class DevServerStatus:
             if started_at is None:
                 missing.append("started_at")
             if missing:
-                fields = ", ".join(missing)
+                fields = format_key_names(missing)
                 raise StatusContractError(
                     f"Status '{status}' requires launch metadata fields: {fields}."
                 )
@@ -303,12 +373,12 @@ class DevServerStatus:
 
 def utc_now() -> str:
     """Return an ISO-8601 UTC timestamp without fractional seconds."""
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return utc_iso_seconds()
 
 
 def utc_now_slug() -> str:
     """Return a filesystem-safe UTC timestamp."""
-    return datetime.now(timezone.utc).replace(microsecond=0).strftime("%Y%m%dT%H%M%SZ")
+    return utc_timestamp_slug()
 
 
 def normalize_port(port: Any) -> int:
@@ -329,16 +399,28 @@ def normalize_port(port: Any) -> int:
 
 def normalize_host(host: Any) -> str:
     """Validate the host stays local to the operator machine."""
-    if not isinstance(host, str) or not host.strip():
+    if not isinstance(host, str):
         raise StatusContractError("Host must be a non-empty string.")
 
-    value = host.strip()
+    value = stripped_text_or_none(host)
+    if value is None:
+        raise StatusContractError("Host must be a non-empty string.")
+
     if value not in ALLOWED_LOCAL_HOSTS:
-        allowed = ", ".join(sorted(ALLOWED_LOCAL_HOSTS))
         raise StatusContractError(
-            f"Host must stay local to SentinelX's dev loop ({allowed})."
+            f"Host must stay local to SentinelX's dev loop ({ALLOWED_LOCAL_HOSTS_DISPLAY})."
         )
     return value
+
+
+def format_json_payload(payload: Any) -> str:
+    """Return the dev-server JSON formatting used for files and CLI output."""
+    return json.dumps(payload, indent=2, sort_keys=True)
+
+
+def format_json_payload_line(payload: Any) -> str:
+    """Return formatted dev-server JSON with a trailing newline."""
+    return format_json_payload(payload) + "\n"
 
 
 def discover_repo_root(start: Path | None = None) -> Path:
@@ -346,13 +428,16 @@ def discover_repo_root(start: Path | None = None) -> Path:
     origin = (start or Path(__file__)).resolve()
     current = origin if origin.is_dir() else origin.parent
 
-    for candidate in (current, *current.parents):
+    candidate: Path | None = current
+    while candidate is not None:
         if (
             (candidate / "pyproject.toml").is_file()
             and (candidate / "app").is_dir()
             and (candidate / "tools").is_dir()
         ):
             return candidate
+        parent = candidate.parent
+        candidate = None if parent == candidate else parent
 
     raise RepoRootError("Unable to discover the SentinelX repo root from the current path.")
 
@@ -432,7 +517,7 @@ def write_status(paths: DevServerPaths, status: DevServerStatus) -> Path:
     if status.log_path is not None:
         resolve_managed_reference(paths, status.log_path)
     paths.logs_dir.mkdir(parents=True, exist_ok=True)
-    payload = json.dumps(status.to_payload(), indent=2, sort_keys=True) + "\n"
+    payload = format_json_payload_line(status.to_payload())
     _atomic_write_text(managed_destination, payload)
     return managed_destination
 
@@ -512,7 +597,7 @@ def probe_health(
                 detail="request timed out",
             )
         if isinstance(reason, ConnectionRefusedError) or (
-            isinstance(reason, OSError) and getattr(reason, "errno", None) in {61, 111}
+            isinstance(reason, OSError) and getattr(reason, "errno", None) in CONNECTION_REFUSED_ERRNOS
         ):
             return HealthProbeResult(
                 status="refused",
@@ -577,8 +662,7 @@ def process_is_running(pid: int | None) -> bool:
         return False
     proc_stat = Path(f"/proc/{pid}/stat")
     try:
-        parts = proc_stat.read_text(encoding="utf-8").split()
-        if len(parts) >= 3 and parts[2] == "Z":
+        if _proc_stat_state(proc_stat.read_text(encoding="utf-8")) == "Z":
             return False
     except OSError:
         pass
@@ -594,6 +678,17 @@ def process_is_running(pid: int | None) -> bool:
     return True
 
 
+def _proc_stat_state(stat_text: str) -> str | None:
+    """Return the Linux /proc/<pid>/stat state field without splitting every field."""
+    command_end = stat_text.rfind(")")
+    if command_end < 0:
+        return None
+    state_index = command_end + 2
+    if state_index >= len(stat_text):
+        return None
+    return stat_text[state_index]
+
+
 def _started_recently(started_at: str | None, *, grace_seconds: float) -> bool:
     if not started_at:
         return False
@@ -601,7 +696,7 @@ def _started_recently(started_at: str | None, *, grace_seconds: float) -> bool:
         started = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
     except ValueError:
         return False
-    return (datetime.now(timezone.utc) - started).total_seconds() < grace_seconds
+    return (utc_datetime_now() - started).total_seconds() < grace_seconds
 
 
 def summarize_probe_failure(probe: HealthProbeResult | None) -> str:
@@ -655,7 +750,7 @@ def render_status_text(status: DevServerStatus, paths: DevServerPaths) -> str:
 def emit_status(status: DevServerStatus, paths: DevServerPaths, output_format: str) -> None:
     """Print status in the requested format."""
     if output_format == "json":
-        print(json.dumps(status_output_payload(status, paths), indent=2, sort_keys=True))
+        print(format_json_payload(status_output_payload(status, paths)))
     else:
         print(render_status_text(status, paths))
 
@@ -753,6 +848,13 @@ def _signal_managed_process(pid: int, sig: int) -> None:
     os.kill(pid, sig)
 
 
+def capped_sigkill_timeout(timeout: float) -> float:
+    """Return the SIGKILL grace period capped at two seconds."""
+    if timeout > 2.0:
+        return 2.0
+    return timeout
+
+
 def stop_managed_process(pid: int, *, timeout: float = DEFAULT_SHUTDOWN_TIMEOUT) -> None:
     """Terminate a manager-owned child process, escalating if needed."""
     if not process_is_running(pid):
@@ -774,7 +876,7 @@ def stop_managed_process(pid: int, *, timeout: float = DEFAULT_SHUTDOWN_TIMEOUT)
     except ProcessLookupError:
         return
 
-    kill_deadline = time.monotonic() + min(timeout, 2.0)
+    kill_deadline = time.monotonic() + capped_sigkill_timeout(timeout)
     while time.monotonic() < kill_deadline:
         if not process_is_running(pid):
             return
@@ -874,7 +976,7 @@ def command_start(
             probe_timeout=args.probe_timeout,
             starting_grace_seconds=args.starting_grace_seconds,
         )
-        if status.status in {"starting", "running", "stale"}:
+        if status.status in ACTIVE_MANAGER_STATUSES:
             status = replace(
                 status,
                 last_failure_at=utc_now(),
@@ -1130,7 +1232,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     """CLI entry point."""
-    raw_argv = list(argv) if argv is not None else sys.argv[1:]
+    raw_argv = sys.argv[1:] if argv is None else argv
     if raw_argv and raw_argv[0] == "serve-child":
         child_args = build_child_parser().parse_args(raw_argv)
         return serve_child(child_args.host, child_args.port)

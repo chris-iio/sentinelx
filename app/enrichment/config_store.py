@@ -32,6 +32,16 @@ _SSH_NORMAL_HOURS_KEY = "normal_hours"
 _SSH_NORMAL_HOURS_DEFAULT = "06:00-22:00"
 
 
+def _provider_option_name(name: str) -> str:
+    """Normalize provider names to their config option key."""
+    return name.lower()
+
+
+def _configured_value(value: str | None) -> str | None:
+    """Return configured text values, treating empty strings as absent."""
+    return value or None
+
+
 class ConfigStore:
     """Persists and retrieves provider API keys using configparser INI format.
 
@@ -64,7 +74,7 @@ class ConfigStore:
         fd = os.open(str(self._config_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, "w") as fh:
             cfg.write(fh)
-        self._cached_cfg = None
+        self._cached_cfg = cfg
 
     def _set_value(self, section: str, key: str, value: str) -> None:
         """Set a single value in the config file, creating the section if needed."""
@@ -74,14 +84,17 @@ class ConfigStore:
         cfg[section][key] = value
         self._save_config(cfg)
 
+    def _get_value(self, section: str, key: str, fallback: str | None = None) -> str | None:
+        """Read a single config value through the cached parser."""
+        return self._read_config().get(section, key, fallback=fallback)
+
     def get_vt_api_key(self) -> str | None:
         """Read the VirusTotal API key from config file.
 
         Returns:
             The API key string, or None if not configured.
         """
-        value = self._read_config().get(_SECTION, _KEY_NAME, fallback=None)
-        return value or None
+        return _configured_value(self._get_value(_SECTION, _KEY_NAME))
 
     def set_vt_api_key(self, key: str) -> None:
         """Write the VirusTotal API key to config file.
@@ -102,8 +115,12 @@ class ConfigStore:
         Returns:
             The stored API key string, or None if not configured.
         """
-        value = self._read_config().get(_PROVIDERS_SECTION, name.lower(), fallback=None)
-        return value or None
+        return _configured_value(
+            self._get_value(
+                _PROVIDERS_SECTION,
+                _provider_option_name(name),
+            )
+        )
 
     def set_provider_key(self, name: str, key: str) -> None:
         """Write an API key for any provider to the [providers] INI section.
@@ -114,7 +131,7 @@ class ConfigStore:
             name: Provider name (e.g., "GreyNoise", "abuseipdb"). Case-insensitive.
             key:  The API key to store.
         """
-        self._set_value(_PROVIDERS_SECTION, name.lower(), key)
+        self._set_value(_PROVIDERS_SECTION, _provider_option_name(name), key)
 
     def get_cache_ttl(self) -> int:
         """Read the cache TTL in hours from config file.
@@ -122,7 +139,7 @@ class ConfigStore:
         Returns:
             TTL in hours. Defaults to 24 if not configured.
         """
-        value = self._read_config().get(_CACHE_SECTION, _CACHE_TTL_KEY, fallback=None)
+        value = self._get_value(_CACHE_SECTION, _CACHE_TTL_KEY)
         if value is not None:
             try:
                 return int(value)
@@ -151,7 +168,11 @@ class ConfigStore:
         cfg = self._read_config()
         if _PROVIDERS_SECTION not in cfg:
             return {}
-        return dict(cfg[_PROVIDERS_SECTION])
+        section = cfg[_PROVIDERS_SECTION]
+        keys: dict[str, str] = {}
+        for name in section:
+            keys[name] = section[name]
+        return keys
 
     def get_ssh_normal_hours(self) -> str:
         """Read the normal hours window from [ssh] config section.
@@ -160,7 +181,7 @@ class ConfigStore:
             String in "HH:MM-HH:MM" format. Returns "06:00-22:00" if the
             [ssh] section or normal_hours key is absent (D-09 default).
         """
-        value = self._read_config().get(
+        value = self._get_value(
             _SSH_SECTION, _SSH_NORMAL_HOURS_KEY, fallback=_SSH_NORMAL_HOURS_DEFAULT
         )
         return value or _SSH_NORMAL_HOURS_DEFAULT

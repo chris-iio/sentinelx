@@ -17,6 +17,45 @@ interface FilterState {
   search: string;
 }
 
+type CardFilterRecord = {
+  card: HTMLElement;
+  typeLC: string;
+  valueLC: string;
+};
+
+type ControlFilterRecord = {
+  element: HTMLElement;
+  value: string;
+};
+
+function collectCardFilterRecords(cards: NodeListOf<HTMLElement>): CardFilterRecord[] {
+  const records: CardFilterRecord[] = [];
+  for (let i = 0; i < cards.length; i += 1) {
+    const card = cards.item(i);
+    records[records.length] = {
+      card,
+      typeLC: attr(card, "data-ioc-type").toLowerCase(),
+      valueLC: attr(card, "data-ioc-value").toLowerCase(),
+    };
+  }
+  return records;
+}
+
+function collectControlFilterRecords(
+  elements: NodeListOf<HTMLElement>,
+  attributeName: string
+): ControlFilterRecord[] {
+  const records: ControlFilterRecord[] = [];
+  for (let i = 0; i < elements.length; i += 1) {
+    const element = elements.item(i);
+    records[records.length] = {
+      element,
+      value: attr(element, attributeName),
+    };
+  }
+  return records;
+}
+
 /**
  * Initialise the filter bar.
  * Wires verdict buttons, type pills, search input, and dashboard badge clicks.
@@ -32,61 +71,66 @@ export function init(): void {
     type: "all",
     search: "",
   };
+  const cards = filterRoot.querySelectorAll<HTMLElement>(".ioc-card");
+  const verdictBtns = filterRoot.querySelectorAll<HTMLElement>(
+    "[data-filter-verdict]"
+  );
+  const typePills = filterRoot.querySelectorAll<HTMLElement>(
+    "[data-filter-type]"
+  );
+  const cardRecords = collectCardFilterRecords(cards);
+  const verdictButtonRecords = collectControlFilterRecords(verdictBtns, "data-filter-verdict");
+  const typePillRecords = collectControlFilterRecords(typePills, "data-filter-type");
 
   // Apply filter state: show/hide each card and update active button styles
   function applyFilter(): void {
-    const cards = filterRoot.querySelectorAll<HTMLElement>(".ioc-card");
     const verdictLC = filterState.verdict.toLowerCase();
     const typeLC = filterState.type.toLowerCase();
     const searchLC = filterState.search.toLowerCase();
 
-    cards.forEach((card) => {
+    for (let i = 0; i < cardRecords.length; i += 1) {
+      const record = cardRecords[i];
+      if (!record) continue;
+      const { card } = record;
       const cardVerdict = attr(card, "data-verdict").toLowerCase();
-      const cardType = attr(card, "data-ioc-type").toLowerCase();
-      const cardValue = attr(card, "data-ioc-value").toLowerCase();
 
       const verdictMatch = verdictLC === "all" || cardVerdict === verdictLC;
-      const typeMatch = typeLC === "all" || cardType === typeLC;
-      const searchMatch = searchLC === "" || cardValue.indexOf(searchLC) !== -1;
+      const typeMatch = typeLC === "all" || record.typeLC === typeLC;
+      const searchMatch = searchLC === "" || record.valueLC.indexOf(searchLC) !== -1;
 
       card.style.display =
         verdictMatch && typeMatch && searchMatch ? "" : "none";
-    });
+    }
 
     // Update active state on verdict buttons
-    const verdictBtns = filterRoot.querySelectorAll<HTMLElement>(
-      "[data-filter-verdict]"
-    );
-    verdictBtns.forEach((btn) => {
-      const btnVerdict = attr(btn, "data-filter-verdict");
-      if (btnVerdict === filterState.verdict) {
-        btn.classList.add("filter-btn--active");
+    for (let i = 0; i < verdictButtonRecords.length; i += 1) {
+      const record = verdictButtonRecords[i];
+      if (!record) continue;
+      if (record.value === filterState.verdict) {
+        record.element.classList.add("filter-btn--active");
       } else {
-        btn.classList.remove("filter-btn--active");
+        record.element.classList.remove("filter-btn--active");
       }
-    });
+    }
 
     // Update active state on type pills
-    const typePills = filterRoot.querySelectorAll<HTMLElement>(
-      "[data-filter-type]"
-    );
-    typePills.forEach((pill) => {
-      const pillType = attr(pill, "data-filter-type");
-      if (pillType === filterState.type) {
-        pill.classList.add("filter-pill--active");
+    for (let i = 0; i < typePillRecords.length; i += 1) {
+      const record = typePillRecords[i];
+      if (!record) continue;
+      if (record.value === filterState.type) {
+        record.element.classList.add("filter-pill--active");
       } else {
-        pill.classList.remove("filter-pill--active");
+        record.element.classList.remove("filter-pill--active");
       }
-    });
+    }
   }
 
   // Verdict button click handler
-  const verdictBtns = filterRoot.querySelectorAll<HTMLElement>(
-    "[data-filter-verdict]"
-  );
-  verdictBtns.forEach((btn) => {
+  for (let i = 0; i < verdictButtonRecords.length; i += 1) {
+    const record = verdictButtonRecords[i];
+    if (!record) continue;
+    const { element: btn, value: verdict } = record;
     btn.addEventListener("click", () => {
-      const verdict = attr(btn, "data-filter-verdict");
       if (verdict === "all") {
         filterState.verdict = "all";
       } else {
@@ -95,15 +139,14 @@ export function init(): void {
       }
       applyFilter();
     });
-  });
+  }
 
   // Type pill click handler
-  const typePills = filterRoot.querySelectorAll<HTMLElement>(
-    "[data-filter-type]"
-  );
-  typePills.forEach((pill) => {
+  for (let i = 0; i < typePillRecords.length; i += 1) {
+    const record = typePillRecords[i];
+    if (!record) continue;
+    const { element: pill, value: type } = record;
     pill.addEventListener("click", () => {
-      const type = attr(pill, "data-filter-type");
       if (type === "all") {
         filterState.type = "all";
       } else {
@@ -111,7 +154,7 @@ export function init(): void {
       }
       applyFilter();
     });
-  });
+  }
 
   // Search input handler (debounced at 100ms — R023 O(N²) fix)
   const searchInput = document.getElementById(
@@ -134,14 +177,17 @@ export function init(): void {
     const dashBadges = dashboard.querySelectorAll<HTMLElement>(
       ".verdict-kpi-card[data-verdict]"
     );
-    dashBadges.forEach((badge) => {
+    const dashboardBadgeRecords = collectControlFilterRecords(dashBadges, "data-verdict");
+    for (let i = 0; i < dashboardBadgeRecords.length; i += 1) {
+      const record = dashboardBadgeRecords[i];
+      if (!record) continue;
+      const { element: badge, value: verdict } = record;
       badge.addEventListener("click", () => {
-        const verdict = attr(badge, "data-verdict");
         filterState.verdict =
           filterState.verdict === verdict ? "all" : verdict;
         applyFilter();
       });
-    });
+    }
   }
 
 }

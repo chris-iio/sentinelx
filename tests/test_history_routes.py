@@ -8,10 +8,14 @@ Tests cover:
 - GET / works with no history (empty list)
 - History results are embedded as data-history-results attribute
 """
+import builtins
+import inspect
+from types import MappingProxyType
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+from app.enrichment.models import EnrichmentResult
 from app.enrichment.history_store import HistoryStore
 from app.pipeline.models import IOC, IOCType
 
@@ -127,6 +131,50 @@ class TestEnrichmentSaveWrapper:
         assert diagnostics["last_failure_at"] is None
         assert diagnostics["last_error_summary"] is None
 
+    def test_save_serializes_results_and_iocs_with_direct_loops(self, monkeypatch):
+        """History-save serialization should preserve order without map-based helpers."""
+        from app.routes._helpers import _run_enrichment_and_save
+
+        ioc_a = IOC(type=IOCType.IPV4, value="10.0.0.1", raw_match="10[.]0[.]0[.]1")
+        ioc_b = IOC(type=IOCType.DOMAIN, value="example.com", raw_match="example[.]com")
+        ioc_c = IOC(type=IOCType.URL, value="http://evil.example", raw_match="hxxp://evil[.]example")
+        result = EnrichmentResult(
+            ioc=ioc_a,
+            provider="ProviderA",
+            verdict="clean",
+            detection_count=0,
+            total_engines=1,
+            scan_date=None,
+            raw_stats={"ok": True},
+        )
+        mock_orch = MagicMock()
+        mock_orch.enrich_all.return_value = None
+        mock_orch.get_status.return_value = {
+            "total": 1,
+            "done": 1,
+            "complete": True,
+            "results": [result],
+        }
+        mock_store = MagicMock()
+
+        def fail_map(*_args, **_kwargs):
+            raise AssertionError("history-save serialization should use direct loops")
+
+        monkeypatch.setattr(builtins, "map", fail_map)
+
+        _run_enrichment_and_save(
+            mock_orch,
+            "test_job_id",
+            [ioc_a, ioc_b],
+            "test input",
+            "online",
+            mock_store,
+        )
+
+        save_kwargs = mock_store.save_analysis.call_args.kwargs
+        assert [ioc["value"] for ioc in save_kwargs["iocs"]] == ["10.0.0.1", "example.com"]
+        assert [item["provider"] for item in save_kwargs["results"]] == ["ProviderA"]
+
     def test_save_failure_does_not_break_enrichment(self):
         """If HistoryStore.save_analysis raises, enrichment still completes."""
         from app.routes._helpers import (
@@ -196,6 +244,16 @@ class TestEnrichmentSaveWrapper:
         """Malformed helper state is coerced to safe aggregate defaults."""
         from app.routes import _helpers
 
+        source = inspect.getsource(_helpers._coerce_history_save_diagnostics)
+        assert "dict(_HISTORY_SAVE_DIAGNOSTICS_DEFAULTS)" not in source
+        assert '("attempts", "successes", "failures", "skipped")' not in source
+        assert '("last_attempt_at", "last_success_at", "last_failure_at")' not in source
+        accessor_source = inspect.getsource(_helpers.get_history_save_diagnostics)
+        assert "dict(_history_save_diagnostics)" not in accessor_source
+        assert isinstance(_helpers._HISTORY_SAVE_OUTCOMES, frozenset)
+        assert isinstance(_helpers._HISTORY_SAVE_RECORDABLE_OUTCOMES, frozenset)
+        assert isinstance(_helpers._HISTORY_SAVE_DIAGNOSTICS_DEFAULTS, MappingProxyType)
+
         malformed = {
             "attempts": "oops",
             "successes": -1,
@@ -220,6 +278,40 @@ class TestEnrichmentSaveWrapper:
             "last_failure_at": None,
             "last_error_summary": None,
         }
+
+    def test_history_save_diagnostics_presence_checks_avoid_timestamp_strip(self):
+        """Timestamp presence checks should not allocate stripped copies."""
+        from app.routes import _helpers
+
+        class NoStripText(str):
+            def strip(self, *_args, **_kwargs):
+                raise AssertionError("timestamp presence should scan directly")
+
+        raw = {
+            "last_attempt_at": NoStripText("2026-01-01T00:00:00Z"),
+            "last_success_at": NoStripText("   "),
+            "last_failure_at": NoStripText("2026-01-01T00:00:01Z"),
+        }
+
+        diagnostics = _helpers._coerce_history_save_diagnostics(raw)
+
+        assert diagnostics["last_attempt_at"] == "2026-01-01T00:00:00Z"
+        assert diagnostics["last_success_at"] is None
+        assert diagnostics["last_failure_at"] == "2026-01-01T00:00:01Z"
+
+    def test_history_save_diagnostics_error_summary_avoids_strip_allocation(self):
+        """Error summaries should trim through the shared bounded index helper."""
+        from app.routes import _helpers
+
+        class MeasuredStripText(str):
+            def strip(self, *_args, **_kwargs):
+                raise AssertionError("history error summaries should not allocate through strip()")
+
+        diagnostics = _helpers._coerce_history_save_diagnostics({
+            "last_error_summary": MeasuredStripText("  failed summary  "),
+        })
+
+        assert diagnostics["last_error_summary"] == "failed summary"
 
 
 # ---------------------------------------------------------------------------
@@ -258,6 +350,8 @@ class TestHistoryDetailRoute:
 
     def test_history_renders_online_mode_with_history_owner(self, client, seeded_store):
         """History page keeps online-mode DOM shape but advertises history ownership."""
+        import app.routes.history as history_module
+
         store, analysis_id, _, results = seeded_store
         client.application.history_store = store
         response = client.get(f"/history/{analysis_id}")
@@ -267,11 +361,12 @@ class TestHistoryDetailRoute:
         assert 'data-job-id="history"' in html
         assert 'data-mode="online"' in html
         assert 'data-results-owner="history"' in html
-        assert 'data-provider-counts="{}"' in html
+        assert f'data-provider-counts="{history_module._EMPTY_JSON_OBJECT}"' in html
         assert 'id="export-btn"' in html
         assert 'id="enrich-progress"' in html
         assert f"0/{len(results)} providers complete" in html
         assert 'data-results-owner="live"' not in html
+        assert history_module._EMPTY_JSON_OBJECT == "{}"
 
     def test_history_shows_correct_ioc_count(self, client, seeded_store):
         """History page shows the correct total IOC count."""
@@ -280,6 +375,133 @@ class TestHistoryDetailRoute:
         response = client.get(f"/history/{analysis_id}")
         assert response.status_code == 200
         assert b"2 unique IOCs" in response.data
+
+    def test_history_groups_iocs_while_rebuilding_models(self, client, seeded_store, monkeypatch):
+        """History reload should not rescan rebuilt IOC objects just to group them."""
+        import app.routes.history as history_module
+
+        store, analysis_id, _, _ = seeded_store
+        client.application.history_store = store
+
+        def fail_group_by_type(_iocs):
+            raise AssertionError("history reload should group persisted IOCs in one pass")
+
+        monkeypatch.setattr(history_module, "group_by_type", fail_group_by_type, raising=False)
+
+        response = client.get(f"/history/{analysis_id}")
+
+        assert response.status_code == 200
+        assert b"10.0.0.1" in response.data
+        assert b"evil.com" in response.data
+        assert "setdefault" not in history_module._group_history_iocs.__code__.co_names
+
+    def test_group_history_iocs_skips_iteration_for_empty_single_pair_or_three_rows(self):
+        """Short history IOC groups should avoid the accumulator loop."""
+        import app.routes.history as history_module
+
+        class NoIterList(list):
+            def __iter__(self):
+                raise AssertionError("short history IOC grouping should not iterate")
+
+            def __getitem__(self, index):
+                if isinstance(index, slice):
+                    raise AssertionError("history IOC grouping should not slice")
+                return super().__getitem__(index)
+
+        assert history_module._group_history_iocs(NoIterList()) == {}
+
+        grouped = history_module._group_history_iocs(
+            NoIterList([{"type": "ipv4", "value": "10.0.0.1", "raw_match": "10[.]0[.]0[.]1"}])
+        )
+
+        assert list(grouped) == [IOCType.IPV4]
+        assert grouped[IOCType.IPV4] == [
+            IOC(type=IOCType.IPV4, value="10.0.0.1", raw_match="10[.]0[.]0[.]1")
+        ]
+        same_type_grouped = history_module._group_history_iocs(
+            NoIterList([
+                {"type": "ipv4", "value": "10.0.0.1", "raw_match": "10[.]0[.]0[.]1"},
+                {"type": "ipv4", "value": "10.0.0.2", "raw_match": "10[.]0[.]0[.]2"},
+            ])
+        )
+        mixed_type_grouped = history_module._group_history_iocs(
+            NoIterList([
+                {"type": "ipv4", "value": "10.0.0.1", "raw_match": "10[.]0[.]0[.]1"},
+                {"type": "domain", "value": "evil.com", "raw_match": "evil[.]com"},
+            ])
+        )
+        three_grouped = history_module._group_history_iocs(
+            NoIterList([
+                {"type": "ipv4", "value": "10.0.0.1", "raw_match": "10[.]0[.]0[.]1"},
+                {"type": "domain", "value": "evil.com", "raw_match": "evil[.]com"},
+                {"type": "ipv4", "value": "10.0.0.2", "raw_match": "10[.]0[.]0[.]2"},
+            ])
+        )
+
+        assert same_type_grouped[IOCType.IPV4] == [
+            IOC(type=IOCType.IPV4, value="10.0.0.1", raw_match="10[.]0[.]0[.]1"),
+            IOC(type=IOCType.IPV4, value="10.0.0.2", raw_match="10[.]0[.]0[.]2"),
+        ]
+        assert mixed_type_grouped[IOCType.IPV4] == [
+            IOC(type=IOCType.IPV4, value="10.0.0.1", raw_match="10[.]0[.]0[.]1")
+        ]
+        assert mixed_type_grouped[IOCType.DOMAIN] == [
+            IOC(type=IOCType.DOMAIN, value="evil.com", raw_match="evil[.]com")
+        ]
+        assert three_grouped[IOCType.IPV4] == [
+            IOC(type=IOCType.IPV4, value="10.0.0.1", raw_match="10[.]0[.]0[.]1"),
+            IOC(type=IOCType.IPV4, value="10.0.0.2", raw_match="10[.]0[.]0[.]2"),
+        ]
+        assert three_grouped[IOCType.DOMAIN] == [
+            IOC(type=IOCType.DOMAIN, value="evil.com", raw_match="evil[.]com")
+        ]
+        assert "len" in history_module._group_history_iocs.__code__.co_names
+
+    def test_empty_history_skips_ioc_grouping(self, client, monkeypatch):
+        """Empty history reloads should not rebuild/group unused IOC template data."""
+        import app.routes.history as history_module
+
+        mock_store = MagicMock()
+        mock_store.load_analysis.return_value = {
+            "id": "empty-analysis",
+            "input_text": "no indicators here",
+            "mode": "online",
+            "iocs": [],
+            "results": [],
+            "total_count": 0,
+            "top_verdict": "unknown",
+            "created_at": "2026-01-01T00:00:00",
+        }
+        client.application.history_store = mock_store
+
+        def fail_group_history_iocs(_raw_iocs):
+            raise AssertionError("empty history reload should skip IOC grouping")
+
+        monkeypatch.setattr(history_module, "_group_history_iocs", fail_group_history_iocs)
+
+        response = client.get("/history/empty-analysis")
+
+        assert response.status_code == 200
+        assert b"No IOCs found" in response.data
+
+    def test_empty_history_results_skip_json_dumps(self):
+        """Empty history replay payloads should not invoke the JSON encoder."""
+        import app.routes.history as history_module
+
+        with patch("app.json_utils.json.dumps", side_effect=AssertionError):
+            assert history_module._history_results_json([]) == history_module._EMPTY_JSON_ARRAY
+        assert history_module._EMPTY_JSON_ARRAY == "[]"
+
+    def test_nonempty_history_results_use_json_dumps(self):
+        """Non-empty history replay payloads still use the JSON encoder."""
+        import app.routes.history as history_module
+
+        results = [{"ioc_value": "10.0.0.1", "verdict": "clean"}]
+
+        with patch("app.json_utils.json.dumps", return_value="encoded") as dumps:
+            assert history_module._history_results_json(results) == "encoded"
+
+        dumps.assert_called_once_with(results)
 
 
 # ---------------------------------------------------------------------------
@@ -355,3 +577,44 @@ class TestSerializeIoc:
             "value": "example.com",
             "raw_match": "example[.]com",
         }
+
+    def test_serialize_iocs_uses_shared_helper_and_small_list_fast_paths(self, monkeypatch):
+        """Batch IOC serialization should share the per-IOC serializer path."""
+        import app.routes._helpers as helpers
+
+        calls = []
+
+        def serialize_ioc(ioc):
+            calls.append(ioc.value)
+            return {"value": ioc.value}
+
+        monkeypatch.setattr(helpers, "_serialize_ioc", serialize_ioc)
+
+        ioc_a = IOC(type=IOCType.IPV4, value="10.0.0.1", raw_match="10[.]0[.]0[.]1")
+        ioc_b = IOC(type=IOCType.DOMAIN, value="example.com", raw_match="example[.]com")
+        ioc_c = IOC(type=IOCType.URL, value="http://evil.example", raw_match="hxxp://evil[.]example")
+
+        class NoIterIocs(list):
+            def __iter__(self):
+                raise AssertionError("short IOC serialization should not iterate")
+
+        assert helpers._serialize_iocs([]) == []
+        assert helpers._serialize_iocs(NoIterIocs([ioc_a])) == [{"value": "10.0.0.1"}]
+        assert helpers._serialize_iocs(NoIterIocs([ioc_a, ioc_b])) == [
+            {"value": "10.0.0.1"},
+            {"value": "example.com"},
+        ]
+        assert helpers._serialize_iocs(NoIterIocs([ioc_a, ioc_b, ioc_c])) == [
+            {"value": "10.0.0.1"},
+            {"value": "example.com"},
+            {"value": "http://evil.example"},
+        ]
+        assert calls == [
+            "10.0.0.1",
+            "10.0.0.1",
+            "example.com",
+            "10.0.0.1",
+            "example.com",
+            "http://evil.example",
+        ]
+        assert "len" in helpers._serialize_iocs.__code__.co_names

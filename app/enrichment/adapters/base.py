@@ -22,12 +22,33 @@ Does NOT import any adapter-specific module.
 from __future__ import annotations
 
 import abc
+from collections.abc import Collection, Mapping
+from types import MappingProxyType
 
 import requests
 
 from app.enrichment.http_safety import safe_request
-from app.enrichment.models import EnrichmentError, EnrichmentResult
+from app.enrichment.models import EnrichmentError, EnrichmentResult, error_result
 from app.pipeline.models import IOC, IOCType
+
+_EMPTY_AUTH_HEADERS: Mapping[str, str] = MappingProxyType({})
+_EMPTY_ALLOWED_HOSTS: frozenset[str] = frozenset()
+
+
+def _allowed_hosts_membership(allowed_hosts: Collection[str]) -> frozenset[str]:
+    if isinstance(allowed_hosts, frozenset):
+        return allowed_hosts
+    if not allowed_hosts:
+        return _EMPTY_ALLOWED_HOSTS
+    if isinstance(allowed_hosts, (list, tuple)):
+        host_count = len(allowed_hosts)
+        if host_count == 1:
+            return frozenset((allowed_hosts[0],))
+        if host_count == 2:
+            return frozenset((allowed_hosts[0], allowed_hosts[1]))
+        if host_count == 3:
+            return frozenset((allowed_hosts[0], allowed_hosts[1], allowed_hosts[2]))
+    return frozenset(allowed_hosts)
 
 
 class BaseHTTPAdapter(abc.ABC):
@@ -56,11 +77,13 @@ class BaseHTTPAdapter(abc.ABC):
     # --- Override points with sensible defaults --------------------------------
     _http_method: str = "GET"
 
-    def __init__(self, allowed_hosts: list[str], *, api_key: str = "") -> None:
-        self._allowed_hosts = allowed_hosts
+    def __init__(self, allowed_hosts: Collection[str], *, api_key: str = "") -> None:
+        self._allowed_hosts = _allowed_hosts_membership(allowed_hosts)
         self._api_key = api_key
         self._session = requests.Session()
-        self._session.headers.update(self._auth_headers())
+        auth_headers = self._auth_headers()
+        if auth_headers:
+            self._session.headers.update(auth_headers)
 
     # --- Template method: the adapter contract ---------------------------------
 
@@ -93,9 +116,7 @@ class BaseHTTPAdapter(abc.ABC):
             EnrichmentResult on success, EnrichmentError on failure.
         """
         if ioc.type not in self.supported_types:
-            return EnrichmentError(
-                ioc=ioc, provider=self.name, error="Unsupported type",
-            )
+            return error_result(ioc, self.name, "Unsupported type")
 
         url = self._build_url(ioc)
         hook = self._make_pre_raise_hook(ioc)
@@ -130,13 +151,13 @@ class BaseHTTPAdapter(abc.ABC):
 
     # --- Override points (safe defaults) ---------------------------------------
 
-    def _auth_headers(self) -> dict:
+    def _auth_headers(self) -> Mapping[str, str]:
         """Return extra headers to set on the session.
 
         Override in subclasses that need API-key or custom auth headers.
         Default: no extra headers.
         """
-        return {}
+        return _EMPTY_AUTH_HEADERS
 
     def _make_pre_raise_hook(self, ioc: IOC):
         """Return a pre-raise hook callback, or None.

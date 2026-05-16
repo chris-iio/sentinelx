@@ -6,6 +6,9 @@ All HTTP calls are mocked using unittest.mock.patch -- no real API calls.
 """
 from __future__ import annotations
 
+import inspect
+from types import MappingProxyType
+
 from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.enrichment.adapters.hashlookup import HashlookupAdapter
 from tests.helpers import (
@@ -53,6 +56,28 @@ def _make_adapter(allowed_hosts: list[str] | None = None) -> HashlookupAdapter:
 
 
 class TestLookupFound:
+
+    def test_result_helper_preserves_provider_envelope(self) -> None:
+        """Hashlookup response branches should share one provider envelope."""
+        from app.enrichment.adapters.hashlookup import _hashlookup_result
+
+        ioc = make_sha256_ioc("c" * 64)
+        result = _hashlookup_result(
+            ioc=ioc,
+            provider_name="CIRCL Hashlookup",
+            verdict="known_good",
+            detection_count=1,
+            total_engines=1,
+            raw_stats={"source": "NSRL"},
+        )
+
+        assert result.ioc is ioc
+        assert result.provider == "CIRCL Hashlookup"
+        assert result.verdict == "known_good"
+        assert result.detection_count == 1
+        assert result.total_engines == 1
+        assert result.scan_date is None
+        assert result.raw_stats == {"source": "NSRL"}
 
     def test_md5_found_returns_known_good(self) -> None:
         """MD5 hash found (200) -> verdict=known_good, detection_count=1, total_engines=1."""
@@ -179,6 +204,11 @@ class TestLookupNotFound:
         assert result.verdict == "no_data"
         assert result.detection_count == 0
         assert result.total_engines == 0
+        assert result.scan_date is None
+        assert result.raw_stats == {}
+        assert "no_data_result(ioc, self.name)" in inspect.getsource(
+            HashlookupAdapter._make_pre_raise_hook,
+        )
 
     def test_404_returns_result_not_error(self) -> None:
         """404 response -> isinstance(result, EnrichmentResult) is True, NOT EnrichmentError."""
@@ -263,3 +293,9 @@ class TestURLPattern:
         called_url = adapter._session.get.call_args.args[0]
         assert "/lookup/sha256/" in called_url, f"Expected /lookup/sha256/ in URL, got: {called_url}"
 
+    def test_supported_types_derive_from_hash_route_map(self) -> None:
+        """Supported hash types should stay locked to the route map keys."""
+        from app.enrichment.adapters.hashlookup import _HASH_TYPE_PATH
+
+        assert isinstance(_HASH_TYPE_PATH, MappingProxyType)
+        assert HashlookupAdapter.supported_types == frozenset(_HASH_TYPE_PATH)

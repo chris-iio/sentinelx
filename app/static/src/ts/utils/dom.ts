@@ -10,3 +10,38 @@
 export function attr(el: Element, name: string, fallback = ""): string {
   return el.getAttribute(name) ?? fallback;
 }
+
+export type ResultsSurfaceOwner = "live" | "history" | "static";
+
+export function pageResultsElement(): HTMLElement | null {
+  return document.querySelector<HTMLElement>(".page-results");
+}
+
+export function resolveResultsSurfaceOwner(
+  pageResults: HTMLElement | null = pageResultsElement()
+): ResultsSurfaceOwner | null {
+  if (!pageResults) return null;
+
+  const explicitOwner = attr(pageResults, "data-results-owner");
+  const mode = attr(pageResults, "data-mode");
+  const jobId = attr(pageResults, "data-job-id");
+  const hasHistoryResults = pageResults.hasAttribute("data-history-results");
+
+  if (explicitOwner === "history") {
+    return "history";
+  }
+
+  if (explicitOwner === "live") {
+    return mode === "online" && jobId ? "live" : "static";
+  }
+
+  if (hasHistoryResults) {
+    return "history";
+  }
+
+  if (mode === "online" && jobId) {
+    return "live";
+  }
+
+  return "static";
+}

@@ -35,6 +35,17 @@ function showPasteFeedback(charCount: number): void {
 
 type AnalysisMode = "offline" | "online";
 
+type FormElements = {
+  form: HTMLElement | null;
+  textarea: HTMLTextAreaElement | null;
+  submitBtn: HTMLButtonElement | null;
+  clearBtn: HTMLElement | null;
+  widget: HTMLElement | null;
+  toggleBtn: HTMLElement | null;
+  modeInput: HTMLInputElement | null;
+  modeStatus: HTMLElement | null;
+};
+
 const MODE_COPY: Record<AnalysisMode, string> = {
   offline: "Offline selected — local extraction only; no provider enrichment requests are sent.",
   online: "Online selected — configured providers may enrich submitted indicators.",
@@ -71,14 +82,25 @@ function renderModeState(mode: string, elements: {
 
 // ---- Submit button: disable when textarea is empty ----
 
-function initSubmitButton(): void {
-  const form = document.getElementById("analyze-form");
-  if (!form) return;
+function hasNonWhitespace(value: string): boolean {
+  for (let i = 0; i < value.length; i += 1) {
+    const code = value.charCodeAt(i);
+    if (
+      code !== 32
+      && code !== 9
+      && code !== 10
+      && code !== 13
+      && code !== 12
+      && code !== 11
+    ) return true;
+  }
+  return false;
+}
 
-  const textarea = document.querySelector<HTMLTextAreaElement>("#ioc-text");
-  const submitBtn = document.querySelector<HTMLButtonElement>("#submit-btn");
-  const clearBtn = document.getElementById("clear-btn");
-
+function initSubmitButton(elements: FormElements): void {
+  if (!elements.form) return;
+  const textarea = elements.textarea;
+  const submitBtn = elements.submitBtn;
   if (!textarea || !submitBtn) return;
 
   // Re-bind to non-nullable aliases so closures below don't need assertions.
@@ -89,7 +111,7 @@ function initSubmitButton(): void {
   const sb: HTMLButtonElement = submitBtn;
 
   function updateSubmitState(): void {
-    sb.disabled = ta.value.trim().length === 0;
+    sb.disabled = !hasNonWhitespace(ta.value);
   }
 
   ta.addEventListener("input", updateSubmitState);
@@ -107,8 +129,8 @@ function initSubmitButton(): void {
   updateSubmitState();
 
   // ---- Clear button ----
-  if (clearBtn) {
-    clearBtn.addEventListener("click", function () {
+  if (elements.clearBtn) {
+    elements.clearBtn.addEventListener("click", function () {
       ta.value = "";
       updateSubmitState();
       ta.focus();
@@ -118,8 +140,7 @@ function initSubmitButton(): void {
 
 // ---- Auto-grow textarea (INP-02) ----
 
-function initAutoGrow(): void {
-  const textarea = document.querySelector<HTMLTextAreaElement>("#ioc-text");
+function initAutoGrow(textarea: HTMLTextAreaElement | null): void {
   if (!textarea) return;
 
   // Non-nullable alias for use inside closures (TypeScript can't narrow through closures)
@@ -141,13 +162,13 @@ function initAutoGrow(): void {
 
 // ---- Mode toggle switch (INPUT-01, INPUT-03) ----
 
-function initModeToggle(): void {
-  const form = document.getElementById("analyze-form");
-  const widget = document.getElementById("mode-toggle-widget");
-  const toggleBtn = document.getElementById("mode-toggle-btn");
-  const modeInput = document.querySelector<HTMLInputElement>("#mode-input");
-  const modeStatus = document.getElementById("mode-status");
-  const submitBtn = document.querySelector<HTMLButtonElement>("#submit-btn");
+function initModeToggle(elements: FormElements): void {
+  const form = elements.form;
+  const widget = elements.widget;
+  const toggleBtn = elements.toggleBtn;
+  const modeInput = elements.modeInput;
+  const modeStatus = elements.modeStatus;
+  const submitBtn = elements.submitBtn;
 
   if (!form && !widget && !toggleBtn && !modeInput && !modeStatus) return;
   if (!form || !widget || !toggleBtn || !modeInput || !modeStatus) {
@@ -187,7 +208,18 @@ function initModeToggle(): void {
  * Initialise all form controls: submit button state, auto-grow, and mode toggle.
  */
 export function init(): void {
-  initSubmitButton();
-  initAutoGrow();
-  initModeToggle();
+  const elements: FormElements = {
+    form: document.getElementById("analyze-form"),
+    textarea: document.querySelector<HTMLTextAreaElement>("#ioc-text"),
+    submitBtn: document.querySelector<HTMLButtonElement>("#submit-btn"),
+    clearBtn: document.getElementById("clear-btn"),
+    widget: document.getElementById("mode-toggle-widget"),
+    toggleBtn: document.getElementById("mode-toggle-btn"),
+    modeInput: document.querySelector<HTMLInputElement>("#mode-input"),
+    modeStatus: document.getElementById("mode-status"),
+  };
+
+  initSubmitButton(elements);
+  initAutoGrow(elements.textarea);
+  initModeToggle(elements);
 }

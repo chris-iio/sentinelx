@@ -17,41 +17,22 @@ import { init as initHistory } from "./modules/history";
 import { init as initSettings } from "./modules/settings";
 import { init as initUi } from "./modules/ui";
 import { init as initGraph } from "./modules/graph";
-import { attr } from "./utils/dom";
+import {
+  pageResultsElement,
+  resolveResultsSurfaceOwner as resolveDomResultsSurfaceOwner,
+  type ResultsSurfaceOwner,
+} from "./utils/dom";
 
-export type ResultsSurfaceOwner = "live" | "history" | "static";
+export type { ResultsSurfaceOwner } from "./utils/dom";
 
 export function resolveResultsSurfaceOwner(
-  pageResults: HTMLElement | null = document.querySelector<HTMLElement>(".page-results")
+  pageResults: HTMLElement | null = pageResultsElement()
 ): ResultsSurfaceOwner | null {
-  if (!pageResults) return null;
-
-  const explicitOwner = attr(pageResults, "data-results-owner");
-  const mode = attr(pageResults, "data-mode");
-  const jobId = attr(pageResults, "data-job-id");
-  const hasHistoryResults = pageResults.hasAttribute("data-history-results");
-
-  if (explicitOwner === "history") {
-    return "history";
-  }
-
-  if (explicitOwner === "live") {
-    return mode === "online" && jobId ? "live" : "static";
-  }
-
-  if (hasHistoryResults) {
-    return "history";
-  }
-
-  if (mode === "online" && jobId) {
-    return "live";
-  }
-
-  return "static";
+  return resolveDomResultsSurfaceOwner(pageResults);
 }
 
 export function initResultsSurface(
-  pageResults: HTMLElement | null = document.querySelector<HTMLElement>(".page-results")
+  pageResults: HTMLElement | null = pageResultsElement()
 ): void {
   const owner = resolveResultsSurfaceOwner(pageResults);
   if (!pageResults || !owner) return;

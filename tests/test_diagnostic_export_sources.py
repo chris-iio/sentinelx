@@ -1,8 +1,14 @@
 import json
+import dis
 import zipfile
 from io import BytesIO
 
+from app.diagnostics import sources as sources_module
 from app.diagnostics import assemble_diagnostic_bundle, build_default_diagnostic_sources
+from app.diagnostics.policy import (
+    DIAGNOSTIC_SANITIZATION_POLICY,
+    DiagnosticSanitizationPolicy,
+)
 from app.enrichment.config_store import ConfigStore
 
 GENERATED_AT = "2026-01-02T03:04:05Z"
@@ -40,6 +46,35 @@ class FailingConfigStore:
 
     def all_provider_keys(self):
         raise AssertionError("all_provider_keys should not run after vt failure")
+
+
+class _BoundedItemsMapping(dict):
+    def __init__(self, pairs, *, max_reads: int):
+        super().__init__()
+        self._items = dict(pairs)
+        self._keys = tuple(self._items)
+        self.max_reads = max_reads
+        self.reads = 0
+
+    def __iter__(self):
+        for key in self._keys:
+            self.reads += 1
+            if self.reads > self.max_reads:
+                raise AssertionError("safe diagnostics should stop at the mapping cap")
+            yield key
+
+    def __getitem__(self, key):
+        return self._items[key]
+
+    def items(self):
+        raise AssertionError("safe diagnostics should iterate mapping keys directly")
+
+
+class _NoSliceList(list):
+    def __getitem__(self, index):
+        if isinstance(index, slice):
+            raise AssertionError("recent history diagnostics should use bounded iteration")
+        return super().__getitem__(index)
 
 
 def _bundle_payloads(bundle):
@@ -129,6 +164,18 @@ def test_default_sources_include_safe_runtime_snapshots_without_request_context(
     assert "[REDACTED]" in archive_text
 
 
+def test_diagnostic_sanitization_policy_centralizes_source_bounds() -> None:
+    policy = DIAGNOSTIC_SANITIZATION_POLICY
+
+    assert not hasattr(policy, "__dict__")
+    assert DiagnosticSanitizationPolicy().runtime_source_max_bytes == 16 * 1024
+    assert sources_module._SOURCE_MAX_BYTES == policy.runtime_source_max_bytes
+    assert sources_module._MAX_SAFE_STRING_CHARS == policy.max_safe_string_chars
+    assert sources_module._MAX_LIST_ITEMS == policy.max_list_items
+    assert sources_module._MAX_DICT_ITEMS == policy.max_dict_items
+    assert sources_module._MAX_DEPTH == policy.max_jsonish_depth
+
+
 def test_failing_runtime_dependencies_become_source_errors_and_do_not_abort(tmp_path):
     cache = FakeCacheStore(error=RuntimeError("cache down Bearer cache-token-123456"))
     history = FakeHistoryStore(error=ValueError("history unavailable"))
@@ -161,6 +208,36 @@ def test_failing_runtime_dependencies_become_source_errors_and_do_not_abort(tmp_
     assert "Bearer [REDACTED]" in manifest_text
 
 
+def test_config_secret_inventory_payload_accumulates_labels_without_list_constructor() -> None:
+    instructions = list(dis.get_instructions(sources_module._config_secret_inventory_payload))
+    list_calls = [
+        instruction
+        for index, instruction in enumerate(instructions)
+        if instruction.opname == "LOAD_GLOBAL"
+        and instruction.argval == "list"
+        and any(
+            later.opname.startswith("CALL")
+            for later in instructions[index + 1 : index + 4]
+        )
+    ]
+
+    assert list_calls == []
+
+
+def test_copy_label_tuple_skips_iteration_for_empty_single_pair_or_three_labels() -> None:
+    class NoIterTuple(tuple):
+        def __iter__(self):
+            raise AssertionError("short label copies should not iterate")
+
+    assert sources_module._copy_label_tuple(NoIterTuple(())) == []
+    assert sources_module._copy_label_tuple(NoIterTuple(("configured_secret:virustotal",))) == [
+        "configured_secret:virustotal"
+    ]
+    assert sources_module._copy_label_tuple(NoIterTuple(("b", "a"))) == ["b", "a"]
+    assert sources_module._copy_label_tuple(NoIterTuple(("c", "b", "a"))) == ["c", "b", "a"]
+    assert "len" in sources_module._copy_label_tuple.__code__.co_names
+
+
 def test_missing_optional_runtime_objects_are_explicitly_omitted():
     sources = build_default_diagnostic_sources(generated_at=GENERATED_AT)
     bundle = assemble_diagnostic_bundle(sources, generated_at=GENERATED_AT)
@@ -179,3 +256,150 @@ def test_missing_optional_runtime_objects_are_explicitly_omitted():
     health_payload = payloads["runtime/health-checks.json"]
     assert health_payload["status"] == "degraded"
     assert health_payload["checks"]["cache"]["detail"] == "cache_store_not_provided"
+
+
+def test_safe_mapping_uses_bounded_iteration_for_nested_mappings():
+    from app.diagnostics.sources import _safe_mapping
+
+    child = _BoundedItemsMapping(
+        [(f"child-{index}", index) for index in range(55)],
+        max_reads=50,
+    )
+    raw = _BoundedItemsMapping(
+        [("nested", child), *[(f"key-{index}", index) for index in range(54)]],
+        max_reads=50,
+    )
+
+    payload = _safe_mapping(raw)
+
+    assert raw.reads == 50
+    assert child.reads == 50
+    assert "key-48" in payload
+    assert "key-49" not in payload
+    assert payload["nested"]["child-49"] == 49
+    assert "child-50" not in payload["nested"]
+
+
+def test_safe_jsonish_uses_direct_recursive_loops():
+    from app.diagnostics.sources import _safe_jsonish
+
+    nested_code_names = {
+        const.co_name
+        for const in _safe_jsonish.__code__.co_consts
+        if hasattr(const, "co_name")
+    }
+
+    assert _safe_jsonish({"items": [1, "two"]}) == {"items": [1, "two"]}
+    assert "<dictcomp>" not in nested_code_names
+    assert "<listcomp>" not in nested_code_names
+
+
+def test_safe_jsonish_skips_iteration_for_exact_empty_single_or_pair_containers():
+    from app.diagnostics.sources import _safe_jsonish
+
+    class NoIterList(list):
+        def __iter__(self):
+            raise AssertionError("short list diagnostics should not iterate")
+
+        def __getitem__(self, index):
+            if isinstance(index, slice):
+                raise AssertionError("diagnostic list sanitization should not slice")
+            return super().__getitem__(index)
+
+    assert _safe_jsonish({}) == {}
+    assert _safe_jsonish({"item": NoIterList(["value"])}) == {"item": ["value"]}
+    assert _safe_jsonish(NoIterList([])) == []
+    assert _safe_jsonish(NoIterList(["value"])) == ["value"]
+    assert _safe_jsonish(NoIterList(["first", "second"])) == ["first", "second"]
+    assert "len" in _safe_jsonish.__code__.co_names
+
+
+def test_job_diagnostics_payload_adds_defaults_without_setdefault() -> None:
+    from app.diagnostics.sources import _job_diagnostics_payload
+
+    payload = _job_diagnostics_payload(lambda _job_id: {"diagnostics": {}}, "job-1")
+    explicit = _job_diagnostics_payload(
+        lambda _job_id: {"job_id": "custom-job", "found": False},
+        "job-1",
+    )
+
+    assert payload == {"diagnostics": {}, "job_id": "job-1", "found": True}
+    assert explicit == {"job_id": "custom-job", "found": False}
+    assert "setdefault" not in _job_diagnostics_payload.__code__.co_names
+
+
+def test_recent_history_payload_uses_bounded_iteration_not_slice():
+    from app.diagnostics.sources import _recent_history_payload
+
+    class NoSliceHistoryStore:
+        def __init__(self, rows):
+            self.rows = rows
+            self.limits = []
+
+        def list_recent(self, limit=20):
+            self.limits.append(limit)
+            return self.rows
+
+    rows = _NoSliceList(
+        {"id": f"analysis-{index}", "input_text": f"row {index}"}
+        for index in range(20)
+    )
+    history = NoSliceHistoryStore(rows)
+
+    payload = _recent_history_payload(history, limit=10)
+
+    assert history.limits == [10]
+    assert payload["limit"] == 10
+    assert payload["returned_count"] == 10
+    assert payload["items"][0]["id"] == "analysis-0"
+    assert payload["items"][-1]["id"] == "analysis-9"
+
+
+def test_recent_history_payload_skips_iteration_for_empty_or_single_rows():
+    from app.diagnostics.sources import _recent_history_payload
+
+    class NoIterRows(list):
+        def __iter__(self):
+            raise AssertionError("empty/single recent history payloads should not iterate")
+
+        def __getitem__(self, index):
+            if isinstance(index, slice):
+                raise AssertionError("recent history payloads should not slice")
+            return super().__getitem__(index)
+
+    class HistoryStore:
+        def __init__(self, rows):
+            self.rows = rows
+
+        def list_recent(self, limit=20):
+            return self.rows
+
+    empty_payload = _recent_history_payload(HistoryStore(NoIterRows([])), limit=10)
+    single_payload = _recent_history_payload(
+        HistoryStore(NoIterRows([{"id": "analysis-1"}])),
+        limit=10,
+    )
+    zero_limit_payload = _recent_history_payload(
+        HistoryStore(NoIterRows([{"id": "analysis-1"}])),
+        limit=0,
+    )
+
+    assert empty_payload == {"limit": 10, "returned_count": 0, "items": []}
+    assert single_payload == {
+        "limit": 10,
+        "returned_count": 1,
+        "items": [{"id": "analysis-1"}],
+    }
+    assert zero_limit_payload == {"limit": 0, "returned_count": 0, "items": []}
+    assert "len" in _recent_history_payload.__code__.co_names
+
+
+def test_recent_history_payload_accumulates_without_list_comprehension_frame():
+    from app.diagnostics.sources import _recent_history_payload
+
+    nested_code_names = {
+        const.co_name
+        for const in _recent_history_payload.__code__.co_consts
+        if hasattr(const, "co_name")
+    }
+    assert "<listcomp>" not in nested_code_names

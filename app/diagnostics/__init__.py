@@ -15,6 +15,10 @@ from app.diagnostics.contract import (
     serialize_manifest,
     serialize_source_record,
 )
+from app.diagnostics.policy import (
+    DIAGNOSTIC_SANITIZATION_POLICY,
+    DiagnosticSanitizationPolicy,
+)
 from app.diagnostics.redaction import (
     REDACTED_TEXT,
     ConfiguredSecretInventory,
@@ -32,11 +36,13 @@ __all__ = [
     "DEFAULT_HISTORY_LIMIT",
     "DEFAULT_SOURCE_MAX_BYTES",
     "DIAGNOSTIC_EXPORT_SCHEMA_VERSION",
+    "DIAGNOSTIC_SANITIZATION_POLICY",
     "MAX_SAFE_ERROR_SUMMARY_CHARS",
     "REDACTED_TEXT",
     "ConfiguredSecretInventory",
     "DiagnosticBundle",
     "DiagnosticManifest",
+    "DiagnosticSanitizationPolicy",
     "DiagnosticSource",
     "DiagnosticSourceRecord",
     "RedactionMetadata",

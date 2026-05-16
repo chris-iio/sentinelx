@@ -12,6 +12,7 @@ Covers:
 """
 from __future__ import annotations
 
+import inspect
 import threading
 from unittest.mock import MagicMock, patch
 
@@ -22,6 +23,9 @@ from app.enrichment.orchestrator import (
     EnrichmentOrchestrator,
     _BACKOFF_BASE,
     _MAX_RATE_LIMIT_RETRIES,
+    _cached_enrichment_result,
+    _normalize_provider_name,
+    _provider_diagnostics_bucket,
 )
 from app.pipeline.models import IOC, IOCType
 
@@ -65,6 +69,11 @@ def _make_mock_adapter(supported_types: set | None = None) -> MagicMock:
         }
     adapter.supported_types = supported_types
     return adapter
+
+
+class _NoItemsDict(dict):
+    def items(self):
+        raise AssertionError("orchestrator diagnostics should scan mapping keys directly")
 
 
 # ---------------------------------------------------------------------------
@@ -356,6 +365,31 @@ class TestMultiAdapterDispatch:
         # DOMAIN IOC not in adapter_a.supported_types — 0 dispatches
         assert len(status["results"]) == 0
         assert adapter_a.lookup.call_count == 0
+
+    def test_zero_dispatch_job_skips_thread_pool(self, monkeypatch):
+        """Jobs with no matching adapter work should complete without executor setup."""
+        import app.enrichment.orchestrator as orchestrator_module
+
+        ioc = _make_ioc(IOCType.DOMAIN, "evil.com")
+        adapter = _make_mock_adapter(supported_types={IOCType.MD5})
+
+        def fail_thread_pool(*_args, **_kwargs):
+            raise AssertionError("zero-dispatch jobs should not construct a thread pool")
+
+        monkeypatch.setattr(orchestrator_module, "ThreadPoolExecutor", fail_thread_pool)
+
+        orchestrator = EnrichmentOrchestrator(adapters=[adapter], max_workers=4)
+        orchestrator.enrich_all("job-zero-dispatch", [ioc])
+
+        status = orchestrator.get_status("job-zero-dispatch")
+
+        assert status is not None
+        assert status["total"] == 0
+        assert status["done"] == 0
+        assert status["results"] == []
+        assert status["complete"] is True
+        assert status["status"] == "complete"
+        assert adapter.lookup.call_count == 0
 
     def test_multi_adapter_total_counts_all_dispatches(self):
         """2 IOCs x 2 adapters (both supporting both types) = total of 4 dispatches."""
@@ -831,9 +865,106 @@ class TestGetStatusListSnapshot:
             f"got {len(status2['results'])}. get_status() must return a list copy."
         )
 
+    def test_get_status_snapshot_copies_results_directly(self):
+        """Full status snapshots should copy results with direct accumulation."""
+        import inspect
+
+        from app.enrichment.orchestrator import EnrichmentOrchestrator
+
+        ioc = _make_ioc(IOCType.IPV4, "1.2.3.4")
+        result = _make_result(ioc)
+        orchestrator = _make_orchestrator(_make_mock_adapter())
+        with orchestrator._lock:
+            orchestrator._jobs["job-direct-copy"] = {
+                "total": 1,
+                "done": 1,
+                "complete": True,
+                "status": "complete",
+                "terminal": False,
+                "results": [result],
+            }
+
+        status = orchestrator.get_status("job-direct-copy")
+        source = inspect.getsource(EnrichmentOrchestrator._status_snapshot)
+
+        assert status["results"] == [result]
+        assert status["results"] is not orchestrator._jobs["job-direct-copy"]["results"]
+        assert "list(results)" not in source
+        assert "_copy_results_tail(results, 0)" in source
+
 
 class TestIncrementalStatusSnapshot:
     """Prove the additive tail snapshot path stays lock-safe and cursor-correct."""
+
+    def test_get_incremental_status_nonnegative_since_does_not_slice_results(self, mock_adapter):
+        """Non-negative cursors should avoid allocating an intermediate slice."""
+        orchestrator = _make_orchestrator(mock_adapter)
+        ioc_a = _make_ioc(IOCType.IPV4, "198.51.100.10")
+        ioc_b = _make_ioc(IOCType.IPV4, "198.51.100.11")
+
+        class NoSliceResults(list):
+            def __getitem__(self, index):
+                if isinstance(index, slice):
+                    raise AssertionError("incremental status should use bounded iteration")
+                return super().__getitem__(index)
+
+        results = NoSliceResults([
+            _make_result(ioc_a, provider="ProviderA"),
+            _make_result(ioc_b, provider="ProviderB"),
+        ])
+
+        with orchestrator._lock:
+            orchestrator._jobs["job-no-slice-tail"] = {
+                "total": 2,
+                "done": 2,
+                "results": results,
+                "complete": True,
+                "status": "complete",
+                "terminal": False,
+                "terminal_reason": None,
+                "error": None,
+                "_diagnostics": {},
+            }
+
+        snapshot = orchestrator.get_incremental_status("job-no-slice-tail", since=1)
+
+        assert snapshot is not None
+        assert snapshot["results"] == [results[1]]
+        assert snapshot["next_since"] == 2
+        assert snapshot["cached_markers"] == {}
+
+    def test_get_incremental_status_copies_tail_without_list_constructor(self, mock_adapter):
+        """Incremental tails should be accumulated directly from bounded iteration."""
+        import inspect
+        import app.enrichment.orchestrator as orchestrator_module
+
+        source = inspect.getsource(orchestrator_module.EnrichmentOrchestrator._incremental_status_snapshot)
+
+        assert "list(islice(" not in source
+        assert "self._copy_results_tail(results, since)" in source
+        assert "self._copy_results_tail(results, start)" in source
+
+    def test_copy_results_tail_skips_iteration_for_short_tails(self, mock_adapter):
+        """Tail copying should avoid iterator setup when the requested tail has two or fewer results."""
+        orchestrator = _make_orchestrator(mock_adapter)
+        first = _make_result(_make_ioc(IOCType.IPV4, "198.51.100.50"))
+        second = _make_result(_make_ioc(IOCType.IPV4, "198.51.100.51"))
+
+        class NoIterResults(list):
+            def __iter__(self):
+                raise AssertionError("short tail copying should not iterate")
+
+            def __getitem__(self, index):
+                if isinstance(index, slice):
+                    raise AssertionError("tail copying should not slice results")
+                return super().__getitem__(index)
+
+        results = NoIterResults([first, second])
+
+        assert orchestrator._copy_results_tail(results, 2) == []
+        assert orchestrator._copy_results_tail(results, 1) == [second]
+        assert orchestrator._copy_results_tail(results, 0) == [first, second]
+        assert "len" in orchestrator._copy_results_tail.__code__.co_names
 
     def test_get_incremental_status_returns_tail_and_aligned_cached_markers(self, mock_adapter):
         """Tail reads should include only requested results and matching cache markers."""
@@ -882,11 +1013,52 @@ class TestIncrementalStatusSnapshot:
         assert full_snapshot is not None
         assert full_snapshot["results"] == [result_a, result_b, result_c]
 
+    def test_get_incremental_status_builds_scalar_fields_without_items_scan(self, mock_adapter):
+        """Polling snapshots should copy known scalar fields directly."""
+        orchestrator = _make_orchestrator(mock_adapter)
+        ioc = _make_ioc(IOCType.IPV4, "198.51.100.44")
+        result = _make_result(ioc, provider="ProviderA")
+
+        class NoItemsJob(dict):
+            def items(self):
+                raise AssertionError("status snapshots should not scan every job item")
+
+        with orchestrator._lock:
+            orchestrator._jobs["job-no-items-snapshot"] = NoItemsJob({
+                "total": 1,
+                "done": 1,
+                "results": [result],
+                "complete": True,
+                "status": "complete",
+                "terminal": False,
+                "terminal_reason": None,
+                "error": None,
+                "_diagnostics": {"ignored": True},
+            })
+
+        snapshot = orchestrator.get_incremental_status("job-no-items-snapshot", since=0)
+
+        assert snapshot is not None
+        assert snapshot["total"] == 1
+        assert snapshot["done"] == 1
+        assert snapshot["status"] == "complete"
+        assert snapshot["results"] == [result]
+        assert "_diagnostics" not in snapshot
+
     def test_get_incremental_status_preserves_negative_since_behavior(self, mock_adapter):
-        """Negative since values should keep Python slice semantics for compatibility."""
+        """Negative since values should keep slice semantics without slicing results."""
         orchestrator = _make_orchestrator(mock_adapter)
         iocs = [_make_ioc(IOCType.IPV4, f"203.0.113.{i}") for i in range(3)]
-        results = [_make_result(ioc, provider=f"Provider{i}") for i, ioc in enumerate(iocs)]
+
+        class NoSliceResults(list):
+            def __getitem__(self, index):
+                if isinstance(index, slice):
+                    raise AssertionError("negative incremental cursors should use bounded iteration")
+                return super().__getitem__(index)
+
+        results = NoSliceResults(
+            [_make_result(ioc, provider=f"Provider{i}") for i, ioc in enumerate(iocs)]
+        )
 
         with orchestrator._lock:
             orchestrator._jobs["job-negative-since"] = {
@@ -908,16 +1080,25 @@ class TestIncrementalStatusSnapshot:
         assert snapshot["cached_markers"] == {}
 
     def test_get_incremental_status_returns_empty_tail_beyond_retained_length(self, mock_adapter):
-        """Out-of-range since values should return an empty tail without cursor drift."""
+        """Out-of-range since values should return an empty tail without walking results."""
         orchestrator = _make_orchestrator(mock_adapter)
         ioc_a = _make_ioc(IOCType.IPV4, "192.0.2.40")
         ioc_b = _make_ioc(IOCType.IPV4, "192.0.2.41")
+
+        class NoWalkResults(list):
+            def __iter__(self):
+                raise AssertionError("empty out-of-range tails should not iterate results")
+
+            def __getitem__(self, index):
+                if isinstance(index, slice):
+                    raise AssertionError("empty out-of-range tails should not slice results")
+                return super().__getitem__(index)
 
         with orchestrator._lock:
             orchestrator._jobs["job-since-beyond"] = {
                 "total": 2,
                 "done": 2,
-                "results": [_make_result(ioc_a), _make_result(ioc_b)],
+                "results": NoWalkResults([_make_result(ioc_a), _make_result(ioc_b)]),
                 "complete": True,
                 "status": "complete",
                 "terminal": False,
@@ -1014,9 +1195,71 @@ class TestCachedMarkersLock:
             key = f"{ioc.value}|VirusTotal"
             assert key in markers, f"Missing cached_markers entry for {key}"
 
+    def test_cached_markers_snapshot_copies_directly(self, mock_adapter):
+        """cached_markers should return an isolated snapshot without dict() copying."""
+        import inspect
+
+        orchestrator = _make_orchestrator(mock_adapter)
+        with orchestrator._lock:
+            orchestrator._cached_markers["1.2.3.4|VirusTotal"] = "2026-05-01T00:00:00Z"
+
+        markers = orchestrator.cached_markers
+        markers["1.2.3.4|VirusTotal"] = "tampered"
+
+        source = inspect.getsource(EnrichmentOrchestrator.cached_markers.fget)
+        assert "dict(self._cached_markers)" not in source
+        assert orchestrator.cached_markers == {
+            "1.2.3.4|VirusTotal": "2026-05-01T00:00:00Z"
+        }
+
+    def test_cache_hit_hydration_preserves_cached_payload(self):
+        """Cache hits should not remove cached_at from the cache payload dict."""
+        ioc = _make_ioc(IOCType.IPV4, "10.0.0.9")
+        adapter = _make_keyed_adapter("VirusTotal", supported_types={IOCType.IPV4})
+        cached_payload = {
+            "provider": "VirusTotal",
+            "verdict": "clean",
+            "detection_count": 0,
+            "total_engines": 10,
+            "scan_date": None,
+            "raw_stats": {},
+            "cached_at": "2024-01-01T00:00:00",
+        }
+        cache_mock = MagicMock()
+        cache_mock.get.return_value = cached_payload
+
+        orchestrator = EnrichmentOrchestrator(
+            adapters=[adapter],
+            max_workers=1,
+            cache=cache_mock,
+        )
+        orchestrator.enrich_all("job-cache-payload", [ioc])
+
+        status = orchestrator.get_status("job-cache-payload")
+        assert isinstance(status["results"][0], EnrichmentResult)
+        assert cached_payload["cached_at"] == "2024-01-01T00:00:00"
+        assert "pop" not in inspect.getsource(_cached_enrichment_result)
+
 
 class TestJobDiagnostics:
     """Prove orchestrator-owned runtime/provider diagnostics stay bounded and safe."""
+
+    def test_dispatch_diagnostics_reuses_provider_bucket_without_setdefault(self):
+        """Initial dispatch diagnostics should avoid eager default bucket allocation."""
+        ioc_a = _make_ioc(IOCType.IPV4, "198.51.100.10")
+        ioc_b = _make_ioc(IOCType.IPV4, "198.51.100.11")
+        adapter = _make_public_adapter("VirusTotal", supported_types={IOCType.IPV4})
+        orchestrator = _make_orchestrator(adapter)
+
+        diagnostics = orchestrator._build_dispatch_diagnostics([
+            (adapter, ioc_a),
+            (adapter, ioc_b),
+        ])
+
+        assert diagnostics["dispatch_count"] == 2
+        assert diagnostics["providers"]["VirusTotal"]["dispatch_count"] == 2
+        assert "setdefault" not in EnrichmentOrchestrator._build_dispatch_diagnostics.__code__.co_names
+        assert "setdefault" not in _provider_diagnostics_bucket.__code__.co_names
 
     def test_diagnostics_track_cache_hits_misses_and_unknown_provider_bucket(self):
         """Blank adapter names should fall into a bounded unknown bucket."""
@@ -1065,6 +1308,15 @@ class TestJobDiagnostics:
         assert unknown_provider["cache_hits"] == 1
         assert unknown_provider["cache_misses"] == 1
         assert unknown_provider["error_count"] == 0
+
+    def test_provider_name_normalization_uses_index_trim_without_strip(self):
+        class NoStripProviderName(str):
+            def strip(self, *_args, **_kwargs):
+                raise AssertionError("provider normalization should avoid direct strip allocation")
+
+        assert _normalize_provider_name(NoStripProviderName("  VirusTotal  ")) == "VirusTotal"
+        assert _normalize_provider_name(NoStripProviderName(" \n\t ")) == "unknown"
+        assert "strip" not in _normalize_provider_name.__code__.co_names
 
     def test_diagnostics_track_rate_limit_retry_error_and_latency_aggregates(self):
         """429 retries should increment retry counters without changing retry flow."""
@@ -1160,10 +1412,10 @@ class TestJobDiagnostics:
                 "_diagnostics": {
                     "dispatch_count": "oops",
                     "cache_hits": -1,
-                    "providers": {
+                    "providers": _NoItemsDict({
                         "   ": {"cache_hits": 2, "latency_max_seconds": 0.75},
                         "VirusTotal": "broken",
-                    },
+                    }),
                 }
             }
 

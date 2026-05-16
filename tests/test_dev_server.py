@@ -146,6 +146,10 @@ def test_repo_root_discovery_and_paths_stay_under_runtime_boundary():
     assert paths.logs_dir.relative_to(repo_root).as_posix() == ".gsd/runtime/dev-server/logs"
     assert ".bg-shell" not in str(paths.runtime_dir)
     assert classification.classification == "transient"
+    source = SCRIPT.read_text(encoding="utf-8")
+    helper_source = source[source.index("def discover_repo_root") : source.index("def code_repo_root")]
+    assert "*current.parents" not in helper_source
+    assert "while candidate is not None" in helper_source
 
 
 def test_status_round_trip_and_empty_runtime_default(tmp_path: Path):
@@ -184,6 +188,79 @@ def test_status_round_trip_and_empty_runtime_default(tmp_path: Path):
     assert destination == paths.status_path
     assert loaded_status == stored_status
     assert json.loads(paths.status_path.read_text(encoding="utf-8"))["status"] == "running"
+
+
+def test_dev_server_records_use_slots_to_avoid_instance_dict(tmp_path: Path):
+    dev_server = load_dev_server_module()
+    paths = dev_server.dev_server_paths(tmp_path)
+    probe = dev_server.HealthProbeResult(
+        status="healthy",
+        checked_at="2026-04-25T11:00:00Z",
+        url=f"http://127.0.0.1:5001{HEALTH_PATH}",
+        http_status=200,
+    )
+    status = dev_server.DevServerStatus(
+        status="running",
+        host="127.0.0.1",
+        port=5001,
+        updated_at="2026-04-25T11:00:00Z",
+        probe=probe,
+    )
+
+    assert not hasattr(paths, "__dict__")
+    assert not hasattr(probe, "__dict__")
+    assert not hasattr(status, "__dict__")
+
+
+def test_dev_server_static_membership_tables_are_immutable():
+    dev_server = load_dev_server_module()
+
+    assert dev_server.VALID_MANAGER_STATUSES == frozenset((
+        "stopped",
+        "starting",
+        "running",
+        "stale",
+        "crashed",
+    ))
+    assert dev_server.VALID_PROBE_STATUSES == frozenset((
+        "healthy",
+        "refused",
+        "timeout",
+        "malformed",
+    ))
+    assert dev_server.CONNECTION_REFUSED_ERRNOS == frozenset((61, 111))
+    assert dev_server.ACTIVE_MANAGER_STATUSES == frozenset(("starting", "running", "stale"))
+
+    source = SCRIPT.read_text(encoding="utf-8")
+    assert "in {61, 111}" not in source
+    assert 'status.status in {"starting", "running", "stale"}' not in source
+
+
+def test_sigkill_timeout_cap_uses_direct_branch():
+    dev_server = load_dev_server_module()
+
+    assert dev_server.capped_sigkill_timeout(0.25) == 0.25
+    assert dev_server.capped_sigkill_timeout(2.0) == 2.0
+    assert dev_server.capped_sigkill_timeout(3.5) == 2.0
+    assert "min" not in dev_server.capped_sigkill_timeout.__code__.co_names
+
+    source = SCRIPT.read_text(encoding="utf-8")
+    stop_source = source[source.index("def stop_managed_process") : source.index("def serve_child")]
+    assert "min(timeout, 2.0)" not in stop_source
+
+
+def test_dev_server_json_formatter_is_sorted_and_newline_terminated():
+    dev_server = load_dev_server_module()
+
+    assert dev_server.format_json_payload({"b": 1, "a": 2}) == '{\n  "a": 2,\n  "b": 1\n}'
+    assert dev_server.format_json_payload_line({"b": 1, "a": 2}).endswith("\n")
+
+
+def test_dev_server_json_call_sites_use_shared_formatter():
+    dev_server = load_dev_server_module()
+
+    assert "format_json_payload_line" in dev_server.write_status.__code__.co_names
+    assert "format_json_payload" in dev_server.emit_status.__code__.co_names
 
 
 def test_load_status_rejects_partial_unknown_invalid_port_and_non_local_host_payloads(tmp_path: Path):
@@ -238,6 +315,209 @@ def test_load_status_rejects_partial_unknown_invalid_port_and_non_local_host_pay
         dev_server.normalize_port(70000)
 
 
+def test_status_payload_key_validation_avoids_key_set_materialization(monkeypatch: pytest.MonkeyPatch):
+    """Status/probe payload key validation should scan keys directly."""
+    dev_server = load_dev_server_module()
+
+    def fail_set(*_args, **_kwargs):
+        raise AssertionError("payload key validation should not materialize set(payload)")
+
+    monkeypatch.setattr("builtins.set", fail_set)
+
+    probe = dev_server.HealthProbeResult.from_payload({
+        "status": "healthy",
+        "checked_at": "2026-04-25T11:00:00Z",
+        "url": f"http://127.0.0.1:5001{HEALTH_PATH}",
+        "http_status": 200,
+        "detail": None,
+    })
+    status = dev_server.DevServerStatus.from_payload({
+        "status": "running",
+        "host": "127.0.0.1",
+        "port": 5001,
+        "updated_at": "2026-04-25T11:00:00Z",
+        "restart_count": 0,
+        "pid": 12345,
+        "log_path": ".gsd/runtime/dev-server/logs/server.log",
+        "started_at": "2026-04-25T10:59:00Z",
+        "last_failure_at": None,
+        "last_failure_reason": None,
+        "probe": probe.to_payload(),
+    })
+
+    assert probe.status == "healthy"
+    assert status.probe == probe
+    assert "validate_payload_keys" in dev_server.HealthProbeResult.from_payload.__func__.__code__.co_names
+    assert "validate_payload_keys" in dev_server.DevServerStatus.from_payload.__func__.__code__.co_names
+
+
+def test_payload_key_validation_reports_unexpected_and_missing_keys() -> None:
+    """Shared key validation should preserve status contract error messages."""
+    dev_server = load_dev_server_module()
+
+    with pytest.raises(dev_server.StatusContractError, match="Probe payload has unexpected keys: extra"):
+        dev_server.HealthProbeResult.from_payload({
+            "status": "healthy",
+            "checked_at": "2026-04-25T11:00:00Z",
+            "url": f"http://127.0.0.1:5001{HEALTH_PATH}",
+            "extra": True,
+        })
+
+    with pytest.raises(dev_server.StatusContractError, match="Status payload is missing required keys"):
+        dev_server.DevServerStatus.from_payload({
+            "status": "running",
+            "host": "127.0.0.1",
+            "port": 5001,
+        })
+
+
+def test_payload_key_formatter_skips_sort_for_single_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Single-key validation errors should avoid sorting work."""
+    dev_server = load_dev_server_module()
+
+    def fail_sorted(*_args, **_kwargs):
+        raise AssertionError("single-key validation errors should not sort")
+
+    monkeypatch.setattr("builtins.sorted", fail_sorted)
+
+    with pytest.raises(dev_server.StatusContractError, match="Probe payload has unexpected keys: extra"):
+        dev_server.HealthProbeResult.from_payload({
+            "status": "healthy",
+            "checked_at": "2026-04-25T11:00:00Z",
+            "url": f"http://127.0.0.1:5001{HEALTH_PATH}",
+            "extra": True,
+        })
+    assert dev_server.format_key_names(("extra",)) == "extra"
+
+
+def test_payload_key_formatter_skips_sort_for_two_keys(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Two-key validation errors should sort through direct comparison."""
+    dev_server = load_dev_server_module()
+
+    def fail_sorted(*_args, **_kwargs):
+        raise AssertionError("two-key validation errors should not sort")
+
+    monkeypatch.setattr("builtins.sorted", fail_sorted)
+
+    assert dev_server.format_key_names(("zeta", "alpha")) == "alpha, zeta"
+    with pytest.raises(dev_server.StatusContractError, match="Probe payload has unexpected keys: alpha, zeta"):
+        dev_server.HealthProbeResult.from_payload({
+            "status": "healthy",
+            "checked_at": "2026-04-25T11:00:00Z",
+            "url": f"http://127.0.0.1:5001{HEALTH_PATH}",
+            "zeta": True,
+            "alpha": True,
+        })
+
+
+def test_payload_key_formatter_skips_sort_for_three_keys(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Three-key validation errors should sort through direct comparisons."""
+    dev_server = load_dev_server_module()
+
+    def fail_sorted(*_args, **_kwargs):
+        raise AssertionError("three-key validation errors should not sort")
+
+    monkeypatch.setattr("builtins.sorted", fail_sorted)
+
+    assert dev_server.format_key_names(("zeta", "alpha", "middle")) == "alpha, middle, zeta"
+    with pytest.raises(dev_server.StatusContractError, match="Probe payload has unexpected keys: alpha, middle, zeta"):
+        dev_server.HealthProbeResult.from_payload({
+            "status": "healthy",
+            "checked_at": "2026-04-25T11:00:00Z",
+            "url": f"http://127.0.0.1:5001{HEALTH_PATH}",
+            "zeta": True,
+            "alpha": True,
+            "middle": True,
+        })
+
+
+def test_payload_key_formatter_reads_short_sequence_length_once() -> None:
+    """Short key formatting should not repeat Sequence length work."""
+    dev_server = load_dev_server_module()
+
+    class CountedKeys:
+        def __init__(self, keys: tuple[str, ...]) -> None:
+            self.keys = keys
+            self.len_calls = 0
+
+        def __len__(self) -> int:
+            self.len_calls += 1
+            if self.len_calls > 1:
+                raise AssertionError("short key formatter should read length once")
+            return len(self.keys)
+
+        def __getitem__(self, index: int) -> str:
+            return self.keys[index]
+
+        def __iter__(self):
+            raise AssertionError("short key formatter should not iterate")
+
+    single = CountedKeys(("extra",))
+    pair = CountedKeys(("zeta", "alpha"))
+    triple = CountedKeys(("zeta", "alpha", "middle"))
+
+    assert dev_server.format_key_names(single) == "extra"
+    assert dev_server.format_key_names(pair) == "alpha, zeta"
+    assert dev_server.format_key_names(triple) == "alpha, middle, zeta"
+
+
+def test_launch_metadata_error_uses_shared_key_formatter(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Launch metadata validation should reuse the shared short-key formatter."""
+    dev_server = load_dev_server_module()
+
+    def fail_sorted(*_args, **_kwargs):
+        raise AssertionError("two-field launch metadata errors should not sort")
+
+    monkeypatch.setattr("builtins.sorted", fail_sorted)
+
+    with pytest.raises(
+        dev_server.StatusContractError,
+        match="Status 'running' requires launch metadata fields: log_path, pid.",
+    ):
+        dev_server.DevServerStatus.from_payload({
+            "status": "running",
+            "host": "127.0.0.1",
+            "port": 5001,
+            "updated_at": "2026-04-25T11:00:00Z",
+            "restart_count": 0,
+            "started_at": "2026-04-25T10:59:00Z",
+            "probe": None,
+        })
+    assert "format_key_names" in dev_server.DevServerStatus.from_payload.__func__.__code__.co_names
+
+
+def test_invalid_host_error_reuses_cached_allowed_host_display(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Invalid-host validation should not sort the static allowed-host set per failure."""
+    dev_server = load_dev_server_module()
+
+    def fail_sorted(*_args, **_kwargs):
+        raise AssertionError("invalid-host errors should reuse cached allowed-host text")
+
+    monkeypatch.setattr("builtins.sorted", fail_sorted)
+
+    with pytest.raises(dev_server.StatusContractError, match="Host must stay local"):
+        dev_server.normalize_host("0.0.0.0")
+    assert dev_server.ALLOWED_LOCAL_HOSTS_DISPLAY == "127.0.0.1, ::1, localhost"
+    assert dev_server.ALLOWED_LOCAL_HOSTS == frozenset(("127.0.0.1", "localhost", "::1"))
+    assert 'ALLOWED_LOCAL_HOSTS_DISPLAY = ", ".join(sorted(' not in SCRIPT.read_text(encoding="utf-8")
+
+
+def test_valid_host_normalization_avoids_strip_allocation() -> None:
+    """Valid host normalization should trim through index scanning."""
+    dev_server = load_dev_server_module()
+
+    class NoStripHost(str):
+        def strip(self, chars=None):  # noqa: ANN001
+            raise AssertionError("host normalization should not allocate through strip()")
+
+    host = NoStripHost("  localhost  ")
+
+    assert dev_server.normalize_host(host) == "localhost"
+    assert dev_server.stripped_text_or_none(NoStripHost(" \n\t ")) is None
+    assert "stripped_text_or_none" in dev_server.normalize_host.__code__.co_names
+    assert "strip" not in dev_server.stripped_text_or_none.__code__.co_names
+
+
 def test_load_status_rejects_malformed_json(tmp_path: Path):
     dev_server = load_dev_server_module()
     paths = dev_server.dev_server_paths(tmp_path)
@@ -290,6 +570,20 @@ def test_probe_health_reports_refused_timeout_and_malformed():
         drifted_result = dev_server.probe_health(port=drifted_port, timeout=0.2)
     assert drifted_result.status == "malformed"
     assert drifted_result.detail == "unexpected health payload"
+
+
+def test_proc_stat_state_parses_without_split_list() -> None:
+    """Process state parsing should handle names with spaces without splitting every field."""
+    dev_server = load_dev_server_module()
+
+    class NoSplitStat(str):
+        def split(self, *_args, **_kwargs):
+            raise AssertionError("/proc stat state parsing should not split all fields")
+
+    assert dev_server._proc_stat_state(NoSplitStat("123 (python worker) R 1 2 3")) == "R"
+    assert dev_server._proc_stat_state(NoSplitStat("123 (stopped worker) Z 1 2 3")) == "Z"
+    assert dev_server._proc_stat_state(NoSplitStat("malformed")) is None
+    assert "_proc_stat_state" in dev_server.process_is_running.__code__.co_names
 
 
 def test_refresh_status_reports_running_starting_stale_and_crashed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -430,6 +724,25 @@ def test_start_rejects_non_local_host_before_launch(tmp_path: Path, capsys: pyte
     assert exit_code == 1
     assert payload["status"] == "crashed"
     assert "Host must stay local" in payload["last_failure_reason"]
+
+
+def test_main_avoids_extra_programmatic_argv_copy(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+    """Programmatic CLI calls should pass argv through without an eager list copy."""
+    dev_server = load_dev_server_module()
+
+    exit_code = dev_server.main((
+        "--repo-root",
+        str(tmp_path),
+        "status",
+        "--format",
+        "json",
+    ))
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert exit_code == 0
+    assert payload["status"] == "stopped"
+    assert "list(argv)" not in SCRIPT.read_text(encoding="utf-8")
 
 
 def test_makefile_exposes_supported_dev_server_targets_as_thin_cli_wrappers():

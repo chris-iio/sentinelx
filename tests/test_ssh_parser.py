@@ -13,10 +13,11 @@ from __future__ import annotations
 import io
 import logging
 from datetime import datetime, timezone
+from types import MappingProxyType
 
 import pytest
 
-from app.ssh.parser import parse_auth_log
+from app.ssh.parser import _BSD_MONTHS, _strip_line_ending, parse_auth_log
 
 
 # ---------------------------------------------------------------------------
@@ -215,6 +216,48 @@ class TestTimestampBSD:
         assert ev.timestamp.day == 28
         assert ev.timestamp.hour == 12
 
+    def test_bsd_timestamp_parsing_does_not_use_strptime(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """BSD timestamps use direct field parsing instead of datetime.strptime()."""
+        import app.ssh.parser as parser_module
+
+        assert isinstance(_BSD_MONTHS, MappingProxyType)
+        assert _BSD_MONTHS["Jan"] == 1
+        assert _BSD_MONTHS["Dec"] == 12
+
+        real_datetime = datetime
+
+        class FastDatetime:
+            @staticmethod
+            def now():
+                return real_datetime.now()
+
+            @staticmethod
+            def fromisoformat(value: str):
+                return real_datetime.fromisoformat(value)
+
+            @staticmethod
+            def strptime(*_args, **_kwargs):  # type: ignore[no-untyped-def]
+                raise AssertionError("BSD timestamp parsing should not call strptime()")
+
+            def __call__(
+                self,
+                year: int,
+                month: int,
+                day: int,
+                hour: int,
+                minute: int,
+                second: int,
+            ) -> datetime:
+                return real_datetime(year, month, day, hour, minute, second)
+
+        monkeypatch.setattr(parser_module, "datetime", FastDatetime())
+        line = "Jan  5 03:22:11 server sshd[1]: Accepted password for alice from 1.2.3.4 port 22 ssh2"
+
+        events, _summary = parse_auth_log(_str_stream(line + "\n"), now=real_datetime(2025, 1, 10))
+
+        assert len(events) == 1
+        assert events[0].timestamp == real_datetime(2025, 1, 5, 3, 22, 11)
+
 
 # ---------------------------------------------------------------------------
 # TestTimestampRFC3339 (PARSE-02)
@@ -371,6 +414,32 @@ class TestSourceExtraction:
         assert ev.source_ip is None
         assert ev.hostname == "server01"
 
+    def test_repeated_source_classification_is_cached(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Repeated source tokens should not be reparsed by ipaddress for every line."""
+        import app.ssh.parser as parser_module
+
+        parser_module._classify_source.cache_clear()
+        real_ip_address = parser_module.ipaddress.ip_address
+        calls: list[str] = []
+
+        def counting_ip_address(source: str):
+            calls.append(source)
+            return real_ip_address(source)
+
+        monkeypatch.setattr(parser_module.ipaddress, "ip_address", counting_ip_address)
+        text = "\n".join([
+            "Jan 15 10:00:00 server sshd[1]: Accepted password for u1 from 203.0.113.77 port 22 ssh2",
+            "Jan 15 10:01:00 server sshd[2]: Accepted publickey for u2 from 203.0.113.77 port 2222 ssh2",
+            "Jan 15 10:02:00 server sshd[3]: Accepted password for u3 from 203.0.113.77 port 2223 ssh2",
+        ]) + "\n"
+
+        events, summary = parse_auth_log(_str_stream(text), now=datetime(2025, 1, 15))
+
+        assert len(events) == 3
+        assert summary.parsed_count == 3
+        assert calls == ["203.0.113.77"]
+        parser_module._classify_source.cache_clear()
+
 
 # ---------------------------------------------------------------------------
 # TestPartialMatch (D-06)
@@ -463,6 +532,39 @@ class TestStreamTypes:
         ev = events[0]
         assert ev.username == "bob"
         assert ev.source_ip == "10.0.0.1"
+
+    def test_text_stream_is_not_read_all_at_once(self) -> None:
+        """Parser should iterate lines instead of materializing the whole stream."""
+        class StreamingStringIO(io.StringIO):
+            def read(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+                raise AssertionError("parse_auth_log should not call read() on text streams")
+
+        line = "Jan 15 10:00:00 server sshd[1]: Accepted publickey for bob from 10.0.0.1 port 22 ssh2"
+        stream = StreamingStringIO(line + "\n")
+
+        events, summary = parse_auth_log(stream, now=datetime(2025, 1, 15))
+
+        assert len(events) == 1
+        assert summary.total_lines == 1
+
+    def test_line_cleanup_avoids_rstrip_allocation(self) -> None:
+        """Parser line cleanup should trim CR/LF with an index scan."""
+        class NoRstripLine(str):
+            def rstrip(self, *_args, **_kwargs):
+                raise AssertionError("parse_auth_log should avoid direct rstrip allocation")
+
+        line = NoRstripLine(
+            "Jan 15 10:00:00 server sshd[1]: Accepted publickey for bob from 10.0.0.1 port 22 ssh2\r\n"
+        )
+
+        assert _strip_line_ending(line).endswith("ssh2")
+        assert "rstrip" not in _strip_line_ending.__code__.co_names
+
+        events, summary = parse_auth_log(iter([line]), now=datetime(2025, 1, 15))
+
+        assert len(events) == 1
+        assert summary.total_lines == 1
+        assert events[0].raw_line.endswith("ssh2")
 
     def test_bytes_io_malformed_utf8_does_not_crash(self) -> None:
         """Malformed UTF-8 bytes are decoded with errors='replace', not raised."""

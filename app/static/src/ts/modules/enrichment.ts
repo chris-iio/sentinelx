@@ -10,7 +10,7 @@
  */
 
 import type { EnrichmentItem, EnrichmentStatus } from "../types/api";
-import { attr } from "../utils/dom";
+import { attr, pageResultsElement, resolveResultsSurfaceOwner } from "../utils/dom";
 import { initExportButton as sharedInitExportButton } from "./shared-rendering";
 import { createResultApplicationCoordinator } from "./result-application";
 
@@ -30,6 +30,30 @@ type PollPayload = {
   status: number;
   data: EnrichmentStatus;
 };
+
+type ProgressElements = {
+  fill: HTMLElement | null;
+  text: HTMLElement | null;
+};
+
+type CompletionElements = {
+  progressContainer: HTMLElement | null;
+  progressText: HTMLElement | null;
+  exportButton: HTMLElement | null;
+};
+
+type CompletionState = {
+  complete: boolean;
+  exportEnabled: boolean;
+  text: string;
+};
+
+function getProgressElements(): ProgressElements {
+  return {
+    fill: document.getElementById("enrich-progress-fill"),
+    text: document.getElementById("enrich-progress-text"),
+  };
+}
 
 function recordPollingState(
   pageResults: HTMLElement,
@@ -92,28 +116,16 @@ async function readPollPayload(resp: Response): Promise<PollPayload> {
 // ---- Private helpers ----
 
 function isLiveResultsPage(pageResults: HTMLElement): boolean {
-  const explicitOwner = attr(pageResults, "data-results-owner");
-  const mode = attr(pageResults, "data-mode");
-  const jobId = attr(pageResults, "data-job-id");
-
-  if (explicitOwner) {
-    return explicitOwner === "live" && mode === "online" && Boolean(jobId);
-  }
-
-  if (pageResults.hasAttribute("data-history-results")) {
-    return false;
-  }
-
-  return mode === "online" && Boolean(jobId);
+  return resolveResultsSurfaceOwner(pageResults) === "live";
 }
 
 /**
  * Update the progress bar fill and text.
  * Source: main.js updateProgressBar() (lines 375-383).
  */
-function updateProgressBar(done: number, total: number): void {
-  const fill = document.getElementById("enrich-progress-fill");
-  const text = document.getElementById("enrich-progress-text");
+function updateProgressBar(done: number, total: number, elements?: ProgressElements): void {
+  const fill = elements?.fill ?? document.getElementById("enrich-progress-fill");
+  const text = elements?.text ?? document.getElementById("enrich-progress-text");
   if (!fill || !text) return;
 
   const pct = total > 0 ? Math.round((done / total) * 100) : 0;
@@ -121,28 +133,46 @@ function updateProgressBar(done: number, total: number): void {
   text.textContent = done + "/" + total + " providers complete";
 }
 
+function showWarningBanner(message: string, cachedBanner: HTMLElement | null = null): void {
+  const banner = cachedBanner ?? document.getElementById("enrich-warning");
+  if (!banner) return;
+  banner.style.display = "block";
+  banner.textContent = message;
+}
+
 /**
  * Show a warning banner for rate-limit or authentication errors.
  * Source: main.js showEnrichWarning() (lines 605-611).
  */
-function showEnrichWarning(message: string): void {
-  const banner = document.getElementById("enrich-warning");
-  if (!banner) return;
-  banner.style.display = "block";
-  banner.textContent =
+function showEnrichWarning(message: string, cachedBanner: HTMLElement | null = null): void {
+  showWarningBanner(
     "Warning: " +
-    message +
-    " Consider using offline mode or checking your API key in Settings.";
+      message +
+      " Consider using offline mode or checking your API key in Settings.",
+    cachedBanner
+  );
 }
 
 /**
  * Show a terminal enrichment failure banner for analyst-visible polling failures.
  */
-function showTerminalFailure(message: string): void {
-  const banner = document.getElementById("enrich-warning");
-  if (!banner) return;
-  banner.style.display = "block";
-  banner.textContent = message;
+function showTerminalFailure(message: string, cachedBanner: HTMLElement | null = null): void {
+  showWarningBanner(message, cachedBanner);
+}
+
+function updateCompletionState(elements: CompletionElements | undefined, state: CompletionState): void {
+  const container = elements?.progressContainer ?? document.getElementById("enrich-progress");
+  if (container) {
+    container.classList.toggle("complete", state.complete);
+  }
+  const text = elements?.progressText ?? document.getElementById("enrich-progress-text");
+  if (text) {
+    text.textContent = state.text;
+  }
+  const exportBtn = elements?.exportButton ?? document.getElementById("export-btn");
+  if (exportBtn && state.exportEnabled) {
+    exportBtn.removeAttribute("disabled");
+  }
 }
 
 /**
@@ -150,21 +180,14 @@ function showTerminalFailure(message: string): void {
  * update text, and enable the export button.
  */
 function markEnrichmentComplete(
-  coordinator: ReturnType<typeof createResultApplicationCoordinator>
+  coordinator: ReturnType<typeof createResultApplicationCoordinator>,
+  elements?: CompletionElements
 ): void {
-  const container = document.getElementById("enrich-progress");
-  if (container) {
-    container.classList.add("complete");
-  }
-  const text = document.getElementById("enrich-progress-text");
-  if (text) {
-    text.textContent = "Enrichment complete";
-  }
-  const exportBtn = document.getElementById("export-btn");
-  if (exportBtn) {
-    exportBtn.removeAttribute("disabled");
-  }
-
+  updateCompletionState(elements, {
+    complete: true,
+    exportEnabled: true,
+    text: "Enrichment complete",
+  });
   coordinator.finalize();
 }
 
@@ -174,21 +197,14 @@ function markEnrichmentComplete(
  */
 function markEnrichmentTerminalFailure(
   message: string,
-  coordinator: ReturnType<typeof createResultApplicationCoordinator>
+  coordinator: ReturnType<typeof createResultApplicationCoordinator>,
+  elements?: CompletionElements
 ): void {
-  const container = document.getElementById("enrich-progress");
-  if (container) {
-    container.classList.remove("complete");
-  }
-  const text = document.getElementById("enrich-progress-text");
-  if (text) {
-    text.textContent = message;
-  }
-  const exportBtn = document.getElementById("export-btn");
-  if (exportBtn && allResults.length > 0) {
-    exportBtn.removeAttribute("disabled");
-  }
-
+  updateCompletionState(elements, {
+    complete: false,
+    exportEnabled: allResults.length > 0,
+    text: message,
+  });
   coordinator.finalize();
 }
 
@@ -215,17 +231,25 @@ function getTerminalFailureMessage(data: EnrichmentStatus): string {
  * init() (summary rows are built during polling/replay).
  */
 export function wireExpandToggles(
-  pageResults: HTMLElement | null = document.querySelector<HTMLElement>(".page-results")
+  pageResults: HTMLElement | null = pageResultsElement()
 ): void {
   if (!pageResults) return;
   if (pageResults.getAttribute("data-results-expand-wired") === "true") return;
+
+  const detailCache = new WeakMap<HTMLElement, HTMLElement>();
 
   function handleToggle(target: HTMLElement): void {
     const summaryRow = target.closest<HTMLElement>(".ioc-summary-row");
     if (!summaryRow) return;
 
-    const slot = summaryRow.closest<HTMLElement>(".enrichment-slot");
-    const details = slot ? slot.querySelector<HTMLElement>(".enrichment-details") : null;
+    let details = detailCache.get(summaryRow) ?? null;
+    if (!details) {
+      const slot = summaryRow.closest<HTMLElement>(".enrichment-slot");
+      details = slot ? slot.querySelector<HTMLElement>(".enrichment-details") : null;
+      if (details) {
+        detailCache.set(summaryRow, details);
+      }
+    }
     if (!details) return;
 
     const isOpen = details.classList.toggle("is-open");
@@ -253,7 +277,7 @@ export function wireExpandToggles(
 // ---- Public API ----
 
 export function init(): void {
-  const pageResults = document.querySelector<HTMLElement>(".page-results");
+  const pageResults = pageResultsElement();
   if (!pageResults || !isLiveResultsPage(pageResults)) return;
 
   const jobId = attr(pageResults, "data-job-id");
@@ -261,6 +285,14 @@ export function init(): void {
   const livePageResults: HTMLElement = pageResults;
   allResults.length = 0;
   wireExpandToggles(livePageResults);
+  const progressElements = getProgressElements();
+  const warningBanner = document.getElementById("enrich-warning");
+  const exportDropdown = document.getElementById("export-dropdown");
+  const completionElements: CompletionElements = {
+    progressContainer: document.getElementById("enrich-progress"),
+    progressText: progressElements.text,
+    exportButton: document.getElementById("export-btn"),
+  };
 
   let since = 0;
   const coordinator = createResultApplicationCoordinator();
@@ -318,8 +350,8 @@ export function init(): void {
         reason,
         consecutiveFailures,
       });
-      showTerminalFailure(message);
-      markEnrichmentTerminalFailure(message, coordinator);
+      showTerminalFailure(message, warningBanner);
+      markEnrichmentTerminalFailure(message, coordinator, completionElements);
       recordPollingState(livePageResults, "failed", consecutiveFailures, reason);
       return;
     }
@@ -338,7 +370,7 @@ export function init(): void {
 
   function applyStatusPayload(payload: PollPayload): void {
     const data = payload.data;
-    updateProgressBar(data.done, data.total);
+    updateProgressBar(data.done, data.total, progressElements);
 
     const results = data.results;
     for (let i = 0; i < results.length; i++) {
@@ -350,7 +382,7 @@ export function init(): void {
       if (result.type === "error" && result.error) {
         const errLower = result.error.toLowerCase();
         if (errLower.indexOf("rate limit") !== -1 || errLower.indexOf("429") !== -1) {
-          showEnrichWarning("Rate limit reached for " + result.provider + ".");
+          showEnrichWarning("Rate limit reached for " + result.provider + ".", warningBanner);
         } else if (
           errLower.indexOf("authentication") !== -1 ||
           errLower.indexOf("401") !== -1 ||
@@ -359,7 +391,8 @@ export function init(): void {
           showEnrichWarning(
             "Authentication error for " +
               result.provider +
-              ". Please check your API key in Settings."
+              ". Please check your API key in Settings.",
+            warningBanner
           );
         }
       }
@@ -377,8 +410,8 @@ export function init(): void {
       stopPolling();
       clearPendingFlush();
       const terminalMessage = getTerminalFailureMessage(data);
-      showTerminalFailure(terminalMessage);
-      markEnrichmentTerminalFailure(terminalMessage, coordinator);
+      showTerminalFailure(terminalMessage, warningBanner);
+      markEnrichmentTerminalFailure(terminalMessage, coordinator, completionElements);
       recordPollingState(livePageResults, "failed", 0, "http_error");
       return;
     }
@@ -390,7 +423,7 @@ export function init(): void {
     if (data.complete) {
       stopPolling();
       clearPendingFlush();
-      markEnrichmentComplete(coordinator);
+      markEnrichmentComplete(coordinator, completionElements);
       recordPollingState(livePageResults, "complete");
     }
   }
@@ -413,5 +446,8 @@ export function init(): void {
   scheduleNextPoll(POLL_BASE_DELAY_MS);
 
   livePageResults.setAttribute("data-results-runtime", "live");
-  sharedInitExportButton(allResults, livePageResults);
+  sharedInitExportButton(allResults, livePageResults, {
+    exportButton: completionElements.exportButton,
+    dropdown: exportDropdown,
+  });
 }

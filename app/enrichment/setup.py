@@ -11,8 +11,12 @@ Usage:
 """
 from __future__ import annotations
 
+from collections.abc import Collection, Mapping
+from types import MappingProxyType
+
 from app.enrichment.adapters.abuseipdb import AbuseIPDBAdapter
 from app.enrichment.adapters.asn_cymru import CymruASNAdapter
+from app.enrichment.adapters.base import _allowed_hosts_membership
 from app.enrichment.adapters.crtsh import CrtShAdapter
 from app.enrichment.adapters.threatminer import ThreatMinerAdapter
 from app.enrichment.adapters.dns_lookup import DnsAdapter
@@ -30,82 +34,155 @@ from app.enrichment.adapters.virustotal import VTAdapter
 from app.enrichment.config_store import ConfigStore
 from app.enrichment.registry import ProviderRegistry
 
+
+def _provider_info(
+    *,
+    provider_id: str,
+    name: str,
+    signup_url: str,
+    description: str,
+    ioc_types: str,
+) -> Mapping[str, str | bool]:
+    """Return one immutable settings metadata entry."""
+    return MappingProxyType(
+        {
+            "id": provider_id,
+            "name": name,
+            "requires_key": True,
+            "signup_url": signup_url,
+            "description": description,
+            "ioc_types": ioc_types,
+        }
+    )
+
+
 # Metadata for the settings page — one entry per key-requiring provider.
 # Shodan InternetDB is omitted because it requires no configuration (zero-auth).
-PROVIDER_INFO: list[dict[str, str | bool]] = [
-    {
-        "id": "virustotal",
-        "name": "VirusTotal",
-        "requires_key": True,
-        "signup_url": "https://www.virustotal.com/gui/join-us",
-        "description": "IP, domain, URL, hash enrichment",
-        "ioc_types": "IP · domain · URL · hash",
-    },
-    {
-        "id": "malwarebazaar",
-        "name": "MalwareBazaar",
-        "requires_key": True,
-        "signup_url": "https://auth.abuse.ch/",
-        "description": "Hash only, malware sample database",
-        "ioc_types": "hash",
-    },
-    {
-        "id": "threatfox",
-        "name": "ThreatFox",
-        "requires_key": True,
-        "signup_url": "https://auth.abuse.ch/",
-        "description": "IP, domain, URL, hash, IOC sharing platform",
-        "ioc_types": "IP · domain · URL · hash",
-    },
-    {
-        "id": "urlhaus",
-        "name": "URLhaus",
-        "requires_key": True,
-        "signup_url": "https://auth.abuse.ch/",
-        "description": "URL, hash, IP, domain, malware distribution tracking",
-        "ioc_types": "URL · hash · IP · domain",
-    },
-    {
-        "id": "otx",
-        "name": "OTX AlienVault",
-        "requires_key": True,
-        "signup_url": "https://otx.alienvault.com/api",
-        "description": "All IOC types including CVE, community threat intel",
-        "ioc_types": "IP · domain · URL · hash · CVE",
-    },
-    {
-        "id": "greynoise",
-        "name": "GreyNoise",
-        "requires_key": True,
-        "signup_url": "https://www.greynoise.io/",
-        "description": "IP only, internet scanner noise classification",
-        "ioc_types": "IP",
-    },
-    {
-        "id": "abuseipdb",
-        "name": "AbuseIPDB",
-        "requires_key": True,
-        "signup_url": "https://www.abuseipdb.com/register",
-        "description": "IP only, crowd-sourced abuse reporting",
-        "ioc_types": "IP",
-    },
-    {
-        "id": "emailrep",
-        "name": "EmailRep",
-        "requires_key": True,
-        "signup_url": "https://emailrep.io/key",
-        "description": "Email only, reputation and account-risk signals",
-        "ioc_types": "email",
-    },
-]
+PROVIDER_INFO: tuple[Mapping[str, str | bool], ...] = (
+    _provider_info(
+        provider_id="virustotal",
+        name="VirusTotal",
+        signup_url="https://www.virustotal.com/gui/join-us",
+        description="IP, domain, URL, hash enrichment",
+        ioc_types="IP · domain · URL · hash",
+    ),
+    _provider_info(
+        provider_id="malwarebazaar",
+        name="MalwareBazaar",
+        signup_url="https://auth.abuse.ch/",
+        description="Hash only, malware sample database",
+        ioc_types="hash",
+    ),
+    _provider_info(
+        provider_id="threatfox",
+        name="ThreatFox",
+        signup_url="https://auth.abuse.ch/",
+        description="IP, domain, URL, hash, IOC sharing platform",
+        ioc_types="IP · domain · URL · hash",
+    ),
+    _provider_info(
+        provider_id="urlhaus",
+        name="URLhaus",
+        signup_url="https://auth.abuse.ch/",
+        description="URL, hash, IP, domain, malware distribution tracking",
+        ioc_types="URL · hash · IP · domain",
+    ),
+    _provider_info(
+        provider_id="otx",
+        name="OTX AlienVault",
+        signup_url="https://otx.alienvault.com/api",
+        description="All IOC types including CVE, community threat intel",
+        ioc_types="IP · domain · URL · hash · CVE",
+    ),
+    _provider_info(
+        provider_id="greynoise",
+        name="GreyNoise",
+        signup_url="https://www.greynoise.io/",
+        description="IP only, internet scanner noise classification",
+        ioc_types="IP",
+    ),
+    _provider_info(
+        provider_id="abuseipdb",
+        name="AbuseIPDB",
+        signup_url="https://www.abuseipdb.com/register",
+        description="IP only, crowd-sourced abuse reporting",
+        ioc_types="IP",
+    ),
+    _provider_info(
+        provider_id="emailrep",
+        name="EmailRep",
+        signup_url="https://emailrep.io/key",
+        description="Email only, reputation and account-risk signals",
+        ioc_types="email",
+    ),
+)
+PROVIDER_IDS = (
+    "virustotal",
+    "malwarebazaar",
+    "threatfox",
+    "urlhaus",
+    "otx",
+    "greynoise",
+    "abuseipdb",
+    "emailrep",
+)
+
+_PRE_SHODAN_KEYED_PROVIDER_REGISTRATIONS = (
+    ("malwarebazaar", MBAdapter),
+    ("threatfox", TFAdapter),
+)
+
+_POST_SHODAN_KEYED_PROVIDER_REGISTRATIONS = (
+    ("urlhaus", URLhausAdapter),
+    ("otx", OTXAdapter),
+    ("greynoise", GreyNoiseAdapter),
+    ("abuseipdb", AbuseIPDBAdapter),
+    ("emailrep", EmailRepAdapter),
+)
+
+_ZERO_AUTH_PROVIDER_CLASSES = (
+    HashlookupAdapter,
+    IPApiAdapter,
+    DnsAdapter,
+    CrtShAdapter,
+    ThreatMinerAdapter,
+    CymruASNAdapter,
+    WhoisAdapter,
+)
 
 
-def _get_provider_key_or_empty(config_store: ConfigStore, provider_id: str) -> str:
-    """Return a provider API key, treating local config read failures as missing."""
+def _get_provider_keys(config_store: ConfigStore) -> dict[str, str]:
+    """Return provider API keys, treating local config read failures as missing."""
     try:
-        return config_store.get_provider_key(provider_id) or ""
+        return config_store.all_provider_keys()
     except Exception:
-        return ""
+        return {}
+
+
+def _provider_key_or_empty(provider_keys: dict[str, str], provider_id: str) -> str:
+    """Return a provider API key from a preloaded provider-key map."""
+    return provider_keys.get(provider_id) or ""
+
+
+def _register_keyed_provider(
+    registry: ProviderRegistry,
+    adapter_cls,
+    provider_keys: dict[str, str],
+    provider_id: str,
+    allowed_hosts: Collection[str],
+) -> None:
+    """Register a key-requiring provider from the preloaded provider-key map."""
+    api_key = _provider_key_or_empty(provider_keys, provider_id)
+    registry.register(adapter_cls(api_key=api_key, allowed_hosts=allowed_hosts))
+
+
+def _register_zero_auth_provider(
+    registry: ProviderRegistry,
+    adapter_cls,
+    allowed_hosts: Collection[str],
+) -> None:
+    """Register a provider that needs no API key."""
+    registry.register(adapter_cls(allowed_hosts=allowed_hosts))
 
 
 def build_registry(
@@ -121,14 +198,14 @@ def build_registry(
 
     Registered providers:
         - VirusTotal        (requires key — via get_vt_api_key)
-        - MalwareBazaar     (requires key — via get_provider_key("malwarebazaar"))
-        - ThreatFox         (requires key — via get_provider_key("threatfox"))
+        - MalwareBazaar     (requires key — via provider-key map)
+        - ThreatFox         (requires key — via provider-key map)
         - Shodan InternetDB (zero-auth — no key required)
-        - URLhaus           (requires key — via get_provider_key("urlhaus"))
-        - OTX AlienVault    (requires key — via get_provider_key("otx"))
-        - GreyNoise         (requires key — via get_provider_key("greynoise"))
-        - AbuseIPDB         (requires key — via get_provider_key("abuseipdb"))
-        - EmailRep          (requires key — via get_provider_key("emailrep"))
+        - URLhaus           (requires key — via provider-key map)
+        - OTX AlienVault    (requires key — via provider-key map)
+        - GreyNoise         (requires key — via provider-key map)
+        - AbuseIPDB         (requires key — via provider-key map)
+        - EmailRep          (requires key — via provider-key map)
         - CIRCL Hashlookup  (zero-auth — NSRL known-good hash detection)
         - IP Context        (zero-auth — GeoIP/rDNS via ipinfo.io)
         - DNS Records       (zero-auth — live DNS resolution via dnspython)
@@ -146,38 +223,34 @@ def build_registry(
     """
     registry = ProviderRegistry()
 
+    allowed_host_membership = _allowed_hosts_membership(allowed_hosts)
     vt_key = config_store.get_vt_api_key() or ""
-    registry.register(VTAdapter(api_key=vt_key, allowed_hosts=allowed_hosts))
+    provider_keys = _get_provider_keys(config_store)
 
-    mb_key = _get_provider_key_or_empty(config_store, "malwarebazaar")
-    registry.register(MBAdapter(api_key=mb_key, allowed_hosts=allowed_hosts))
+    registry.register(VTAdapter(api_key=vt_key, allowed_hosts=allowed_host_membership))
 
-    tf_key = _get_provider_key_or_empty(config_store, "threatfox")
-    registry.register(TFAdapter(api_key=tf_key, allowed_hosts=allowed_hosts))
-    registry.register(ShodanAdapter(allowed_hosts=allowed_hosts))
+    for provider_id, adapter_cls in _PRE_SHODAN_KEYED_PROVIDER_REGISTRATIONS:
+        _register_keyed_provider(
+            registry,
+            adapter_cls,
+            provider_keys,
+            provider_id,
+            allowed_host_membership,
+        )
 
-    urlhaus_key = _get_provider_key_or_empty(config_store, "urlhaus")
-    registry.register(URLhausAdapter(api_key=urlhaus_key, allowed_hosts=allowed_hosts))
+    registry.register(ShodanAdapter(allowed_hosts=allowed_host_membership))
 
-    otx_key = _get_provider_key_or_empty(config_store, "otx")
-    registry.register(OTXAdapter(api_key=otx_key, allowed_hosts=allowed_hosts))
-
-    gn_key = _get_provider_key_or_empty(config_store, "greynoise")
-    registry.register(GreyNoiseAdapter(api_key=gn_key, allowed_hosts=allowed_hosts))
-
-    abuseipdb_key = _get_provider_key_or_empty(config_store, "abuseipdb")
-    registry.register(AbuseIPDBAdapter(api_key=abuseipdb_key, allowed_hosts=allowed_hosts))
-
-    emailrep_key = _get_provider_key_or_empty(config_store, "emailrep")
-    registry.register(EmailRepAdapter(api_key=emailrep_key, allowed_hosts=allowed_hosts))
+    for provider_id, adapter_cls in _POST_SHODAN_KEYED_PROVIDER_REGISTRATIONS:
+        _register_keyed_provider(
+            registry,
+            adapter_cls,
+            provider_keys,
+            provider_id,
+            allowed_host_membership,
+        )
 
     # Zero-auth providers — no key needed, always configured
-    registry.register(HashlookupAdapter(allowed_hosts=allowed_hosts))
-    registry.register(IPApiAdapter(allowed_hosts=allowed_hosts))
-    registry.register(DnsAdapter(allowed_hosts=allowed_hosts))
-    registry.register(CrtShAdapter(allowed_hosts=allowed_hosts))
-    registry.register(ThreatMinerAdapter(allowed_hosts=allowed_hosts))
-    registry.register(CymruASNAdapter(allowed_hosts=allowed_hosts))
-    registry.register(WhoisAdapter(allowed_hosts=allowed_hosts))
+    for adapter_cls in _ZERO_AUTH_PROVIDER_CLASSES:
+        _register_zero_auth_provider(registry, adapter_cls, allowed_host_membership)
 
     return registry

@@ -2,66 +2,91 @@
  * Settings page module — accordion and API key toggles.
  */
 
-/** Wire up accordion sections — one open at a time. */
-function initAccordion(): void {
-  const sections = document.querySelectorAll<HTMLElement>(
-    ".settings-section[data-provider]"
-  );
-  if (sections.length === 0) return;
+type AccordionRecord = { section: HTMLElement; header: HTMLElement };
+type KeyToggleRecord = { button: HTMLButtonElement; input: HTMLInputElement };
+type SectionRecords = {
+  accordionRecords: AccordionRecord[];
+  keyToggleRecords: KeyToggleRecord[];
+};
 
-  function expandSection(section: HTMLElement): void {
-    sections.forEach((s) => {
-      if (s !== section) {
-        s.removeAttribute("data-expanded");
-        const btn = s.querySelector(".accordion-header");
-        if (btn) btn.setAttribute("aria-expanded", "false");
-      }
-    });
-    section.setAttribute("data-expanded", "");
-    const btn = section.querySelector(".accordion-header");
-    if (btn) btn.setAttribute("aria-expanded", "true");
-  }
+function collectSectionRecords(sections: NodeListOf<HTMLElement>): SectionRecords {
+  const accordionRecords: AccordionRecord[] = [];
+  const keyToggleRecords: KeyToggleRecord[] = [];
 
-  sections.forEach((section) => {
-    const header = section.querySelector(".accordion-header");
-    if (!header) return;
-    header.addEventListener("click", () => {
-      if (section.hasAttribute("data-expanded")) {
-        section.removeAttribute("data-expanded");
-        header.setAttribute("aria-expanded", "false");
-      } else {
-        expandSection(section);
-      }
-    });
-  });
+  for (let i = 0; i < sections.length; i += 1) {
+    const section = sections[i];
+    if (!section) continue;
 
-}
+    if (section.hasAttribute("data-provider")) {
+      const header = section.querySelector<HTMLElement>(".accordion-header");
+      if (header) accordionRecords.push({ section, header });
+    }
 
-/** Wire up per-provider API key show/hide toggles. */
-function initKeyToggles(): void {
-  const sections = document.querySelectorAll(".settings-section");
-  sections.forEach((section) => {
-    const btn = section.querySelector(
+    const button = section.querySelector(
       "[data-role='toggle-key']"
     ) as HTMLButtonElement | null;
     const input = section.querySelector(
       "input[type='password'], input[type='text']"
     ) as HTMLInputElement | null;
-    if (!btn || !input) return;
+    if (button && input) keyToggleRecords.push({ button, input });
+  }
 
-    btn.addEventListener("click", () => {
-      if (input.type === "password") {
-        input.type = "text";
-        btn.textContent = "Hide";
+  return { accordionRecords, keyToggleRecords };
+}
+
+/** Wire up accordion sections — one open at a time. */
+function initAccordion(sectionRecords: AccordionRecord[]): void {
+  function expandSection(section: HTMLElement, activeHeader: HTMLElement): void {
+    for (let i = 0; i < sectionRecords.length; i += 1) {
+      const record = sectionRecords[i];
+      if (!record) continue;
+      const { section: s, header } = record;
+      if (s !== section) {
+        s.removeAttribute("data-expanded");
+        header.setAttribute("aria-expanded", "false");
+      }
+    }
+    section.setAttribute("data-expanded", "");
+    activeHeader.setAttribute("aria-expanded", "true");
+  }
+
+  for (let i = 0; i < sectionRecords.length; i += 1) {
+    const record = sectionRecords[i];
+    if (!record) continue;
+    const { section, header } = record;
+    header.addEventListener("click", () => {
+      if (section.hasAttribute("data-expanded")) {
+        section.removeAttribute("data-expanded");
+        header.setAttribute("aria-expanded", "false");
       } else {
-        input.type = "password";
-        btn.textContent = "Show";
+        expandSection(section, header);
       }
     });
-  });
+  }
+}
+
+/** Wire up per-provider API key show/hide toggles. */
+function initKeyToggles(keyToggleRecords: KeyToggleRecord[]): void {
+  for (let i = 0; i < keyToggleRecords.length; i += 1) {
+    const record = keyToggleRecords[i];
+    if (!record) continue;
+    const { button, input } = record;
+
+    button.addEventListener("click", () => {
+      if (input.type === "password") {
+        input.type = "text";
+        button.textContent = "Hide";
+      } else {
+        input.type = "password";
+        button.textContent = "Show";
+      }
+    });
+  }
 }
 
 export function init(): void {
-  initAccordion();
-  initKeyToggles();
+  const sections = document.querySelectorAll<HTMLElement>(".settings-section");
+  const { accordionRecords, keyToggleRecords } = collectSectionRecords(sections);
+  initAccordion(accordionRecords);
+  initKeyToggles(keyToggleRecords);
 }

@@ -6,12 +6,18 @@ All HTTP calls are mocked using unittest.mock.patch -- no real API calls.
 """
 from __future__ import annotations
 
+import inspect
 from unittest.mock import MagicMock
 
 import requests
 import requests.exceptions
 
-from app.enrichment.adapters.threatminer import ThreatMinerAdapter
+from app.enrichment.adapters.threatminer import (
+    ThreatMinerAdapter,
+    _extract_field_values,
+    _extract_samples,
+    _no_data_result,
+)
 from tests.helpers import (
     make_mock_response,
     mock_adapter_session,
@@ -78,6 +84,28 @@ EMPTY_RESULTS_RESPONSE = {
     "status_message": "Results found.",
     "results": [],
 }
+
+
+class _BoundedResults:
+    def __init__(self, rows, *, max_reads: int):
+        self._rows = rows
+        self.max_reads = max_reads
+        self.reads = 0
+
+    def __iter__(self):
+        for row in self._rows:
+            self.reads += 1
+            if self.reads > self.max_reads:
+                raise AssertionError("ThreatMiner extraction should stop at the cap")
+            yield row
+
+    def __bool__(self) -> bool:
+        return bool(self._rows)
+
+
+class _ExplodingResults:
+    def __iter__(self):
+        raise AssertionError("zero-cap extraction should not read result rows")
 
 
 # --- Helpers ---
@@ -183,6 +211,44 @@ class TestIPLookup:
         assert len(result.raw_stats["passive_dns"]) <= 25, (
             f"Expected at most 25 passive_dns entries (cap), got {len(result.raw_stats['passive_dns'])}"
         )
+
+    def test_ip_lookup_passive_dns_stops_at_cap(self) -> None:
+        """IP passive DNS extraction should not read past the 25-row cap."""
+        rows = _BoundedResults(
+            [{"domain": f"sub{i}.example.com"} for i in range(30)],
+            max_reads=25,
+        )
+        domains = _extract_field_values(rows, "domain", limit=25)
+
+        assert rows.reads == 25
+        assert len(domains) == 25
+        assert domains[-1] == "sub24.example.com"
+
+    def test_zero_cap_passive_dns_skips_result_iteration(self) -> None:
+        """A zero passive-DNS cap should return empty without reading rows."""
+        assert _extract_field_values(_ExplodingResults(), "domain", limit=0) == []
+
+    def test_empty_single_and_pair_passive_dns_lists_skip_accumulator_loop(self) -> None:
+        class NoIterList(list):
+            def __iter__(self):
+                raise AssertionError("short passive DNS extraction should not iterate")
+
+        assert _extract_field_values([], "domain", limit=25) == []
+        assert _extract_field_values([{"domain": "only.example"}], "domain", limit=25) == [
+            "only.example"
+        ]
+        assert _extract_field_values([{"ip": "1.2.3.4"}], "domain", limit=25) == []
+        assert _extract_field_values(
+            NoIterList([{"domain": "first.example"}, {"domain": "second.example"}]),
+            "domain",
+            limit=25,
+        ) == ["first.example", "second.example"]
+        assert _extract_field_values(
+            NoIterList([{"ip": "1.2.3.4"}, {"domain": "second.example"}]),
+            "domain",
+            limit=1,
+        ) == ["second.example"]
+        assert "len" in _extract_field_values.__code__.co_names
 
     def test_ip_lookup_verdict_is_no_data(self) -> None:
         """IP lookup verdict is always 'no_data' (informational context, not threat signal)."""
@@ -349,6 +415,57 @@ class TestDomainLookup:
             f"Expected at most 20 samples entries, got {len(result.raw_stats['samples'])}"
         )
 
+    def test_domain_lookup_samples_stop_at_cap(self) -> None:
+        """Domain related-sample extraction should not read past the 20-row cap."""
+        rows = _BoundedResults(
+            [f"{'a' * 63}{i:01d}" for i in range(25)],
+            max_reads=20,
+        )
+        samples = _extract_samples(rows, limit=20)
+
+        assert rows.reads == 20
+        assert len(samples) == 20
+        assert samples[-1].endswith("9")
+
+    def test_zero_cap_samples_skip_result_iteration(self) -> None:
+        """A zero sample cap should return empty without reading rows."""
+        assert _extract_samples(_ExplodingResults(), limit=0) == []
+
+    def test_empty_single_and_pair_sample_lists_skip_accumulator_loop(self) -> None:
+        class NoIterList(list):
+            def __iter__(self):
+                raise AssertionError("short sample extraction should not iterate")
+
+        assert _extract_samples([], limit=20) == []
+        assert _extract_samples(["hash-only"], limit=20) == ["hash-only"]
+        assert _extract_samples([{"sha256": "hash-from-dict"}], limit=20) == ["hash-from-dict"]
+        assert _extract_samples([{"count": 1}], limit=20) == []
+        assert _extract_samples(
+            NoIterList(["first-hash", {"sha256": "second-hash"}]),
+            limit=20,
+        ) == ["first-hash", "second-hash"]
+        assert _extract_samples(
+            NoIterList([{"sha256": "first-hash"}, "second-hash"]),
+            limit=1,
+        ) == ["first-hash"]
+        assert "len" in _extract_samples.__code__.co_names
+
+    def test_dict_sample_rows_do_not_allocate_values_view(self) -> None:
+        """Defensive dict sample extraction should scan keys directly."""
+
+        class NoValuesDict(dict):
+            def values(self):
+                raise AssertionError("sample extraction should not allocate a values view")
+
+        samples = _extract_samples(
+            [
+                NoValuesDict({"ignored": 1, "sample": "hash-from-dict"}),
+            ],
+            limit=20,
+        )
+
+        assert samples == ["hash-from-dict"]
+
     def test_domain_lookup_verdict_is_no_data(self) -> None:
         """Domain lookup verdict is always 'no_data'."""
         ioc = make_domain_ioc()
@@ -444,6 +561,18 @@ class TestHashLookup:
             f"Expected at most 20 sample entries, got {len(result.raw_stats['samples'])}"
         )
 
+    def test_hash_lookup_samples_stop_at_cap(self) -> None:
+        """Hash sample extraction should not read past the 20-row cap."""
+        rows = _BoundedResults(
+            [f"{'a' * 63}{i:01d}" for i in range(25)],
+            max_reads=20,
+        )
+        samples = _extract_samples(rows, limit=20)
+
+        assert rows.reads == 20
+        assert len(samples) == 20
+        assert samples[-1].endswith("9")
+
     def test_md5_lookup_uses_sample_php(self) -> None:
         """MD5 hash lookup also uses sample.php."""
         ioc = make_md5_ioc()
@@ -504,6 +633,22 @@ class TestHashLookup:
 # ===================================================================
 
 class TestNoDataHandling:
+
+    def test_no_data_result_helper_preserves_informational_shape(self) -> None:
+        """ThreatMiner no-data branches should share one result shape."""
+        ioc = make_domain_ioc()
+        raw_stats = {"samples": ["abc"]}
+
+        result = _no_data_result(ioc, "ThreatMiner", raw_stats)
+
+        assert result.ioc is ioc
+        assert result.provider == "ThreatMiner"
+        assert result.verdict == "no_data"
+        assert result.detection_count == 0
+        assert result.total_engines == 0
+        assert result.scan_date is None
+        assert result.raw_stats is raw_stats
+        assert "no_data_result(ioc, provider_name, raw_stats)" in inspect.getsource(_no_data_result)
 
     def test_ip_body_404_returns_no_data(self) -> None:
         """IP lookup with body status_code '404' returns EnrichmentResult(verdict='no_data')."""
@@ -670,4 +815,3 @@ class TestHTTPErrors:
         assert adapter._session.get.call_count == 1, (
             f"After 429 on first domain call, must NOT make second call. Got {adapter._session.get.call_count} calls."
         )
-

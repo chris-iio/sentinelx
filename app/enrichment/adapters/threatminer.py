@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from app.enrichment.adapters.base import BaseHTTPAdapter
 from app.enrichment.http_safety import safe_request
-from app.enrichment.models import EnrichmentError, EnrichmentResult
+from app.enrichment.models import EnrichmentError, EnrichmentResult, error_result, no_data_result
 from app.pipeline.models import IOC, IOCType
 
 THREATMINER_BASE_IP = "https://api.threatminer.org/v2/host.php"
@@ -18,22 +18,20 @@ _MAX_SAMPLES = 20
 class ThreatMinerAdapter(BaseHTTPAdapter):
     """ThreatMiner multi-call lookup — overrides lookup() for sub-method dispatch."""
 
-    supported_types: frozenset[IOCType] = frozenset({
+    supported_types: frozenset[IOCType] = frozenset((
         IOCType.IPV4,
         IOCType.IPV6,
         IOCType.DOMAIN,
         IOCType.MD5,
         IOCType.SHA1,
         IOCType.SHA256,
-    })
+    ))
     name = "ThreatMiner"
     requires_api_key = False
 
     def lookup(self, ioc: IOC) -> EnrichmentResult | EnrichmentError:
         if ioc.type not in self.supported_types:
-            return EnrichmentError(
-                ioc=ioc, provider=self.name, error="Unsupported type"
-            )
+            return error_result(ioc, self.name, "Unsupported type")
 
         if ioc.type in (IOCType.IPV4, IOCType.IPV6):
             return self._lookup_ip(ioc)
@@ -66,32 +64,12 @@ class ThreatMinerAdapter(BaseHTTPAdapter):
 
         # Body status_code "404" = no data (HTTP is always 200 for ThreatMiner)
         if body.get("status_code") == "404" or not body.get("results"):
-            return EnrichmentResult(
-                ioc=ioc,
-                provider=self.name,
-                verdict="no_data",
-                detection_count=0,
-                total_engines=0,
-                scan_date=None,
-                raw_stats={},
-            )
+            return _no_data_result(ioc, self.name)
 
         # Extract domain field from each result (IP passive DNS: what domains resolved to this IP)
-        domains = [
-            r["domain"]
-            for r in body["results"]
-            if isinstance(r, dict) and r.get("domain")
-        ][:_MAX_HOSTS]
+        domains = _extract_field_values(body["results"], "domain", limit=_MAX_HOSTS)
 
-        return EnrichmentResult(
-            ioc=ioc,
-            provider=self.name,
-            verdict="no_data",
-            detection_count=0,
-            total_engines=0,
-            scan_date=None,
-            raw_stats={"passive_dns": domains},
-        )
+        return _no_data_result(ioc, self.name, {"passive_dns": domains})
 
     def _lookup_domain(self, ioc: IOC) -> EnrichmentResult | EnrichmentError:
         # First call: passive DNS (rt=2)
@@ -111,29 +89,17 @@ class ThreatMinerAdapter(BaseHTTPAdapter):
 
         # Extract IPs from passive DNS results (domain direction: domain -> IP)
         if dns_body.get("status_code") != "404" and dns_body.get("results"):
-            ips = [
-                r["ip"]
-                for r in dns_body["results"]
-                if isinstance(r, dict) and r.get("ip")
-            ][:_MAX_HOSTS]
+            ips = _extract_field_values(dns_body["results"], "ip", limit=_MAX_HOSTS)
             if ips:
                 raw_stats["passive_dns"] = ips
 
         # Extract sample hashes from related samples results
         if samples_body.get("status_code") != "404" and samples_body.get("results"):
-            samples = _extract_samples(samples_body["results"])[:_MAX_SAMPLES]
+            samples = _extract_samples(samples_body["results"], limit=_MAX_SAMPLES)
             if samples:
                 raw_stats["samples"] = samples
 
-        return EnrichmentResult(
-            ioc=ioc,
-            provider=self.name,
-            verdict="no_data",
-            detection_count=0,
-            total_engines=0,
-            scan_date=None,
-            raw_stats=raw_stats,
-        )
+        return _no_data_result(ioc, self.name, raw_stats)
 
     def _lookup_hash(self, ioc: IOC) -> EnrichmentResult | EnrichmentError:
         body_or_err = self._call(ioc, THREATMINER_BASE_SAMPLE, "4")
@@ -143,39 +109,108 @@ class ThreatMinerAdapter(BaseHTTPAdapter):
 
         # Body status_code "404" = no data (HTTP is always 200 for ThreatMiner)
         if body.get("status_code") == "404" or not body.get("results"):
-            return EnrichmentResult(
-                ioc=ioc,
-                provider=self.name,
-                verdict="no_data",
-                detection_count=0,
-                total_engines=0,
-                scan_date=None,
-                raw_stats={},
-            )
+            return _no_data_result(ioc, self.name)
 
-        samples = _extract_samples(body["results"])[:_MAX_SAMPLES]
+        samples = _extract_samples(body["results"], limit=_MAX_SAMPLES)
 
-        return EnrichmentResult(
-            ioc=ioc,
-            provider=self.name,
-            verdict="no_data",
-            detection_count=0,
-            total_engines=0,
-            scan_date=None,
-            raw_stats={"samples": samples},
-        )
+        return _no_data_result(ioc, self.name, {"samples": samples})
 
 
-def _extract_samples(results: list) -> list[str]:
-    """Extract hash strings from a ThreatMiner results list (handles both str and dict entries)."""
+def _no_data_result(
+    ioc: IOC,
+    provider_name: str,
+    raw_stats: dict | None = None,
+) -> EnrichmentResult:
+    return no_data_result(ioc, provider_name, raw_stats)
+
+
+def _extract_field_values(results: list, field_name: str, *, limit: int) -> list[str]:
+    """Extract string field values from ThreatMiner result rows up to ``limit``."""
+    if limit <= 0:
+        return []
+    if isinstance(results, list):
+        result_count = len(results)
+        if result_count == 0:
+            return []
+        if result_count == 1:
+            row = results[0]
+            if isinstance(row, dict) and row.get(field_name):
+                return [row[field_name]]
+            return []
+        if result_count == 2:
+            values: list[str] = []
+            row = results[0]
+            if isinstance(row, dict) and row.get(field_name):
+                values.append(row[field_name])
+                if len(values) >= limit:
+                    return values
+            row = results[1]
+            if isinstance(row, dict) and row.get(field_name):
+                values.append(row[field_name])
+            return values
+
+    values: list[str] = []
+    for row in results:
+        if isinstance(row, dict) and row.get(field_name):
+            values.append(row[field_name])
+            if len(values) >= limit:
+                break
+    return values
+
+
+def _extract_samples(results: list, *, limit: int = _MAX_SAMPLES) -> list[str]:
+    """Extract hash strings from ThreatMiner results up to ``limit``."""
+    if limit <= 0:
+        return []
+    if isinstance(results, list):
+        result_count = len(results)
+        if result_count == 0:
+            return []
+        if result_count == 1:
+            row = results[0]
+            if isinstance(row, str):
+                return [row]
+            if isinstance(row, dict):
+                for key in row:
+                    v = row[key]
+                    if isinstance(v, str):
+                        return [v]
+            return []
+        if result_count == 2:
+            samples: list[str] = []
+            first = results[0]
+            if isinstance(first, str):
+                samples.append(first)
+            elif isinstance(first, dict):
+                for key in first:
+                    v = first[key]
+                    if isinstance(v, str):
+                        samples.append(v)
+                        break
+            if len(samples) >= limit:
+                return samples
+            second = results[1]
+            if isinstance(second, str):
+                samples.append(second)
+            elif isinstance(second, dict):
+                for key in second:
+                    v = second[key]
+                    if isinstance(v, str):
+                        samples.append(v)
+                        break
+            return samples
+
     samples: list[str] = []
     for r in results:
         if isinstance(r, str):
             samples.append(r)
         elif isinstance(r, dict):
             # Defensive: extract string values from unexpected dict entries
-            for v in r.values():
+            for key in r:
+                v = r[key]
                 if isinstance(v, str):
                     samples.append(v)
                     break  # Only take the first string value per dict
+        if len(samples) >= limit:
+            break
     return samples

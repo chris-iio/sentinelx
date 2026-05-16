@@ -8,7 +8,9 @@ All HTTP calls are mocked; no real EmailRep API calls are made.
 """
 from __future__ import annotations
 
-from app.enrichment.adapters.emailrep import EmailRepAdapter
+import inspect
+
+from app.enrichment.adapters.emailrep import EmailRepAdapter, _emailrep_result
 from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.pipeline.models import IOC, IOCType
 from tests.helpers import make_domain_ioc, make_mock_response, mock_adapter_session
@@ -174,6 +176,126 @@ class TestEmailRepLookup:
             "spam",
             "spoofable",
         ]
+
+    def test_verdict_uses_risk_flag_scan_without_second_malicious_pass(self, monkeypatch) -> None:
+        """EmailRep verdict should reuse the ordered risk-flag pass."""
+        import builtins
+
+        def fail_any(*_args, **_kwargs):
+            raise AssertionError("EmailRep parsing should not scan malicious flags twice")
+
+        ioc = make_email_ioc("attacker@evil.com")
+        mock_resp = make_mock_response(200, EMAILREP_MALICIOUS_RESPONSE)
+
+        adapter = _make_adapter()
+        mock_adapter_session(adapter, response=mock_resp)
+        monkeypatch.setattr(builtins, "any", fail_any)
+
+        result = adapter.lookup(ioc)
+
+        assert isinstance(result, EnrichmentResult)
+        assert result.verdict == "malicious"
+        assert "blacklisted" in result.raw_stats["risk_flags"]
+
+    def test_verdict_membership_tables_are_static_frozensets(self) -> None:
+        """EmailRep verdict parsing should not rebuild static membership sets."""
+        from app.enrichment.adapters import emailrep
+
+        source = inspect.getsource(emailrep._parse_response)
+        risk_source = inspect.getsource(emailrep._risk_flags)
+
+        assert '{"none", "n/a", "unknown"}' not in source
+        assert '{"malicious", "suspicious"}' not in source
+        assert "field in _MALICIOUS_FLAGS" not in risk_source
+        assert isinstance(emailrep._NO_REPUTATION_VALUES, frozenset)
+        assert isinstance(emailrep._DETECTION_VERDICTS, frozenset)
+        assert isinstance(emailrep._MALICIOUS_FLAG_SET, frozenset)
+        assert emailrep._NO_REPUTATION_VALUES == frozenset(("none", "n/a", "unknown"))
+        assert emailrep._DETECTION_VERDICTS == frozenset(("malicious", "suspicious"))
+        assert emailrep._MALICIOUS_FLAG_SET == frozenset(emailrep._MALICIOUS_FLAGS)
+
+    def test_empty_details_skip_risk_flag_scan(self) -> None:
+        """Thin EmailRep details should not scan every risk flag field."""
+        from app.enrichment.adapters import emailrep
+
+        class EmptyDetails(dict):
+            def get(self, *_args, **_kwargs):
+                raise AssertionError("empty EmailRep details should not scan risk fields")
+
+        assert emailrep._risk_flags(EmptyDetails()) == ([], False)
+        assert "if not details" in inspect.getsource(emailrep._risk_flags)
+
+    def test_parse_response_reads_details_once(self) -> None:
+        """EmailRep parsing should reuse the details lookup for thin responses."""
+        from app.enrichment.adapters import emailrep
+
+        class CountingBody(dict):
+            details_reads = 0
+
+            def get(self, key, default=None):
+                if key == "details":
+                    type(self).details_reads += 1
+                    if type(self).details_reads > 1:
+                        raise AssertionError("EmailRep details should be read once")
+                return super().get(key, default)
+
+        result = emailrep._parse_response(
+            make_email_ioc("thin@example.net"),
+            CountingBody({"email": "thin@example.net"}),
+            "EmailRep",
+        )
+
+        assert result.verdict == "no_data"
+        assert result.raw_stats["risk_flags"] == []
+        assert CountingBody.details_reads == 1
+
+    def test_missing_profiles_avoid_eager_default_list(self) -> None:
+        """EmailRep profiles should not allocate through dict.get's default argument."""
+        from app.enrichment.adapters import emailrep
+
+        class NoDefaultDetails(dict):
+            def get(self, key, default=None):
+                if key == "profiles" and default is not None:
+                    raise AssertionError("EmailRep profiles should avoid eager default list allocation")
+                return super().get(key, default)
+
+        result = emailrep._parse_response(
+            make_email_ioc("thin@example.net"),
+            {
+                "email": "thin@example.net",
+                "reputation": "none",
+                "suspicious": False,
+                "references": 0,
+                "details": NoDefaultDetails({"first_seen": "never", "last_seen": "never"}),
+            },
+            "EmailRep",
+        )
+
+        assert result.verdict == "no_data"
+        assert result.raw_stats["profiles"] == []
+        assert type(result.raw_stats["profiles"]) is list
+
+    def test_result_helper_preserves_provider_envelope(self) -> None:
+        """EmailRep result construction should keep the provider envelope centralized."""
+        ioc = make_email_ioc("attacker@evil.com")
+        raw_stats = {"reputation": "low", "risk_flags": ["blacklisted"]}
+
+        result = _emailrep_result(
+            ioc=ioc,
+            provider="EmailRep",
+            verdict="malicious",
+            detection_count=4,
+            scan_date="04/05/2024",
+            raw_stats=raw_stats,
+        )
+
+        assert result.ioc is ioc
+        assert result.provider == "EmailRep"
+        assert result.verdict == "malicious"
+        assert result.detection_count == 4
+        assert result.total_engines == 1
+        assert result.scan_date == "04/05/2024"
+        assert result.raw_stats is raw_stats
 
     def test_risky_but_not_confirmed_abuse_flags_return_suspicious(self) -> None:
         """Low reputation and disposable/deliverability flags -> suspicious, not malicious."""

@@ -30,7 +30,20 @@ class IOCType(Enum):
     EMAIL = "email"
 
 
-@dataclass(frozen=True)
+IOC_TYPE_VALUES = (
+    IOCType.IPV4.value,
+    IOCType.IPV6.value,
+    IOCType.DOMAIN.value,
+    IOCType.URL.value,
+    IOCType.MD5.value,
+    IOCType.SHA1.value,
+    IOCType.SHA256.value,
+    IOCType.CVE.value,
+    IOCType.EMAIL.value,
+)
+
+
+@dataclass(frozen=True, slots=True)
 class IOC:
     """An immutable, typed indicator of compromise.
 
@@ -58,7 +71,38 @@ def group_by_type(iocs: list[IOC]) -> dict[IOCType, list[IOC]]:
         Dict mapping each present IOCType to its list of IOCs.
         Types with no IOCs are omitted from the result.
     """
+    ioc_count = len(iocs)
+    if ioc_count == 0:
+        return {}
+    if ioc_count == 1:
+        ioc = iocs[0]
+        return {ioc.type: [ioc]}
+    if ioc_count == 2:
+        first = iocs[0]
+        second = iocs[1]
+        if first.type == second.type:
+            return {first.type: [first, second]}
+        return {first.type: [first], second.type: [second]}
+    if ioc_count == 3:
+        first = iocs[0]
+        second = iocs[1]
+        third = iocs[2]
+        result: dict[IOCType, list[IOC]] = {}
+        append_ioc_by_type(result, first)
+        append_ioc_by_type(result, second)
+        append_ioc_by_type(result, third)
+        return result
+
     result: dict[IOCType, list[IOC]] = {}
     for ioc in iocs:
-        result.setdefault(ioc.type, []).append(ioc)
+        append_ioc_by_type(result, ioc)
     return result
+
+
+def append_ioc_by_type(grouped: dict[IOCType, list[IOC]], ioc: IOC) -> None:
+    """Append an IOC to a type grouping without setdefault's eager list allocation."""
+    group = grouped.get(ioc.type)
+    if group is None:
+        group = []
+        grouped[ioc.type] = group
+    group.append(ioc)

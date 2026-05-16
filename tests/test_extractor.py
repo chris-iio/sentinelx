@@ -4,6 +4,10 @@ Uses both iocextract and iocsearcher under the hood.
 Tests cover all required IOC types and edge cases.
 """
 
+from types import SimpleNamespace
+from unittest.mock import patch
+
+import app.pipeline.extractor as extractor_module
 from app.pipeline.extractor import extract_iocs
 
 
@@ -136,9 +140,73 @@ class TestExtractEdgeCases:
         results = extract_iocs("")
         assert results == []
 
+    def test_whitespace_only_input_skips_extraction_sources(self):
+        with (
+            patch("iocextract.extract_urls", side_effect=AssertionError("extract_urls should not run")),
+            patch("iocextract.extract_ipv4s", side_effect=AssertionError("extract_ipv4s should not run")),
+            patch("iocextract.extract_ipv6s", side_effect=AssertionError("extract_ipv6s should not run")),
+            patch("iocextract.extract_hashes", side_effect=AssertionError("extract_hashes should not run")),
+            patch(
+                "app.pipeline.extractor._searcher.search_data",
+                side_effect=AssertionError("iocsearcher should not run"),
+            ),
+        ):
+            assert extract_iocs(" \t\n  ") == []
+
+    def test_whitespace_only_input_uses_direct_presence_scan(self):
+        class NoStripText(str):
+            def strip(self, *_args, **_kwargs):
+                raise AssertionError("whitespace-only extraction fast path should not allocate strip output")
+
+        assert extract_iocs(NoStripText(" \t\n  ")) == []
+        assert "has_non_whitespace" in extractor_module.extract_iocs.__code__.co_names
+
     def test_no_iocs_text(self):
         results = extract_iocs("Hello world, no indicators here")
         assert results == []
+
+    def test_expected_extraction_errors_share_one_policy(self):
+        """All library extraction paths should use the shared expected-error tuple."""
+        source = extractor_module.extract_iocs.__code__.co_names
+
+        assert extractor_module._EXPECTED_EXTRACTION_ERRORS == (
+            ValueError,
+            TypeError,
+            AttributeError,
+            UnicodeError,
+        )
+        assert "_EXPECTED_EXTRACTION_ERRORS" in source
+
+    def test_expected_extraction_errors_fail_closed_without_warning(self):
+        """Expected library errors should be swallowed while other sources continue."""
+        with (
+            patch("iocextract.extract_urls", side_effect=ValueError("bad url")),
+            patch("iocextract.extract_ipv4s", return_value=["192.0.2.1"]),
+            patch("iocextract.extract_ipv6s", return_value=[]),
+            patch("iocextract.extract_hashes", return_value=[]),
+            patch("app.pipeline.extractor._searcher.search_data", return_value=[]),
+            patch("app.pipeline.extractor.logger.warning") as warning,
+        ):
+            results = extract_iocs("fixture")
+
+        assert results == [{"raw": "192.0.2.1", "type_hint": "ipv4"}]
+        warning.assert_not_called()
+
+    def test_candidate_cleanup_uses_index_trim_without_strip(self):
+        class NoStripCandidate(str):
+            def strip(self, *_args, **_kwargs):
+                raise AssertionError("candidate cleanup should avoid direct strip allocation")
+
+        with (
+            patch("iocextract.extract_urls", return_value=[NoStripCandidate("  http://evil.example  ")]),
+            patch("iocextract.extract_ipv4s", return_value=[]),
+            patch("iocextract.extract_ipv6s", return_value=[]),
+            patch("iocextract.extract_hashes", return_value=[]),
+            patch("app.pipeline.extractor._searcher.search_data", return_value=[]),
+        ):
+            results = extract_iocs("fixture")
+
+        assert results == [{"raw": "http://evil.example", "type_hint": "url"}]
 
     def test_returns_list_of_dicts(self):
         """Each result must be a dict with 'raw' and 'type_hint' keys."""
@@ -160,6 +228,30 @@ class TestDeduplicationInExtract:
         results = extract_iocs(text)
         raws = [r["raw"] for r in results if "192.168.1.1" in r["raw"]]
         assert len(raws) == 1
+
+    def test_dedup_appends_first_seen_candidates_directly(self):
+        """Duplicate raw values keep first type hint and first-seen output order."""
+        with (
+            patch("iocextract.extract_urls", return_value=["http://one.example", "http://dup.example"]),
+            patch("iocextract.extract_ipv4s", return_value=["192.0.2.10"]),
+            patch("iocextract.extract_ipv6s", return_value=[]),
+            patch("iocextract.extract_hashes", return_value=["http://dup.example"]),
+            patch(
+                "app.pipeline.extractor._searcher.search_data",
+                return_value=[
+                    SimpleNamespace(value="192.0.2.10", name="domain"),
+                    SimpleNamespace(value="CVE-2026-12345", name="cve"),
+                ],
+            ),
+        ):
+            results = extract_iocs("dedupe fixture")
+
+        assert results == [
+            {"raw": "http://one.example", "type_hint": "url"},
+            {"raw": "http://dup.example", "type_hint": "url"},
+            {"raw": "192.0.2.10", "type_hint": "ipv4"},
+            {"raw": "CVE-2026-12345", "type_hint": "cve"},
+        ]
 
 
 class TestExtractEmail:

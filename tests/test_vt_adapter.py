@@ -7,10 +7,18 @@ All HTTP calls are mocked using unittest.mock.patch — no real API calls.
 from __future__ import annotations
 
 import base64
+import builtins
+import inspect
+from types import MappingProxyType
 
 
 from app.enrichment.models import EnrichmentError, EnrichmentResult
-from app.enrichment.adapters.virustotal import VTAdapter
+from app.enrichment.adapters.virustotal import (
+    VTAdapter,
+    _parse_response,
+    _trim_base64_padding,
+    _virustotal_result,
+)
 from tests.helpers import (
     make_mock_response,
     make_domain_ioc,
@@ -84,6 +92,14 @@ def _make_adapter() -> VTAdapter:
     return VTAdapter(api_key=FAKE_API_KEY, allowed_hosts=ALLOWED_HOSTS)
 
 
+def test_supported_types_derive_from_endpoint_map() -> None:
+    """Supported VT types should stay locked to the endpoint map keys."""
+    from app.enrichment.adapters.virustotal import ENDPOINT_MAP
+
+    assert isinstance(ENDPOINT_MAP, MappingProxyType)
+    assert VTAdapter.supported_types == frozenset(ENDPOINT_MAP)
+
+
 class TestLookupSuccess:
     def test_lookup_ipv4_success(self) -> None:
         ioc = make_ipv4_ioc("1.2.3.4")
@@ -144,6 +160,15 @@ class TestLookupSuccess:
         assert f"/urls/{expected_id}" in call_url
         assert "evil.com" not in call_url
 
+    def test_url_id_padding_trim_uses_suffix_scan_without_strip(self) -> None:
+        class NoStripBase64(str):
+            def strip(self, *_args, **_kwargs):
+                raise AssertionError("VT URL id padding trim should not use generic strip")
+
+        assert _trim_base64_padding(NoStripBase64("YWJjZA==")) == "YWJjZA"
+        assert _trim_base64_padding(NoStripBase64("YWJjZA")) == "YWJjZA"
+        assert "strip" not in _trim_base64_padding.__code__.co_names
+
     def test_lookup_hash_sha256(self) -> None:
         sha256 = "a" * 64
         ioc = make_sha256_ioc(sha256)
@@ -184,6 +209,130 @@ class TestLookupSuccess:
         call_url = adapter._session.get.call_args[0][0]
         assert f"/files/{sha1}" in call_url
 
+    def test_total_engine_count_does_not_use_sum_helper(self, monkeypatch) -> None:
+        """VT stats parsing should compute engine totals in the stats scan."""
+        class NoItemsDict(dict):
+            def items(self):
+                raise AssertionError("VT stats parsing should scan stat keys directly")
+
+        ioc = make_ipv4_ioc("1.2.3.4")
+        body = {
+            "data": {
+                "type": "ip_address",
+                "id": "1.2.3.4",
+                "attributes": {
+                    "last_analysis_stats": NoItemsDict(
+                        {
+                            "malicious": 5,
+                            "suspicious": 0,
+                            "harmless": 60,
+                            "undetected": 8,
+                            "timeout": 0,
+                        }
+                    ),
+                    "last_analysis_date": 1700000000,
+                },
+            }
+        }
+
+        def fail_sum(*_args, **_kwargs):
+            raise AssertionError("VT stats parsing should not rescan via sum")
+
+        monkeypatch.setattr(builtins, "sum", fail_sum)
+
+        result = _parse_response(ioc, body)
+
+        assert isinstance(result, EnrichmentResult)
+        assert result.detection_count == 5
+        assert result.total_engines == 73
+
+    def test_engine_status_exclusions_use_static_frozenset(self) -> None:
+        """VT stats parsing should not rebuild excluded engine-status sets."""
+        from app.enrichment.adapters import virustotal
+
+        source = inspect.getsource(virustotal._parse_response)
+
+        assert '{"timeout", "type-unsupported"}' not in source
+        assert isinstance(virustotal._EXCLUDED_ENGINE_STATUSES, frozenset)
+        assert virustotal._EXCLUDED_ENGINE_STATUSES == frozenset(
+            ("timeout", "type-unsupported")
+        )
+
+    def test_top_detections_do_not_allocate_values_view(self) -> None:
+        """VT top detections should scan analysis result keys directly."""
+
+        class NoValuesDict(dict):
+            def values(self):
+                raise AssertionError("VT top detection parsing should not allocate a values view")
+
+        ioc = make_ipv4_ioc("1.2.3.4")
+        body = {
+            "data": {
+                "attributes": {
+                    "last_analysis_stats": {"malicious": 1},
+                    "last_analysis_results": NoValuesDict({
+                        "EngineA": {"category": "malicious", "result": "Trojan.A"},
+                        "EngineB": {"category": "malicious", "result": "Trojan.A"},
+                        "EngineC": {"category": "malicious", "result": "Dropper.C"},
+                    }),
+                },
+            },
+        }
+        mock_resp = make_mock_response(200, body)
+
+        adapter = _make_adapter()
+        mock_adapter_session(adapter, response=mock_resp)
+        result = adapter.lookup(ioc)
+
+        assert isinstance(result, EnrichmentResult)
+        assert result.raw_stats["top_detections"] == ["Trojan.A", "Dropper.C"]
+
+    def test_missing_analysis_maps_avoid_eager_default_dicts(self) -> None:
+        """Missing VT analysis maps should not allocate through dict.get defaults."""
+        class NoDefaultAttrs(dict):
+            def get(self, key, default=None):
+                if key in {"last_analysis_stats", "last_analysis_results"} and default is not None:
+                    raise AssertionError("VT analysis maps should avoid eager default dict allocation")
+                return super().get(key, default)
+
+        body = {
+            "data": {
+                "attributes": NoDefaultAttrs({
+                    "last_analysis_date": 1700000000,
+                }),
+            },
+        }
+
+        result = _parse_response(make_ipv4_ioc("1.2.3.4"), body)
+
+        assert result.verdict == "no_data"
+        assert result.detection_count == 0
+        assert result.total_engines == 0
+        assert result.raw_stats["top_detections"] == []
+        assert result.raw_stats["reputation"] == 0
+
+    def test_result_helper_preserves_provider_envelope(self) -> None:
+        """Parsed VT results should keep the provider envelope centralized."""
+        ioc = make_ipv4_ioc("1.2.3.4")
+        raw_stats = {"malicious": 5, "top_detections": ["Example"]}
+
+        result = _virustotal_result(
+            ioc=ioc,
+            verdict="malicious",
+            detection_count=5,
+            total_engines=73,
+            scan_date="2023-11-14T22:13:20+00:00",
+            raw_stats=raw_stats,
+        )
+
+        assert result.ioc is ioc
+        assert result.provider == "VirusTotal"
+        assert result.verdict == "malicious"
+        assert result.detection_count == 5
+        assert result.total_engines == 73
+        assert result.scan_date == "2023-11-14T22:13:20+00:00"
+        assert result.raw_stats is raw_stats
+
 
 class TestLookupErrors:
     def test_lookup_404_returns_no_data(self) -> None:
@@ -201,6 +350,11 @@ class TestLookupErrors:
             f"{result!r}"
         )
         assert result.verdict == "no_data"
+        assert result.detection_count == 0
+        assert result.total_engines == 0
+        assert result.scan_date is None
+        assert result.raw_stats == {}
+        assert 'no_data_result(ioc, "VirusTotal")' in inspect.getsource(VTAdapter.lookup)
 
     def test_lookup_429_returns_rate_limit_error(self) -> None:
         ioc = make_ipv4_ioc()

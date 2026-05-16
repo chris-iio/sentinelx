@@ -1,34 +1,29 @@
 """URLhaus URL/host/payload lookup adapter (abuse.ch)."""
 from __future__ import annotations
 
+from types import MappingProxyType
+
 from app.enrichment.adapters.base import BaseHTTPAdapter
-from app.enrichment.models import EnrichmentResult
+from app.enrichment.models import EnrichmentResult, provider_result
 from app.pipeline.models import IOC, IOCType
 
 URLHAUS_BASE = "https://urlhaus-api.abuse.ch"
 
 # Maps IOCType to (url_path, body_key) for POST requests
-_ENDPOINT_MAP: dict[IOCType, tuple[str, str]] = {
+_ENDPOINT_MAP = MappingProxyType({
     IOCType.URL: ("/v1/url/", "url"),
     IOCType.IPV4: ("/v1/host/", "host"),
     IOCType.IPV6: ("/v1/host/", "host"),
     IOCType.DOMAIN: ("/v1/host/", "host"),
     IOCType.MD5: ("/v1/payload/", "md5_hash"),
     IOCType.SHA256: ("/v1/payload/", "sha256_hash"),
-}
+})
 
 
 class URLhausAdapter(BaseHTTPAdapter):
     """URLhaus multi-endpoint lookup — see BaseHTTPAdapter for the template pattern."""
 
-    supported_types: frozenset[IOCType] = frozenset({
-        IOCType.URL,
-        IOCType.IPV4,
-        IOCType.IPV6,
-        IOCType.DOMAIN,
-        IOCType.MD5,
-        IOCType.SHA256,
-    })
+    supported_types: frozenset[IOCType] = frozenset(_ENDPOINT_MAP)
     name = "URLhaus"
     requires_api_key = True
     _http_method = "POST"
@@ -56,7 +51,8 @@ def _parse_response(ioc: IOC, body: dict, provider_name: str) -> EnrichmentResul
     query_status: str = body.get("query_status", "")
     urls_count: int = body.get("urls_count", 0) or 0
     tags: list[str] | None = body.get("tags")
-    blacklists: dict = body.get("blacklists", {}) or {}
+    raw_blacklists = body.get("blacklists")
+    blacklists = raw_blacklists if isinstance(raw_blacklists, dict) else {}
     signature: str | None = body.get("signature")
 
     if query_status == "is_listed":
@@ -73,13 +69,11 @@ def _parse_response(ioc: IOC, body: dict, provider_name: str) -> EnrichmentResul
         verdict = "no_data"
         detection_count = 0
 
-    return EnrichmentResult(
+    return _urlhaus_result(
         ioc=ioc,
         provider=provider_name,
         verdict=verdict,
         detection_count=detection_count,
-        total_engines=1,
-        scan_date=None,
         raw_stats={
             "query_status": query_status,
             "urls_count": urls_count,
@@ -87,4 +81,23 @@ def _parse_response(ioc: IOC, body: dict, provider_name: str) -> EnrichmentResul
             "blacklists": blacklists,
             "signature": signature,
         },
+    )
+
+
+def _urlhaus_result(
+    *,
+    ioc: IOC,
+    provider: str,
+    verdict: str,
+    detection_count: int,
+    raw_stats: dict,
+) -> EnrichmentResult:
+    return provider_result(
+        ioc=ioc,
+        provider=provider,
+        verdict=verdict,
+        detection_count=detection_count,
+        total_engines=1,
+        scan_date=None,
+        raw_stats=raw_stats,
     )

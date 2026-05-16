@@ -18,6 +18,10 @@ from app.enrichment.provider import Provider
 from app.pipeline.models import IOCType
 
 
+def _provider_supports_configured_type(provider: Provider, ioc_type: IOCType) -> bool:
+    return provider.is_configured() and ioc_type in provider.supported_types
+
+
 class ProviderRegistry:
     """Central registry for threat intelligence provider adapters.
 
@@ -57,7 +61,17 @@ class ProviderRegistry:
         Returns:
             List of all registered Provider objects.
         """
-        return list(self._providers.values())
+        if not self._providers:
+            return []
+
+        providers: list[Provider] = []
+        for name in self._providers:
+            providers.append(self._providers[name])
+        return providers
+
+    def registered_count(self) -> int:
+        """Return the number of registered providers without copying them."""
+        return len(self._providers)
 
     def configured(self) -> list[Provider]:
         """Return providers that are ready to make API requests.
@@ -68,7 +82,26 @@ class ProviderRegistry:
         Returns:
             List of configured Provider objects.
         """
-        return [p for p in self._providers.values() if p.is_configured()]
+        if not self._providers:
+            return []
+
+        providers: list[Provider] = []
+        for name in self._providers:
+            provider = self._providers[name]
+            if provider.is_configured():
+                providers.append(provider)
+        return providers
+
+    def configured_count(self) -> int:
+        """Return the number of configured providers without copying them."""
+        if not self._providers:
+            return 0
+
+        count = 0
+        for name in self._providers:
+            if self._providers[name].is_configured():
+                count += 1
+        return count
 
     def providers_for_type(self, ioc_type: IOCType) -> list[Provider]:
         """Return configured providers that support the given IOC type.
@@ -83,10 +116,15 @@ class ProviderRegistry:
         Returns:
             List of configured providers that can enrich this IOC type.
         """
-        return [
-            p for p in self._providers.values()
-            if p.is_configured() and ioc_type in p.supported_types
-        ]
+        if not self._providers:
+            return []
+
+        providers: list[Provider] = []
+        for name in self._providers:
+            provider = self._providers[name]
+            if _provider_supports_configured_type(provider, ioc_type):
+                providers.append(provider)
+        return providers
 
     def provider_count_for_type(self, ioc_type: IOCType) -> int:
         """Return number of configured providers supporting the given IOC type.
@@ -99,4 +137,12 @@ class ProviderRegistry:
         Returns:
             Count of configured providers that can enrich this IOC type.
         """
-        return len(self.providers_for_type(ioc_type))
+        if not self._providers:
+            return 0
+
+        count = 0
+        for name in self._providers:
+            provider = self._providers[name]
+            if _provider_supports_configured_type(provider, ioc_type):
+                count += 1
+        return count

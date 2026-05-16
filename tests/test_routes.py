@@ -8,9 +8,13 @@ Tests cover:
 - Polling endpoint: JSON structure, 404 for unknown jobs, result serialization
 - Edge cases: empty input, no IOCs, duplicate IOC deduplication
 """
+import json
+import inspect
+from types import MappingProxyType
 from unittest.mock import MagicMock, patch
 
-from tests.helpers import make_ipv4_ioc
+from app.pipeline.models import IOCType
+from tests.helpers import make_domain_ioc, make_ipv4_ioc
 
 
 # ---------------------------------------------------------------------------
@@ -48,6 +52,25 @@ def test_analyze_whitespace_only_input(client):
     assert b"No input provided" in response.data
 
 
+def test_analyze_uses_shared_text_presence_check(client, monkeypatch):
+    """Browser analyze should share the direct non-whitespace scanner."""
+    from app.routes import analysis as analysis_routes
+
+    calls: list[str] = []
+
+    def record_presence(value: str) -> bool:
+        calls.append(value)
+        return True
+
+    monkeypatch.setattr(analysis_routes, "has_non_whitespace", record_presence)
+    monkeypatch.setattr(analysis_routes, "run_pipeline", lambda _text: [])
+
+    response = client.post("/analyze", data={"text": "no indicators here", "mode": "offline"})
+
+    assert response.status_code == 200
+    assert calls == ["no indicators here"]
+
+
 def test_analyze_extracts_ipv4(client):
     """POST with text containing a defanged IPv4 returns the refanged IP in response."""
     response = client.post(
@@ -70,6 +93,80 @@ def test_analyze_groups_by_type(client):
     # Results page should contain group/accordion structure
     data = response.data
     assert b"grouped" in data or b"details" in data or b"summary" in data or b"ipv4" in data.lower()
+
+
+def test_analyze_groups_template_iocs_with_shared_group_helper(client, monkeypatch):
+    """Browser analyze should use the shared IOC grouping helper for template rendering."""
+    from app.routes import analysis as analysis_routes
+
+    iocs = [
+        make_ipv4_ioc("8.8.8.8"),
+        make_ipv4_ioc("1.1.1.1"),
+        make_domain_ioc("example.com"),
+    ]
+    monkeypatch.setattr(analysis_routes, "run_pipeline", lambda _text: iocs)
+
+    grouped = analysis_routes._group_iocs_for_template(iocs)
+    response = client.post("/analyze", data={"text": "8.8.8.8 example.com", "mode": "offline"})
+
+    assert grouped[IOCType.IPV4] == iocs[:2]
+    assert grouped[IOCType.DOMAIN] == [iocs[2]]
+    assert response.status_code == 200
+    assert b"8.8.8.8" in response.data
+
+
+def test_analyze_template_grouping_reuses_shared_group_helper(client, monkeypatch):
+    """Browser analyze should delegate to the optimized pipeline grouping helper."""
+    from app.routes import analysis as analysis_routes
+    from app.routes import _helpers as route_helpers
+
+    iocs = [
+        make_ipv4_ioc("8.8.8.8"),
+        make_ipv4_ioc("1.1.1.1"),
+        make_domain_ioc("example.com"),
+    ]
+    calls: list[list] = []
+
+    def group_once(seen_iocs):
+        calls.append(seen_iocs)
+        return {IOCType.IPV4: seen_iocs[:2], IOCType.DOMAIN: [seen_iocs[2]]}
+
+    monkeypatch.setattr(route_helpers, "group_by_type", group_once)
+
+    grouped = analysis_routes._group_iocs_for_template(iocs)
+
+    assert grouped[IOCType.IPV4] == iocs[:2]
+    assert grouped[IOCType.DOMAIN] == [iocs[2]]
+    assert calls == [iocs]
+    assert "group_by_type" in analysis_routes._group_iocs_for_template.__code__.co_names
+    assert "group_by_type" in route_helpers._group_iocs_for_template.__code__.co_names
+    assert "setdefault" not in analysis_routes._group_iocs_for_template.__code__.co_names
+
+
+def test_analyze_template_grouping_preserves_pipeline_short_paths() -> None:
+    """Route-level grouping should preserve pipeline empty/single/pair fast paths."""
+    from app.routes import analysis as analysis_routes
+
+    ioc_a = make_ipv4_ioc("8.8.8.8")
+    ioc_b = make_domain_ioc("example.com")
+
+    class NoIterIocs(list):
+        def __iter__(self):
+            raise AssertionError("route grouping should preserve shared short paths")
+
+        def __getitem__(self, index):
+            if isinstance(index, slice):
+                raise AssertionError("route grouping should not slice short IOC lists")
+            return super().__getitem__(index)
+
+    assert analysis_routes._group_iocs_for_template(NoIterIocs()) == {}
+    assert analysis_routes._group_iocs_for_template(NoIterIocs([ioc_a])) == {
+        IOCType.IPV4: [ioc_a],
+    }
+    assert analysis_routes._group_iocs_for_template(NoIterIocs([ioc_a, ioc_b])) == {
+        IOCType.IPV4: [ioc_a],
+        IOCType.DOMAIN: [ioc_b],
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -106,6 +203,15 @@ def test_invalid_host_returns_400(client, app):
 def test_debug_mode_is_false(app):
     """Flask app.debug is False (SEC-15)."""
     assert app.debug is False
+
+
+def test_testing_app_uses_isolated_sqlite_paths(app):
+    """Testing app factories should avoid the user home SQLite store."""
+    test_data_dir = app.config.get("TEST_DATA_DIR")
+
+    assert test_data_dir
+    assert str(app.cache_store._db_path).startswith(test_data_dir)
+    assert str(app.history_store._db_path).startswith(test_data_dir)
 
 
 def test_security_headers_present(client):
@@ -186,6 +292,36 @@ def test_analyze_no_iocs_found(client):
     assert b"No IOCs detected" in data or b"no_results" in data or b"No IOCs" in data
 
 
+def test_analyze_online_no_iocs_skips_enrichment_setup(client, monkeypatch):
+    """Online mode with no extracted IOCs renders no-results without provider setup."""
+    from app.routes import analysis as analysis_routes
+    from app.routes import _helpers as route_helpers
+
+    mock_registry = MagicMock()
+    mock_registry.configured.side_effect = AssertionError(
+        "zero-IOC online analysis should not check provider configuration"
+    )
+    client.application.registry = mock_registry
+
+    def fail_group_iocs(_iocs):
+        raise AssertionError("zero-IOC browser analysis should not group template IOCs")
+
+    monkeypatch.setattr(route_helpers, "_group_iocs_for_template", fail_group_iocs)
+
+    with patch("app.routes._helpers._enrichment_pool") as mock_pool:
+        response = client.post(
+            "/analyze",
+            data={"text": "Hello world, no indicators here", "mode": "online"},
+        )
+
+    assert response.status_code == 200
+    assert b"No IOCs detected" in response.data or b"No IOCs found" in response.data
+    assert b"data-job-id" not in response.data
+    mock_pool.submit.assert_not_called()
+    assert "no_results else _group_iocs_for_template" in inspect.getsource(route_helpers._ioc_template_context)
+    assert "_ioc_template_context" in inspect.getsource(analysis_routes.analyze)
+
+
 def test_analyze_deduplicates(client):
     """POST with duplicate IOC values returns deduplicated results (no doubles)."""
     text = (
@@ -237,6 +373,31 @@ def test_analyze_online_without_api_key_redirects_follows(client):
     assert b"provider" in response.data.lower() or b"configure" in response.data.lower()
 
 
+def test_analyze_online_without_api_key_skips_template_grouping(client, monkeypatch):
+    """Missing-provider online rejection should redirect before template IOC grouping."""
+    from app.routes import analysis as analysis_routes
+
+    mock_registry = MagicMock()
+    mock_registry.configured.return_value = []
+    client.application.registry = mock_registry
+
+    monkeypatch.setattr(
+        analysis_routes,
+        "_group_iocs_for_template",
+        lambda _iocs: (_ for _ in ()).throw(
+            AssertionError("missing-provider redirect should not group template IOCs")
+        ),
+    )
+
+    response = client.post(
+        "/analyze",
+        data={"text": "192[.]168[.]1[.]1", "mode": "online"},
+    )
+
+    assert response.status_code == 302
+    assert "/settings" in response.headers["Location"]
+
+
 def test_analyze_online_with_api_key_returns_job_id(client):
     """POST /analyze online mode with configured registry returns results page with job_id."""
     with (
@@ -261,6 +422,258 @@ def test_analyze_online_with_api_key_returns_job_id(client):
         assert response.status_code == 200
         # Pool submit must be called for background enrichment
         mock_pool.submit.assert_called_once()
+
+
+def test_provider_counts_metadata_uses_direct_count_path():
+    """Provider-count page metadata should not allocate provider lists or comprehension frames."""
+    from app.routes.analysis import _PROVIDER_COUNT_IOC_TYPES, _provider_counts_json
+
+    mock_registry = MagicMock()
+    mock_registry.provider_count_for_type.side_effect = (
+        lambda ioc_type: 3 if ioc_type == IOCType.SHA256 else 1
+    )
+    mock_registry.providers_for_type.side_effect = AssertionError(
+        "provider-count metadata should use provider_count_for_type"
+    )
+
+    provider_counts = json.loads(_provider_counts_json(mock_registry))
+
+    assert provider_counts["sha256"] == 3
+    assert provider_counts["ipv4"] == 1
+    assert "cve" not in provider_counts
+    assert IOCType.CVE not in _PROVIDER_COUNT_IOC_TYPES
+    assert tuple(_PROVIDER_COUNT_IOC_TYPES) is _PROVIDER_COUNT_IOC_TYPES
+    assert "_PROVIDER_COUNT_IOC_TYPES" in _provider_counts_json.__code__.co_names
+    assert "encode_json_object" in _provider_counts_json.__code__.co_names
+    assert mock_registry.providers_for_type.call_count == 0
+    assert all(
+        getattr(const, "co_name", None) != "<dictcomp>"
+        for const in _provider_counts_json.__code__.co_consts
+    )
+
+
+def test_provider_coverage_reuses_configured_provider_list():
+    """Provider coverage should reuse configured providers and count registered providers directly."""
+    from app.routes.analysis import _provider_coverage
+
+    configured_providers = [MagicMock()]
+    mock_registry = MagicMock()
+    mock_registry.registered_count.return_value = 2
+    mock_registry.all.side_effect = AssertionError(
+        "provider coverage should not allocate all registered providers"
+    )
+    mock_registry.configured.side_effect = AssertionError(
+        "provider coverage should reuse the caller's configured-provider list"
+    )
+
+    coverage = _provider_coverage(mock_registry, configured_providers)
+
+    assert coverage == {"registered": 2, "configured": 1, "needs_key": 1}
+    mock_registry.registered_count.assert_called_once()
+    assert mock_registry.all.call_count == 0
+    assert mock_registry.configured.call_count == 0
+
+
+def test_online_fanout_diagnostics_uses_direct_count_path():
+    """Admission diagnostics should count fanout without allocating provider lists."""
+    from app.routes._helpers import _online_fanout_diagnostics
+    from app.pipeline.models import IOC
+
+    mock_registry = MagicMock()
+    mock_registry.provider_count_for_type.return_value = 2
+    mock_registry.providers_for_type.side_effect = AssertionError(
+        "fanout diagnostics should use provider_count_for_type"
+    )
+    iocs = [
+        IOC(type=IOCType.IPV4, value="1.2.3.4", raw_match="1.2.3.4"),
+        IOC(type=IOCType.IPV4, value="5.6.7.8", raw_match="5.6.7.8"),
+    ]
+
+    diagnostics = _online_fanout_diagnostics(
+        iocs,
+        mock_registry,
+        max_iocs=10,
+        max_dispatches=10,
+    )
+
+    assert diagnostics["dispatch_count"] == 4
+    assert diagnostics["provider_counts_by_type"] == {"ipv4": 2}
+    assert mock_registry.provider_count_for_type.call_count == 1
+    assert mock_registry.providers_for_type.call_count == 0
+
+
+def test_enrichable_count_caches_provider_counts_by_ioc_type():
+    """Progress totals should not recount providers for repeated IOC types."""
+    from app.routes.analysis import _enrichable_count
+
+    mock_registry = MagicMock()
+    mock_registry.provider_count_for_type.side_effect = (
+        lambda ioc_type: 2 if ioc_type == IOCType.IPV4 else 3
+    )
+    mock_registry.providers_for_type.side_effect = AssertionError(
+        "enrichable progress count should use provider_count_for_type"
+    )
+    iocs = [
+        make_ipv4_ioc("1.2.3.4"),
+        make_ipv4_ioc("5.6.7.8"),
+        make_domain_ioc("example.com"),
+    ]
+
+    count = _enrichable_count(iocs, mock_registry)
+
+    assert count == 7
+    assert mock_registry.provider_count_for_type.call_count == 2
+    assert mock_registry.provider_count_for_type.call_args_list[0].args == (IOCType.IPV4,)
+    assert mock_registry.provider_count_for_type.call_args_list[1].args == (IOCType.DOMAIN,)
+    assert mock_registry.providers_for_type.call_count == 0
+
+
+def test_analyze_online_reuses_fanout_dispatch_count_for_progress_total(client, monkeypatch):
+    """Online browser progress should reuse admission fanout instead of recounting providers."""
+    from app.pipeline.models import IOC
+    from app.routes import analysis as analysis_routes
+
+    iocs = [
+        IOC(type=IOCType.IPV4, value="8.8.8.8", raw_match="8.8.8.8"),
+        IOC(type=IOCType.IPV4, value="1.1.1.1", raw_match="1.1.1.1"),
+    ]
+    monkeypatch.setattr(analysis_routes, "run_pipeline", lambda _text: iocs)
+    monkeypatch.setattr(
+        analysis_routes,
+        "_provider_counts_json",
+        lambda _registry: "{}",
+    )
+    mock_registry = MagicMock()
+    mock_registry.configured.return_value = [MagicMock()]
+    mock_registry.all.return_value = [MagicMock()]
+    mock_registry.provider_count_for_type.return_value = 2
+    client.application.registry = mock_registry
+
+    with (
+        patch("app.routes._helpers.EnrichmentOrchestrator") as MockOrchestrator,
+        patch("app.routes._helpers._enrichment_pool"),
+    ):
+        MockOrchestrator.return_value = MagicMock()
+        response = client.post(
+            "/analyze",
+            data={"text": "8.8.8.8 1.1.1.1", "mode": "online"},
+        )
+
+    assert response.status_code == 200
+    assert b"0/4" in response.data or b"Enriching 0/4" in response.data
+    assert mock_registry.provider_count_for_type.call_count == 1
+
+
+class _BoundedKeyDict(dict):
+    def __init__(self, pairs, *, max_reads: int):
+        super().__init__()
+        self._pairs = pairs
+        self.max_reads = max_reads
+        self.reads = 0
+        self._values = dict(pairs)
+
+    def __iter__(self):
+        for key, _value in self._pairs:
+            self.reads += 1
+            if self.reads > self.max_reads:
+                raise AssertionError("diagnostic coercion should stop at the export cap")
+            yield key
+
+    def __getitem__(self, key):
+        return self._values[key]
+
+    def items(self):
+        raise AssertionError("diagnostic coercion should avoid items-view allocation")
+
+
+class _NoSliceList(list):
+    def __getitem__(self, index):
+        if isinstance(index, slice):
+            raise AssertionError("diagnostic list coercion should use bounded iteration")
+        return super().__getitem__(index)
+
+
+def test_orchestration_diagnostics_export_coercion_uses_bounded_iteration():
+    """Diagnostic export coercion should not materialize entries beyond its caps."""
+    from app.routes._helpers import _coerce_orchestration_diagnostics_for_export
+
+    child = _BoundedKeyDict(
+        [(f"child-{index}", index) for index in range(45)],
+        max_reads=40,
+    )
+    raw = _BoundedKeyDict(
+        [("nested", child), *[(f"key-{index}", index) for index in range(44)]],
+        max_reads=40,
+    )
+
+    diagnostics = _coerce_orchestration_diagnostics_for_export(raw)
+
+    assert raw.reads == 40
+    assert child.reads == 40
+    assert "key-38" in diagnostics
+    assert "key-39" not in diagnostics
+    assert diagnostics["nested"]["child-39"] == 39
+    assert "child-40" not in diagnostics["nested"]
+
+
+def test_orchestration_diagnostics_export_coercion_does_not_slice_lists():
+    """Diagnostic export list caps should not allocate a sliced copy."""
+    from app.routes._helpers import _coerce_orchestration_diagnostics_for_export
+
+    raw = {"events": _NoSliceList(f"event-{index}" for index in range(30))}
+
+    diagnostics = _coerce_orchestration_diagnostics_for_export(raw)
+
+    assert diagnostics["events"][0] == "event-0"
+    assert diagnostics["events"][-1] == "event-24"
+    assert len(diagnostics["events"]) == 25
+
+
+def test_orchestration_diagnostics_export_coercion_accumulates_lists_directly():
+    """Diagnostic export list coercion should not allocate a list-comprehension frame."""
+    from app.routes._helpers import _coerce_orchestration_diagnostics_for_export
+
+    nested_code_names = {
+        const.co_name
+        for const in _coerce_orchestration_diagnostics_for_export.__code__.co_consts
+        if hasattr(const, "co_name")
+    }
+
+    assert "<listcomp>" not in nested_code_names
+    assert _coerce_orchestration_diagnostics_for_export({"events": ["ok", object()]}) == {
+        "events": ["ok"]
+    }
+
+
+def test_orchestration_status_string_coercion_avoids_strip_allocation():
+    """Diagnostic status strings should trim through the shared bounded index helper."""
+    from app.routes import _helpers
+
+    source = inspect.getsource(_helpers._coerce_orchestration_status_for_diagnostics)
+    assert '("total", "done")' not in source
+    assert '("complete", "terminal")' not in source
+    assert '("status", "terminal_reason", "error")' not in source
+
+    class MeasuredStripText(str):
+        strip_calls = 0
+
+        def strip(self, *_args, **_kwargs):
+            raise AssertionError("diagnostic status coercion should not allocate through strip()")
+
+    status = _helpers._coerce_orchestration_status_for_diagnostics({
+        "total": 1,
+        "done": 1,
+        "complete": True,
+        "terminal": False,
+        "status": MeasuredStripText(" running "),
+        "terminal_reason": MeasuredStripText("   "),
+        "error": MeasuredStripText(" failed "),
+    })
+
+    assert status["status"] == "running"
+    assert "terminal_reason" not in status
+    assert status["error"] == "failed"
+    assert MeasuredStripText.strip_calls == 0
 
 
 def test_analyze_online_creates_all_three_adapters(client):
@@ -291,6 +704,7 @@ def test_analyze_online_creates_all_three_adapters(client):
         assert mock_provider_vt in adapters_passed
         assert mock_provider_mb in adapters_passed
         assert mock_provider_tf in adapters_passed
+        assert mock_registry.configured.call_count == 1
 
 
 def test_enrichable_count_multi_provider(client):
@@ -362,6 +776,7 @@ def test_analyze_online_rejects_ioc_limit_before_launch(client):
     mock_registry.configured.return_value = [mock_provider]
     mock_registry.all.return_value = [mock_provider]
     mock_registry.providers_for_type.return_value = [mock_provider]
+    mock_registry.provider_count_for_type.return_value = 1
     client.application.registry = mock_registry
     client.application.config["ONLINE_MAX_IOCS"] = 1
     client.application.config["ONLINE_MAX_DISPATCHES"] = 200
@@ -379,6 +794,33 @@ def test_analyze_online_rejects_ioc_limit_before_launch(client):
     mock_pool.submit.assert_not_called()
 
 
+def test_analyze_online_uses_shared_limit_config_helper(client):
+    """HTML online admission should read limits through the shared helper."""
+    mock_provider = MagicMock()
+    mock_registry = MagicMock()
+    mock_registry.configured.return_value = [mock_provider]
+    mock_registry.all.return_value = [mock_provider]
+    mock_registry.providers_for_type.return_value = [mock_provider]
+    mock_registry.provider_count_for_type.return_value = 1
+    client.application.registry = mock_registry
+    client.application.config["ONLINE_MAX_IOCS"] = 50
+    client.application.config["ONLINE_MAX_DISPATCHES"] = 200
+
+    with (
+        patch("app.routes.analysis._online_limits_from_config", return_value=(1, 200)) as limits,
+        patch("app.routes._helpers._enrichment_pool") as mock_pool,
+    ):
+        response = client.post(
+            "/analyze",
+            data={"text": "192.168.1.1 10.0.0.1", "mode": "online"},
+        )
+
+    assert response.status_code == 200
+    assert b"Online enrichment was not started" in response.data
+    limits.assert_called_once_with()
+    mock_pool.submit.assert_not_called()
+
+
 def test_analyze_online_rejects_dispatch_limit_before_launch(client):
     """HTML online mode rejects excessive provider fanout before background work."""
     providers = [MagicMock(), MagicMock()]
@@ -386,6 +828,7 @@ def test_analyze_online_rejects_dispatch_limit_before_launch(client):
     mock_registry.configured.return_value = providers
     mock_registry.all.return_value = providers
     mock_registry.providers_for_type.return_value = providers
+    mock_registry.provider_count_for_type.return_value = 2
     client.application.registry = mock_registry
     client.application.config["ONLINE_MAX_IOCS"] = 50
     client.application.config["ONLINE_MAX_DISPATCHES"] = 1
@@ -633,6 +1076,144 @@ def test_enrichment_status_serializes_cached_at_only_for_cached_rows(client):
         routes_module._orchestrators.pop(job_id, None)
 
 
+def test_enrichment_status_reads_cached_markers_once_per_payload(client):
+    """Polling serialization should reuse the cached marker map for the whole tail."""
+    import app.routes._helpers as routes_module
+    from app.enrichment.models import EnrichmentResult
+
+    class CountingStatus(dict):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.cached_marker_gets = 0
+
+        def get(self, key, default=None):
+            if key == "cached_markers":
+                self.cached_marker_gets += 1
+            return super().get(key, default)
+
+    results = [
+        EnrichmentResult(
+            ioc=make_ipv4_ioc(f"192.0.2.{index}"),
+            provider="CachedProvider",
+            verdict="clean",
+            detection_count=0,
+            total_engines=5,
+            scan_date=None,
+            raw_stats={},
+        )
+        for index in range(1, 4)
+    ]
+    status = CountingStatus(
+        {
+            "total": 3,
+            "done": 3,
+            "complete": True,
+            "results": results,
+            "next_since": 3,
+            "status": "complete",
+            "terminal": False,
+            "terminal_reason": None,
+            "error": None,
+            "cached_markers": {
+                f"{result.ioc.value}|{result.provider}": "2026-04-25T00:00:00Z"
+                for result in results
+            },
+        }
+    )
+    mock_orchestrator = MagicMock(spec_set=["get_incremental_status", "get_status"])
+    mock_orchestrator.get_incremental_status.return_value = status
+    mock_orchestrator.get_status.side_effect = AssertionError(
+        "_get_enrichment_status should not fall back to get_status()"
+    )
+
+    job_id = "cachedmarkersonce123"
+    routes_module._orchestrators[job_id] = mock_orchestrator
+
+    try:
+        response = client.get(f"/enrichment/status/{job_id}")
+        assert response.status_code == 200
+        data = response.get_json()
+        assert len(data["results"]) == 3
+        assert status.cached_marker_gets == 1
+        nested_code_names = {
+            const.co_name
+            for const in routes_module._get_enrichment_status.__code__.co_consts
+            if hasattr(const, "co_name")
+        }
+        assert "<listcomp>" not in nested_code_names
+    finally:
+        routes_module._orchestrators.pop(job_id, None)
+
+
+def test_serialize_result_skips_empty_cached_marker_map():
+    """Empty cached-marker maps should not build per-result cache lookup keys."""
+    from app.enrichment.models import EnrichmentResult
+    from app.routes._helpers import _serialize_result
+
+    class EmptyMarkerMap(dict):
+        def get(self, key, default=None):
+            raise AssertionError("empty cached markers should not be queried per result")
+
+    result = EnrichmentResult(
+        ioc=make_ipv4_ioc("192.0.2.10"),
+        provider="CachedProvider",
+        verdict="clean",
+        detection_count=0,
+        total_engines=5,
+        scan_date=None,
+        raw_stats={},
+    )
+
+    serialized = _serialize_result(result, EmptyMarkerMap())
+
+    assert serialized["ioc_value"] == "192.0.2.10"
+    assert "cached_at" not in serialized
+
+
+def test_serialize_results_shared_direct_accumulation(monkeypatch):
+    """Batch result serialization should use the shared per-result serializer path."""
+    import app.routes._helpers as routes_module
+
+    calls = []
+    cached_markers = {"192.0.2.10|CachedProvider": "2026-04-25T00:00:00Z"}
+
+    def serialize_result(result, markers=None):
+        calls.append((result, markers))
+        return {"value": result}
+
+    monkeypatch.setattr(routes_module, "_serialize_result", serialize_result)
+
+    class NoIterResults(list):
+        def __iter__(self):
+            raise AssertionError("short result serialization should not iterate")
+
+    assert routes_module._serialize_results([], cached_markers) == []
+    assert routes_module._serialize_results(NoIterResults(["only"]), cached_markers) == [{"value": "only"}]
+    serialized = routes_module._serialize_results(NoIterResults(["first", "second"]), cached_markers)
+    triple_serialized = routes_module._serialize_results(
+        NoIterResults(["first", "second", "third"]),
+        cached_markers,
+    )
+    nested_code_names = {
+        const.co_name
+        for const in routes_module._serialize_results.__code__.co_consts
+        if hasattr(const, "co_name")
+    }
+
+    assert serialized == [{"value": "first"}, {"value": "second"}]
+    assert triple_serialized == [{"value": "first"}, {"value": "second"}, {"value": "third"}]
+    assert calls == [
+        ("only", cached_markers),
+        ("first", cached_markers),
+        ("second", cached_markers),
+        ("first", cached_markers),
+        ("second", cached_markers),
+        ("third", cached_markers),
+    ]
+    assert "<listcomp>" not in nested_code_names
+    assert "len" in routes_module._serialize_results.__code__.co_names
+
+
 def test_enrichment_status_job_failed_payload_stays_truthful(client):
     """Orchestrator terminal failures stay terminal without being collapsed into 404 tombstones."""
     import app.routes._helpers as routes_module
@@ -672,6 +1253,29 @@ def test_enrichment_status_job_failed_payload_stays_truthful(client):
         routes_module._orchestrators.pop(job_id, None)
 
 
+def test_status_payload_uses_explicit_next_since_without_measuring_results() -> None:
+    """Status payloads should not measure retained results when next_since is explicit."""
+    from app.routes._helpers import _build_status_payload
+
+    class NoLenResults:
+        def __len__(self):
+            raise AssertionError("explicit next_since should skip result-length fallback")
+
+    payload = _build_status_payload(
+        {
+            "total": 10,
+            "done": 2,
+            "complete": False,
+            "results": NoLenResults(),
+            "next_since": 7,
+        },
+        [],
+    )
+
+    assert payload["next_since"] == 7
+    assert payload["status"] == "running"
+
+
 def test_enrichment_status_evicted_job_returns_terminal_payload(client):
     """Registry-level eviction returns an explicit terminal eviction payload."""
     import app.routes._helpers as routes_module
@@ -696,6 +1300,162 @@ def test_enrichment_status_evicted_job_returns_terminal_payload(client):
         assert data["next_since"] == 4
     finally:
         routes_module._terminal_jobs.pop(job_id, None)
+
+
+def test_enrichment_status_not_found_reasons_use_static_membership_set(client):
+    """404 terminal reason checks should reuse a static membership table."""
+    import app.routes._helpers as routes_module
+
+    source = inspect.getsource(routes_module._get_enrichment_status)
+    assert '{"unknown", "evicted"}' not in source
+    assert "_STATUS_NOT_FOUND_REASONS" in source
+    assert routes_module._STATUS_NOT_FOUND_REASONS == frozenset(("unknown", "evicted"))
+
+    mock_orchestrator = _build_incremental_snapshot_orchestrator(
+        [],
+        total=1,
+        done=0,
+        complete=True,
+        terminal=True,
+        terminal_reason="job_failed",
+        error="Provider lookup crashed.",
+    )
+    job_id = "failedterminal123"
+    routes_module._orchestrators[job_id] = mock_orchestrator
+
+    try:
+        response = client.get(f"/enrichment/status/{job_id}?since=1")
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["terminal"] is True
+        assert data["terminal_reason"] == "job_failed"
+    finally:
+        routes_module._orchestrators.pop(job_id, None)
+
+
+def test_orchestration_diagnostics_evicted_job_copies_terminal_snapshot_directly():
+    """Diagnostic tombstone snapshots should avoid constructor-copying terminal jobs."""
+    import app.routes._helpers as routes_module
+
+    job_id = "diagsevicted123"
+    routes_module._terminal_jobs[job_id] = routes_module._terminal_status(
+        job_id,
+        reason="evicted",
+        error="Enrichment job status was evicted from memory.",
+        since=2,
+    )
+
+    try:
+        snapshot = routes_module.get_orchestration_diagnostics_snapshot(job_id)
+        source = inspect.getsource(routes_module.get_orchestration_diagnostics_snapshot)
+
+        assert "dict(_terminal_jobs.get" not in source
+        assert snapshot == {
+            "job_id": job_id,
+            "found": False,
+            "reason": "evicted",
+            "terminal": True,
+        }
+    finally:
+        routes_module._terminal_jobs.pop(job_id, None)
+
+
+def test_orchestration_diagnostics_job_id_normalization_avoids_strip_allocation():
+    """Diagnostic job-id normalization should trim through the shared index helper."""
+    import app.routes._helpers as routes_module
+
+    class NoStripJobId(str):
+        def strip(self, *_args, **_kwargs):
+            raise AssertionError("diagnostic job-id normalization should avoid direct strip allocation")
+
+    class JobIdWrapper:
+        def __str__(self) -> str:
+            return NoStripJobId(" diagstripjob123 ")
+
+    job_id = "diagstripjob123"
+    routes_module._terminal_jobs[job_id] = routes_module._terminal_status(
+        job_id,
+        reason="evicted",
+        error="Enrichment job status was evicted from memory.",
+        since=0,
+    )
+
+    try:
+        snapshot = routes_module.get_orchestration_diagnostics_snapshot(JobIdWrapper())
+
+        assert snapshot["job_id"] == job_id
+        assert snapshot["found"] is False
+        assert snapshot["reason"] == "evicted"
+        assert "strip" not in routes_module.get_orchestration_diagnostics_snapshot.__code__.co_names
+    finally:
+        routes_module._terminal_jobs.pop(job_id, None)
+
+
+def test_route_snapshot_helpers_share_mapping_copy_contract():
+    """Route diagnostic snapshots should share one constructor-free copy helper."""
+    import app.routes._helpers as routes_module
+
+    class NoIterEmptyDict(dict):
+        def __iter__(self):
+            raise AssertionError("empty mapping copy should not iterate")
+
+    class SingleReadDict(dict):
+        reads = 0
+
+        def __iter__(self):
+            for key in super().__iter__():
+                type(self).reads += 1
+                if type(self).reads > 1:
+                    raise AssertionError("single mapping copy should stop after one key")
+                yield key
+
+    class PairReadDict(dict):
+        reads = 0
+
+        def __iter__(self):
+            for key in super().__iter__():
+                type(self).reads += 1
+                if type(self).reads > 2:
+                    raise AssertionError("pair mapping copy should stop after two keys")
+                yield key
+
+    source = inspect.getsource(routes_module)
+    single = SingleReadDict({"count": 1})
+    pair = PairReadDict({"terminal": True, "terminal_reason": "evicted"})
+
+    assert routes_module._copy_mapping({"count": 1}) == {"count": 1}
+    assert routes_module._copy_mapping(None) == {}
+    assert routes_module._copy_mapping(NoIterEmptyDict()) == {}
+    assert isinstance(routes_module._HISTORY_SAVE_DIAGNOSTICS_DEFAULTS, MappingProxyType)
+    assert routes_module._copy_mapping(routes_module._HISTORY_SAVE_DIAGNOSTICS_DEFAULTS)["last_outcome"] == "never"
+    assert routes_module._copy_mapping(single) == {"count": 1}
+    assert routes_module._copy_mapping(pair) == {"terminal": True, "terminal_reason": "evicted"}
+    assert SingleReadDict.reads == 1
+    assert PairReadDict.reads == 2
+    assert "_copy_mapping" in routes_module._history_save_diagnostics_defaults.__code__.co_names
+    assert "_copy_mapping" in routes_module._copy_history_save_diagnostics.__code__.co_names
+    assert "_copy_mapping" in routes_module._copy_terminal_job_snapshot.__code__.co_names
+    assert "len" in routes_module._copy_mapping.__code__.co_names
+    assert "dict(_terminal_jobs.get" not in source
+
+
+def test_history_save_diagnostic_updates_share_identity_preserving_replace_helper():
+    """History-save diagnostic writers should reuse one clear/update path."""
+    import app.routes._helpers as routes_module
+
+    routes_module._reset_history_save_diagnostics()
+    diagnostics_id = id(routes_module._history_save_diagnostics)
+
+    routes_module._record_history_save_attempt()
+    snapshot = routes_module.get_history_save_diagnostics()
+
+    assert id(routes_module._history_save_diagnostics) == diagnostics_id
+    assert snapshot["attempts"] == 1
+    assert "_replace_history_save_diagnostics" in routes_module._record_history_save_attempt.__code__.co_names
+    assert "_replace_history_save_diagnostics" in routes_module._record_history_save_outcome.__code__.co_names
+    assert "_replace_history_save_diagnostics" in routes_module._reset_history_save_diagnostics.__code__.co_names
+
+    routes_module._reset_history_save_diagnostics()
 
 
 # ---------------------------------------------------------------------------

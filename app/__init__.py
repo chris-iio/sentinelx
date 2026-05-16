@@ -10,6 +10,8 @@ Security scaffold is established here, before any routes are registered:
 """
 import logging
 import os
+import tempfile
+from pathlib import Path
 
 from flask import Flask
 from flask_limiter import Limiter
@@ -81,8 +83,18 @@ def create_app(config_override: dict | None = None) -> Flask:
     from .cache.store import CacheStore
     from .enrichment.history_store import HistoryStore
 
-    app.cache_store = CacheStore()
-    app.history_store = HistoryStore()
+    cache_db_path = app.config.get("CACHE_DB_PATH")
+    history_db_path = app.config.get("HISTORY_DB_PATH")
+    if app.config.get("TESTING") and (cache_db_path is None or history_db_path is None):
+        test_data_dir = Path(tempfile.mkdtemp(prefix="sentinelx-test-"))
+        if cache_db_path is None:
+            cache_db_path = test_data_dir / "cache.db"
+        if history_db_path is None:
+            history_db_path = test_data_dir / "history.db"
+        app.config["TEST_DATA_DIR"] = str(test_data_dir)
+
+    app.cache_store = CacheStore(Path(cache_db_path) if cache_db_path is not None else None)
+    app.history_store = HistoryStore(Path(history_db_path) if history_db_path is not None else None)
 
     # Registry is built once at startup and cached on the app.  Rebuilt only
     # when settings are saved (settings_post route invalidates it).

@@ -25,9 +25,11 @@ import re
 import shutil
 import subprocess
 import sys
-from dataclasses import asdict, dataclass, field
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from enum import IntEnum
 from pathlib import Path
+from types import MappingProxyType
 
 # ---------------------------------------------------------------------------
 # Data model
@@ -40,7 +42,16 @@ class Severity(IntEnum):
     CRITICAL = 3
 
 
-@dataclass(frozen=True)
+_SEVERITY_SORT_ORDER = MappingProxyType({"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3})
+_ZERO_SEVERITY_COUNTS = MappingProxyType({
+    "CRITICAL": 0,
+    "HIGH": 0,
+    "MEDIUM": 0,
+    "LOW": 0,
+})
+
+
+@dataclass(frozen=True, slots=True)
 class Finding:
     file: str
     line: int
@@ -51,7 +62,7 @@ class Finding:
     fix: str
 
 
-@dataclass
+@dataclass(slots=True)
 class ScanReport:
     findings: list[Finding] = field(default_factory=list)
     bandit_ran: bool = False
@@ -59,20 +70,45 @@ class ScanReport:
     bandit_total: int = 0
     pip_audit_ran: bool = False
     pip_audit_vulns: int = 0
+    _counts_cache: dict[str, int] | None = field(default=None, init=False, repr=False)
 
     @property
     def counts(self) -> dict[str, int]:
-        counts: dict[str, int] = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
-        for f in self.findings:
-            counts[f.severity] = counts.get(f.severity, 0) + 1
+        if self._counts_cache is None:
+            self._counts_cache = count_findings_by_severity(self.findings)
+        return copy_counts_by_severity(self._counts_cache)
+
+
+def count_findings_by_severity(findings: list[Finding]) -> dict[str, int]:
+    """Count findings by severity in one scan."""
+    finding_count = len(findings)
+    if finding_count == 0:
+        return copy_counts_by_severity(_ZERO_SEVERITY_COUNTS)
+    counts: dict[str, int] = copy_counts_by_severity(_ZERO_SEVERITY_COUNTS)
+    if finding_count == 1:
+        finding = findings[0]
+        counts[finding.severity] = counts.get(finding.severity, 0) + 1
         return counts
+    for finding in findings:
+        counts[finding.severity] = counts.get(finding.severity, 0) + 1
+    return counts
+
+
+def copy_counts_by_severity(counts: Mapping[str, int]) -> dict[str, int]:
+    """Return a mutation-isolated copy of the fixed severity-count map."""
+    return {
+        "CRITICAL": counts["CRITICAL"],
+        "HIGH": counts["HIGH"],
+        "MEDIUM": counts["MEDIUM"],
+        "LOW": counts["LOW"],
+    }
 
 
 # ---------------------------------------------------------------------------
 # Rules — each rule is (regex, file_glob, severity, rule_id, message, fix)
 # ---------------------------------------------------------------------------
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Rule:
     pattern: str
     glob: str
@@ -376,35 +412,39 @@ RULES: list[Rule] = [
 # File exclusions
 # ---------------------------------------------------------------------------
 
-EXCLUDE_DIRS = {
+EXCLUDE_DIRS = frozenset((
     ".venv", "venv", "env", "ENV", ".env",
     "node_modules", "__pycache__", ".git",
     ".ruff_cache", ".pytest_cache", ".mypy_cache",
     "htmlcov", "dist", "build", ".tox",
     "everything-claude-code", ".planning",
     "tools",  # exclude the scanner itself
-}
+))
 
-EXCLUDE_FILES = {
+EXCLUDE_FILES = frozenset((
     ".secrets.baseline",
     "bandit-report.json",
     "security_check.py",  # exclude the scanner itself
-}
+))
 
-TEST_INDICATORS = {"test_", "conftest", "tests/", "testing/"}
+TEST_INDICATORS = frozenset(("test_", "conftest", "tests/", "testing/"))
+BANDIT_FAIL_SEVERITIES = frozenset(("HIGH", "MEDIUM"))
 
 
 def _is_test_file(path: Path) -> bool:
     """Check if a file path looks like a test file."""
     path_str = str(path)
-    return any(indicator in path_str for indicator in TEST_INDICATORS)
+    for indicator in TEST_INDICATORS:
+        if indicator in path_str:
+            return True
+    return False
 
 
 def _should_skip(path: Path) -> bool:
     """Check if a file/directory should be excluded from scanning."""
-    parts = set(path.parts)
-    if parts & EXCLUDE_DIRS:
-        return True
+    for part in path.parts:
+        if part in EXCLUDE_DIRS:
+            return True
     if path.name in EXCLUDE_FILES:
         return True
     return False
@@ -425,18 +465,28 @@ def collect_files(root: Path, glob_pattern: str) -> list[Path]:
 
 def scan_file(filepath: Path, rule: Rule) -> list[Finding]:
     """Scan a single file against a single rule."""
-    findings: list[Finding] = []
     try:
         text = filepath.read_text(encoding="utf-8", errors="replace")
     except OSError:
-        return findings
+        return []
 
     regex = re.compile(rule.pattern, re.IGNORECASE)
-    for lineno, line in enumerate(text.splitlines(), start=1):
+    return scan_text(filepath, text, rule, regex)
+
+
+def scan_text(filepath: Path, text: str, rule: Rule, regex: re.Pattern[str]) -> list[Finding]:
+    """Scan already-read file text against one compiled rule."""
+    findings: list[Finding] = []
+    lineno = 1
+    start = 0
+    text_length = len(text)
+    while start < text_length:
+        end = start
+        while end < text_length and text[end] not in "\r\n":
+            end += 1
+        line = text[start:end]
         # Skip nosec-suppressed lines
-        if "nosec" in line or "noqa" in line:
-            continue
-        if regex.search(line):
+        if "nosec" not in line and "noqa" not in line and regex.search(line):
             findings.append(
                 Finding(
                     file=str(filepath),
@@ -444,34 +494,97 @@ def scan_file(filepath: Path, rule: Rule) -> list[Finding]:
                     severity=rule.severity,
                     rule_id=rule.rule_id,
                     message=rule.message,
-                    snippet=line.strip()[:120],
+                    snippet=bounded_stripped_snippet(line),
                     fix=rule.fix,
                 )
             )
+        if end < text_length and text[end] == "\r" and end + 1 < text_length and text[end + 1] == "\n":
+            start = end + 2
+        else:
+            start = end + 1
+        lineno += 1
     return findings
+
+
+def bounded_stripped_snippet(line: str, limit: int = 120) -> str:
+    """Return a stripped finding snippet while bounding copied content."""
+    start = 0
+    end = len(line)
+    while start < end and line[start].isspace():
+        start += 1
+    while end > start and line[end - 1].isspace():
+        end -= 1
+    snippet_end = start + limit
+    if snippet_end < end:
+        return line[start:snippet_end]
+    return line[start:end]
 
 
 def run_scan(root: Path) -> list[Finding]:
     """Run all rules against all matching files under root."""
     all_findings: list[Finding] = []
     # Group rules by glob to minimize filesystem traversal
-    by_glob: dict[str, list[Rule]] = {}
+    by_glob: dict[str, list[tuple[Rule, re.Pattern[str]]]] = {}
     for rule in RULES:
-        by_glob.setdefault(rule.glob, []).append(rule)
+        compiled_rules = by_glob.get(rule.glob)
+        if compiled_rules is None:
+            compiled_rules = []
+            by_glob[rule.glob] = compiled_rules
+        compiled_rules.append((rule, re.compile(rule.pattern, re.IGNORECASE)))
 
-    for glob_pattern, rules in by_glob.items():
+    for glob_pattern in by_glob:
+        compiled_rules = by_glob[glob_pattern]
         files = collect_files(root, glob_pattern)
         for filepath in files:
             is_test = _is_test_file(filepath)
-            for rule in rules:
+            text: str | None = None
+            for rule, regex in compiled_rules:
                 if rule.skip_tests and is_test:
                     continue
-                all_findings.extend(scan_file(filepath, rule))
+                if text is None:
+                    try:
+                        text = filepath.read_text(encoding="utf-8", errors="replace")
+                    except OSError:
+                        break
+                all_findings.extend(scan_text(filepath, text, rule, regex))
 
-    # Sort by severity (highest first), then file, then line
-    severity_order = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
-    all_findings.sort(key=lambda f: (severity_order.get(f.severity, 9), f.file, f.line))
-    return all_findings
+    return ordered_findings(all_findings)
+
+
+def ordered_findings(findings: list[Finding]) -> list[Finding]:
+    """Return findings ordered by severity, file, and line."""
+    finding_count = len(findings)
+    if finding_count <= 1:
+        return findings
+    if finding_count == 2:
+        first = findings[0]
+        second = findings[1]
+        if finding_sort_key(first) <= finding_sort_key(second):
+            return findings
+        findings[0] = second
+        findings[1] = first
+        return findings
+    if finding_count == 3:
+        first = findings[0]
+        second = findings[1]
+        third = findings[2]
+        if finding_sort_key(second) < finding_sort_key(first):
+            first, second = second, first
+        if finding_sort_key(third) < finding_sort_key(second):
+            second, third = third, second
+            if finding_sort_key(second) < finding_sort_key(first):
+                first, second = second, first
+        findings[0] = first
+        findings[1] = second
+        findings[2] = third
+        return findings
+    findings.sort(key=finding_sort_key)
+    return findings
+
+
+def finding_sort_key(finding: Finding) -> tuple[int, str, int]:
+    """Return the deterministic scanner finding sort key."""
+    return _SEVERITY_SORT_ORDER.get(finding.severity, 9), finding.file, finding.line
 
 
 # ---------------------------------------------------------------------------
@@ -494,14 +607,20 @@ def run_bandit(root: Path) -> tuple[bool, int, int]:
         if result.stdout:
             data = json.loads(result.stdout)
             results = data.get("results", [])
-            high_count = sum(
-                1 for r in results
-                if r.get("issue_severity", "").upper() in ("HIGH", "MEDIUM")
-            )
+            high_count = count_bandit_high_medium(results)
             return True, high_count, len(results)
         return True, 0, 0
     except (subprocess.TimeoutExpired, json.JSONDecodeError, OSError):
         return False, 0, 0
+
+
+def count_bandit_high_medium(results: list[dict]) -> int:
+    """Count Bandit HIGH/MEDIUM findings without building a generator frame."""
+    count = 0
+    for result in results:
+        if result.get("issue_severity", "").upper() in BANDIT_FAIL_SEVERITIES:
+            count += 1
+    return count
 
 
 def run_pip_audit() -> tuple[bool, int]:
@@ -515,16 +634,21 @@ def run_pip_audit() -> tuple[bool, int]:
         )
         if result.stdout:
             data = json.loads(result.stdout)
-            # pip-audit returns a list of dependency objects
-            vulns = sum(
-                len(dep.get("vulns", []))
-                for dep in data
-                if isinstance(dep, dict)
-            )
+            vulns = count_pip_audit_vulns(data)
             return True, vulns
         return True, 0
     except (subprocess.TimeoutExpired, json.JSONDecodeError, OSError):
         return False, 0
+
+
+def count_pip_audit_vulns(dependencies: list[object]) -> int:
+    """Count pip-audit vulnerability rows without generator allocation."""
+    count = 0
+    for dependency in dependencies:
+        if not isinstance(dependency, dict):
+            continue
+        count += len(dependency.get("vulns", []))
+    return count
 
 
 # ---------------------------------------------------------------------------
@@ -540,12 +664,12 @@ _BOLD = "\033[1m"
 _DIM = "\033[2m"
 _NC = "\033[0m"
 
-_SEV_COLOR = {
+_SEV_COLOR = MappingProxyType({
     "CRITICAL": _RED,
     "HIGH": _RED,
     "MEDIUM": _YELLOW,
     "LOW": _DIM,
-}
+})
 
 
 def format_terminal(report: ScanReport) -> str:
@@ -613,13 +737,48 @@ def format_json(report: ScanReport) -> str:
     """Machine-readable JSON output."""
     return json.dumps(
         {
-            "findings": [asdict(f) for f in report.findings],
+            "findings": findings_to_dicts(report.findings),
             "summary": report.counts,
             "bandit": {"ran": report.bandit_ran, "high": report.bandit_high, "total": report.bandit_total},
             "pip_audit": {"ran": report.pip_audit_ran, "vulns": report.pip_audit_vulns},
         },
         indent=2,
     )
+
+
+def findings_to_dicts(findings: list[Finding]) -> list[dict[str, object]]:
+    """Serialize scanner findings with direct accumulation."""
+    finding_count = len(findings)
+    if finding_count == 0:
+        return []
+    if finding_count == 1:
+        return [finding_to_dict(findings[0])]
+    if finding_count == 2:
+        return [finding_to_dict(findings[0]), finding_to_dict(findings[1])]
+    if finding_count == 3:
+        return [
+            finding_to_dict(findings[0]),
+            finding_to_dict(findings[1]),
+            finding_to_dict(findings[2]),
+        ]
+
+    serialized: list[dict[str, object]] = []
+    for finding in findings:
+        serialized.append(finding_to_dict(finding))
+    return serialized
+
+
+def finding_to_dict(finding: Finding) -> dict[str, object]:
+    """Serialize a finding without recursive dataclass traversal."""
+    return {
+        "file": finding.file,
+        "line": finding.line,
+        "severity": finding.severity,
+        "rule_id": finding.rule_id,
+        "message": finding.message,
+        "snippet": finding.snippet,
+        "fix": finding.fix,
+    }
 
 
 # ---------------------------------------------------------------------------

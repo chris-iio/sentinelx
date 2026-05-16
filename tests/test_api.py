@@ -1,12 +1,25 @@
 """Tests for the REST API blueprint (/api/analyze, /api/status/<job_id>)."""
 
+import inspect
+import re
+from pathlib import Path
+from types import MappingProxyType
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from app import create_app
 from app.enrichment.models import EnrichmentResult
-from app.health_contract import HEALTH_CHECKS, HEALTH_PATH, is_valid_health_payload
+from app.health_contract import (
+    _EMPTY_HEALTH_CHECK,
+    HEALTH_CHECKS,
+    HEALTH_CHECK_ORDER,
+    HEALTH_PAYLOAD,
+    HEALTH_PATH,
+    HEALTH_STATUSES,
+    build_health_payload,
+    is_valid_health_payload,
+)
 from app.pipeline.models import IOCType
 
 from tests.helpers import make_ipv4_ioc
@@ -97,6 +110,18 @@ class TestApiHealth:
     def test_health_contract_constants_stay_secret_free(self):
         assert HEALTH_PATH == "/api/health"
         assert "provider_key" not in HEALTH_CHECKS
+        assert HEALTH_CHECK_ORDER == ("cache", "history", "registry")
+        assert HEALTH_STATUSES == frozenset(("ok", "degraded"))
+        assert isinstance(HEALTH_PAYLOAD, MappingProxyType)
+        assert HEALTH_PAYLOAD == {"service": "sentinelx", "status": "ok", "ready": True}
+        assert is_valid_health_payload(dict(HEALTH_PAYLOAD))
+        source = Path("app/health_contract.py").read_text(encoding="utf-8")
+        assert "HEALTH_CHECK_ORDER = tuple(sorted(" not in source
+        assert 'HEALTH_CHECK_ORDER = ("cache", "history", "registry")' in source
+        assert 'HEALTH_STATUSES = frozenset(("ok", "degraded"))' in source
+        assert "HEALTH_PAYLOAD = {" not in source
+        assert '{"ok", "degraded"}' not in source
+        assert re.search(r"frozenset\s*\(\s*\{", source) is None
 
     def test_health_returns_secret_free_schema(self, client):
         resp = client.get(HEALTH_PATH)
@@ -109,6 +134,99 @@ class TestApiHealth:
         assert payload["ready"] is True
         assert set(payload["checks"]) == set(HEALTH_CHECKS)
         assert "provider_key" not in str(payload)
+
+    def test_health_payload_uses_precomputed_check_order(self, monkeypatch):
+        def fail_sorted(_value):
+            raise AssertionError("build_health_payload should not sort checks per call")
+
+        monkeypatch.setattr("builtins.sorted", fail_sorted)
+
+        payload = build_health_payload({
+            "cache": {"status": "ok", "detail": "available"},
+            "history": {"status": "ok", "detail": "available"},
+            "registry": {"status": "ok", "detail": "available"},
+        })
+
+        assert list(payload["checks"]) == ["cache", "history", "registry"]
+        assert is_valid_health_payload(payload)
+
+    def test_health_payload_detail_presence_skips_strip_allocation(self):
+        class NoStripDetail(str):
+            def strip(self, *_args, **_kwargs):
+                raise AssertionError("health detail presence should scan directly")
+
+        payload = build_health_payload({
+            "cache": {"status": "ok", "detail": NoStripDetail("available")},
+            "history": {"status": "ok", "detail": NoStripDetail("history ok")},
+            "registry": {"status": "degraded", "detail": NoStripDetail("   ")},
+        })
+
+        assert payload["checks"]["cache"]["detail"] == "available"
+        assert payload["checks"]["history"]["detail"] == "history ok"
+        assert payload["checks"]["registry"]["detail"] == "unavailable"
+        assert payload["status"] == "degraded"
+        assert is_valid_health_payload(payload)
+
+    def test_health_payload_validation_uses_precomputed_key_sets(self, monkeypatch):
+        def fail_set(_value):
+            raise AssertionError("is_valid_health_payload should not allocate sets per validation")
+
+        class NoKeyViewDict(dict):
+            def keys(self):
+                raise AssertionError("is_valid_health_payload should validate keys by direct membership")
+
+            def values(self):
+                raise AssertionError("is_valid_health_payload should validate checks by known keys")
+
+        payload = build_health_payload({
+            "cache": {"status": "ok", "detail": "available"},
+            "history": {"status": "ok", "detail": "available"},
+            "registry": {"status": "ok", "detail": "available"},
+        })
+        payload["checks"] = NoKeyViewDict({
+            name: NoKeyViewDict(value)
+            for name, value in payload["checks"].items()
+        })
+        payload = NoKeyViewDict(payload)
+        monkeypatch.setattr("builtins.set", fail_set)
+
+        assert is_valid_health_payload(payload)
+        assert "_has_only_keys" in is_valid_health_payload.__code__.co_names
+        assert "_has_exact_keys" in is_valid_health_payload.__code__.co_names
+
+    def test_health_payload_uses_precomputed_status_set(self, monkeypatch):
+        class NoContainsSet(set):
+            def __contains__(self, _value):
+                raise AssertionError("health status validation should not build set literals")
+
+        monkeypatch.setattr("builtins.set", NoContainsSet)
+
+        payload = build_health_payload({
+            "cache": {"status": "ok", "detail": "available"},
+            "history": {"status": "invalid", "detail": "bad"},
+            "registry": {"status": "degraded", "detail": "slow"},
+        })
+
+        assert payload["status"] == "degraded"
+        assert payload["checks"]["history"]["status"] == "degraded"
+        assert is_valid_health_payload(payload)
+
+    def test_health_payload_reuses_empty_missing_check_default(self):
+        class MissingChecks(dict):
+            defaults: list[object] = []
+
+            def get(self, key, default=None):
+                self.defaults.append(default)
+                return default
+
+        checks = MissingChecks()
+
+        payload = build_health_payload(checks)
+
+        assert payload["status"] == "degraded"
+        assert checks.defaults == [_EMPTY_HEALTH_CHECK, _EMPTY_HEALTH_CHECK, _EMPTY_HEALTH_CHECK]
+        assert all(default is _EMPTY_HEALTH_CHECK for default in checks.defaults)
+        assert is_valid_health_payload(payload)
 
     def test_health_reports_degraded_dependency_without_secret_text(self, client):
         client.application.cache_store.stats.side_effect = RuntimeError(
@@ -128,11 +246,24 @@ class TestApiHealth:
         assert "sentinelx-provider-key" not in str(payload)
 
     def test_health_touches_only_aggregate_provider_configuration(self, client):
+        client.application.registry.configured_count.return_value = 1
+        client.application.registry.registered_count.return_value = 2
+        client.application.registry.all.side_effect = AssertionError(
+            "health should not allocate registered providers for count-only detail"
+        )
+        client.application.registry.configured.side_effect = AssertionError(
+            "health should not allocate configured providers for count-only detail"
+        )
+
         resp = client.get(HEALTH_PATH)
 
         assert resp.status_code == 200
-        client.application.registry.configured.assert_called_once()
-        client.application.registry.all.assert_called_once()
+        payload = resp.get_json()
+        assert payload["checks"]["registry"]["detail"] == "1/2 providers configured"
+        client.application.registry.configured_count.assert_called_once()
+        client.application.registry.registered_count.assert_called_once()
+        assert client.application.registry.configured.call_count == 0
+        assert client.application.registry.all.call_count == 0
 
 
 # ---------- POST /api/analyze — validation ----------
@@ -140,6 +271,16 @@ class TestApiHealth:
 
 class TestApiAnalyzeValidation:
     """Input validation for POST /api/analyze."""
+
+    def test_text_presence_helper_scans_without_strip_allocation(self):
+        from app.text_utils import has_non_whitespace
+
+        class NoStripText(str):
+            def strip(self, *_args, **_kwargs):
+                raise AssertionError("text presence should scan directly")
+
+        assert has_non_whitespace(NoStripText("  8.8.8.8  ")) is True
+        assert has_non_whitespace(NoStripText("  \n\t  ")) is False
 
     def test_no_json_body(self, client):
         resp = client.post("/api/analyze", data="not json", content_type="text/plain")
@@ -161,13 +302,37 @@ class TestApiAnalyzeValidation:
         assert resp.status_code == 400
 
     def test_invalid_mode(self, client):
+        from app.routes import api as api_routes
+
         resp = client.post("/api/analyze", json={"text": "8.8.8.8", "mode": "turbo"})
         assert resp.status_code == 400
         assert "Invalid mode" in resp.get_json()["error"]
+        assert api_routes._VALID_MODES == frozenset(("offline", "online"))
+        assert isinstance(api_routes._VALID_MODES, frozenset)
+        assert '{"offline", "online"}' not in Path("app/routes/api.py").read_text(
+            encoding="utf-8"
+        )
 
     def test_text_not_string(self, client):
         resp = client.post("/api/analyze", json={"text": 12345})
         assert resp.status_code == 400
+
+    def test_api_analyze_uses_shared_text_presence_check(self, client, monkeypatch):
+        from app.routes import api as api_routes
+
+        calls: list[str] = []
+
+        def record_presence(value: str) -> bool:
+            calls.append(value)
+            return True
+
+        monkeypatch.setattr(api_routes, "has_non_whitespace", record_presence)
+        monkeypatch.setattr(api_routes, "run_pipeline", lambda _text: [])
+
+        resp = client.post("/api/analyze", json={"text": "no indicators here"})
+
+        assert resp.status_code == 200
+        assert calls == ["no indicators here"]
 
 
 # ---------- POST /api/analyze — offline success ----------
@@ -198,12 +363,172 @@ class TestApiAnalyzeOffline:
         assert "grouped" in data
         assert isinstance(data["grouped"], dict)
 
+    def test_groups_serialized_iocs_in_one_pass(self, client, monkeypatch):
+        from app.pipeline.models import IOC
+        from app.routes import api as api_routes
+        from app.routes import _helpers as route_helpers
+
+        iocs = [
+            IOC(type=IOCType.IPV4, value="8.8.8.8", raw_match="8.8.8.8"),
+            IOC(type=IOCType.IPV4, value="1.1.1.1", raw_match="1.1.1.1"),
+        ]
+        serialize_calls: list[str] = []
+
+        monkeypatch.setattr(api_routes, "run_pipeline", lambda _text: iocs)
+
+        def serialize_once(seen_ioc):
+            serialize_calls.append(seen_ioc.value)
+            return {
+                "type": seen_ioc.type.value,
+                "value": seen_ioc.value,
+                "raw_match": seen_ioc.raw_match,
+            }
+
+        monkeypatch.setattr(route_helpers, "_serialize_ioc", serialize_once)
+
+        resp = client.post("/api/analyze", json={"text": "8.8.8.8"})
+        data = resp.get_json()
+
+        assert resp.status_code == 200
+        assert serialize_calls == ["8.8.8.8", "1.1.1.1"]
+        assert data["iocs"] == data["grouped"]["ipv4"]
+        assert "setdefault" not in api_routes.api_analyze.__code__.co_names
+        assert "_serialized_ioc_response_payload" in inspect.getsource(api_routes.api_analyze)
+        assert "setdefault" not in route_helpers._append_serialized_ioc_by_type.__code__.co_names
+
+    def test_serialized_ioc_response_payload_uses_tiny_batch_paths(self, monkeypatch):
+        from app.pipeline.models import IOC
+        from app.routes import api as api_routes
+        from app.routes import _helpers as route_helpers
+
+        class NoIterIocs(list):
+            def __iter__(self):
+                raise AssertionError("tiny API response batches should not iterate")
+
+            def __getitem__(self, index):
+                if isinstance(index, slice):
+                    raise AssertionError("tiny API response batches should not slice")
+                return super().__getitem__(index)
+
+        def serialize_once(ioc):
+            return {
+                "type": ioc.type.value,
+                "value": ioc.value,
+                "raw_match": ioc.raw_match,
+            }
+
+        monkeypatch.setattr(route_helpers, "_serialize_ioc", serialize_once)
+
+        single_iocs = NoIterIocs([
+            IOC(type=IOCType.IPV4, value="8.8.8.8", raw_match="8.8.8.8"),
+        ])
+        single_rows, single_grouped = api_routes._serialized_ioc_response_payload(single_iocs)
+
+        assert single_rows == [{"type": "ipv4", "value": "8.8.8.8", "raw_match": "8.8.8.8"}]
+        assert single_grouped == {"ipv4": single_rows}
+
+        pair_iocs = NoIterIocs([
+            IOC(type=IOCType.IPV4, value="8.8.8.8", raw_match="8.8.8.8"),
+            IOC(type=IOCType.DOMAIN, value="example.com", raw_match="example.com"),
+        ])
+        pair_rows, pair_grouped = api_routes._serialized_ioc_response_payload(pair_iocs)
+
+        assert pair_rows == [
+            {"type": "ipv4", "value": "8.8.8.8", "raw_match": "8.8.8.8"},
+            {"type": "domain", "value": "example.com", "raw_match": "example.com"},
+        ]
+        assert pair_grouped == {
+            "ipv4": [pair_rows[0]],
+            "domain": [pair_rows[1]],
+        }
+
+        same_type_rows, same_type_grouped = api_routes._serialized_ioc_response_payload(
+            NoIterIocs([
+                IOC(type=IOCType.IPV4, value="8.8.8.8", raw_match="8.8.8.8"),
+                IOC(type=IOCType.IPV4, value="1.1.1.1", raw_match="1.1.1.1"),
+            ])
+        )
+
+        assert same_type_grouped == {"ipv4": same_type_rows}
+
+        three_iocs = NoIterIocs([
+            IOC(type=IOCType.IPV4, value="8.8.8.8", raw_match="8.8.8.8"),
+            IOC(type=IOCType.DOMAIN, value="example.com", raw_match="example.com"),
+            IOC(type=IOCType.IPV4, value="1.1.1.1", raw_match="1.1.1.1"),
+        ])
+        three_rows, three_grouped = api_routes._serialized_ioc_response_payload(three_iocs)
+
+        assert three_rows == [
+            {"type": "ipv4", "value": "8.8.8.8", "raw_match": "8.8.8.8"},
+            {"type": "domain", "value": "example.com", "raw_match": "example.com"},
+            {"type": "ipv4", "value": "1.1.1.1", "raw_match": "1.1.1.1"},
+        ]
+        assert three_grouped == {
+            "ipv4": [three_rows[0], three_rows[2]],
+            "domain": [three_rows[1]],
+        }
+
+        same_type_three_rows, same_type_three_grouped = api_routes._serialized_ioc_response_payload(
+            NoIterIocs([
+                IOC(type=IOCType.IPV4, value="8.8.8.8", raw_match="8.8.8.8"),
+                IOC(type=IOCType.IPV4, value="1.1.1.1", raw_match="1.1.1.1"),
+                IOC(type=IOCType.IPV4, value="9.9.9.9", raw_match="9.9.9.9"),
+            ])
+        )
+
+        assert same_type_three_grouped == {"ipv4": same_type_three_rows}
+
+    def test_serialized_ioc_group_append_preserves_existing_group_order(self):
+        from app.routes.api import _append_serialized_ioc_by_type
+
+        first = {"type": "ipv4", "value": "8.8.8.8"}
+        second = {"type": "ipv4", "value": "1.1.1.1"}
+        grouped: dict[str, list[dict]] = {}
+
+        _append_serialized_ioc_by_type(grouped, "ipv4", first)
+        _append_serialized_ioc_by_type(grouped, "ipv4", second)
+
+        assert grouped == {"ipv4": [first, second]}
+
     def test_no_iocs_found(self, client):
         resp = client.post("/api/analyze", json={"text": "no indicators here"})
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["total_count"] == 0
         assert data["iocs"] == []
+        assert data["grouped"] == {}
+
+    def test_online_no_iocs_skips_enrichment_setup(self, client, monkeypatch):
+        from app.routes import api as api_routes
+
+        client.application.registry.configured.side_effect = AssertionError(
+            "zero-IOC online analysis should not check provider configuration"
+        )
+
+        def fail_serialize(_ioc):
+            raise AssertionError("zero-IOC API analysis should not serialize IOC payloads")
+
+        def fail_group_append(*_args):
+            raise AssertionError("zero-IOC API analysis should not group serialized payloads")
+
+        monkeypatch.setattr(api_routes, "_serialize_ioc", fail_serialize)
+        monkeypatch.setattr(api_routes, "_append_serialized_ioc_by_type", fail_group_append)
+
+        with patch("app.routes._helpers._enrichment_pool") as mock_pool:
+            resp = client.post(
+                "/api/analyze",
+                json={"text": "no indicators here", "mode": "online"},
+            )
+
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["mode"] == "online"
+        assert data["total_count"] == 0
+        assert data["iocs"] == []
+        assert data["grouped"] == {}
+        assert "job_id" not in data
+        mock_pool.submit.assert_not_called()
+        assert "total_count == 0" in inspect.getsource(api_routes.api_analyze)
 
     def test_ioc_structure(self, client):
         resp = client.post("/api/analyze", json={"text": "8.8.8.8"})
@@ -228,6 +553,22 @@ class TestApiAnalyzeOnline:
         assert resp.status_code == 400
         assert "No provider" in resp.get_json()["error"]
 
+    def test_online_no_providers_skips_ioc_serialization(self, client, monkeypatch):
+        """Rejected online requests should not serialize IOC response payloads."""
+        from app.routes import api as api_routes
+
+        client.application.registry.configured.return_value = []
+
+        def fail_serialize(_ioc):
+            raise AssertionError("online rejection should not serialize IOCs")
+
+        monkeypatch.setattr(api_routes, "_serialize_ioc", fail_serialize)
+
+        resp = client.post("/api/analyze", json={"text": "8.8.8.8", "mode": "online"})
+
+        assert resp.status_code == 400
+        assert "No provider" in resp.get_json()["error"]
+
     def test_online_with_provider(self, client):
         """Online mode with a configured provider returns job_id."""
         mock_provider = MagicMock()
@@ -236,6 +577,7 @@ class TestApiAnalyzeOnline:
         client.application.registry.configured.return_value = [mock_provider]
         client.application.registry.all.return_value = [mock_provider]
         client.application.registry.providers_for_type.return_value = [mock_provider]
+        client.application.registry.provider_count_for_type.return_value = 1
 
         with patch("app.routes._helpers._enrichment_pool") as mock_pool:
             resp = client.post("/api/analyze", json={"text": "8.8.8.8", "mode": "online"})
@@ -246,6 +588,7 @@ class TestApiAnalyzeOnline:
             assert "status_url" in data
             assert data["status_url"].startswith("/api/status/")
             mock_pool.submit.assert_called_once()
+            assert client.application.registry.configured.call_count == 1
 
 
     def test_online_rejects_ioc_limit_before_launch(self, client):
@@ -256,6 +599,7 @@ class TestApiAnalyzeOnline:
         client.application.registry.configured.return_value = [mock_provider]
         client.application.registry.all.return_value = [mock_provider]
         client.application.registry.providers_for_type.return_value = [mock_provider]
+        client.application.registry.provider_count_for_type.return_value = 1
         client.application.config["ONLINE_MAX_IOCS"] = 1
         client.application.config["ONLINE_MAX_DISPATCHES"] = 200
 
@@ -272,6 +616,33 @@ class TestApiAnalyzeOnline:
         assert "8.8.8.8" not in str(data)
         mock_pool.submit.assert_not_called()
 
+    def test_online_uses_shared_limit_config_helper(self, client):
+        """API online admission should read limits through the shared helper."""
+        mock_provider = MagicMock()
+        mock_provider.name = "test_provider"
+        mock_provider.supported_types = frozenset({IOCType.IPV4})
+        client.application.registry.configured.return_value = [mock_provider]
+        client.application.registry.all.return_value = [mock_provider]
+        client.application.registry.providers_for_type.return_value = [mock_provider]
+        client.application.registry.provider_count_for_type.return_value = 1
+        client.application.config["ONLINE_MAX_IOCS"] = 50
+        client.application.config["ONLINE_MAX_DISPATCHES"] = 200
+
+        with (
+            patch("app.routes.api._online_limits_from_config", return_value=(1, 200)) as limits,
+            patch("app.routes._helpers._enrichment_pool") as mock_pool,
+        ):
+            resp = client.post(
+                "/api/analyze",
+                json={"text": "8.8.8.8 and 1.1.1.1", "mode": "online"},
+            )
+
+        assert resp.status_code == 413
+        data = resp.get_json()
+        assert data["code"] == "online_limit_exceeded"
+        limits.assert_called_once_with()
+        mock_pool.submit.assert_not_called()
+
     def test_online_rejects_dispatch_limit_before_launch(self, client):
         """Online mode rejects excessive provider fanout before submitting work."""
         mock_provider_a = MagicMock()
@@ -280,6 +651,7 @@ class TestApiAnalyzeOnline:
         client.application.registry.configured.return_value = providers
         client.application.registry.all.return_value = providers
         client.application.registry.providers_for_type.return_value = providers
+        client.application.registry.provider_count_for_type.return_value = 2
         client.application.config["ONLINE_MAX_IOCS"] = 50
         client.application.config["ONLINE_MAX_DISPATCHES"] = 1
 

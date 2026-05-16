@@ -5,11 +5,14 @@ chain, pre_raise_hook short-circuit and pass-through, and stream/redirect flags.
 """
 from __future__ import annotations
 
+import builtins
 from unittest.mock import MagicMock
 
+import pytest
 import requests
 
-from app.enrichment.http_safety import safe_request
+from app.enrichment import http_safety
+from app.enrichment.http_safety import read_limited, safe_request, validate_endpoint
 from app.enrichment.models import EnrichmentError, EnrichmentResult
 from tests.helpers import make_mock_response, make_ipv4_ioc
 
@@ -86,6 +89,57 @@ class TestSafeRequestSuccess:
         assert kwargs["timeout"] == (5, 30)
 
 
+class TestReadLimited:
+    def test_read_limited_parses_chunked_json(self):
+        resp = MagicMock()
+        resp.iter_content.return_value = [
+            b'{"status":',
+            b'"ok","items":',
+            b"[1,2,3]}",
+        ]
+
+        assert read_limited(resp) == {"status": "ok", "items": [1, 2, 3]}
+        resp.iter_content.assert_called_once_with(chunk_size=8192)
+
+    def test_read_limited_single_chunk_skips_bytearray_buffer(self, monkeypatch):
+        """Single-chunk JSON responses should decode without allocating a bytearray buffer."""
+        resp = MagicMock()
+        resp.iter_content.return_value = [b'{"ok":true}']
+
+        def fail_bytearray(*_args, **_kwargs):
+            raise AssertionError("single-chunk responses should decode directly")
+
+        monkeypatch.setattr(builtins, "bytearray", fail_bytearray)
+
+        assert read_limited(resp) == {"ok": True}
+
+    def test_read_limited_multi_chunk_uses_bytearray_buffer(self, monkeypatch):
+        """Multi-chunk JSON responses still use one growable buffer after the second chunk."""
+        resp = MagicMock()
+        resp.iter_content.return_value = [b'{"ok":', b"true}"]
+        original_bytearray = builtins.bytearray
+
+        class CountingBytearray(original_bytearray):
+            calls = 0
+
+            def __new__(cls, *args, **kwargs):
+                cls.calls += 1
+                return super().__new__(cls, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "bytearray", CountingBytearray)
+
+        assert read_limited(resp) == {"ok": True}
+        assert CountingBytearray.calls == 1
+
+    def test_read_limited_uses_shared_chunk_size_constant(self, monkeypatch):
+        resp = MagicMock()
+        resp.iter_content.return_value = [b'{"ok":true}']
+        monkeypatch.setattr(http_safety, "RESPONSE_CHUNK_SIZE", 4)
+
+        assert read_limited(resp) == {"ok": True}
+        resp.iter_content.assert_called_once_with(chunk_size=4)
+
+
 # ── SSRF rejection ─────────────────────────────────────────────────────────
 
 
@@ -100,6 +154,21 @@ class TestSafeRequestSSRF:
         assert "not in allowed_hosts" in result.error or "SSRF" in result.error
         # Must NOT make any network call
         session.get.assert_not_called()
+
+    def test_empty_allowed_hosts_skips_urlparse(self, monkeypatch):
+        """Empty allowlists should fail closed before URL parsing."""
+        def fail_urlparse(_url):
+            raise AssertionError("empty allowlist validation should not parse URLs")
+
+        monkeypatch.setattr(http_safety, "urlparse", fail_urlparse)
+
+        result = safe_request(MagicMock(), URL, [], IOC, PROVIDER)
+
+        assert isinstance(result, EnrichmentError)
+        assert "allowed_hosts is empty" in result.error
+
+        with pytest.raises(ValueError, match="allowed_hosts is empty"):
+            validate_endpoint(URL, [])
 
 
 # ── Exception chain ────────────────────────────────────────────────────────

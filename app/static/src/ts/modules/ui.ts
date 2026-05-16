@@ -33,9 +33,11 @@ function initScrollAwareFilterBar(): void {
  */
 function initCardStagger(): void {
   const cards = document.querySelectorAll<HTMLElement>(".ioc-card");
-  cards.forEach((card, i) => {
-    card.style.setProperty("--card-index", String(Math.min(i, 15)));
-  });
+  for (let i = 0; i < cards.length; i += 1) {
+    const card = cards.item(i);
+    if (!card) continue;
+    card.style.setProperty("--card-index", String(i < 15 ? i : 15));
+  }
 }
 
 /**

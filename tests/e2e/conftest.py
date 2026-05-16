@@ -154,11 +154,11 @@ def live_server(_isolate_config, _isolate_history):
     global _e2e_history_store
     real_setup_orchestrator = _analysis_routes._setup_orchestrator
 
-    def _e2e_setup_orchestrator(iocs, text, mode, history_store):
+    def _e2e_setup_orchestrator(iocs, text, mode, history_store, configured_providers=None):
         fake_job_id = _consume_mocked_online_job()
         if fake_job_id is not None:
             return fake_job_id, object(), app.registry
-        return real_setup_orchestrator(iocs, text, mode, history_store)
+        return real_setup_orchestrator(iocs, text, mode, history_store, configured_providers)
 
     _analysis_routes._setup_orchestrator = _e2e_setup_orchestrator
 

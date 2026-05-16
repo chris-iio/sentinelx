@@ -1,7 +1,7 @@
 # M013 Optimization Audit — SentinelX
 
 - Mode: `baseline`
-- Generated at: `2026-04-25 07:26:04 UTC`
+- Generated at: `2026-05-14 12:33:18 UTC`
 - Repo root: `/home/chris/projects/sentinelx`
 - Output path: `.gsd/milestones/M013/M013-AUDIT.md`
 
@@ -17,8 +17,8 @@
 | Entry point | Command | Purpose |
 | --- | --- | --- |
 | CLI help | `python3 tools/optimization_audit.py --help` | Show the supported modes, capture options, and output controls. |
-| Template scaffold | `python3 tools/optimization_audit.py --mode template --output .gsd/milestones/M013/M013-AUDIT-TEMPLATE.md` | Create a reusable milestone-local ranked artifact template. |
-| Working baseline artifact | `python3 tools/optimization_audit.py --mode baseline --output .gsd/milestones/M013/M013-AUDIT.md` | Create/update the current audit document used by later optimization slices. |
+| Template scaffold | `python3 tools/optimization_audit.py --milestone-id M013 --mode template --output .gsd/milestones/M013/M013-AUDIT-TEMPLATE.md` | Create a reusable milestone-local ranked artifact template. |
+| Working baseline artifact | `python3 tools/optimization_audit.py --milestone-id M013 --mode baseline --output .gsd/milestones/M013/M013-AUDIT.md` | Create/update the current audit document used by later optimization slices. |
 | Convenience targets | `make audit-m013-template` / `make audit-m013` | Repo-native wrappers around the same workflow for contributors. |
 
 ## Verification lanes
@@ -57,10 +57,12 @@
 
 | Capture | Command | Exit | Duration (ms) | Summary |
 | --- | --- | ---: | ---: | --- |
-| runtime-provider-diagnostics | `internal benchmark: EnrichmentOrchestrator synthetic runtime/provider diagnostics` | 0 | 66 | provider mix CacheAlpha:2d/0e, RateLimitBeta:2d/1e; dispatch=4; attempts=5; cache-hit ratio 1/5 (20%); retries=1 (429=1); errors=1; latency total=2.25s max=1.00s. |
-| status-snapshot-scaling | `internal benchmark: EnrichmentOrchestrator.get_status() snapshot scaling` | 0 | 1 | 400 polls at 5000 retained results: `get_status()` 1.40ms vs `get_incremental_status(since=4990)` 0.44ms (3.2x faster) while returning 10 tail rows with next_since=5000. |
-| cache-store-tempdb | `internal benchmark: CacheStore temp WAL put/get loop` | 0 | 18 | Temp WAL cache DB: 250 puts in 3.85ms, 250 TTL reads in 1.18ms, 250 hits, 250 retained rows. |
-| history-store-tempdb | `internal benchmark: HistoryStore temp WAL save/list/load loop` | 0 | 16 | Temp WAL history DB: 180 saves in 3.94ms, list_recent(20) in 0.04ms, single load in 0.02ms, latest total_count=1, recent rows=20. |
+| runtime-provider-diagnostics | `internal benchmark: EnrichmentOrchestrator synthetic runtime/provider diagnostics` | 0 | 81 | provider mix CacheAlpha:2d/0e, RateLimitBeta:2d/1e; dispatch=4; attempts=5; cache-hit ratio 1/5 (20%); retries=1 (429=1); errors=1; latency total=2.25s max=1.00s. |
+| status-snapshot-scaling | `internal benchmark: EnrichmentOrchestrator.get_status() snapshot scaling` | 0 | 2 | 400 polls at 5000 retained results: `get_status()` 2.09ms vs `get_incremental_status(since=4990)` 0.66ms (3.1x faster) while returning 10 tail rows with next_since=5000. |
+| cache-store-tempdb | `internal benchmark: CacheStore temp WAL put/get loop` | 0 | 23 | Temp WAL cache DB: 250 puts in 7.34ms, 250 TTL reads in 1.49ms, 250 hits, 250 retained rows. |
+| cache-stats-query-count | `internal benchmark: CacheStore.stats aggregate query count` | 0 | 14 | CacheStore.stats() executed 1 SELECT for total_entries=1 and oldest_present=True: SELECT COUNT(*), MIN(cached_at) FROM enrichment_cache. |
+| history-store-tempdb | `internal benchmark: HistoryStore temp WAL save/list/load loop` | 0 | 17 | Temp WAL history DB: 180 saves in 3.37ms, list_recent(20) in 0.06ms, single load in 0.03ms, latest total_count=1, recent rows=20. |
+| pipeline-duplicate-candidates | `internal benchmark: run_pipeline normalized duplicate candidate gate` | 0 | 78 | 7 raw URL variants normalize to 1 IOC value(s); classify calls=1; output values=http://evil.com. |
 
 ## Seam checklist
 

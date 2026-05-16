@@ -57,6 +57,39 @@ describe("computeWorstVerdict", () => {
     expect(computeWorstVerdict(entries)).toBe("malicious");
   });
 
+  it("computes worst verdict without an extra some() pre-scan", () => {
+    const originalSome = Array.prototype.some;
+    Array.prototype.some = function failSome() {
+      throw new Error("computeWorstVerdict should scan once");
+    };
+
+    try {
+      expect(
+        computeWorstVerdict([
+          entry({ provider: "VT", verdict: "clean" }),
+          entry({ provider: "TF", verdict: "suspicious" }),
+          entry({ provider: "MB", verdict: "malicious" }),
+        ]),
+      ).toBe("malicious");
+    } finally {
+      Array.prototype.some = originalSome;
+    }
+  });
+
+  it("computes worst verdict with indexed entry access", () => {
+    const entries = [
+      entry({ provider: "VT", verdict: "clean" }),
+      entry({ provider: "TF", verdict: "suspicious" }),
+    ];
+    Object.defineProperty(entries, Symbol.iterator, {
+      value: () => {
+        throw new Error("computeWorstVerdict should not require array iteration");
+      },
+    });
+
+    expect(computeWorstVerdict(entries)).toBe("suspicious");
+  });
+
   it("known_good overrides all other verdicts (design rule)", () => {
     const entries: VerdictEntry[] = [
       entry({ provider: "VT", verdict: "malicious" }),
@@ -121,6 +154,42 @@ describe("computeAttribution", () => {
     expect(result.provider).toBe("ThreatFox");
   });
 
+  it("selects attribution provider without sorting candidates", () => {
+    const originalSort = Array.prototype.sort;
+    Array.prototype.sort = function failSort() {
+      throw new Error("computeAttribution should not sort candidates");
+    };
+
+    try {
+      const result = computeAttribution([
+        entry({ provider: "ThreatFox", verdict: "malicious", totalEngines: 10, statText: "10 matches" }),
+        entry({ provider: "VirusTotal", verdict: "clean", totalEngines: 72, statText: "0/72 engines" }),
+      ]);
+
+      expect(result.provider).toBe("VirusTotal");
+      expect(result.text).toBe("VirusTotal: 0/72 engines");
+    } finally {
+      Array.prototype.sort = originalSort;
+    }
+  });
+
+  it("selects attribution provider with indexed entry access", () => {
+    const entries = [
+      entry({ provider: "ThreatFox", verdict: "malicious", totalEngines: 10, statText: "10 matches" }),
+      entry({ provider: "VirusTotal", verdict: "clean", totalEngines: 72, statText: "0/72 engines" }),
+    ];
+    Object.defineProperty(entries, Symbol.iterator, {
+      value: () => {
+        throw new Error("computeAttribution should not require array iteration");
+      },
+    });
+
+    const result = computeAttribution(entries);
+
+    expect(result.provider).toBe("VirusTotal");
+    expect(result.text).toBe("VirusTotal: 0/72 engines");
+  });
+
   it("excludes no_data/error entries from attribution candidates", () => {
     const entries = [
       entry({ provider: "VT", verdict: "no_data", totalEngines: 100, statText: "100 engines" }),
@@ -158,6 +227,26 @@ describe("findWorstEntry", () => {
     expect(result!.verdict).toBe("malicious");
   });
 
+  it("short-circuits once malicious is found", () => {
+    const result = findWorstEntry([
+      entry({ provider: "VT", verdict: "clean" }),
+      entry({ provider: "TF", verdict: "malicious" }),
+      {
+        get verdict(): never {
+          throw new Error("findWorstEntry should stop after malicious");
+        },
+        provider: "Late",
+        summaryText: "",
+        detectionCount: 0,
+        totalEngines: 0,
+        statText: "",
+      },
+    ]);
+
+    expect(result!.provider).toBe("TF");
+    expect(result!.verdict).toBe("malicious");
+  });
+
   it("returns the first entry when all have equal severity", () => {
     const entries = [
       entry({ provider: "VT", verdict: "clean" }),
@@ -165,6 +254,23 @@ describe("findWorstEntry", () => {
     ];
     const result = findWorstEntry(entries);
     expect(result!.provider).toBe("VT");
+  });
+
+  it("compares two entries directly without array iteration", () => {
+    const entries = [
+      entry({ provider: "VT", verdict: "clean" }),
+      entry({ provider: "TF", verdict: "suspicious" }),
+    ];
+    Object.defineProperty(entries, Symbol.iterator, {
+      value: () => {
+        throw new Error("two-entry worst verdict lookup should not allocate an iterator");
+      },
+    });
+
+    const result = findWorstEntry(entries);
+
+    expect(result!.provider).toBe("TF");
+    expect(result!.verdict).toBe("suspicious");
   });
 
   it("correctly ranks error below no_data below clean", () => {

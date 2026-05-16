@@ -18,6 +18,8 @@
  * not a severity level but a classification override. verdictSeverityIndex()
  * returns -1 for known_good, which is correct and intentional.
  */
+import { pageResultsElement } from "../utils/dom";
+
 export type VerdictKey =
   | "error"
   | "no_data"
@@ -44,36 +46,26 @@ type IocType =
   | "sha256";
 
 /**
- * Ranked severity verdicts — index 0 is least severe, index 4 is most severe.
- *
- * known_good is intentionally excluded: it is a classification override, not
- * a severity level. verdictSeverityIndex returns -1 for known_good, which is
- * the correct and expected behavior (it always wins via computeWorstVerdict's
- * early-return check, not by severity ranking).
- *
- * Source: main.js line 228.
- */
-type RankedVerdict = "error" | "no_data" | "clean" | "suspicious" | "malicious";
-
-const VERDICT_SEVERITY = [
-  "error",
-  "no_data",
-  "clean",
-  "suspicious",
-  "malicious",
-] as const satisfies readonly RankedVerdict[];
-
-/** Pre-built severity lookup Map — O(1) instead of O(N) array scan. R023. */
-const SEVERITY_MAP: ReadonlyMap<string, number> = new Map(
-  VERDICT_SEVERITY.map((v, i) => [v, i])
-);
-
-/**
  * Returns the severity index for a verdict key.
  * Higher index = higher severity. Returns -1 if not found (e.g. known_good).
  */
 export function verdictSeverityIndex(verdict: VerdictKey): number {
-  return SEVERITY_MAP.get(verdict) ?? -1;
+  switch (verdict) {
+    case "error":
+      return 0;
+    case "no_data":
+      return 1;
+    case "clean":
+      return 2;
+    case "suspicious":
+      return 3;
+    case "malicious":
+      return 4;
+    case "known_good":
+      return -1;
+    default:
+      return -1;
+  }
 }
 
 /**
@@ -115,6 +107,11 @@ const _defaultProviderCounts: Record<IocType, number> = {
   sha256: 3,
 } as const;
 
+const _emptyProviderCounts: Record<string, number> = {};
+
+let cachedProviderCountsRaw: string | null = null;
+let cachedProviderCounts: Record<string, number> | null = null;
+
 /**
  * Return provider counts per IOC type, reading from the DOM when available.
  *
@@ -132,13 +129,26 @@ const _defaultProviderCounts: Record<IocType, number> = {
  *   Record mapping IOC type string → configured provider count.
  */
 export function getProviderCounts(): Record<string, number> {
-  const el = document.querySelector<HTMLElement>(".page-results");
+  const el = pageResultsElement();
   if (el === null) return _defaultProviderCounts;
   const raw = el.getAttribute("data-provider-counts");
   if (raw === null) return _defaultProviderCounts;
+  if (raw === cachedProviderCountsRaw && cachedProviderCounts !== null) {
+    return cachedProviderCounts;
+  }
+  if (raw === "{}") {
+    cachedProviderCountsRaw = raw;
+    cachedProviderCounts = _emptyProviderCounts;
+    return _emptyProviderCounts;
+  }
   try {
-    return JSON.parse(raw) as Record<string, number>;
+    const providerCounts = JSON.parse(raw) as Record<string, number>;
+    cachedProviderCountsRaw = raw;
+    cachedProviderCounts = providerCounts;
+    return providerCounts;
   } catch {
+    cachedProviderCountsRaw = raw;
+    cachedProviderCounts = _defaultProviderCounts;
     return _defaultProviderCounts;
   }
 }

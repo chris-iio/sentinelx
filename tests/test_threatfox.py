@@ -6,10 +6,20 @@ All HTTP calls are mocked using unittest.mock.patch — no real API calls.
 """
 from __future__ import annotations
 
+from collections.abc import Iterator
+import inspect
+
 import requests
 
 from app.enrichment.models import EnrichmentError, EnrichmentResult
-from app.enrichment.adapters.threatfox import TFAdapter
+from app.pipeline.models import IOCType
+from app.enrichment.adapters.threatfox import (
+    TFAdapter,
+    _HASH_TYPES,
+    _parse_response,
+    _select_best_record,
+    _threatfox_result,
+)
 from tests.helpers import (
     make_mock_response,
     make_domain_ioc,
@@ -65,6 +75,11 @@ def _tf_no_result_response() -> dict:
 # -- Task 1 Tests: IOC type coverage ------------------------------------------
 
 class TestLookupTypeCoverage:
+    def test_hash_type_membership_uses_static_frozenset(self) -> None:
+        """ThreatFox hash routing should reuse a static membership table."""
+        assert isinstance(_HASH_TYPES, frozenset)
+        assert _HASH_TYPES == frozenset((IOCType.MD5, IOCType.SHA1, IOCType.SHA256))
+
     def test_lookup_sha256_found_high_confidence(self) -> None:
         """search_hash for SHA256 with confidence=90 -> verdict=malicious."""
         ioc = make_sha256_ioc("a" * 64)
@@ -158,6 +173,46 @@ class TestEdgeCases:
         assert isinstance(result, EnrichmentResult)
         assert result.verdict == "no_data"
         assert result.detection_count == 0
+        assert result.total_engines == 0
+        assert result.scan_date is None
+        assert result.raw_stats == {}
+        assert 'no_data_result(ioc, "ThreatFox")' in inspect.getsource(_parse_response)
+
+    def test_ok_with_empty_data_returns_no_data_before_record_selection(self, monkeypatch) -> None:
+        """ThreatFox ok responses without records should not build an empty suspicious hit."""
+        import app.enrichment.adapters.threatfox as threatfox
+
+        def fail_select(_data):
+            raise AssertionError("empty ThreatFox data should return before selecting a record")
+
+        monkeypatch.setattr(threatfox, "_select_best_record", fail_select)
+
+        result = threatfox._parse_response(
+            make_sha256_ioc("b" * 64),
+            {"query_status": "ok", "data": []},
+        )
+
+        assert result.verdict == "no_data"
+        assert result.detection_count == 0
+        assert result.total_engines == 0
+        assert result.raw_stats == {}
+
+    def test_missing_data_avoids_eager_default_list(self) -> None:
+        """Missing data should not allocate through dict.get's default argument."""
+        ioc = make_sha256_ioc("b" * 64)
+
+        class NoDefaultBody(dict):
+            def get(self, key, default=None):
+                if key == "data" and default is not None:
+                    raise AssertionError("ThreatFox data parsing should avoid eager default list allocation")
+                return super().get(key, default)
+
+        result = _parse_response(ioc, NoDefaultBody({"query_status": "ok"}))
+
+        assert result.verdict == "no_data"
+        assert result.detection_count == 0
+        assert result.total_engines == 0
+        assert result.raw_stats == {}
 
     def test_lookup_http_error(self) -> None:
         """HTTP error from server -> EnrichmentError."""
@@ -174,6 +229,28 @@ class TestEdgeCases:
         result = adapter.lookup(ioc)
 
         assert isinstance(result, EnrichmentError)
+
+    def test_result_helper_preserves_provider_envelope(self) -> None:
+        """ThreatFox result construction should keep the provider envelope centralized."""
+        ioc = make_sha256_ioc("b" * 64)
+        raw_stats = {"confidence_level": 90, "malware_printable": "Mirai"}
+
+        result = _threatfox_result(
+            ioc=ioc,
+            verdict="malicious",
+            detection_count=1,
+            total_engines=1,
+            scan_date="2024-01-15 12:00:00 UTC",
+            raw_stats=raw_stats,
+        )
+
+        assert result.ioc is ioc
+        assert result.provider == "ThreatFox"
+        assert result.verdict == "malicious"
+        assert result.detection_count == 1
+        assert result.total_engines == 1
+        assert result.scan_date == "2024-01-15 12:00:00 UTC"
+        assert result.raw_stats is raw_stats
 
 
 # -- Task 1 Tests: Confidence threshold boundary tests -------------------------
@@ -275,3 +352,23 @@ class TestMultipleResults:
         assert result.raw_stats.get("malware_printable") == "Emotet", (
             f"Expected 'Emotet' (highest confidence record), got {result.raw_stats.get('malware_printable')!r}"
         )
+
+    def test_best_record_selection_short_circuits_on_perfect_confidence(self) -> None:
+        """A perfect confidence record is the best possible record, so selection should stop."""
+
+        class ExplodingTail(list):
+            def __iter__(self) -> Iterator[dict]:
+                yield {
+                    "confidence_level": 20,
+                    "malware_printable": "Low",
+                }
+                yield {
+                    "confidence_level": 100,
+                    "malware_printable": "Perfect",
+                }
+                raise AssertionError("best-record selection should stop at perfect confidence")
+
+        best = _select_best_record(ExplodingTail())
+
+        assert best["confidence_level"] == 100
+        assert best["malware_printable"] == "Perfect"

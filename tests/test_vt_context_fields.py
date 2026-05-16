@@ -5,6 +5,8 @@ and reputation score into raw_stats.
 """
 from __future__ import annotations
 
+import builtins
+
 from app.enrichment.adapters.virustotal import _parse_response
 from app.pipeline.models import IOC, IOCType
 
@@ -57,8 +59,13 @@ class TestTopDetections:
         result = _parse_response(_make_ioc(), body)
         assert len(result.raw_stats["top_detections"]) == 5
 
-    def test_empty_when_no_analysis_results(self) -> None:
+    def test_empty_when_no_analysis_results(self, monkeypatch) -> None:
         """top_detections is empty list when last_analysis_results is absent."""
+        def fail_set(*_args, **_kwargs):
+            raise AssertionError("VT parsing should not allocate duplicate tracking for empty analysis results")
+
+        monkeypatch.setattr(builtins, "set", fail_set)
+
         body = {
             "data": {
                 "attributes": {

@@ -9,19 +9,21 @@ and future routes can stay explicit about which local state is inspected.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from datetime import datetime, timezone
+from itertools import islice
 from typing import Any
 
 from app.diagnostics.assembler import DiagnosticSource
+from app.diagnostics.policy import DIAGNOSTIC_SANITIZATION_POLICY
 from app.diagnostics.redaction import collect_configured_secret_inventory
 from app.health_contract import build_health_payload
+from app.time_utils import utcnow_iso
 
 DEFAULT_HISTORY_LIMIT = 10
-_SOURCE_MAX_BYTES = 16 * 1024
-_MAX_SAFE_STRING_CHARS = 240
-_MAX_LIST_ITEMS = 25
-_MAX_DICT_ITEMS = 50
-_MAX_DEPTH = 5
+_SOURCE_MAX_BYTES = DIAGNOSTIC_SANITIZATION_POLICY.runtime_source_max_bytes
+_MAX_SAFE_STRING_CHARS = DIAGNOSTIC_SANITIZATION_POLICY.max_safe_string_chars
+_MAX_LIST_ITEMS = DIAGNOSTIC_SANITIZATION_POLICY.max_list_items
+_MAX_DICT_ITEMS = DIAGNOSTIC_SANITIZATION_POLICY.max_dict_items
+_MAX_DEPTH = DIAGNOSTIC_SANITIZATION_POLICY.max_jsonish_depth
 
 JobDiagnosticsAccessor = Callable[[str], Mapping[str, Any] | None]
 HealthChecksProvider = Callable[[], Mapping[str, Mapping[str, Any]]]
@@ -160,11 +162,28 @@ def _config_secret_inventory_payload(config_store: Any) -> dict[str, Any]:
         raise RuntimeError(inventory.config_error)
     return {
         "configured_secret_count": len(inventory.secret_labels),
-        "configured_secret_labels": list(inventory.secret_labels),
+        "configured_secret_labels": _copy_label_tuple(inventory.secret_labels),
         "provider_count": len(inventory.provider_labels),
-        "provider_labels": list(inventory.provider_labels),
+        "provider_labels": _copy_label_tuple(inventory.provider_labels),
         "config_error": inventory.config_error,
     }
+
+
+def _copy_label_tuple(labels: tuple[str, ...]) -> list[str]:
+    label_count = len(labels)
+    if label_count == 0:
+        return []
+    if label_count == 1:
+        return [labels[0]]
+    if label_count == 2:
+        return [labels[0], labels[1]]
+    if label_count == 3:
+        return [labels[0], labels[1], labels[2]]
+
+    copied: list[str] = []
+    for label in labels:
+        copied.append(label)
+    return copied
 
 
 def _cache_stats_payload(cache_store: Any) -> dict[str, Any]:
@@ -178,7 +197,23 @@ def _recent_history_payload(history_store: Any, limit: int) -> dict[str, Any]:
     recent = history_store.list_recent(limit=limit)
     if not isinstance(recent, list):
         raise TypeError("HistoryStore.list_recent() returned non-list diagnostics")
-    safe_recent = [_safe_jsonish(item) for item in recent[:limit]]
+    recent_count = len(recent)
+    if recent_count == 0 or limit <= 0:
+        return {
+            "limit": limit,
+            "returned_count": 0,
+            "items": [],
+        }
+    if recent_count == 1:
+        return {
+            "limit": limit,
+            "returned_count": 1,
+            "items": [_safe_jsonish(recent[0])],
+        }
+
+    safe_recent: list[Any] = []
+    for item in islice(recent, limit):
+        safe_recent.append(_safe_jsonish(item))
     return {
         "limit": limit,
         "returned_count": len(safe_recent),
@@ -230,8 +265,10 @@ def _job_diagnostics_payload(accessor: JobDiagnosticsAccessor, job_id: str) -> d
     if not isinstance(snapshot, Mapping):
         raise TypeError("job diagnostics accessor returned non-mapping diagnostics")
     safe = _safe_mapping(snapshot)
-    safe.setdefault("job_id", job_id)
-    safe.setdefault("found", True)
+    if "job_id" not in safe:
+        safe["job_id"] = job_id
+    if "found" not in safe:
+        safe["found"] = True
     return safe
 
 
@@ -252,7 +289,7 @@ def _bounded_limit(limit: int) -> int:
 
 
 def _safe_mapping(value: Mapping[str, Any]) -> dict[str, Any]:
-    safe = _safe_jsonish(dict(value))
+    safe = _safe_jsonish(value)
     if not isinstance(safe, dict):
         raise TypeError("diagnostic mapping could not be coerced")
     return safe
@@ -266,15 +303,42 @@ def _safe_jsonish(value: Any, *, depth: int = 0) -> Any:
     if isinstance(value, str):
         return value[:_MAX_SAFE_STRING_CHARS]
     if isinstance(value, Mapping):
-        items = list(value.items())[:_MAX_DICT_ITEMS]
-        return {str(key)[:80]: _safe_jsonish(val, depth=depth + 1) for key, val in items}
-    if isinstance(value, (list, tuple, set, frozenset)):
-        return [_safe_jsonish(item, depth=depth + 1) for item in list(value)[:_MAX_LIST_ITEMS]]
+        if type(value) is dict:
+            value_count = len(value)
+            if value_count == 0:
+                return {}
+            if value_count == 1:
+                for key in value:
+                    return {str(key)[:80]: _safe_jsonish(value[key], depth=depth + 1)}
+        safe: dict[str, Any] = {}
+        for key in islice(value, _MAX_DICT_ITEMS):
+            safe[str(key)[:80]] = _safe_jsonish(value[key], depth=depth + 1)
+        return safe
+    if isinstance(value, (list, tuple)):
+        value_count = len(value)
+        if value_count == 0:
+            return []
+        if value_count == 1:
+            return [_safe_jsonish(value[0], depth=depth + 1)]
+        if value_count == 2:
+            return [
+                _safe_jsonish(value[0], depth=depth + 1),
+                _safe_jsonish(value[1], depth=depth + 1),
+            ]
+        safe_items: list[Any] = []
+        for item in islice(value, _MAX_LIST_ITEMS):
+            safe_items.append(_safe_jsonish(item, depth=depth + 1))
+        return safe_items
+    if isinstance(value, (set, frozenset)):
+        safe_items: list[Any] = []
+        for item in islice(value, _MAX_LIST_ITEMS):
+            safe_items.append(_safe_jsonish(item, depth=depth + 1))
+        return safe_items
     return repr(value)[:_MAX_SAFE_STRING_CHARS]
 
 
 def _utcnow_iso() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    return utcnow_iso()
 
 
 __all__ = [

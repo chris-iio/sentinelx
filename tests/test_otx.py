@@ -6,8 +6,11 @@ All HTTP calls are mocked using unittest.mock.patch -- no real API calls.
 """
 from __future__ import annotations
 
+import inspect
+from types import MappingProxyType
+
 from app.enrichment.models import EnrichmentResult
-from app.enrichment.adapters.otx import OTXAdapter
+from app.enrichment.adapters.otx import OTXAdapter, _parse_response
 from tests.helpers import (
     make_mock_response,
     mock_adapter_session,
@@ -120,6 +123,28 @@ def _make_adapter(api_key: str = "test-api-key", allowed_hosts: list[str] | None
 
 class TestOTXLookup:
 
+    def test_result_helper_preserves_provider_envelope(self) -> None:
+        """OTX response branches should share one provider envelope."""
+        from app.enrichment.adapters.otx import _otx_result
+
+        ioc = make_ipv4_ioc("8.8.8.8")
+        result = _otx_result(
+            ioc=ioc,
+            provider_name="OTX AlienVault",
+            verdict="malicious",
+            detection_count=7,
+            total_engines=1,
+            raw_stats={"pulse_count": 7},
+        )
+
+        assert result.ioc is ioc
+        assert result.provider == "OTX AlienVault"
+        assert result.verdict == "malicious"
+        assert result.detection_count == 7
+        assert result.total_engines == 1
+        assert result.scan_date is None
+        assert result.raw_stats == {"pulse_count": 7}
+
     def test_ipv4_high_pulse_count_returns_malicious(self) -> None:
         """IPv4 with pulse_info.count >= 5 -> verdict=malicious."""
         ioc = make_ipv4_ioc("8.8.8.8")
@@ -161,6 +186,22 @@ class TestOTXLookup:
         assert isinstance(result, EnrichmentResult)
         assert result.verdict == "no_data"
         assert result.detection_count == 0
+
+    def test_missing_pulse_info_reuses_static_empty_mapping(self) -> None:
+        """Missing pulse info should not allocate a per-call default dict."""
+        ioc = make_ipv4_ioc("192.0.2.1")
+
+        class NoDefaultBody(dict):
+            def get(self, key, default=None):
+                if key == "pulse_info" and default is not None:
+                    raise AssertionError("missing OTX pulse info should use the shared empty mapping")
+                return super().get(key, default)
+
+        result = _parse_response(ioc, NoDefaultBody(), "OTX AlienVault")
+
+        assert result.verdict == "no_data"
+        assert result.detection_count == 0
+        assert result.raw_stats["pulse_count"] == 0
 
     def test_domain_lookup_returns_result(self) -> None:
         """DOMAIN IOC -> GET /api/v1/indicators/domain/{value}/general."""
@@ -266,6 +307,12 @@ class TestOTXLookup:
         )
         assert result.verdict == "no_data"
         assert result.detection_count == 0
+        assert result.total_engines == 0
+        assert result.scan_date is None
+        assert result.raw_stats == {}
+        assert "no_data_result(ioc, self.name)" in inspect.getsource(
+            OTXAdapter._make_pre_raise_hook,
+        )
 
     def test_raw_stats_contains_expected_keys(self) -> None:
         """200 response -> raw_stats dict contains keys: pulse_count, reputation, type_title."""
@@ -343,6 +390,13 @@ class TestOTXLookup:
 
 
 class TestOTXTypeMapping:
+
+    def test_supported_types_derive_from_otx_route_map(self) -> None:
+        """Supported OTX types should stay locked to the URL route map keys."""
+        from app.enrichment.adapters.otx import _OTX_TYPE_MAP
+
+        assert isinstance(_OTX_TYPE_MAP, MappingProxyType)
+        assert OTXAdapter.supported_types == frozenset(_OTX_TYPE_MAP)
 
     def test_ipv4_maps_to_ipv4_string(self) -> None:
         """IOCType.IPV4 -> 'IPv4' in URL path."""
@@ -446,4 +500,3 @@ class TestOTXTypeMapping:
 
         call_url = adapter._session.get.call_args[0][0]
         assert "/indicators/cve/CVE-2021-44228/general" in call_url
-

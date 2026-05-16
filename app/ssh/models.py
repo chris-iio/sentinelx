@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class LoginEvent:
     """An immutable record of a successful SSH login event.
 
@@ -52,7 +52,7 @@ class LoginEvent:
     raw_line: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ParseSummary:
     """Immutable summary of a completed auth.log parse run.
 

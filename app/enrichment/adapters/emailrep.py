@@ -4,7 +4,7 @@ from __future__ import annotations
 from urllib.parse import quote
 
 from app.enrichment.adapters.base import BaseHTTPAdapter
-from app.enrichment.models import EnrichmentResult
+from app.enrichment.models import EnrichmentResult, provider_result
 from app.pipeline.models import IOC, IOCType
 
 EMAILREP_BASE = "https://emailrep.io"
@@ -17,6 +17,7 @@ _MALICIOUS_FLAGS = (
     "credentials_leaked_recent",
     "data_breach",
 )
+_MALICIOUS_FLAG_SET = frozenset(_MALICIOUS_FLAGS)
 
 _RISK_FLAG_FIELDS = (
     *_MALICIOUS_FLAGS,
@@ -31,12 +32,14 @@ _NEGATIVE_BOOLEAN_FLAGS = (
     ("deliverable", "deliverable_false"),
     ("valid_mx", "valid_mx_false"),
 )
+_NO_REPUTATION_VALUES = frozenset(("none", "n/a", "unknown"))
+_DETECTION_VERDICTS = frozenset(("malicious", "suspicious"))
 
 
 class EmailRepAdapter(BaseHTTPAdapter):
     """EmailRep reputation endpoint — email-only, API-key-gated."""
 
-    supported_types: frozenset[IOCType] = frozenset({IOCType.EMAIL})
+    supported_types: frozenset[IOCType] = frozenset((IOCType.EMAIL,))
     name = "EmailRep"
     requires_api_key = True
 
@@ -54,41 +57,52 @@ class EmailRepAdapter(BaseHTTPAdapter):
         return _parse_response(ioc, body, self.name)
 
 
-def _risk_flags(details: dict) -> list[str]:
-    """Return ordered EmailRep risk flags from the nested details object."""
-    flags = [field for field in _RISK_FLAG_FIELDS if details.get(field) is True]
+def _risk_flags(details: dict) -> tuple[list[str], bool]:
+    """Return ordered EmailRep risk flags and whether any are malicious."""
+    if not details:
+        return [], False
+    flags: list[str] = []
+    has_malicious_flag = False
+    for field in _RISK_FLAG_FIELDS:
+        if details.get(field) is True:
+            flags.append(field)
+            if field in _MALICIOUS_FLAG_SET:
+                has_malicious_flag = True
     for field, flag_name in _NEGATIVE_BOOLEAN_FLAGS:
         if details.get(field) is False:
             flags.append(flag_name)
     if details.get("spoofable") is True:
         flags.append("spoofable")
-    return flags
+    return flags, has_malicious_flag
 
 
 def _parse_response(ioc: IOC, body: dict, provider_name: str) -> EnrichmentResult:
-    details = body.get("details") if isinstance(body.get("details"), dict) else {}
+    raw_details = body.get("details")
+    details = raw_details if isinstance(raw_details, dict) else {}
     reputation = body.get("reputation") or "none"
     suspicious = bool(body.get("suspicious", False))
     references = body.get("references", 0) or 0
-    flags = _risk_flags(details)
+    flags, has_malicious_flag = _risk_flags(details)
 
-    if any(details.get(flag) is True for flag in _MALICIOUS_FLAGS):
+    if has_malicious_flag:
         verdict = "malicious"
     elif suspicious or flags or reputation == "low":
         verdict = "suspicious"
-    elif reputation in {"none", "n/a", "unknown"}:
+    elif reputation in _NO_REPUTATION_VALUES:
         verdict = "no_data"
     else:
         verdict = "clean"
 
-    detection_count = references if verdict in {"malicious", "suspicious"} else 0
+    detection_count = references if verdict in _DETECTION_VERDICTS else 0
+    raw_profiles = details.get("profiles") if details else None
+    profiles = raw_profiles if isinstance(raw_profiles, list) else []
 
     raw_stats = {
         "reputation": reputation,
         "suspicious": suspicious,
         "references": references,
         "risk_flags": flags,
-        "profiles": details.get("profiles", []) or [],
+        "profiles": profiles,
         "domain_reputation": details.get("domain_reputation"),
         "first_seen": details.get("first_seen"),
         "last_seen": details.get("last_seen"),
@@ -104,12 +118,31 @@ def _parse_response(ioc: IOC, body: dict, provider_name: str) -> EnrichmentResul
         "dmarc_enforced": details.get("dmarc_enforced"),
     }
 
-    return EnrichmentResult(
+    return _emailrep_result(
         ioc=ioc,
         provider=provider_name,
         verdict=verdict,
         detection_count=detection_count,
-        total_engines=1,
         scan_date=details.get("last_seen"),
+        raw_stats=raw_stats,
+    )
+
+
+def _emailrep_result(
+    *,
+    ioc: IOC,
+    provider: str,
+    verdict: str,
+    detection_count: int,
+    scan_date: str | None,
+    raw_stats: dict,
+) -> EnrichmentResult:
+    return provider_result(
+        ioc=ioc,
+        provider=provider,
+        verdict=verdict,
+        detection_count=detection_count,
+        total_engines=1,
+        scan_date=scan_date,
         raw_stats=raw_stats,
     )

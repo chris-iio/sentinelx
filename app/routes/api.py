@@ -14,19 +14,22 @@ from flask import Blueprint, current_app, jsonify, request
 from app import limiter
 from app.health_contract import HEALTH_PATH, build_health_payload
 from app.pipeline.extractor import run_pipeline
-from app.pipeline.models import IOCType, group_by_type
+from app.text_utils import has_non_whitespace
 
 from ._helpers import (
+    _append_serialized_ioc_by_type,
     _get_enrichment_status,
     _online_fanout_diagnostics,
     _online_limit_response,
+    _online_limits_from_config,
+    _serialized_ioc_response_payload,
     _serialize_ioc,
     _setup_orchestrator,
 )
 
 bp_api = Blueprint("api", __name__, url_prefix="/api")
 
-_VALID_MODES = {"offline", "online"}
+_VALID_MODES = frozenset(("offline", "online"))
 
 
 def _health_check_ok(detail: str = "ok") -> dict[str, str]:
@@ -37,6 +40,13 @@ def _health_check_ok(detail: str = "ok") -> dict[str, str]:
 def _health_check_degraded(exc: Exception) -> dict[str, str]:
     """Return a bounded degraded check without leaking paths or secrets."""
     return {"status": "degraded", "detail": exc.__class__.__name__}
+
+
+def _registry_health_detail(registry) -> str:
+    """Return configured/registered provider health detail from direct counts."""
+    configured_count = registry.configured_count()
+    registered_count = registry.registered_count()
+    return f"{configured_count}/{registered_count} providers configured"
 
 
 @bp_api.route(HEALTH_PATH.removeprefix("/api"), methods=["GET"])
@@ -60,11 +70,7 @@ def api_health():
         checks["history"] = _health_check_degraded(exc)
 
     try:
-        all_count = len(current_app.registry.all())
-        configured_count = len(current_app.registry.configured())
-        checks["registry"] = _health_check_ok(
-            f"{configured_count}/{all_count} providers configured"
-        )
+        checks["registry"] = _health_check_ok(_registry_health_detail(current_app.registry))
     except Exception as exc:  # pragma: no cover - exercised by route tests
         current_app.logger.warning("Health registry check failed: %s", exc.__class__.__name__)
         checks["registry"] = _health_check_degraded(exc)
@@ -97,7 +103,7 @@ def api_analyze():
         return jsonify({"error": "Request body must be JSON"}), 400
 
     text = data.get("text", "")
-    if not isinstance(text, str) or not text.strip():
+    if not isinstance(text, str) or not has_non_whitespace(text):
         return jsonify({"error": "Field 'text' is required and must be non-empty"}), 400
 
     mode = data.get("mode", "offline")
@@ -105,28 +111,22 @@ def api_analyze():
         return jsonify({"error": f"Invalid mode '{mode}'. Must be 'offline' or 'online'."}), 400
 
     iocs = run_pipeline(text)
-    grouped = group_by_type(iocs)
     total_count = len(iocs)
+    if total_count == 0:
+        return jsonify({
+            "mode": mode,
+            "total_count": 0,
+            "iocs": [],
+            "grouped": {},
+        }), 200
 
-    serialized_iocs = [_serialize_ioc(ioc) for ioc in iocs]
-
-    # Build grouped summary
-    grouped_summary = {}
-    for ioc_type, ioc_list in grouped.items():
-        type_key = ioc_type.value if isinstance(ioc_type, IOCType) else str(ioc_type)
-        grouped_summary[type_key] = [_serialize_ioc(i) for i in ioc_list]
-
-    response: dict = {
-        "mode": mode,
-        "total_count": total_count,
-        "iocs": serialized_iocs,
-        "grouped": grouped_summary,
-    }
+    job_id: str | None = None
 
     if mode == "online":
         registry = current_app.registry
+        configured_providers = registry.configured()
 
-        if not registry.configured():
+        if not configured_providers:
             return jsonify({
                 "error": (
                     "No provider API keys configured. "
@@ -134,8 +134,7 @@ def api_analyze():
                 ),
             }), 400
 
-        max_iocs = int(current_app.config.get("ONLINE_MAX_IOCS", 50))
-        max_dispatches = int(current_app.config.get("ONLINE_MAX_DISPATCHES", 200))
+        max_iocs, max_dispatches = _online_limits_from_config()
         fanout_diagnostics = _online_fanout_diagnostics(
             iocs,
             registry,
@@ -153,9 +152,19 @@ def api_analyze():
             return jsonify(_online_limit_response(fanout_diagnostics)), 413
 
         job_id, _, registry = _setup_orchestrator(
-            iocs, text, mode, current_app.history_store,
+            iocs, text, mode, current_app.history_store, configured_providers,
         )
 
+    serialized_iocs, grouped_summary = _serialized_ioc_response_payload(iocs)
+
+    response: dict = {
+        "mode": mode,
+        "total_count": total_count,
+        "iocs": serialized_iocs,
+        "grouped": grouped_summary,
+    }
+
+    if job_id is not None:
         response["job_id"] = job_id
         response["status_url"] = f"/api/status/{job_id}"
 

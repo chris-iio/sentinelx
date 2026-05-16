@@ -15,21 +15,23 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Collection
 from typing import Any, Callable
 from urllib.parse import urlparse
 
 import requests
 
-from app.enrichment.models import EnrichmentError, IOC
+from app.enrichment.models import EnrichmentError, IOC, error_result
 
 logger = logging.getLogger(__name__)
 
 
 TIMEOUT = (5, 30)  # (connect, read) — SEC-04
 MAX_RESPONSE_BYTES = 1 * 1024 * 1024  # 1 MB cap — SEC-05
+RESPONSE_CHUNK_SIZE = 8192
 
 
-def validate_endpoint(url: str, allowed_hosts: list[str]) -> None:
+def validate_endpoint(url: str, allowed_hosts: Collection[str]) -> None:
     """Raise ValueError if endpoint hostname is not on the SSRF allowlist.
 
     Enforces SEC-16: no outbound calls to hosts outside ALLOWED_API_HOSTS.
@@ -42,6 +44,9 @@ def validate_endpoint(url: str, allowed_hosts: list[str]) -> None:
     Raises:
         ValueError: If the URL hostname is not in the allowlist.
     """
+    if not allowed_hosts:
+        raise ValueError("Endpoint rejected because allowed_hosts is empty (SSRF allowlist SEC-16).")
+
     parsed = urlparse(url)
     if parsed.hostname not in allowed_hosts:
         raise ValueError(
@@ -63,22 +68,31 @@ def read_limited(resp: requests.Response) -> dict:
         ValueError: If response body exceeds MAX_RESPONSE_BYTES.
         json.JSONDecodeError: If body is not valid JSON.
     """
-    chunks: list[bytes] = []
+    body: bytearray | None = None
+    first_chunk: bytes | None = None
     total = 0
-    for chunk in resp.iter_content(chunk_size=8192):
+    for chunk in resp.iter_content(chunk_size=RESPONSE_CHUNK_SIZE):
         total += len(chunk)
         if total > MAX_RESPONSE_BYTES:
             raise ValueError(
                 f"Response exceeded size limit of {MAX_RESPONSE_BYTES} bytes (SEC-05)"
             )
-        chunks.append(chunk)
-    return json.loads(b"".join(chunks))
+        if first_chunk is None:
+            first_chunk = chunk
+            continue
+        if body is None:
+            body = bytearray()
+            body.extend(first_chunk)
+        body.extend(chunk)
+    if body is None:
+        return json.loads(first_chunk if first_chunk is not None else b"")
+    return json.loads(body)
 
 
 def safe_request(
     session: requests.Session,
     url: str,
-    allowed_hosts: list[str],
+    allowed_hosts: Collection[str],
     ioc: IOC,
     provider: str,
     *,
@@ -140,21 +154,19 @@ def safe_request(
         return body
 
     except requests.exceptions.Timeout:
-        return EnrichmentError(ioc=ioc, provider=provider, error="Request timed out")
+        return error_result(ioc, provider, "Request timed out")
     except requests.exceptions.HTTPError as exc:
         status = exc.response.status_code if exc.response is not None else "unknown"
-        return EnrichmentError(ioc=ioc, provider=provider, error=f"HTTP {status}")
+        return error_result(ioc, provider, f"HTTP {status}")
     except requests.exceptions.SSLError:
-        return EnrichmentError(ioc=ioc, provider=provider, error="SSL/TLS error")
+        return error_result(ioc, provider, "SSL/TLS error")
     except requests.exceptions.ConnectionError:
-        return EnrichmentError(ioc=ioc, provider=provider, error="Connection failed")
+        return error_result(ioc, provider, "Connection failed")
     except ValueError as exc:
-        return EnrichmentError(
-            ioc=ioc, provider=provider, error=str(exc) or "Endpoint validation failed"
-        )
+        return error_result(ioc, provider, str(exc) or "Endpoint validation failed")
     except Exception as exc:
         logger.warning(
             "safe_request unexpected error provider=%s ioc=%s: %s",
             provider, ioc.value, exc,
         )
-        return EnrichmentError(ioc=ioc, provider=provider, error=f"Unexpected error: {exc}")
+        return error_result(ioc, provider, f"Unexpected error: {exc}")

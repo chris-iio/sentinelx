@@ -6,10 +6,22 @@ from flask import (
 
 from app import limiter
 from app.enrichment.config_store import ConfigStore
-from app.enrichment.setup import PROVIDER_INFO, build_registry
+from app.enrichment.setup import PROVIDER_IDS, PROVIDER_INFO, build_registry
+from app.text_utils import stripped_text_or_none
 
 from . import bp
 from ._helpers import _mask_key, get_history_save_diagnostics
+
+
+_VALID_PROVIDER_IDS = frozenset(PROVIDER_IDS)
+_VIRUSTOTAL_PROVIDER_ID = "virustotal"
+
+
+def _stripped_form_value(field_name: str) -> str:
+    value = request.form.get(field_name)
+    if value is None:
+        return ""
+    return stripped_text_or_none(value) or ""
 
 
 @bp.route("/settings", methods=["GET"])
@@ -17,13 +29,14 @@ from ._helpers import _mask_key, get_history_save_diagnostics
 def settings_get():
     """Settings page — shows per-provider API key configuration forms."""
     config_store = ConfigStore()
+    provider_keys = config_store.all_provider_keys()
     providers_with_status = []
     for info in PROVIDER_INFO:
         pid = info["id"]
-        if pid == "virustotal":
+        if pid == _VIRUSTOTAL_PROVIDER_ID:
             key = config_store.get_vt_api_key()
         else:
-            key = config_store.get_provider_key(pid)
+            key = provider_keys.get(pid)
         providers_with_status.append({
             **info,
             "masked_key": _mask_key(key),
@@ -46,20 +59,19 @@ def settings_get():
 @limiter.limit("10 per minute")
 def settings_post():
     """Save a provider API key."""
-    provider_id = request.form.get("provider_id", "").strip()
-    api_key = request.form.get("api_key", "").strip()
+    provider_id = _stripped_form_value("provider_id")
+    api_key = _stripped_form_value("api_key")
 
     if not api_key:
         flash("API key cannot be empty.", "error")
         return redirect(url_for("main.settings_get"))
 
-    valid_ids = {p["id"] for p in PROVIDER_INFO}
-    if provider_id not in valid_ids:
+    if provider_id not in _VALID_PROVIDER_IDS:
         flash("Unknown provider.", "error")
         return redirect(url_for("main.settings_get"))
 
     config_store = ConfigStore()
-    if provider_id == "virustotal":
+    if provider_id == _VIRUSTOTAL_PROVIDER_ID:
         config_store.set_vt_api_key(api_key)
     else:
         config_store.set_provider_key(provider_id, api_key)
@@ -84,7 +96,7 @@ def cache_clear():
 @limiter.limit("10 per minute")
 def cache_ttl_set():
     """Update cache TTL hours setting."""
-    ttl_str = request.form.get("cache_ttl", "").strip()
+    ttl_str = _stripped_form_value("cache_ttl")
     try:
         ttl = int(ttl_str)
         if ttl < 1:

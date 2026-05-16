@@ -14,6 +14,7 @@ All WHOIS calls are mocked using unittest.mock.patch -- no real WHOIS queries.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import inspect
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -109,6 +110,57 @@ class TestSuccessfulLookup:
         assert isinstance(result, EnrichmentResult)
         assert result.verdict == "no_data"
 
+    def test_result_helper_preserves_provider_envelope(self) -> None:
+        """WHOIS result construction should keep the informational envelope centralized."""
+        import inspect
+
+        from app.enrichment.adapters.whois_lookup import _whois_result
+
+        raw_stats = {
+            "registrar": "Example Registrar Inc.",
+            "creation_date": "2020-01-01T00:00:00+00:00",
+            "expiration_date": None,
+            "name_servers": ["NS1.EXAMPLE.COM"],
+            "org": "Example Org",
+            "lookup_errors": [],
+        }
+
+        result = _whois_result(
+            ioc=DOMAIN_IOC,
+            provider="WHOIS",
+            raw_stats=raw_stats,
+        )
+
+        assert result.ioc is DOMAIN_IOC
+        assert result.provider == "WHOIS"
+        assert result.verdict == "no_data"
+        assert result.detection_count == 0
+        assert result.total_engines == 0
+        assert result.scan_date is None
+        assert result.raw_stats is raw_stats
+        assert "no_data_result(ioc, provider, raw_stats)" in inspect.getsource(_whois_result)
+
+    def test_empty_raw_stats_helper_preserves_fresh_defaults(self) -> None:
+        """WHOIS empty-result branches should share one fresh raw-stats shape."""
+        from app.enrichment.adapters.whois_lookup import _empty_whois_raw_stats
+
+        first = _empty_whois_raw_stats()
+        second = _empty_whois_raw_stats()
+        errors = ["parse failed"]
+        with_errors = _empty_whois_raw_stats(errors)
+
+        assert first == {
+            "registrar": None,
+            "creation_date": None,
+            "expiration_date": None,
+            "name_servers": [],
+            "org": None,
+            "lookup_errors": [],
+        }
+        assert first["name_servers"] is not second["name_servers"]
+        assert first["lookup_errors"] is not second["lookup_errors"]
+        assert with_errors["lookup_errors"] is errors
+
 
 # ---------------------------------------------------------------------------
 # raw_stats field extraction
@@ -171,6 +223,26 @@ class TestRawStatsExtraction:
 
         assert isinstance(result, EnrichmentResult)
         assert result.raw_stats["name_servers"] == []
+
+    def test_name_server_lists_are_reused_without_copying(self) -> None:
+        """WHOIS name server lists should not be copied when already materialized."""
+        name_servers = ["NS1.EXAMPLE.COM", "NS2.EXAMPLE.COM"]
+        mock_resp = _make_whois_response(name_servers=name_servers)
+        with patch("app.enrichment.adapters.whois_lookup.whois.whois", return_value=mock_resp):
+            result = _make_adapter().lookup(DOMAIN_IOC)
+
+        assert isinstance(result, EnrichmentResult)
+        assert result.raw_stats["name_servers"] is name_servers
+
+    def test_name_server_non_list_iterables_are_materialized(self) -> None:
+        """Non-list name server iterables still become lists for raw_stats."""
+        mock_resp = _make_whois_response()
+        mock_resp.name_servers = ("NS1.EXAMPLE.COM", "NS2.EXAMPLE.COM")
+        with patch("app.enrichment.adapters.whois_lookup.whois.whois", return_value=mock_resp):
+            result = _make_adapter().lookup(DOMAIN_IOC)
+
+        assert isinstance(result, EnrichmentResult)
+        assert result.raw_stats["name_servers"] == ["NS1.EXAMPLE.COM", "NS2.EXAMPLE.COM"]
 
     def test_raw_stats_has_all_keys(self) -> None:
         """raw_stats must contain registrar, creation_date, expiration_date, name_servers, org, lookup_errors."""
@@ -455,3 +527,45 @@ class TestNormaliseDatetime:
         """String -> returned as-is."""
         from app.enrichment.adapters.whois_lookup import _normalise_datetime
         assert _normalise_datetime("2020-01-01") == "2020-01-01"
+
+
+class TestNormaliseNameServers:
+
+    def test_normalise_name_servers_reuses_exact_lists_without_iterating(self) -> None:
+        from app.enrichment.adapters.whois_lookup import _normalise_name_servers
+
+        class NoIterList(list):
+            def __iter__(self):
+                raise AssertionError("exact name server lists should not be copied")
+
+        servers = NoIterList(["NS1.EXAMPLE.COM"])
+
+        assert _normalise_name_servers(servers) is servers
+
+    def test_normalise_name_servers_accumulates_iterables_without_list_constructor(self) -> None:
+        from app.enrichment.adapters.whois_lookup import _normalise_name_servers
+
+        servers = ("NS1.EXAMPLE.COM", "NS2.EXAMPLE.COM")
+
+        assert _normalise_name_servers(servers) == ["NS1.EXAMPLE.COM", "NS2.EXAMPLE.COM"]
+        assert "return list(" not in inspect.getsource(_normalise_name_servers)
+
+    def test_normalise_name_servers_skips_iteration_for_empty_single_pair_or_three_tuple(self) -> None:
+        from app.enrichment.adapters.whois_lookup import _normalise_name_servers
+
+        class NoIterTuple(tuple):
+            def __iter__(self):
+                raise AssertionError("short tuple name servers should not iterate")
+
+        assert _normalise_name_servers(NoIterTuple(())) == []
+        assert _normalise_name_servers(NoIterTuple(("NS1.EXAMPLE.COM",))) == ["NS1.EXAMPLE.COM"]
+        assert _normalise_name_servers(NoIterTuple(("NS1.EXAMPLE.COM", "NS2.EXAMPLE.COM"))) == [
+            "NS1.EXAMPLE.COM",
+            "NS2.EXAMPLE.COM",
+        ]
+        assert _normalise_name_servers(NoIterTuple(("NS1.EXAMPLE.COM", "NS2.EXAMPLE.COM", "NS3.EXAMPLE.COM"))) == [
+            "NS1.EXAMPLE.COM",
+            "NS2.EXAMPLE.COM",
+            "NS3.EXAMPLE.COM",
+        ]
+        assert "len" in _normalise_name_servers.__code__.co_names

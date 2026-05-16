@@ -27,6 +27,7 @@ import ipaddress
 import re
 
 from app.pipeline.models import IOC, IOCType
+from app.text_utils import stripped_text_or_none
 
 # ---------------------------------------------------------------------------
 # Compiled patterns — more specific patterns MUST come before general ones.
@@ -53,25 +54,28 @@ _RE_DOMAIN = re.compile(
     r"+[a-zA-Z]{2,}$"
 )
 # Domains to reject explicitly
-_DOMAIN_BLACKLIST = {"localhost"}
+_DOMAIN_BLACKLIST = frozenset(("localhost",))
 
 
-def _is_valid_ipv4(value: str) -> bool:
-    """Return True if value is a syntactically valid IPv4 address."""
+def _looks_like_ip_literal(value: str) -> bool:
+    """Return True when value has the shape of an IPv4 or IPv6 literal."""
+    if ":" in value:
+        return True
+    if "." not in value:
+        return False
+    for char in value:
+        if char != "." and not char.isdecimal():
+            return False
+    return True
+
+
+def _classify_ip_type(value: str) -> IOCType | None:
+    """Return the IOC type for a syntactically valid IP address."""
     try:
         addr = ipaddress.ip_address(value)
-        return addr.version == 4
+        return IOCType.IPV4 if addr.version == 4 else IOCType.IPV6
     except ValueError:
-        return False
-
-
-def _is_valid_ipv6(value: str) -> bool:
-    """Return True if value is a syntactically valid IPv6 address."""
-    try:
-        addr = ipaddress.ip_address(value)
-        return addr.version == 6
-    except ValueError:
-        return False
+        return None
 
 
 def classify(normalized_value: str, raw_match: str) -> IOC | None:
@@ -95,10 +99,9 @@ def classify(normalized_value: str, raw_match: str) -> IOC | None:
     Returns:
         IOC dataclass with assigned type, or None if unclassifiable.
     """
-    if not normalized_value:
+    v = stripped_text_or_none(normalized_value)
+    if v is None:
         return None
-
-    v = normalized_value.strip()
 
     # 1. CVE
     if _RE_CVE.match(v):
@@ -120,20 +123,19 @@ def classify(normalized_value: str, raw_match: str) -> IOC | None:
     if _RE_URL.match(v):
         return IOC(type=IOCType.URL, value=v, raw_match=raw_match)
 
-    # 6. IPv6
-    if _is_valid_ipv6(v):
-        return IOC(type=IOCType.IPV6, value=v, raw_match=raw_match)
-
-    # 7. IPv4
-    if _is_valid_ipv4(v):
-        return IOC(type=IOCType.IPV4, value=v, raw_match=raw_match)
+    # 6-7. IP address — parse once, preserving IPv6-before-IPv4 precedence.
+    if _looks_like_ip_literal(v):
+        ip_type = _classify_ip_type(v)
+        if ip_type is not None:
+            return IOC(type=ip_type, value=v, raw_match=raw_match)
 
     # 8. Email — must come before domain: user@evil.com would match domain regex
     if _RE_EMAIL.match(v):
         return IOC(type=IOCType.EMAIL, value=v.lower(), raw_match=raw_match)
 
     # 9. Domain
-    if v.lower() not in _DOMAIN_BLACKLIST and _RE_DOMAIN.match(v):
-        return IOC(type=IOCType.DOMAIN, value=v.lower(), raw_match=raw_match)
+    lower_v = v.lower()
+    if lower_v not in _DOMAIN_BLACKLIST and _RE_DOMAIN.match(v):
+        return IOC(type=IOCType.DOMAIN, value=lower_v, raw_match=raw_match)
 
     return None

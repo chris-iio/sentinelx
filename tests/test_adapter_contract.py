@@ -9,7 +9,9 @@ Usage:
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Callable
 from unittest.mock import MagicMock
 
@@ -68,6 +70,44 @@ class AdapterEntry:
 
 # All 9 IOC types for computing excluded_types conveniently
 _ALL_TYPES = frozenset(IOCType)
+
+
+def test_adapter_static_frozensets_avoid_temporary_set_literals() -> None:
+    """Static adapter frozensets should not allocate temporary set literals."""
+    offenders: list[str] = []
+    temporary_set_literal = re.compile(r"frozenset\s*\(\s*\{", re.MULTILINE)
+    for path in Path("app/enrichment/adapters").glob("*.py"):
+        source = path.read_text(encoding="utf-8")
+        if temporary_set_literal.search(source):
+            offenders.append(str(path))
+
+    assert offenders == []
+
+
+def test_adapter_result_helpers_use_shared_provider_result_factory() -> None:
+    """Provider-specific result helpers should not duplicate the model envelope."""
+    offenders: list[str] = []
+    for path in Path("app/enrichment/adapters").glob("*.py"):
+        if path.name in {"base.py", "__init__.py"}:
+            continue
+        source = path.read_text(encoding="utf-8")
+        if "return EnrichmentResult(" in source:
+            offenders.append(str(path))
+
+    assert offenders == []
+
+
+def test_enrichment_error_paths_use_shared_error_result_factory() -> None:
+    """Production enrichment error paths should not duplicate the error envelope."""
+    offenders: list[str] = []
+    for path in Path("app/enrichment").rglob("*.py"):
+        if path.name in {"models.py", "__init__.py"}:
+            continue
+        source = path.read_text(encoding="utf-8")
+        if "return EnrichmentError(" in source:
+            offenders.append(str(path))
+
+    assert offenders == []
 
 
 def _excluded(supported: frozenset[IOCType]) -> list[IOCType]:

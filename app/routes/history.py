@@ -1,13 +1,20 @@
 """History routes: list and reload past analyses."""
 
-import json
-
 from flask import abort, current_app, render_template
 
 from app import limiter
-from app.pipeline.models import IOC, IOCType, group_by_type
+from app.json_utils import EMPTY_JSON_ARRAY, EMPTY_JSON_OBJECT, encode_json_array
 
 from . import bp
+from ._helpers import _group_history_iocs, _history_ioc_template_context
+
+_EMPTY_JSON_ARRAY = EMPTY_JSON_ARRAY
+_EMPTY_JSON_OBJECT = EMPTY_JSON_OBJECT
+
+
+def _history_results_json(results: list[dict]) -> str:
+    """Serialize replay results without invoking JSON machinery for the empty case."""
+    return encode_json_array(results)
 
 
 @bp.route("/history")
@@ -27,30 +34,17 @@ def history_detail(analysis_id: str):
     if record is None:
         abort(404)
 
-    iocs = [
-        IOC(
-            type=IOCType(d["type"]),
-            value=d["value"],
-            raw_match=d["raw_match"],
-        )
-        for d in record["iocs"]
-    ]
-    grouped = group_by_type(iocs)
-    total_count = record["total_count"]
-    no_results = total_count == 0
     enrichable_count = len(record["results"])
 
-    history_results = json.dumps(record["results"])
+    history_results = _history_results_json(record["results"])
 
     return render_template(
         "results.html",
-        grouped={} if no_results else grouped,
         mode="online",
-        total_count=total_count,
-        no_results=no_results,
+        **_history_ioc_template_context(record["iocs"], record["total_count"]),
         job_id="history",
         enrichable_count=enrichable_count,
-        provider_counts="{}",
+        provider_counts=_EMPTY_JSON_OBJECT,
         provider_coverage={"registered": 0, "configured": 0, "needs_key": 0},
         history_results=history_results,
         results_owner="history",

@@ -49,34 +49,69 @@ function svgEl(tag: string): SVGElement {
   return document.createElementNS(SVG_NS, tag) as SVGElement;
 }
 
+function appendEmptyGraphMessage(container: HTMLElement): void {
+  const msg = document.createElement("p");
+  msg.className = "graph-empty";
+  msg.appendChild(document.createTextNode("No provider data to graph"));
+  container.appendChild(msg);
+}
+
+type GraphPoint = { x: number; y: number };
+
+function providerOrbitPoint(index: number, total: number, cx: number, cy: number, radius: number): GraphPoint {
+  if (total === 1) {
+    return { x: cx, y: cy - radius };
+  }
+  if (total === 2) {
+    return { x: cx, y: index === 0 ? cy - radius : cy + radius };
+  }
+  const angle = (2 * Math.PI * index) / total - Math.PI / 2;
+  return {
+    x: Math.round(cx + radius * Math.cos(angle)),
+    y: Math.round(cy + radius * Math.sin(angle)),
+  };
+}
+
 /**
  * Render the hub-and-spoke relationship graph into the given container.
  * Safe to call when no provider data is present — shows a fallback message.
  */
-function renderRelationshipGraph(container: HTMLElement): void {
+export function renderRelationshipGraph(container: HTMLElement): void {
   const nodesAttr = container.getAttribute("data-graph-nodes");
   const edgesAttr = container.getAttribute("data-graph-edges");
+
+  if (!nodesAttr || nodesAttr === "[]") {
+    appendEmptyGraphMessage(container);
+    return;
+  }
 
   let nodes: GraphNode[] = [];
   let edges: GraphEdge[] = [];
 
   try {
-    nodes = nodesAttr ? (JSON.parse(nodesAttr) as GraphNode[]) : [];
-    edges = edgesAttr ? (JSON.parse(edgesAttr) as GraphEdge[]) : [];
+    nodes = JSON.parse(nodesAttr) as GraphNode[];
+    edges = edgesAttr && edgesAttr !== "[]" ? (JSON.parse(edgesAttr) as GraphEdge[]) : [];
   } catch {
     // Malformed JSON — show empty state
     nodes = [];
     edges = [];
   }
 
-  const providerNodes = nodes.filter((n) => n.role === "provider");
-  const iocNode = nodes.find((n) => n.role === "ioc");
+  const providerNodes: GraphNode[] = [];
+  let iocNode: GraphNode | undefined;
+
+  for (let i = 0; i < nodes.length; i += 1) {
+    const node = nodes[i];
+    if (!node) continue;
+    if (node.role === "provider") {
+      providerNodes.push(node);
+    } else if (node.role === "ioc" && iocNode === undefined) {
+      iocNode = node;
+    }
+  }
 
   if (!iocNode || providerNodes.length === 0) {
-    const msg = document.createElement("p");
-    msg.className = "graph-empty";
-    msg.appendChild(document.createTextNode("No provider data to graph"));
-    container.appendChild(msg);
+    appendEmptyGraphMessage(container);
     return;
   }
 
@@ -97,24 +132,30 @@ function renderRelationshipGraph(container: HTMLElement): void {
   const edgeGroup = svgEl("g");
   edgeGroup.setAttribute("class", "graph-edges");
 
-  // Pre-built node index Map — O(1) lookup per edge instead of O(N) find+indexOf. R023.
-  const nodeIndexMap = new Map<string, number>(
-    providerNodes.map((n, i) => [n.id, i])
-  );
+  const nodeIndexMap = new Map<string, number>();
+  const providerPoints: GraphPoint[] = [];
+  for (let idx = 0; idx < providerNodes.length; idx++) {
+    const providerNode = providerNodes[idx];
+    if (providerNode) {
+      nodeIndexMap.set(providerNode.id, idx);
+      providerPoints[idx] = providerOrbitPoint(idx, providerNodes.length, cx, cy, orbitRadius);
+    }
+  }
 
-  for (const edge of edges) {
+  for (let i = 0; i < edges.length; i += 1) {
+    const edge = edges[i];
+    if (!edge) continue;
     const idx = nodeIndexMap.get(edge.to);
     if (idx === undefined) continue;
 
-    const angle = (2 * Math.PI * idx) / providerNodes.length - Math.PI / 2;
-    const px = cx + orbitRadius * Math.cos(angle);
-    const py = cy + orbitRadius * Math.sin(angle);
+    const point = providerPoints[idx];
+    if (!point) continue;
 
     const line = svgEl("line");
     line.setAttribute("x1", String(cx));
     line.setAttribute("y1", String(cy));
-    line.setAttribute("x2", String(Math.round(px)));
-    line.setAttribute("y2", String(Math.round(py)));
+    line.setAttribute("x2", String(point.x));
+    line.setAttribute("y2", String(point.y));
     line.setAttribute("stroke", verdictColor(edge.verdict));
     line.setAttribute("stroke-width", "2");
     line.setAttribute("opacity", "0.6");
@@ -127,10 +168,12 @@ function renderRelationshipGraph(container: HTMLElement): void {
   const nodeGroup = svgEl("g");
   nodeGroup.setAttribute("class", "graph-nodes");
 
-  providerNodes.forEach((node, idx) => {
-    const angle = (2 * Math.PI * idx) / providerNodes.length - Math.PI / 2;
-    const px = cx + orbitRadius * Math.cos(angle);
-    const py = cy + orbitRadius * Math.sin(angle);
+  for (let idx = 0; idx < providerNodes.length; idx += 1) {
+    const node = providerNodes[idx];
+    if (!node) continue;
+
+    const point = providerPoints[idx];
+    if (!point) continue;
 
     const group = svgEl("g");
     group.setAttribute("class", "graph-node graph-node--provider");
@@ -142,16 +185,16 @@ function renderRelationshipGraph(container: HTMLElement): void {
 
     // Circle
     const circle = svgEl("circle");
-    circle.setAttribute("cx", String(Math.round(px)));
-    circle.setAttribute("cy", String(Math.round(py)));
+    circle.setAttribute("cx", String(point.x));
+    circle.setAttribute("cy", String(point.y));
     circle.setAttribute("r", String(prrr));
     circle.setAttribute("fill", verdictColor(node.verdict));
     group.appendChild(circle);
 
     // Label below circle (SEC-08: createTextNode)
     const text = svgEl("text");
-    text.setAttribute("x", String(Math.round(px)));
-    text.setAttribute("y", String(Math.round(py + prrr + 14)));
+    text.setAttribute("x", String(point.x));
+    text.setAttribute("y", String(point.y + prrr + 14));
     text.setAttribute("text-anchor", "middle");
     text.setAttribute("font-size", "10");
     text.setAttribute("fill", "#e5e7eb");
@@ -159,7 +202,7 @@ function renderRelationshipGraph(container: HTMLElement): void {
     group.appendChild(text);
 
     nodeGroup.appendChild(group);
-  });
+  }
 
   svg.appendChild(nodeGroup);
 

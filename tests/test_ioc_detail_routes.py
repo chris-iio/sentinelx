@@ -56,6 +56,126 @@ class TestIocDetailRoute:
         response = client.get("/ioc/invalid/1.2.3.4")
         assert response.status_code == 404
 
+    def test_valid_ioc_types_are_precomputed(self) -> None:
+        """The detail route should not rebuild valid IOC type sets per request."""
+        import app.routes.detail as detail_route
+        from app.pipeline.models import IOC_TYPE_VALUES, IOCType
+
+        assert isinstance(detail_route._VALID_IOC_TYPES, frozenset)
+        assert "ipv4" in detail_route._VALID_IOC_TYPES
+        assert "invalid" not in detail_route._VALID_IOC_TYPES
+        assert IOC_TYPE_VALUES == tuple(ioc_type.value for ioc_type in IOCType)
+        assert detail_route._VALID_IOC_TYPES == frozenset(IOC_TYPE_VALUES)
+        source = Path("app/routes/detail.py").read_text(encoding="utf-8")
+        assert "_valid_ioc_types" not in source
+        assert "_VALID_IOC_TYPES = frozenset(IOC_TYPE_VALUES)" in source
+
+    def test_graph_fallback_literals_are_route_constants(self) -> None:
+        """Graph construction should reuse fallback literals from one place."""
+        import app.routes.detail as detail_route
+
+        assert detail_route._GRAPH_IOC_ID == "ioc"
+        assert detail_route._UNKNOWN_PROVIDER == "unknown"
+        assert detail_route._DEFAULT_VERDICT == "no_data"
+        assert detail_route._provider_graph_data.__code__.co_consts.count("unknown") == 0
+        assert detail_route._provider_graph_data.__code__.co_consts.count("no_data") == 0
+
+    def test_graph_data_skips_iteration_for_empty_single_pair_or_three_results(self) -> None:
+        """Short graph construction should not enter the general loop."""
+        import app.routes.detail as detail_route
+
+        class NoIterList(list):
+            def __iter__(self):
+                raise AssertionError("short graph data should not iterate results")
+
+            def __getitem__(self, index):
+                if isinstance(index, slice):
+                    raise AssertionError("graph data should not slice results")
+                return super().__getitem__(index)
+
+        assert detail_route._provider_graph_data(NoIterList(), "1.2.3.4") == ([], [])
+
+        nodes, edges = detail_route._provider_graph_data(
+            NoIterList([{"provider": "VirusTotal", "verdict": "malicious"}]),
+            "1.2.3.4",
+        )
+
+        assert nodes == [
+            {"id": "ioc", "label": "1.2.3.4", "verdict": "ioc", "role": "ioc"},
+            {
+                "id": "VirusTotal",
+                "label": "VirusTotal",
+                "verdict": "malicious",
+                "role": "provider",
+            },
+        ]
+        assert edges == [{"from": "ioc", "to": "VirusTotal", "verdict": "malicious"}]
+
+        pair_nodes, pair_edges = detail_route._provider_graph_data(
+            NoIterList([
+                {"provider": "VirusTotal", "verdict": "malicious"},
+                {"provider": "AbuseIPDB", "verdict": "suspicious"},
+            ]),
+            "1.2.3.4",
+        )
+
+        assert pair_nodes == [
+            {"id": "ioc", "label": "1.2.3.4", "verdict": "ioc", "role": "ioc"},
+            {
+                "id": "VirusTotal",
+                "label": "VirusTotal",
+                "verdict": "malicious",
+                "role": "provider",
+            },
+            {
+                "id": "AbuseIPDB",
+                "label": "AbuseIPDB",
+                "verdict": "suspicious",
+                "role": "provider",
+            },
+        ]
+        assert pair_edges == [
+            {"from": "ioc", "to": "VirusTotal", "verdict": "malicious"},
+            {"from": "ioc", "to": "AbuseIPDB", "verdict": "suspicious"},
+        ]
+        three_nodes, three_edges = detail_route._provider_graph_data(
+            NoIterList([
+                {"provider": "VirusTotal", "verdict": "malicious"},
+                {"provider": "AbuseIPDB", "verdict": "suspicious"},
+                {"provider": "Shodan", "verdict": "clean"},
+            ]),
+            "1.2.3.4",
+        )
+
+        assert three_nodes == [
+            {"id": "ioc", "label": "1.2.3.4", "verdict": "ioc", "role": "ioc"},
+            {
+                "id": "VirusTotal",
+                "label": "VirusTotal",
+                "verdict": "malicious",
+                "role": "provider",
+            },
+            {
+                "id": "AbuseIPDB",
+                "label": "AbuseIPDB",
+                "verdict": "suspicious",
+                "role": "provider",
+            },
+            {
+                "id": "Shodan",
+                "label": "Shodan",
+                "verdict": "clean",
+                "role": "provider",
+            },
+        ]
+        assert three_edges == [
+            {"from": "ioc", "to": "VirusTotal", "verdict": "malicious"},
+            {"from": "ioc", "to": "AbuseIPDB", "verdict": "suspicious"},
+            {"from": "ioc", "to": "Shodan", "verdict": "clean"},
+        ]
+        route_body = detail_route.ioc_detail.__wrapped__
+        assert "_provider_graph_data" in route_body.__code__.co_names
+
     def test_detail_page_empty_cache(self, client, tmp_path) -> None:
         """Detail page with no cached data shows 'No enrichment data' message."""
         client.application.cache_store = CacheStore(db_path=tmp_path / "cache.db")
@@ -64,6 +184,8 @@ class TestIocDetailRoute:
         assert response.status_code == 200
         html = response.data.decode()
         assert "No enrichment data" in html
+        assert 'data-graph-nodes="[]"' in html
+        assert 'data-graph-edges="[]"' in html
 
     def test_detail_page_with_results(self, client, tmp_path) -> None:
         """Detail page with cached results shows provider tab labels."""

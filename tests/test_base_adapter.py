@@ -17,7 +17,12 @@ from unittest.mock import patch
 
 import pytest
 
-from app.enrichment.adapters.base import BaseHTTPAdapter
+from app.enrichment.adapters.base import (
+    BaseHTTPAdapter,
+    _EMPTY_ALLOWED_HOSTS,
+    _EMPTY_AUTH_HEADERS,
+    _allowed_hosts_membership,
+)
 from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.enrichment.provider import Provider
 from app.pipeline.models import IOC, IOCType
@@ -233,6 +238,67 @@ class TestLookupDispatch:
         assert result.raw_stats == body
 
     @patch("app.enrichment.adapters.base.safe_request")
+    def test_allowed_hosts_are_cached_as_membership_set(self, mock_sr):
+        mock_sr.return_value = {"verdict": "clean"}
+        allowed_hosts = ["api.stub.test", "unused.example"]
+        adapter = StubAdapter(allowed_hosts=allowed_hosts)
+        allowed_hosts.append("late-added.example")
+        ioc = make_ipv4_ioc("8.8.4.4")
+
+        result = adapter.lookup(ioc)
+
+        call_args = mock_sr.call_args
+        passed_allowed_hosts = call_args[0][2]
+        assert isinstance(result, EnrichmentResult)
+        assert passed_allowed_hosts == frozenset({"api.stub.test", "unused.example"})
+        assert "late-added.example" not in passed_allowed_hosts
+
+    def test_allowed_hosts_membership_reuses_existing_frozenset(self):
+        allowed_hosts = frozenset(("api.stub.test", "unused.example"))
+        adapter = StubAdapter(allowed_hosts=allowed_hosts)
+
+        assert _allowed_hosts_membership(allowed_hosts) is allowed_hosts
+        assert adapter._allowed_hosts is allowed_hosts
+
+    def test_empty_allowed_hosts_reuse_shared_empty_snapshot(self, monkeypatch):
+        class NoIterEmptyList(list):
+            def __iter__(self):
+                raise AssertionError("empty allowed_hosts should not be materialized")
+
+        allowed_hosts = NoIterEmptyList()
+
+        adapter = StubAdapter(allowed_hosts=allowed_hosts)
+
+        assert _allowed_hosts_membership(allowed_hosts) is _EMPTY_ALLOWED_HOSTS
+        assert adapter._allowed_hosts is _EMPTY_ALLOWED_HOSTS
+
+    def test_single_pair_and_three_allowed_hosts_skip_general_iteration(self):
+        class NoIterHosts(list):
+            def __iter__(self):
+                raise AssertionError("short allowed_hosts should use indexed fast paths")
+
+            def __getitem__(self, index):
+                if isinstance(index, slice):
+                    raise AssertionError("allowed_hosts membership should not slice")
+                return super().__getitem__(index)
+
+        single = NoIterHosts(["api.stub.test"])
+        pair = NoIterHosts(["api.stub.test", "unused.example"])
+        three = NoIterHosts(["api.stub.test", "unused.example", "third.example"])
+
+        single_membership = _allowed_hosts_membership(single)
+        pair_membership = _allowed_hosts_membership(pair)
+        three_membership = _allowed_hosts_membership(three)
+        adapter = StubAdapter(allowed_hosts=pair)
+        pair.append("late-added.example")
+
+        assert single_membership == frozenset(("api.stub.test",))
+        assert pair_membership == frozenset(("api.stub.test", "unused.example"))
+        assert three_membership == frozenset(("api.stub.test", "unused.example", "third.example"))
+        assert adapter._allowed_hosts == frozenset(("api.stub.test", "unused.example"))
+        assert "late-added.example" not in adapter._allowed_hosts
+
+    @patch("app.enrichment.adapters.base.safe_request")
     def test_propagates_enrichment_error(self, mock_sr):
         ioc = make_ipv4_ioc()
         error = EnrichmentError(ioc=ioc, provider="StubProvider", error="HTTP 429")
@@ -253,6 +319,24 @@ class TestAuthHeaders:
     def test_default_auth_headers_empty(self):
         adapter = StubAdapter(allowed_hosts=[])
         assert adapter._auth_headers() == {}
+        assert adapter._auth_headers() is _EMPTY_AUTH_HEADERS
+
+    def test_default_auth_headers_skip_empty_session_update(self, monkeypatch):
+        class Headers(dict):
+            def update(self, values=(), **kwargs):
+                if not values and not kwargs:
+                    raise AssertionError("empty auth headers should not update the session")
+                return super().update(values, **kwargs)
+
+        class Session:
+            def __init__(self):
+                self.headers = Headers()
+
+        monkeypatch.setattr("app.enrichment.adapters.base.requests.Session", Session)
+
+        adapter = StubAdapter(allowed_hosts=[])
+
+        assert adapter._session.headers == {}
 
     def test_session_has_no_extra_headers_for_default(self):
         adapter = StubAdapter(allowed_hosts=[])

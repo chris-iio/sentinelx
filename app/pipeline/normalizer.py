@@ -18,7 +18,7 @@ import re
 # 1. Scheme [://] variants handled before bare hxxp:// to avoid double-replacement
 # 2. Dot patterns applied after scheme to handle URLs with defanged dots
 # 3. At-sign defanging comes last
-_DEFANG_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+_DEFANG_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     # --- Scheme normalization ---
     # hxxps[://] must come before hxxp[://] (longer match first)
     (re.compile(r"hxxps\[://\]", re.IGNORECASE), "https://"),
@@ -49,7 +49,17 @@ _DEFANG_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\(@\)"), "@"),
     # [at] variant
     (re.compile(r"\[at\]", re.IGNORECASE), "@"),
-]
+)
+
+
+def _may_contain_defang_pattern(text: str) -> bool:
+    """Return True when *text* contains characters used by known defang patterns."""
+    if "[" in text or "(" in text or "{" in text:
+        return True
+    if "_" in text or "x" in text or "X" in text:
+        lowered = text.lower()
+        return "_dot_" in lowered or "hxxp" in lowered
+    return False
 
 
 def normalize(text: str) -> str:
@@ -74,6 +84,8 @@ def normalize(text: str) -> str:
         '192.168.1.1'
     """
     if not text:
+        return text
+    if not _may_contain_defang_pattern(text):
         return text
 
     result = text

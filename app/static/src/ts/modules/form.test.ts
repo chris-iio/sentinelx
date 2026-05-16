@@ -169,4 +169,41 @@ describe("index form mode state", () => {
     expect(submit.disabled).toBe(false);
     expect(submit.className).toContain("mode-online");
   });
+
+  it("updates submit enablement without trim allocation", async () => {
+    renderIndexForm();
+    init();
+
+    const textarea = document.querySelector<HTMLTextAreaElement>("#ioc-text");
+    const submit = document.querySelector<HTMLButtonElement>("#submit-btn");
+    if (!textarea || !submit) {
+      throw new Error("Mode test fixture is missing required elements");
+    }
+
+    textarea.value = " \n\t ";
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(submit.disabled).toBe(true);
+
+    textarea.value = " \n\t 192.0.2.1";
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(submit.disabled).toBe(false);
+
+    const source = await import("node:fs/promises").then((fs) =>
+      fs.readFile("app/static/src/ts/modules/form.ts", "utf8")
+    );
+    expect(source).toContain("function hasNonWhitespace");
+    expect(source).not.toContain(".trim(");
+    expect(source).not.toContain(".trim().length");
+  });
+
+  it("reuses form element lookups across init helpers", () => {
+    renderIndexForm();
+    const querySelectorSpy = vi.spyOn(document, "querySelector");
+
+    init();
+
+    expect(querySelectorSpy.mock.calls.filter(([selector]) => selector === "#ioc-text")).toHaveLength(1);
+    expect(querySelectorSpy.mock.calls.filter(([selector]) => selector === "#submit-btn")).toHaveLength(1);
+    expect(querySelectorSpy.mock.calls.filter(([selector]) => selector === "#mode-input")).toHaveLength(1);
+  });
 });

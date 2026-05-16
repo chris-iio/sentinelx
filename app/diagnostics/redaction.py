@@ -13,12 +13,14 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from app.enrichment.config_store import ConfigStore
+from app.diagnostics.policy import DIAGNOSTIC_SANITIZATION_POLICY
+from app.text_utils import stripped_text_or_none
 
 REDACTED_TEXT = "[REDACTED]"
 CIRCULAR_TEXT = "[Circular]"
 MAX_DEPTH_TEXT = "[MaxDepth]"
 MIN_CONFIGURED_SECRET_CHARS = 8
-DEFAULT_MAX_REDACTION_DEPTH = 20
+DEFAULT_MAX_REDACTION_DEPTH = DIAGNOSTIC_SANITIZATION_POLICY.max_redaction_depth
 
 
 class ConfigSecretStore(Protocol):
@@ -29,7 +31,7 @@ class ConfigSecretStore(Protocol):
     def all_provider_keys(self) -> dict[str, str]: ...
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ConfiguredSecretInventory:
     """Safe ConfigStore secret inventory metadata.
 
@@ -43,7 +45,7 @@ class ConfiguredSecretInventory:
     config_error: str | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RedactionMetadata:
     """Secret-free metadata describing redaction work performed."""
 
@@ -52,7 +54,7 @@ class RedactionMetadata:
     config_error: str | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class _SecretCandidate:
     """Internal exact-match redaction candidate.
 
@@ -64,36 +66,52 @@ class _SecretCandidate:
     value: str = field(repr=False, compare=False)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class _SecretCollection:
     candidates: tuple[_SecretCandidate, ...]
     inventory: ConfiguredSecretInventory
 
 
-@dataclass
+@dataclass(slots=True)
 class _RedactionAccumulator:
     count: int = 0
     labels: set[str] = field(default_factory=set)
     config_error: str | None = None
+    _label_snapshot: tuple[str, ...] = field(default_factory=tuple, init=False)
+    _labels_dirty: bool = field(default=True, init=False)
+
+    def _remember_label(self, label: str) -> None:
+        if label not in self.labels:
+            self.labels.add(label)
+            self._labels_dirty = True
 
     def add(self, label: str, count: int = 1) -> None:
         if count <= 0:
             return
         self.count += count
-        self.labels.add(label)
+        self._remember_label(label)
 
     def note(self, label: str) -> None:
-        self.labels.add(label)
+        self._remember_label(label)
 
     def metadata(self) -> RedactionMetadata:
+        if self._labels_dirty:
+            label_count = len(self.labels)
+            if label_count == 0:
+                self._label_snapshot = ()
+            elif label_count == 1:
+                self._label_snapshot = (next(iter(self.labels)),)
+            else:
+                self._label_snapshot = tuple(sorted(self.labels))
+            self._labels_dirty = False
         return RedactionMetadata(
             redaction_count=self.count,
-            redaction_labels=tuple(sorted(self.labels)),
+            redaction_labels=self._label_snapshot,
             config_error=self.config_error,
         )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class _TextRule:
     label: str
     regex: re.Pattern[str]
@@ -102,19 +120,125 @@ class _TextRule:
 
 _QUERY_NAMES = ("api_key", "apikey", "token", "secret")
 _FIELD_NAMES = frozenset(_QUERY_NAMES)
-_AUTH_HEADER_KEYS = frozenset({"authorization", "x-api-key", "auth-key", "key"})
+_AUTH_HEADER_KEYS = frozenset(("authorization", "x-api-key", "auth-key", "key"))
+_PAYLOAD_SEQUENCE_TYPES = (list, tuple)
+_PAYLOAD_CONTAINER_TYPES = (dict, list, tuple)
+_LABEL_PART_RE = re.compile(r"[^a-z0-9_.-]+")
 
 
 def _normalize_label_part(value: object) -> str:
     """Return a bounded label component without secret-bearing punctuation."""
     if not isinstance(value, str):
         value = str(value)
-    label = re.sub(r"[^a-z0-9_.-]+", "_", value.strip().lower()).strip("_")
-    return label[:64] or "unknown"
+    stripped = stripped_text_or_none(value)
+    label = _trim_label_underscores(_LABEL_PART_RE.sub("_", stripped.lower() if stripped is not None else ""))
+    return label[:DIAGNOSTIC_SANITIZATION_POLICY.max_redaction_label_chars] or "unknown"
 
 
-def _is_usable_configured_secret(value: object) -> bool:
-    return isinstance(value, str) and len(value.strip()) >= MIN_CONFIGURED_SECRET_CHARS
+def _trim_label_underscores(value: str) -> str:
+    start = 0
+    end = len(value)
+    while start < end and value[start] == "_":
+        start += 1
+    while end > start and value[end - 1] == "_":
+        end -= 1
+    return value[start:end]
+
+
+def _usable_configured_secret(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    stripped = stripped_text_or_none(value)
+    if stripped is None or len(stripped) < MIN_CONFIGURED_SECRET_CHARS:
+        return None
+    return stripped
+
+
+def _stable_keys(keys: dict[str, str]) -> tuple[str, ...]:
+    key_count = len(keys)
+    if key_count == 0:
+        return ()
+    if key_count == 1:
+        for key in keys:
+            return (key,)
+    if key_count == 2:
+        iterator = iter(keys)
+        first = next(iterator)
+        second = next(iterator)
+        if first <= second:
+            return (first, second)
+        return (second, first)
+    if key_count == 3:
+        iterator = iter(keys)
+        first = next(iterator)
+        second = next(iterator)
+        third = next(iterator)
+        if first > second:
+            first, second = second, first
+        if second > third:
+            second, third = third, second
+            if first > second:
+                first, second = second, first
+        return (first, second, third)
+    return tuple(sorted(keys))
+
+
+def _stable_label_tuple(labels: list[str] | dict[str, None]) -> tuple[str, ...]:
+    label_count = len(labels)
+    if label_count == 0:
+        return ()
+    if label_count == 1:
+        for label in labels:
+            return (label,)
+    if label_count == 2:
+        iterator = iter(labels)
+        first = next(iterator)
+        second = next(iterator)
+        if first <= second:
+            return (first, second)
+        return (second, first)
+    if label_count == 3:
+        iterator = iter(labels)
+        first = next(iterator)
+        second = next(iterator)
+        third = next(iterator)
+        if first > second:
+            first, second = second, first
+        if second > third:
+            second, third = third, second
+            if first > second:
+                first, second = second, first
+        return (first, second, third)
+    return tuple(sorted(labels))
+
+
+def _stable_secret_candidates(
+    candidates: list[_SecretCandidate],
+) -> tuple[_SecretCandidate, ...]:
+    candidate_count = len(candidates)
+    if candidate_count == 0:
+        return ()
+    if candidate_count == 1:
+        return (candidates[0],)
+    if candidate_count == 2:
+        first = candidates[0]
+        second = candidates[1]
+        if len(first.value) < len(second.value):
+            return (second, first)
+        return (first, second)
+    if candidate_count == 3:
+        first = candidates[0]
+        second = candidates[1]
+        third = candidates[2]
+        if len(first.value) < len(second.value):
+            first, second = second, first
+        if len(second.value) < len(third.value):
+            second, third = third, second
+            if len(first.value) < len(second.value):
+                first, second = second, first
+        return (first, second, third)
+    candidates.sort(key=lambda item: len(item.value), reverse=True)
+    return tuple(candidates)
 
 
 def _collect_configured_secret_candidates(
@@ -133,27 +257,34 @@ def _collect_configured_secret_candidates(
         )
 
     candidates: list[_SecretCandidate] = []
-    if _is_usable_configured_secret(vt_key):
-        candidates.append(_SecretCandidate(label="configured_secret:virustotal", value=vt_key.strip()))
+    vt_secret = _usable_configured_secret(vt_key)
+    if vt_secret is not None:
+        candidates.append(_SecretCandidate(label="configured_secret:virustotal", value=vt_secret))
 
-    provider_labels: list[str] = []
-    for raw_provider_name, raw_secret in sorted(provider_keys.items(), key=lambda item: item[0]):
+    provider_labels: dict[str, None] = {}
+    for raw_provider_name in _stable_keys(provider_keys):
+        raw_secret = provider_keys[raw_provider_name]
         provider_label = _normalize_label_part(raw_provider_name)
-        if _is_usable_configured_secret(raw_secret):
-            provider_labels.append(provider_label)
+        provider_secret = _usable_configured_secret(raw_secret)
+        if provider_secret is not None:
+            provider_labels[provider_label] = None
             candidates.append(
                 _SecretCandidate(
                     label=f"configured_secret:provider:{provider_label}",
-                    value=raw_secret.strip(),
+                    value=provider_secret,
                 )
             )
 
-    secret_labels = tuple(sorted(candidate.label for candidate in candidates))
+    ordered_candidates = _stable_secret_candidates(candidates)
+    secret_labels_list: list[str] = []
+    for candidate in ordered_candidates:
+        secret_labels_list.append(candidate.label)
+    secret_labels = _stable_label_tuple(secret_labels_list)
     return _SecretCollection(
-        candidates=tuple(candidates),
+        candidates=ordered_candidates,
         inventory=ConfiguredSecretInventory(
             secret_labels=secret_labels,
-            provider_labels=tuple(sorted(set(provider_labels))),
+            provider_labels=_stable_label_tuple(provider_labels),
         ),
     )
 
@@ -263,7 +394,7 @@ def _apply_exact_secret_redaction(
 ) -> str:
     """Redact configured secrets with literal replacement before regex rules."""
     redacted = text
-    for secret in sorted(candidates, key=lambda item: len(item.value), reverse=True):
+    for secret in candidates:
         if not secret.value or secret.value == REDACTED_TEXT:
             continue
         occurrences = redacted.count(secret.value)
@@ -344,8 +475,8 @@ def _redact_entire_scalar(
     if value is None:
         return None
     if isinstance(value, str):
-        stripped = value.strip()
-        if not stripped:
+        stripped = stripped_text_or_none(value)
+        if stripped is None:
             return value
         _apply_exact_secret_redaction(value, candidates, acc)
         acc.add(label)
@@ -376,16 +507,18 @@ def _redact_payload_value(
         return value
 
     value_id = id(value)
-    if isinstance(value, (dict, list, tuple)):
+    if isinstance(value, _PAYLOAD_CONTAINER_TYPES):
         if value_id in seen:
             return CIRCULAR_TEXT
         seen.add(value_id)
         try:
             if isinstance(value, dict):
                 redacted_dict: dict[object, object] = {}
-                for raw_key, raw_child in value.items():
+                for raw_key in value:
+                    raw_child = value[raw_key]
                     redacted_key = _safe_key(raw_key, candidates, acc)
-                    key_for_rules = raw_key.lower().strip() if isinstance(raw_key, str) else ""
+                    stripped_key = stripped_text_or_none(raw_key) if isinstance(raw_key, str) else None
+                    key_for_rules = stripped_key.lower() if stripped_key is not None else ""
                     if key_for_rules in _FIELD_NAMES:
                         child = _redact_entire_scalar(
                             raw_child,
@@ -418,14 +551,44 @@ def _redact_payload_value(
                     redacted_dict[redacted_key] = child
                 return redacted_dict
 
-            return [
-                _redact_payload_value(child, candidates, acc, depth=depth - 1, seen=seen)
-                for child in value
-            ]
+            return _redact_payload_sequence(
+                value,
+                candidates,
+                acc,
+                depth=depth - 1,
+                seen=seen,
+            )
         finally:
             seen.remove(value_id)
 
     return f"[Unserializable:{type(value).__name__}]"
+
+
+def _redact_payload_sequence(
+    value: list[object] | tuple[object, ...],
+    candidates: tuple[_SecretCandidate, ...],
+    acc: _RedactionAccumulator,
+    *,
+    depth: int,
+    seen: set[int],
+) -> list[object]:
+    value_count = len(value)
+    if value_count == 0:
+        return []
+    if value_count == 1:
+        return [_redact_payload_value(value[0], candidates, acc, depth=depth, seen=seen)]
+    if value_count == 2:
+        return [
+            _redact_payload_value(value[0], candidates, acc, depth=depth, seen=seen),
+            _redact_payload_value(value[1], candidates, acc, depth=depth, seen=seen),
+        ]
+
+    redacted_items: list[object] = []
+    for child in value:
+        redacted_items.append(
+            _redact_payload_value(child, candidates, acc, depth=depth, seen=seen)
+        )
+    return redacted_items
 
 
 def redact_diagnostic_payload(

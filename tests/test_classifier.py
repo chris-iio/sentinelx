@@ -3,6 +3,11 @@
 Covers all 8 IOC types with positive cases, negative cases, and precedence.
 """
 
+import ipaddress
+import builtins
+from pathlib import Path
+
+import app.pipeline.classifier as classifier_module
 from app.pipeline.classifier import classify
 from app.pipeline.models import IOC, IOCType
 
@@ -31,6 +36,35 @@ class TestClassifyIPv4:
         result = classify("8.8.8.8", "8.8.8.8")
         assert result is not None
         assert result.type == IOCType.IPV4
+
+    def test_ipv4_classification_parses_ip_once(self, monkeypatch):
+        calls = 0
+        original_ip_address = ipaddress.ip_address
+
+        def counting_ip_address(value):
+            nonlocal calls
+            calls += 1
+            return original_ip_address(value)
+
+        monkeypatch.setattr(classifier_module.ipaddress, "ip_address", counting_ip_address)
+
+        result = classify("8.8.8.8", "8.8.8.8")
+
+        assert result is not None
+        assert result.type == IOCType.IPV4
+        assert calls == 1
+
+    def test_ip_literal_precheck_scans_directly_without_all(self, monkeypatch):
+        def fail_all(*_args, **_kwargs):
+            raise AssertionError("IP literal precheck should not allocate an all() generator")
+
+        monkeypatch.setattr(builtins, "all", fail_all)
+
+        result = classify("8.8.8.8", "8.8.8.8")
+
+        assert result is not None
+        assert result.type == IOCType.IPV4
+        assert "all" not in classifier_module._looks_like_ip_literal.__code__.co_names
 
     def test_invalid_octet_too_large(self):
         """999.999.999.999 should not classify as IPv4"""
@@ -91,10 +125,52 @@ class TestClassifyDomain:
         result = classify("localhost", "localhost")
         assert result is None or result.type != IOCType.DOMAIN
 
+    def test_domain_blacklist_uses_static_frozenset(self):
+        """Static domain blacklist should avoid temporary set-literal allocation."""
+        source = Path("app/pipeline/classifier.py").read_text(encoding="utf-8")
+
+        assert classifier_module._DOMAIN_BLACKLIST == frozenset(("localhost",))
+        assert '_DOMAIN_BLACKLIST = frozenset(("localhost",))' in source
+        assert '_DOMAIN_BLACKLIST = {"localhost"}' not in source
+
     def test_bare_tld_rejected(self):
         """A bare TLD like 'com' should not classify as domain"""
         result = classify("com", "com")
         assert result is None or result.type != IOCType.DOMAIN
+
+    def test_domain_lowercase_value_is_reused(self):
+        """Domain classification should lowercase once for blacklist and output value."""
+
+        class LowerCountingStr(str):
+            lower_calls = 0
+
+            def strip(self, chars=None):  # noqa: ANN001
+                return self
+
+            def lower(self):
+                type(self).lower_calls += 1
+                return super().lower()
+
+        value = LowerCountingStr("Example.COM")
+        result = classify(value, value)
+
+        assert result is not None
+        assert result.type == IOCType.DOMAIN
+        assert result.value == "example.com"
+        assert LowerCountingStr.lower_calls == 1
+
+    def test_domain_skips_ip_parser(self, monkeypatch):
+        """Non-IP domain candidates should not pay a failed ipaddress parse."""
+
+        def fail_ip_address(_value):
+            raise AssertionError("domain classification should skip ipaddress parsing")
+
+        monkeypatch.setattr(classifier_module.ipaddress, "ip_address", fail_ip_address)
+
+        result = classify("example.com", "example.com")
+
+        assert result is not None
+        assert result.type == IOCType.DOMAIN
 
 
 class TestClassifyURL:
@@ -304,6 +380,17 @@ class TestClassifyNone:
         """Successful classification returns an IOC instance"""
         result = classify("8.8.8.8", "8.8.8.8")
         assert isinstance(result, IOC)
+
+    def test_input_trim_uses_index_scan_without_strip(self):
+        class NoStripValue(str):
+            def strip(self, *_args, **_kwargs):
+                raise AssertionError("classifier cleanup should avoid direct strip allocation")
+
+        result = classify(NoStripValue("  8.8.8.8  "), "  8.8.8.8  ")
+
+        assert result is not None
+        assert result.type == IOCType.IPV4
+        assert result.value == "8.8.8.8"
 
 
 class TestClassifyEmail:

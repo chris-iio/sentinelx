@@ -68,4 +68,23 @@ describe("results surface dispatch", () => {
       "static"
     );
   });
+
+  it("uses the shared page-results lookup when no surface is passed", async () => {
+    document.body.innerHTML = `
+      <div class="page-results"
+           data-results-owner="history"
+           data-history-results='[]'></div>
+    `;
+
+    const domUtils = await import("../utils/dom");
+    const pageResultsSpy = vi.spyOn(domUtils, "pageResultsElement");
+    const main = await import("../main");
+    const history = await import("./history");
+
+    main.initResultsSurface();
+
+    expect(pageResultsSpy).toHaveBeenCalled();
+    expect(history.init).toHaveBeenCalledTimes(1);
+    expect(main.resolveResultsSurfaceOwner()).toBe("history");
+  });
 });

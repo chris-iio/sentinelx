@@ -2,6 +2,7 @@
  * Focused unit tests for result-application.ts shared live/history coordinator.
  */
 
+import { readFileSync } from "node:fs";
 import type { EnrichmentItem, EnrichmentResultItem } from "../types/api";
 
 function installCssEscape(): void {
@@ -73,6 +74,14 @@ function buildDom(cards: string, providerCounts = '{"ipv4":4}'): void {
   `;
 }
 
+function buildCards(count: number, iocType = "ipv4"): string {
+  let cards = "";
+  for (let index = 0; index < count; index += 1) {
+    cards += buildCard(`10.0.0.${index + 1}`, iocType);
+  }
+  return cards;
+}
+
 function resultItem(
   overrides: Partial<EnrichmentResultItem> & Pick<EnrichmentResultItem, "provider">
 ): EnrichmentResultItem {
@@ -101,14 +110,14 @@ function errorItem(overrides: Partial<EnrichmentItem> & { provider: string; erro
   } as EnrichmentItem;
 }
 
-async function importCoordinatorWithCardSpies(): Promise<{
+async function importCoordinatorWithCardSpies(invokeActual = true): Promise<{
   createResultApplicationCoordinator: typeof import("./result-application").createResultApplicationCoordinator;
   updateDashboardCountsSpy: ReturnType<typeof vi.fn>;
   sortCardsBySeveritySpy: ReturnType<typeof vi.fn>;
 }> {
   const actualCards = await vi.importActual<typeof import("./cards")>("./cards");
-  const updateDashboardCountsSpy = vi.fn(actualCards.updateDashboardCounts);
-  const sortCardsBySeveritySpy = vi.fn(actualCards.sortCardsBySeverity);
+  const updateDashboardCountsSpy = invokeActual ? vi.fn(actualCards.updateDashboardCounts) : vi.fn();
+  const sortCardsBySeveritySpy = invokeActual ? vi.fn(actualCards.sortCardsBySeverity) : vi.fn();
 
   vi.doMock("./cards", () => ({
     ...actualCards,
@@ -245,10 +254,71 @@ describe("result-application coordinator", () => {
     expect(waiting?.textContent).toBe("1 provider still loading...");
   });
 
+  it("keeps dirty IOC tracking lazy for empty and context-only flushes", async () => {
+    buildDom(buildCard("1.2.3.4"), '{"ipv4":2}');
+    const { createResultApplicationCoordinator } = await import("./result-application");
+    const OriginalSet = globalThis.Set;
+
+    globalThis.Set = function failSet() {
+      throw new Error("empty flush should not allocate dirty IOC tracking");
+    } as unknown as SetConstructor;
+
+    try {
+      const coordinator = createResultApplicationCoordinator();
+      coordinator.flush();
+    } finally {
+      globalThis.Set = OriginalSet;
+    }
+
+    const coordinator = createResultApplicationCoordinator();
+    coordinator.apply(
+      resultItem({
+        provider: "IP Context",
+        raw_stats: {},
+      })
+    );
+    coordinator.flush();
+
+    globalThis.Set = function failSet() {
+      throw new Error("second empty flush should not allocate dirty IOC tracking");
+    } as unknown as SetConstructor;
+    try {
+      coordinator.flush();
+    } finally {
+      globalThis.Set = OriginalSet;
+    }
+
+    const source = await import("node:fs/promises").then((fs) =>
+      fs.readFile("app/static/src/ts/modules/result-application.ts", "utf8")
+    );
+    expect(source).toContain("let dirtyIocs: Set<string> | null = null");
+    expect(source).not.toContain("const dirtyIocs = new Set<string>();");
+  });
+
+  it("flushes dirty IOC values with indexed access", async () => {
+    buildDom(buildCard("1.2.3.4"), '{"ipv4":1}');
+    const { createResultApplicationCoordinator } = await import("./result-application");
+    const coordinator = createResultApplicationCoordinator();
+    coordinator.apply(resultItem({ provider: "VirusTotal", verdict: "clean" }));
+    coordinator.apply(resultItem({ provider: "ThreatFox", verdict: "malicious" }));
+    const source = await import("node:fs/promises").then((fs) =>
+      fs.readFile("app/static/src/ts/modules/result-application.ts", "utf8")
+    );
+
+    coordinator.flush();
+
+    expect(source).toContain("const dirtyIocValues: string[] = []");
+    expect(source).not.toContain("for (const iocValue of dirtyIocs)");
+    expect(document.querySelector<HTMLElement>(".ioc-summary-row")?.textContent).toContain(
+      "MALICIOUS"
+    );
+  });
+
   it("caches stable IOC handles and provider counts across repeated apply, flush, and finalize calls", async () => {
     buildDom(buildCard("1.2.3.4") + buildCard("5.6.7.8"), '{"ipv4":2}');
     const { createResultApplicationCoordinator } = await import("./result-application");
     const querySelectorSpy = vi.spyOn(Document.prototype, "querySelector");
+    const slotQuerySelectorSpy = vi.spyOn(HTMLElement.prototype, "querySelector");
     const jsonParseSpy = vi.spyOn(JSON, "parse");
     const coordinator = createResultApplicationCoordinator();
 
@@ -276,6 +346,10 @@ describe("result-application coordinator", () => {
         ioc_value: "5.6.7.8",
       })
     );
+    coordinator.flush();
+    const detailsLookupCountBeforeFinalize = slotQuerySelectorSpy.mock.calls.filter(
+      ([selector]) => selector === ".enrichment-details"
+    ).length;
 
     coordinator.finalize();
     await vi.advanceTimersByTimeAsync(150);
@@ -284,15 +358,141 @@ describe("result-application coordinator", () => {
       selector === '.ioc-card[data-ioc-value="1.2.3.4"]' ||
       selector === '.ioc-card[data-ioc-value="5.6.7.8"]'
     );
+    const spinnerLookupCalls = slotQuerySelectorSpy.mock.calls.filter(
+      ([selector]) => selector === ".spinner-wrapper"
+    );
+    const pendingLookupCalls = slotQuerySelectorSpy.mock.calls.filter(
+      ([selector]) => selector === ".enrichment-waiting-text"
+    );
+    const verdictLabelLookupCalls = slotQuerySelectorSpy.mock.calls.filter(
+      ([selector]) => selector === ".verdict-label"
+    );
+    const contextLineLookupCalls = slotQuerySelectorSpy.mock.calls.filter(
+      ([selector]) => selector === ".ioc-context-line"
+    );
+    const detailsLookupCalls = slotQuerySelectorSpy.mock.calls.filter(
+      ([selector]) => selector === ".enrichment-details"
+    );
+    const noDataSummaryLookupCalls = slotQuerySelectorSpy.mock.calls.filter(
+      ([selector]) => selector === ".no-data-summary-row"
+    );
+    const summaryRowLookupCalls = slotQuerySelectorSpy.mock.calls.filter(
+      ([selector]) => selector === ".ioc-summary-row"
+    );
 
     expect(jsonParseSpy).toHaveBeenCalledTimes(1);
     expect(cardLookupCalls).toHaveLength(2);
+    expect(spinnerLookupCalls).toHaveLength(2);
+    expect(pendingLookupCalls).toHaveLength(2);
+    expect(verdictLabelLookupCalls).toHaveLength(2);
+    expect(contextLineLookupCalls).toHaveLength(2);
+    expect(detailsLookupCalls).toHaveLength(detailsLookupCountBeforeFinalize);
+    expect(noDataSummaryLookupCalls).toHaveLength(0);
+    expect(summaryRowLookupCalls).toHaveLength(2);
     expect(
       document.querySelector('.ioc-card[data-ioc-value="1.2.3.4"]')?.getAttribute("data-verdict")
     ).toBe("malicious");
     expect(
       document.querySelector('.ioc-card[data-ioc-value="5.6.7.8"] .detail-link')
     ).not.toBeNull();
+  });
+
+  it("measures large-result render pressure at the severity-change gate", async () => {
+    buildDom(buildCards(240), '{"ipv4":4}');
+    const {
+      createResultApplicationCoordinator,
+      updateDashboardCountsSpy,
+      sortCardsBySeveritySpy,
+    } = await importCoordinatorWithCardSpies();
+    const documentQueryAllSpy = vi.spyOn(Document.prototype, "querySelectorAll");
+    const elementQueryAllSpy = vi.spyOn(HTMLElement.prototype, "querySelectorAll");
+    const coordinator = createResultApplicationCoordinator();
+
+    coordinator.apply(
+      resultItem({
+        provider: "VirusTotal",
+        verdict: "clean",
+        ioc_value: "10.0.0.1",
+      })
+    );
+    coordinator.flush();
+    await vi.advanceTimersByTimeAsync(150);
+
+    updateDashboardCountsSpy.mockClear();
+    sortCardsBySeveritySpy.mockClear();
+    documentQueryAllSpy.mockClear();
+    elementQueryAllSpy.mockClear();
+
+    coordinator.apply(
+      resultItem({
+        provider: "ThreatFox",
+        verdict: "clean",
+        ioc_value: "10.0.0.1",
+      })
+    );
+    coordinator.flush();
+    await vi.advanceTimersByTimeAsync(150);
+
+    expect(updateDashboardCountsSpy).not.toHaveBeenCalled();
+    expect(sortCardsBySeveritySpy).not.toHaveBeenCalled();
+    expect(
+      documentQueryAllSpy.mock.calls.filter(([selector]) => selector === ".ioc-card")
+    ).toHaveLength(0);
+    expect(
+      elementQueryAllSpy.mock.calls.filter(([selector]) => selector === ".ioc-card")
+    ).toHaveLength(0);
+
+    coordinator.apply(
+      resultItem({
+        provider: "AbuseIPDB",
+        verdict: "malicious",
+        detection_count: 1,
+        total_engines: 1,
+        ioc_value: "10.0.0.1",
+      })
+    );
+    coordinator.flush();
+    await vi.advanceTimersByTimeAsync(150);
+
+    expect(updateDashboardCountsSpy).toHaveBeenCalledTimes(1);
+    expect(sortCardsBySeveritySpy).toHaveBeenCalledTimes(1);
+    expect(
+      documentQueryAllSpy.mock.calls.filter(([selector]) => selector === ".ioc-card")
+    ).toHaveLength(1);
+    expect(
+      elementQueryAllSpy.mock.calls.filter(([selector]) => selector === ".ioc-card")
+    ).toHaveLength(1);
+    expect(
+      document.querySelector<HTMLElement>('.ioc-card[data-ioc-value="10.0.0.1"]')?.getAttribute(
+        "data-verdict"
+      )
+    ).toBe("malicious");
+  });
+
+  it("finalize walks cached IOC values without allocating a Map values iterator", async () => {
+    buildDom(buildCard("1.2.3.4"), '{"ipv4":1}');
+    const { createResultApplicationCoordinator } = await import("./result-application");
+    const details = document.querySelector<HTMLElement>(".enrichment-details")!;
+    const detailsQuerySelectorSpy = vi.spyOn(details, "querySelector");
+    const originalValues = Map.prototype.values;
+    Map.prototype.values = function () {
+      throw new Error("finalize should use cached IOC values directly");
+    } as typeof Map.prototype.values;
+    try {
+      const coordinator = createResultApplicationCoordinator();
+      coordinator.apply(resultItem({ provider: "VirusTotal", verdict: "clean" }));
+      coordinator.finalize();
+      coordinator.finalize();
+    } finally {
+      Map.prototype.values = originalValues;
+    }
+
+    const detailFooterLookups = detailsQuerySelectorSpy.mock.calls.filter(
+      ([selector]) => selector === ".detail-link-footer"
+    );
+
+    expect(document.querySelector(".detail-link")).not.toBeNull();
+    expect(detailFooterLookups).toHaveLength(1);
   });
 
   it.each([
@@ -329,6 +529,50 @@ describe("result-application coordinator", () => {
       expect(jsonParseSpy).toHaveBeenCalledTimes(providerCounts === null ? 0 : 1);
     }
   );
+
+  it("reads provider counts without per-IOC prototype property checks", async () => {
+    buildDom(
+      buildCard("1.2.3.4") +
+        buildCard("example.com", { iocType: "domain", iocValue: "example.com" }),
+      '{"ipv4":2}'
+    );
+    const hasOwnPropertySpy = vi.spyOn(Object.prototype, "hasOwnProperty");
+    hasOwnPropertySpy.mockImplementation(() => {
+      throw new Error("provider count reads should not call hasOwnProperty per IOC");
+    });
+
+    try {
+      const { createResultApplicationCoordinator } = await import("./result-application");
+      const coordinator = createResultApplicationCoordinator();
+
+      coordinator.apply(
+        resultItem({
+          provider: "IP Context",
+          raw_stats: { geo: "Tokyo, JP" },
+        })
+      );
+      coordinator.apply(
+        resultItem({
+          provider: "IP Context",
+          ioc_value: "example.com",
+          ioc_type: "domain",
+          raw_stats: { geo: "Seoul, KR" },
+        })
+      );
+    } finally {
+      hasOwnPropertySpy.mockRestore();
+    }
+
+    const source = readFileSync(
+      `${process.cwd()}/app/static/src/ts/modules/result-application.ts`,
+      "utf8"
+    );
+    const waitingText = document.querySelectorAll<HTMLElement>(".enrichment-waiting-text");
+
+    expect(waitingText).toHaveLength(1);
+    expect(waitingText.item(0).textContent).toBe("1 provider still loading...");
+    expect(source).not.toContain("Object.prototype.hasOwnProperty.call(providerCounts");
+  });
 
   it("ignores missing cards and malformed slot structure without breaking valid IOC application", async () => {
     buildDom(buildCardWithoutSlot("1.2.3.4") + buildCard("5.6.7.8"));
@@ -544,6 +788,28 @@ describe("result-application coordinator", () => {
     expect(providerNames).toEqual(["ThreatFox", "GreyNoise"]);
   });
 
+  it("skips reputation detail-row sorting while an IOC has only one reputation row", async () => {
+    buildDom(buildCard("1.2.3.4"), '{"ipv4":1}');
+    const { createResultApplicationCoordinator } = await import("./result-application");
+    const coordinator = createResultApplicationCoordinator();
+
+    coordinator.apply(resultItem({ provider: "VirusTotal", verdict: "clean" }));
+    const reputationSection = document.querySelector<HTMLElement>(".enrichment-section--reputation")!;
+    const querySelectorAllSpy = vi
+      .spyOn(reputationSection, "querySelectorAll")
+      .mockImplementation((selector: string) => {
+        if (selector === ".provider-detail-row") {
+          throw new Error("single-row reputation sections should not be sorted");
+        }
+        return HTMLElement.prototype.querySelectorAll.call(reputationSection, selector);
+      });
+
+    coordinator.flush();
+
+    expect(querySelectorAllSpy).not.toHaveBeenCalledWith(".provider-detail-row");
+    expect(document.querySelector(".ioc-summary-row")).not.toBeNull();
+  });
+
   it("runs global recount and reorder when a delta changes card severity/order state", async () => {
     buildDom(buildCard("1.2.3.4") + buildCard("5.6.7.8"), '{"ipv4":1}');
     const { createResultApplicationCoordinator, updateDashboardCountsSpy, sortCardsBySeveritySpy } =
@@ -581,6 +847,23 @@ describe("result-application coordinator", () => {
     expect(orderedIocs).toEqual(["5.6.7.8", "1.2.3.4"]);
     expect(document.querySelector('[data-verdict-count="malicious"]')?.textContent).toBe("1");
     expect(document.querySelector('[data-verdict-count="clean"]')?.textContent).toBe("1");
+  });
+
+  it("detects severity-changing flushes without whole-grid verdict snapshots", async () => {
+    buildDom(buildCard("1.2.3.4") + buildCard("5.6.7.8"), '{"ipv4":1}');
+    const { createResultApplicationCoordinator, updateDashboardCountsSpy, sortCardsBySeveritySpy } =
+      await importCoordinatorWithCardSpies(false);
+    const querySelectorAllSpy = vi.spyOn(Document.prototype, "querySelectorAll");
+    const coordinator = createResultApplicationCoordinator();
+
+    coordinator.apply(resultItem({ provider: "VirusTotal", verdict: "clean", ioc_value: "1.2.3.4" }));
+    coordinator.flush();
+
+    expect(updateDashboardCountsSpy).toHaveBeenCalledTimes(1);
+    expect(sortCardsBySeveritySpy).toHaveBeenCalledTimes(1);
+    expect(
+      querySelectorAllSpy.mock.calls.some(([selector]) => selector === ".ioc-card")
+    ).toBe(false);
   });
 
   it("preserves history-replay copy, export, and detail-link affordances without extra global work on unchanged severity", async () => {

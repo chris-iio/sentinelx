@@ -135,6 +135,19 @@ class TestLoginEvent:
         )
         assert LoginEvent(**kwargs) == LoginEvent(**kwargs)
 
+    def test_uses_slots_to_avoid_instance_dict(self) -> None:
+        """LoginEvent avoids per-instance __dict__ allocation."""
+        event = LoginEvent(
+            username="alice",
+            source_ip="1.2.3.4",
+            hostname=None,
+            timestamp=TIMESTAMP,
+            auth_method="password",
+            line_number=42,
+            raw_line=RAW_LINE_IP,
+        )
+        assert not hasattr(event, "__dict__")
+
     def test_all_fields_accessible(self) -> None:
         """All 7 LoginEvent fields are accessible after construction."""
         event = LoginEvent(
@@ -234,6 +247,16 @@ class TestParseSummary:
             warning_count=0,
         )
         assert summary.total_lines == 0
+
+    def test_uses_slots_to_avoid_instance_dict(self) -> None:
+        """ParseSummary avoids per-instance __dict__ allocation."""
+        summary = ParseSummary(
+            total_lines=0,
+            parsed_count=0,
+            skipped_count=0,
+            warning_count=0,
+        )
+        assert not hasattr(summary, "__dict__")
 
 
 # ---------------------------------------------------------------------------

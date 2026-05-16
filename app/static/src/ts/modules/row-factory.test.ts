@@ -11,6 +11,7 @@
  *   CTX-02 → updateSummaryRow staleness badge
  */
 
+import { readFileSync } from "node:fs";
 import {
   formatDate,
   updateSummaryRow,
@@ -19,6 +20,9 @@ import {
   updateContextLine,
   injectSectionHeadersAndNoDataSummary,
   CONTEXT_PROVIDERS,
+  oldestCachedAt,
+  formatAsnContext,
+  formatDnsAContext,
 } from "./row-factory";
 import type { VerdictEntry } from "./verdict-compute";
 import type { EnrichmentResultItem, EnrichmentItem } from "../types/api";
@@ -96,6 +100,17 @@ function makeCard(): HTMLElement {
 /* ------------------------------------------------------------------ */
 
 describe("CONTEXT_PROVIDERS", () => {
+  it("derives the exported set from one readonly provider-name list", async () => {
+    const source = await import("node:fs/promises").then((fs) =>
+      fs.readFile("app/static/src/ts/modules/row-factory.ts", "utf8")
+    );
+
+    expect(source).toContain("const CONTEXT_PROVIDER_NAMES =");
+    expect(source).toContain("as const");
+    expect(source).toContain("new Set<string>(CONTEXT_PROVIDER_NAMES)");
+    expect(source).not.toContain("export const CONTEXT_PROVIDERS = new Set([");
+  });
+
   it("contains the expected context-only providers", () => {
     expect(CONTEXT_PROVIDERS.has("IP Context")).toBe(true);
     expect(CONTEXT_PROVIDERS.has("DNS Records")).toBe(true);
@@ -256,6 +271,26 @@ describe("updateSummaryRow", () => {
     expect(staleBadge!.textContent).toMatch(/cached \d+h ago/);
   });
 
+  it("CTX-02: finds oldest cachedAt without sorting cached entries", () => {
+    const oneHourAgo = new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString();
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+    const originalSort = Array.prototype.sort;
+    Array.prototype.sort = function failSort() {
+      throw new Error("oldestCachedAt should not sort cached entries");
+    };
+
+    try {
+      expect(
+        oldestCachedAt([
+          entry({ provider: "VT", verdict: "clean", cachedAt: oneHourAgo }),
+          entry({ provider: "TF", verdict: "clean", cachedAt: twoHoursAgo }),
+        ]),
+      ).toBe(twoHoursAgo);
+    } finally {
+      Array.prototype.sort = originalSort;
+    }
+  });
+
   it("CTX-02: no staleness badge when no entries have cachedAt", () => {
     const slot = makeSlot();
     const verdicts: Record<string, VerdictEntry[]> = {
@@ -307,6 +342,27 @@ describe("updateSummaryRow", () => {
     const row = slot.querySelector(".ioc-summary-row");
     expect(row!.lastElementChild).toBe(chevron);
   });
+
+  it("reuses cached summary row and details handles when provided", () => {
+    const slot = makeSlot();
+    const details = slot.querySelector<HTMLElement>(".enrichment-details")!;
+    const verdicts: Record<string, VerdictEntry[]> = {
+      "1.2.3.4": [entry({ provider: "VT", verdict: "clean" })],
+    };
+    const summaryRow = updateSummaryRow(slot, "1.2.3.4", verdicts, null, details)!;
+    const slotQuerySelectorSpy = vi
+      .spyOn(slot, "querySelector")
+      .mockImplementation(() => {
+        throw new Error("updateSummaryRow should reuse cached summary/details handles");
+      });
+
+    verdicts["1.2.3.4"]!.push(entry({ provider: "TF", verdict: "malicious" }));
+    const reusedSummary = updateSummaryRow(slot, "1.2.3.4", verdicts, summaryRow, details);
+
+    expect(slotQuerySelectorSpy).not.toHaveBeenCalled();
+    expect(reusedSummary).toBe(summaryRow);
+    expect(summaryRow.textContent).toContain("MALICIOUS");
+  });
 });
 
 /* ------------------------------------------------------------------ */
@@ -314,6 +370,17 @@ describe("updateSummaryRow", () => {
 /* ------------------------------------------------------------------ */
 
 describe("createDetailRow", () => {
+  it("shares provider name and cache badge builders with context rows", async () => {
+    const source = await import("node:fs/promises").then((fs) =>
+      fs.readFile("app/static/src/ts/modules/row-factory.ts", "utf8")
+    );
+
+    expect(source).toContain("function createProviderNameSpan");
+    expect(source).toContain("function createCacheBadge");
+    expect(source.match(/className = "provider-detail-name"/g)).toHaveLength(1);
+    expect(source.match(/className = "cache-badge"/g)).toHaveLength(1);
+  });
+
   it("creates a row with .provider-detail-row class and data-verdict attribute", () => {
     const row = createDetailRow("VirusTotal", "malicious", "45/72 engines");
 
@@ -374,6 +441,22 @@ describe("createDetailRow", () => {
     const cacheBadge = row.querySelector(".cache-badge");
     expect(cacheBadge).not.toBeNull();
     expect(cacheBadge!.textContent).toMatch(/cached \d+h ago/);
+  });
+
+  it("formats relative cache badges without constructing Date objects", () => {
+    const cachedAt = "2026-01-02T03:04:05Z";
+    const parseSpy = vi.spyOn(Date, "parse").mockReturnValue(Date.now() - 60 * 60 * 1000);
+    const source = readFileSync(`${process.cwd()}/app/static/src/ts/modules/row-factory.ts`, "utf8");
+    const result: EnrichmentItem = resultItem({
+      provider: "VirusTotal",
+      cached_at: cachedAt,
+    });
+
+    const row = createDetailRow("VirusTotal", "clean", "0/72 engines", result);
+
+    expect(parseSpy).toHaveBeenCalledWith(cachedAt);
+    expect(row.querySelector(".cache-badge")?.textContent).toBe("cached 1h ago");
+    expect(source ?? "").not.toContain("new Date(iso).getTime()");
   });
 
   it("no cache badge when result has no cached_at", () => {
@@ -456,6 +539,30 @@ describe("createDetailRow", () => {
 
     const tags = Array.from(contextDiv!.querySelectorAll(".context-tag")).map((tag) => tag.textContent);
     expect(tags).toEqual(["suspicious_tld", "spoofable", "github", "twitter"]);
+  });
+
+  it("renders tag context arrays with indexed access", () => {
+    const riskFlags = ["suspicious_tld", "spoofable"];
+    Object.defineProperty(riskFlags, Symbol.iterator, {
+      value: () => {
+        throw new Error("context tag rendering should not require array iteration");
+      },
+    });
+    const result: EnrichmentItem = resultItem({
+      provider: "EmailRep",
+      ioc_value: "analyst@example.com",
+      ioc_type: "email",
+      verdict: "suspicious",
+      raw_stats: {
+        reputation: "medium",
+        risk_flags: riskFlags,
+      },
+    });
+
+    const row = createDetailRow("EmailRep", "suspicious", "risk flags", result);
+
+    const tags = Array.from(row.querySelectorAll(".context-tag")).map((tag) => tag.textContent);
+    expect(tags).toEqual(["suspicious_tld", "spoofable"]);
   });
 
   it("safely ignores malformed EmailRep nested data without raw dumping or markup creation", () => {
@@ -680,6 +787,51 @@ describe("injectSectionHeadersAndNoDataSummary", () => {
     expect(summaryRow.nextElementSibling).toBe(row1);
   });
 
+  it("GRP-02: counts no-data rows without querying a NodeList", () => {
+    const slot = makeSlot();
+    const noDataSection = slot.querySelector<HTMLElement>(".enrichment-section--no-data")!;
+
+    for (let i = 0; i < 2; i++) {
+      const row = document.createElement("div");
+      row.className = "provider-detail-row provider-row--no-data";
+      noDataSection.appendChild(row);
+    }
+    const querySelectorAllSpy = vi
+      .spyOn(noDataSection, "querySelectorAll")
+      .mockImplementation(() => {
+        throw new Error("no-data summary should scan child rows directly");
+      });
+
+    injectSectionHeadersAndNoDataSummary(slot);
+
+    expect(querySelectorAllSpy).not.toHaveBeenCalled();
+    expect(noDataSection.querySelector(".no-data-summary-row")?.textContent).toBe(
+      "2 providers had no record"
+    );
+  });
+
+  it("GRP-02: repeated injection reuses the existing no-data summary", () => {
+    const slot = makeSlot();
+    const noDataSection = slot.querySelector<HTMLElement>(".enrichment-section--no-data")!;
+
+    for (let i = 0; i < 2; i++) {
+      const row = document.createElement("div");
+      row.className = "provider-detail-row provider-row--no-data";
+      noDataSection.appendChild(row);
+    }
+    const insertBeforeSpy = vi.spyOn(noDataSection, "insertBefore");
+
+    injectSectionHeadersAndNoDataSummary(slot);
+    injectSectionHeadersAndNoDataSummary(slot);
+
+    let summaryCount = 0;
+    for (const child of noDataSection.children) {
+      if (child.classList.contains("no-data-summary-row")) summaryCount += 1;
+    }
+    expect(summaryCount).toBe(1);
+    expect(insertBeforeSpy).toHaveBeenCalledTimes(1);
+  });
+
   it("edge: zero no-data rows → no summary row created", () => {
     const slot = makeSlot();
 
@@ -715,6 +867,30 @@ describe("updateContextLine", () => {
     expect(span).not.toBeNull();
     expect(span!.className).toBe("context-field");
     expect(span!.textContent).toBe("US, New York, NY");
+  });
+
+  it("CTX-01: reuses a cached context line when provided", () => {
+    const card = makeCard();
+    const contextLine = card.querySelector<HTMLElement>(".ioc-context-line")!;
+    const cardQuerySelectorSpy = vi
+      .spyOn(card, "querySelector")
+      .mockImplementation(() => {
+        throw new Error("updateContextLine should not query the card when a cached context line exists");
+      });
+
+    updateContextLine(
+      card,
+      resultItem({
+        provider: "IP Context",
+        raw_stats: { geo: "US, New York, NY" },
+      }),
+      contextLine,
+    );
+
+    expect(cardQuerySelectorSpy).not.toHaveBeenCalled();
+    expect(contextLine.querySelector('[data-context-provider="IP Context"]')?.textContent).toBe(
+      "US, New York, NY"
+    );
   });
 
   it("CTX-01: ASN Intel renders when no IP Context is present", () => {
@@ -807,6 +983,58 @@ describe("updateContextLine", () => {
     expect(span).not.toBeNull();
     // Only first 3 IPs shown
     expect(span!.textContent).toBe("A: 93.184.216.34, 93.184.216.35, 93.184.216.36");
+  });
+
+  it("CTX-01: context snippet formatting avoids temporary array helpers", () => {
+    const slice = Array.prototype.slice;
+    const filter = Array.prototype.filter;
+    const join = Array.prototype.join;
+    Array.prototype.slice = function () {
+      throw new Error("context formatting should not slice context arrays");
+    };
+    Array.prototype.filter = function () {
+      throw new Error("context formatting should not filter context arrays");
+    };
+    Array.prototype.join = function () {
+      throw new Error("context formatting should not join context arrays");
+    };
+
+    try {
+      expect(formatAsnContext("AS13335", "1.1.1.0/24")).toBe("AS13335 · 1.1.1.0/24");
+      const aRecords = [
+        "93.184.216.34",
+        123,
+        "93.184.216.35",
+        "93.184.216.36",
+        "93.184.216.37",
+      ];
+      Object.defineProperty(aRecords, Symbol.iterator, {
+        value: () => {
+          throw new Error("DNS context formatting should not require array iteration");
+        },
+      });
+      expect(formatDnsAContext(aRecords)).toBe("93.184.216.34, 93.184.216.35, 93.184.216.36");
+    } finally {
+      Array.prototype.slice = slice;
+      Array.prototype.filter = filter;
+      Array.prototype.join = join;
+    }
+  });
+
+  it("CTX-01: context span upsert helper stays module-level", async () => {
+    const source = await import("node:fs/promises").then((fs) =>
+      fs.readFile("app/static/src/ts/modules/row-factory.ts", "utf8")
+    );
+    const updateContextLineBody = source.slice(
+      source.indexOf("export function updateContextLine("),
+      source.indexOf("/**", source.indexOf("export function updateContextLine(") + 1)
+    );
+
+    expect(source.match(/function upsertContextSpan/g)).toHaveLength(1);
+    expect(updateContextLineBody).not.toContain("function upsertContextSpan");
+    expect(updateContextLineBody).toContain('upsertContextSpan(contextLine, "IP Context", geo)');
+    expect(updateContextLineBody).toContain('upsertContextSpan(contextLine, "ASN Intel", text)');
+    expect(updateContextLineBody).toContain('upsertContextSpan(contextLine, "DNS Records", "A: " + text)');
   });
 
   it("CTX-01: upsert — calling twice with same provider updates text, doesn't duplicate", () => {

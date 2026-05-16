@@ -6,9 +6,10 @@ Verifies read/write behavior and directory creation.
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import patch
 
 
-from app.enrichment.config_store import ConfigStore
+from app.enrichment.config_store import ConfigStore, _configured_value
 
 
 class TestConfigStoreGetKey:
@@ -68,6 +69,57 @@ class TestConfigStoreSetAndGet:
         store2 = ConfigStore(config_path=config_path)
         assert store2.get_vt_api_key() == "persistent-key-123"
 
+    def test_save_keeps_written_config_cached(self, tmp_path: Path) -> None:
+        """Reads after a write reuse the in-memory parser instead of reparsing disk."""
+        config_path = tmp_path / "config.ini"
+        store = ConfigStore(config_path=config_path)
+
+        with patch("configparser.ConfigParser.read") as read:
+            store.set_vt_api_key("cached-after-save-key")
+            read.reset_mock()
+            assert store.get_vt_api_key() == "cached-after-save-key"
+
+        read.assert_not_called()
+
+    def test_getters_share_cached_value_helper(self, tmp_path: Path, monkeypatch) -> None:
+        """Config getters should route through one cached value-read helper."""
+        store = ConfigStore(config_path=tmp_path / "config.ini")
+        calls: list[tuple[str, str, str | None]] = []
+
+        def get_value(section: str, key: str, fallback: str | None = None) -> str | None:
+            calls.append((section, key, fallback))
+            if section == "virustotal":
+                return "vt-key"
+            if section == "providers":
+                return "provider-key"
+            if section == "cache":
+                return "7"
+            if section == "ssh":
+                return fallback
+            return fallback
+
+        monkeypatch.setattr(store, "_get_value", get_value)
+
+        assert store.get_vt_api_key() == "vt-key"
+        assert store.get_provider_key("GreyNoise") == "provider-key"
+        assert store.get_cache_ttl() == 7
+        assert store.get_ssh_normal_hours() == "06:00-22:00"
+        assert calls == [
+            ("virustotal", "api_key", None),
+            ("providers", "greynoise", None),
+            ("cache", "ttl_hours", None),
+            ("ssh", "normal_hours", "06:00-22:00"),
+        ]
+
+    def test_api_key_getters_share_empty_value_normalization(self) -> None:
+        """API-key getters should share one empty-string normalization helper."""
+        source = Path("app/enrichment/config_store.py").read_text(encoding="utf-8")
+
+        assert _configured_value("") is None
+        assert _configured_value(None) is None
+        assert _configured_value("key") == "key"
+        assert source.count("_configured_value(") == 3
+
 
 class TestConfigStoreMultiProvider:
     """Tests for multi-provider key storage via get/set_provider_key."""
@@ -103,6 +155,26 @@ class TestConfigStoreMultiProvider:
         assert store.get_provider_key("greynoise") == "key-xyz"
         # Retrieval with original case also works (normalized internally)
         assert store.get_provider_key("GreyNoise") == "key-xyz"
+
+    def test_provider_key_get_and_set_share_option_normalization(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """Provider get/set should use one normalization helper for option names."""
+        import app.enrichment.config_store as config_store
+
+        calls: list[str] = []
+
+        def normalize(name: str) -> str:
+            calls.append(name)
+            return name.lower()
+
+        monkeypatch.setattr(config_store, "_provider_option_name", normalize)
+
+        store = ConfigStore(config_path=tmp_path / "config.ini")
+        store.set_provider_key("GreyNoise", "key-xyz")
+
+        assert store.get_provider_key("GREYNOISE") == "key-xyz"
+        assert calls == ["GreyNoise", "GREYNOISE"]
 
     def test_all_provider_keys_returns_empty_dict_when_none_set(self, tmp_path: Path) -> None:
         """all_provider_keys returns empty dict when no provider keys are stored."""
@@ -143,6 +215,49 @@ class TestConfigStoreMultiProvider:
         # [virustotal] section key must not appear here
         assert "api_key" not in result
         assert result == {"urlhaus": "uh-key"}
+
+    def test_all_provider_keys_accumulates_directly_from_section(self, tmp_path: Path) -> None:
+        """all_provider_keys should not rely on constructor-style section copying."""
+
+        class ProviderSection:
+            def __init__(self) -> None:
+                self.reads = 0
+                self._values = {
+                    "greynoise": "gn-key",
+                    "abuseipdb": "ab-key",
+                }
+
+            def __iter__(self):
+                return iter(self._values)
+
+            def __getitem__(self, key: str) -> str:
+                self.reads += 1
+                return self._values[key]
+
+            def keys(self):
+                raise AssertionError("all_provider_keys should not copy the section via dict()")
+
+        class FakeConfig:
+            def __init__(self) -> None:
+                self.section = ProviderSection()
+
+            def __contains__(self, section: str) -> bool:
+                return section == "providers"
+
+            def __getitem__(self, section: str) -> ProviderSection:
+                if section != "providers":
+                    raise KeyError(section)
+                return self.section
+
+        fake_config = FakeConfig()
+        store = ConfigStore(config_path=tmp_path / "config.ini")
+        store._cached_cfg = fake_config  # type: ignore[assignment]
+
+        assert store.all_provider_keys() == {
+            "greynoise": "gn-key",
+            "abuseipdb": "ab-key",
+        }
+        assert fake_config.section.reads == 2
 
 
 class TestSshSection:

@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from app.pipeline.models import IOC
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class EnrichmentResult:
     """An immutable enrichment result from a TI provider.
 
@@ -33,7 +33,7 @@ class EnrichmentResult:
     raw_stats: dict
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class EnrichmentError:
     """An immutable enrichment failure result.
 
@@ -49,3 +49,43 @@ class EnrichmentError:
     ioc: IOC
     provider: str
     error: str
+
+
+def error_result(ioc: IOC, provider: str, error: str) -> EnrichmentError:
+    """Return the common provider error envelope."""
+    return EnrichmentError(ioc=ioc, provider=provider, error=error)
+
+
+def no_data_result(ioc: IOC, provider: str, raw_stats: dict | None = None) -> EnrichmentResult:
+    """Return the common informational no-data result shape."""
+    return provider_result(
+        ioc=ioc,
+        provider=provider,
+        verdict="no_data",
+        detection_count=0,
+        total_engines=0,
+        scan_date=None,
+        raw_stats=raw_stats,
+    )
+
+
+def provider_result(
+    *,
+    ioc: IOC,
+    provider: str,
+    verdict: str,
+    detection_count: int,
+    total_engines: int,
+    scan_date: str | None = None,
+    raw_stats: dict | None = None,
+) -> EnrichmentResult:
+    """Return the common provider result envelope."""
+    return EnrichmentResult(
+        ioc=ioc,
+        provider=provider,
+        verdict=verdict,
+        detection_count=detection_count,
+        total_engines=total_engines,
+        scan_date=scan_date,
+        raw_stats=raw_stats if raw_stats is not None else {},
+    )

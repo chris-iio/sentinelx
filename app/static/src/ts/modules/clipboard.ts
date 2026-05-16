@@ -10,6 +10,8 @@
 
 import { attr } from "../utils/dom";
 
+let copyButtonsInitialized = false;
+
 // ---- Private helpers ----
 
 /**
@@ -71,23 +73,28 @@ export function writeToClipboard(text: string, btn: HTMLElement): void {
 }
 
 /**
- * Attach click handlers to all .copy-btn elements present in the DOM.
+ * Attach a delegated click handler for copy buttons.
  * Each button reads data-value (IOC) and optionally data-enrichment (worst verdict).
  */
 export function init(): void {
-  const copyButtons = document.querySelectorAll<HTMLElement>(".copy-btn");
+  if (copyButtonsInitialized) return;
+  copyButtonsInitialized = true;
 
-  copyButtons.forEach(function (btn) {
-    btn.addEventListener("click", function () {
-      const value = attr(btn, "data-value");
-      if (!value) return;
+  document.addEventListener("click", function (event) {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
 
-      // Check for enrichment summary set by polling loop (worst verdict)
-      const enrichment = attr(btn, "data-enrichment");
-      // attr() returns "" when attribute is absent (falsy) — same ternary as original
-      const copyText = enrichment ? (value + " | " + enrichment) : value;
+    const btn = target.closest<HTMLElement>(".copy-btn");
+    if (!btn) return;
 
-      writeToClipboard(copyText, btn);
-    });
+    const value = attr(btn, "data-value");
+    if (!value) return;
+
+    // Check for enrichment summary set by polling loop (worst verdict)
+    const enrichment = attr(btn, "data-enrichment");
+    // attr() returns "" when attribute is absent (falsy) — same ternary as original
+    const copyText = enrichment ? (value + " | " + enrichment) : value;
+
+    writeToClipboard(copyText, btn);
   });
 }

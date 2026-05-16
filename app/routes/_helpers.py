@@ -7,16 +7,24 @@ and enrichment_status (which reads them) share the same registry.
 import logging
 import uuid
 from collections import OrderedDict
+from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
+from itertools import islice
 from threading import Lock
+from types import MappingProxyType
 
 from flask import current_app, jsonify, request
 
 from app.enrichment.config_store import ConfigStore
 from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.enrichment.orchestrator import EnrichmentOrchestrator
-from app.pipeline.models import IOC
+from app.pipeline.models import IOC, IOCType, append_ioc_by_type, group_by_type
+from app.text_utils import (
+    has_non_whitespace,
+    stripped_bounded_non_whitespace,
+    stripped_text_or_none,
+)
+from app.time_utils import utcnow_iso
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +33,7 @@ logger = logging.getLogger(__name__)
 # M012 S01: keep short terminal tombstones so pollers can tell eviction apart
 # from a never-seen job id.
 _MAX_ORCHESTRATORS = 200
+_STATUS_NOT_FOUND_REASONS = frozenset(("unknown", "evicted"))
 _orchestrators: OrderedDict[str, EnrichmentOrchestrator] = OrderedDict()
 _terminal_jobs: OrderedDict[str, dict] = OrderedDict()
 _orch_lock = Lock()
@@ -32,8 +41,11 @@ _orch_lock = Lock()
 # Shared thread pool for enrichment jobs — caps concurrent enrichments to 4.
 _enrichment_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="enrich")
 
-_HISTORY_SAVE_OUTCOMES = {"never", "saved", "failed", "skipped"}
-_HISTORY_SAVE_DIAGNOSTICS_DEFAULTS = {
+_HISTORY_SAVE_OUTCOMES = frozenset(("never", "saved", "failed", "skipped"))
+_HISTORY_SAVE_RECORDABLE_OUTCOMES = frozenset(("saved", "failed", "skipped"))
+_HISTORY_SAVE_COUNTER_FIELDS = ("attempts", "successes", "failures", "skipped")
+_HISTORY_SAVE_TIMESTAMP_FIELDS = ("last_attempt_at", "last_success_at", "last_failure_at")
+_HISTORY_SAVE_DIAGNOSTICS_DEFAULTS = MappingProxyType({
     "attempts": 0,
     "successes": 0,
     "failures": 0,
@@ -43,22 +55,58 @@ _HISTORY_SAVE_DIAGNOSTICS_DEFAULTS = {
     "last_success_at": None,
     "last_failure_at": None,
     "last_error_summary": None,
-}
+})
 _history_save_diag_lock = Lock()
-_history_save_diagnostics: dict[str, object] = dict(_HISTORY_SAVE_DIAGNOSTICS_DEFAULTS)
+
+
+def _history_save_diagnostics_defaults() -> dict[str, object]:
+    return _copy_mapping(_HISTORY_SAVE_DIAGNOSTICS_DEFAULTS)
+
+
+def _copy_mapping(source: Mapping[str, object] | None) -> dict[str, object]:
+    """Return a shallow dict snapshot without constructor-copying live state."""
+    if source is None:
+        return {}
+    source_count = len(source)
+    if source_count == 0:
+        return {}
+    if source_count == 1:
+        for key in source:
+            return {key: source[key]}
+    if source_count == 2:
+        key_iter = iter(source)
+        first = next(key_iter)
+        second = next(key_iter)
+        return {first: source[first], second: source[second]}
+
+    snapshot: dict[str, object] = {}
+    for key in source:
+        snapshot[key] = source[key]
+    return snapshot
+
+
+def _copy_history_save_diagnostics(source: Mapping[str, object]) -> dict[str, object]:
+    return _copy_mapping(source)
+
+
+def _copy_terminal_job_snapshot(source: Mapping[str, object] | None) -> dict[str, object]:
+    return _copy_mapping(source)
+
+
+_history_save_diagnostics: dict[str, object] = _history_save_diagnostics_defaults()
 
 
 def _utcnow_iso() -> str:
     """Return the current UTC timestamp in ISO-8601 Zulu form."""
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    return utcnow_iso()
 
 
 def _coerce_history_save_diagnostics(raw: object) -> dict[str, object]:
     """Return a safe diagnostics snapshot even if module state is malformed."""
     data = raw if isinstance(raw, dict) else {}
-    diagnostics = dict(_HISTORY_SAVE_DIAGNOSTICS_DEFAULTS)
+    diagnostics = _history_save_diagnostics_defaults()
 
-    for field in ("attempts", "successes", "failures", "skipped"):
+    for field in _HISTORY_SAVE_COUNTER_FIELDS:
         value = data.get(field)
         if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
             diagnostics[field] = value
@@ -67,14 +115,17 @@ def _coerce_history_save_diagnostics(raw: object) -> dict[str, object]:
     if outcome in _HISTORY_SAVE_OUTCOMES:
         diagnostics["last_outcome"] = outcome
 
-    for field in ("last_attempt_at", "last_success_at", "last_failure_at"):
+    for field in _HISTORY_SAVE_TIMESTAMP_FIELDS:
         value = data.get(field)
-        if isinstance(value, str) and value.strip():
+        if isinstance(value, str) and has_non_whitespace(value):
             diagnostics[field] = value
 
     error_summary = data.get("last_error_summary")
-    if isinstance(error_summary, str) and error_summary.strip():
-        diagnostics["last_error_summary"] = error_summary.strip()[:120]
+    if isinstance(error_summary, str):
+        diagnostics["last_error_summary"] = stripped_bounded_non_whitespace(
+            error_summary,
+            max_chars=120,
+        )
 
     return diagnostics
 
@@ -86,13 +137,12 @@ def _record_history_save_attempt() -> None:
         diagnostics = _coerce_history_save_diagnostics(_history_save_diagnostics)
         diagnostics["attempts"] += 1
         diagnostics["last_attempt_at"] = timestamp
-        _history_save_diagnostics.clear()
-        _history_save_diagnostics.update(diagnostics)
+        _replace_history_save_diagnostics(diagnostics)
 
 
 def _record_history_save_outcome(outcome: str, error: Exception | None = None) -> None:
     """Record the last bounded outcome for helper-owned history persistence."""
-    if outcome not in {"saved", "failed", "skipped"}:
+    if outcome not in _HISTORY_SAVE_RECORDABLE_OUTCOMES:
         return
 
     timestamp = _utcnow_iso()
@@ -115,14 +165,13 @@ def _record_history_save_outcome(outcome: str, error: Exception | None = None) -
             diagnostics["skipped"] += 1
             diagnostics["last_error_summary"] = None
 
-        _history_save_diagnostics.clear()
-        _history_save_diagnostics.update(diagnostics)
+        _replace_history_save_diagnostics(diagnostics)
 
 
 def get_history_save_diagnostics() -> dict[str, object]:
     """Return a safe snapshot of helper-level history save diagnostics."""
     with _history_save_diag_lock:
-        snapshot = dict(_history_save_diagnostics)
+        snapshot = _copy_history_save_diagnostics(_history_save_diagnostics)
     return _coerce_history_save_diagnostics(snapshot)
 
 
@@ -134,13 +183,13 @@ def get_orchestration_diagnostics_snapshot(job_id: str) -> dict[str, object]:
     internals.  Missing/evicted jobs are represented as safe snapshots so the
     diagnostic manifest can show that the optional job context was considered.
     """
-    normalized_job_id = str(job_id or "").strip()
+    normalized_job_id = stripped_text_or_none(str(job_id or "")) or ""
     if not normalized_job_id:
         return {"job_id": "", "found": False, "reason": "job_id_not_provided"}
 
     with _orch_lock:
         orchestrator = _orchestrators.get(normalized_job_id)
-        terminal = dict(_terminal_jobs.get(normalized_job_id) or {})
+        terminal = _copy_terminal_job_snapshot(_terminal_jobs.get(normalized_job_id))
 
     if orchestrator is None:
         reason = terminal.get("terminal_reason") or "unknown"
@@ -168,21 +217,28 @@ def get_orchestration_diagnostics_snapshot(job_id: str) -> dict[str, object]:
     }
 
 
+_ORCHESTRATION_STATUS_COUNT_FIELDS = ("total", "done")
+_ORCHESTRATION_STATUS_BOOL_FIELDS = ("complete", "terminal")
+_ORCHESTRATION_STATUS_TEXT_FIELDS = ("status", "terminal_reason", "error")
+
+
 def _coerce_orchestration_status_for_diagnostics(raw: object) -> dict[str, object]:
     data = raw if isinstance(raw, dict) else {}
     status: dict[str, object] = {}
-    for field in ("total", "done"):
+    for field in _ORCHESTRATION_STATUS_COUNT_FIELDS:
         value = data.get(field)
         if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
             status[field] = value
-    for field in ("complete", "terminal"):
+    for field in _ORCHESTRATION_STATUS_BOOL_FIELDS:
         value = data.get(field)
         if isinstance(value, bool):
             status[field] = value
-    for field in ("status", "terminal_reason", "error"):
+    for field in _ORCHESTRATION_STATUS_TEXT_FIELDS:
         value = data.get(field)
-        if isinstance(value, str) and value.strip():
-            status[field] = value.strip()[:160]
+        if isinstance(value, str):
+            text = stripped_bounded_non_whitespace(value, max_chars=160)
+            if text is not None:
+                status[field] = text
     result_count = data.get("results")
     if isinstance(result_count, list):
         status["result_count"] = len(result_count)
@@ -192,24 +248,26 @@ def _coerce_orchestration_status_for_diagnostics(raw: object) -> dict[str, objec
 def _coerce_orchestration_diagnostics_for_export(raw: object) -> dict[str, object]:
     data = raw if isinstance(raw, dict) else {}
     safe: dict[str, object] = {}
-    for key, value in list(data.items())[:40]:
+    for key in islice(data, 40):
+        value = data[key]
         key_text = str(key)[:80]
         if isinstance(value, (str, int, float, bool)) or value is None:
             safe[key_text] = value[:240] if isinstance(value, str) else value
         elif isinstance(value, dict):
-            safe[key_text] = {
-                str(child_key)[:80]: (
-                    child_value[:240] if isinstance(child_value, str) else child_value
-                )
-                for child_key, child_value in list(value.items())[:40]
-                if isinstance(child_value, (str, int, float, bool)) or child_value is None
-            }
+            children: dict[str, object] = {}
+            for child_key in islice(value, 40):
+                child_value = value[child_key]
+                if isinstance(child_value, (str, int, float, bool)) or child_value is None:
+                    children[str(child_key)[:80]] = (
+                        child_value[:240] if isinstance(child_value, str) else child_value
+                    )
+            safe[key_text] = children
         elif isinstance(value, list):
-            safe[key_text] = [
-                item[:240] if isinstance(item, str) else item
-                for item in value[:25]
-                if isinstance(item, (str, int, float, bool)) or item is None
-            ]
+            children: list[object] = []
+            for item in islice(value, 25):
+                if isinstance(item, (str, int, float, bool)) or item is None:
+                    children.append(item[:240] if isinstance(item, str) else item)
+            safe[key_text] = children
         else:
             safe[key_text] = repr(value)[:240]
     return safe
@@ -218,8 +276,13 @@ def _coerce_orchestration_diagnostics_for_export(raw: object) -> dict[str, objec
 def _reset_history_save_diagnostics() -> None:
     """Reset helper-level history save diagnostics for focused tests."""
     with _history_save_diag_lock:
-        _history_save_diagnostics.clear()
-        _history_save_diagnostics.update(_HISTORY_SAVE_DIAGNOSTICS_DEFAULTS)
+        _replace_history_save_diagnostics(_history_save_diagnostics_defaults())
+
+
+def _replace_history_save_diagnostics(diagnostics: dict[str, object]) -> None:
+    """Replace helper-level history diagnostics while preserving dict identity."""
+    _history_save_diagnostics.clear()
+    _history_save_diagnostics.update(diagnostics)
 
 
 def _mask_key(key: str | None) -> str | None:
@@ -227,9 +290,12 @@ def _mask_key(key: str | None) -> str | None:
 
     Returns None if key is None or shorter than 4 characters.
     """
-    if not key or len(key) <= 4:
+    if key is None or key == "":
         return None
-    return "*" * (len(key) - 4) + key[-4:]
+    key_length = len(key)
+    if key_length <= 4:
+        return None
+    return "*" * (key_length - 4) + key[-4:]
 
 
 def _serialize_result(
@@ -249,7 +315,7 @@ def _serialize_result(
             "scan_date": r.scan_date,
             "raw_stats": r.raw_stats,
         }
-        if cached_markers is not None:
+        if cached_markers:
             cache_key = r.ioc.value + "|" + r.provider
             cached_at = cached_markers.get(cache_key)
             if cached_at:
@@ -275,12 +341,16 @@ def _build_status_payload(status: dict, serialized_results: list[dict]) -> dict:
 
     Existing progress fields stay intact so cursor polling semantics do not change.
     """
+    next_since = status.get("next_since")
+    if next_since is None:
+        next_since = len(status.get("results", []))
+
     return {
         "total": status["total"],
         "done": status["done"],
         "complete": status["complete"],
         "results": serialized_results,
-        "next_since": status.get("next_since", len(status.get("results", []))),
+        "next_since": next_since,
         "status": status.get("status", "complete" if status["complete"] else "running"),
         "terminal": status.get("terminal", False),
         "terminal_reason": status.get("terminal_reason"),
@@ -313,6 +383,180 @@ def _serialize_ioc(ioc: IOC) -> dict:
     }
 
 
+def _group_iocs_for_template(iocs: list[IOC]) -> dict[IOCType, list[IOC]]:
+    """Return template IOC groups through the shared route payload seam."""
+    return group_by_type(iocs)
+
+
+def _ioc_template_context(iocs: list[IOC]) -> dict[str, object]:
+    """Return common result-template IOC context for fresh analysis routes."""
+    total_count = len(iocs)
+    no_results = total_count == 0
+    return {
+        "grouped": {} if no_results else _group_iocs_for_template(iocs),
+        "total_count": total_count,
+        "no_results": no_results,
+    }
+
+
+def _ioc_from_history_row(data: dict) -> IOC:
+    return IOC(
+        type=IOCType(data["type"]),
+        value=data["value"],
+        raw_match=data["raw_match"],
+    )
+
+
+def _group_history_iocs(raw_iocs: list[dict]) -> dict[IOCType, list[IOC]]:
+    """Rebuild and group persisted IOC rows in one pass."""
+    raw_count = len(raw_iocs)
+    if raw_count == 0:
+        return {}
+    if raw_count == 1:
+        ioc = _ioc_from_history_row(raw_iocs[0])
+        return {ioc.type: [ioc]}
+    if raw_count == 2:
+        first = _ioc_from_history_row(raw_iocs[0])
+        second = _ioc_from_history_row(raw_iocs[1])
+        if first.type == second.type:
+            return {first.type: [first, second]}
+        return {first.type: [first], second.type: [second]}
+    if raw_count == 3:
+        grouped: dict[IOCType, list[IOC]] = {}
+        append_ioc_by_type(grouped, _ioc_from_history_row(raw_iocs[0]))
+        append_ioc_by_type(grouped, _ioc_from_history_row(raw_iocs[1]))
+        append_ioc_by_type(grouped, _ioc_from_history_row(raw_iocs[2]))
+        return grouped
+
+    grouped: dict[IOCType, list[IOC]] = {}
+    for data in raw_iocs:
+        append_ioc_by_type(grouped, _ioc_from_history_row(data))
+    return grouped
+
+
+def _history_ioc_template_context(raw_iocs: list[dict], total_count: int) -> dict[str, object]:
+    """Return common result-template IOC context for history replay routes."""
+    no_results = total_count == 0
+    return {
+        "grouped": {} if no_results else _group_history_iocs(raw_iocs),
+        "total_count": total_count,
+        "no_results": no_results,
+    }
+
+
+def _serialize_iocs(iocs: list[IOC]) -> list[dict]:
+    """Serialize IOC objects with direct accumulation for history storage."""
+    ioc_count = len(iocs)
+    if ioc_count == 0:
+        return []
+    if ioc_count == 1:
+        return [_serialize_ioc(iocs[0])]
+    if ioc_count == 2:
+        return [_serialize_ioc(iocs[0]), _serialize_ioc(iocs[1])]
+    if ioc_count == 3:
+        return [_serialize_ioc(iocs[0]), _serialize_ioc(iocs[1]), _serialize_ioc(iocs[2])]
+
+    serialized: list[dict] = []
+    for ioc in iocs:
+        serialized.append(_serialize_ioc(ioc))
+    return serialized
+
+
+def _append_serialized_ioc_by_type(
+    grouped: dict[str, list[dict]],
+    type_key: str,
+    serialized_ioc: dict,
+) -> None:
+    """Append serialized IOC payloads without setdefault's eager list allocation."""
+    group = grouped.get(type_key)
+    if group is None:
+        group = []
+        grouped[type_key] = group
+    group.append(serialized_ioc)
+
+
+def _serialized_ioc_response_payload(iocs: list[IOC]) -> tuple[list[dict], dict[str, list[dict]]]:
+    """Return serialized IOC rows plus grouped rows for JSON API responses."""
+    ioc_count = len(iocs)
+    if ioc_count == 0:
+        return [], {}
+    if ioc_count == 1:
+        ioc = iocs[0]
+        serialized = _serialize_ioc(ioc)
+        return [serialized], {ioc.type.value: [serialized]}
+    if ioc_count == 2:
+        first = iocs[0]
+        second = iocs[1]
+        first_serialized = _serialize_ioc(first)
+        second_serialized = _serialize_ioc(second)
+        serialized_iocs = [first_serialized, second_serialized]
+        if first.type == second.type:
+            return serialized_iocs, {first.type.value: serialized_iocs}
+        return serialized_iocs, {
+            first.type.value: [first_serialized],
+            second.type.value: [second_serialized],
+        }
+    if ioc_count == 3:
+        first = iocs[0]
+        second = iocs[1]
+        third = iocs[2]
+        first_serialized = _serialize_ioc(first)
+        second_serialized = _serialize_ioc(second)
+        third_serialized = _serialize_ioc(third)
+        serialized_iocs = [first_serialized, second_serialized, third_serialized]
+        if first.type == second.type == third.type:
+            return serialized_iocs, {first.type.value: serialized_iocs}
+        grouped_summary: dict[str, list[dict]] = {}
+        _append_serialized_ioc_by_type(grouped_summary, first.type.value, first_serialized)
+        _append_serialized_ioc_by_type(grouped_summary, second.type.value, second_serialized)
+        _append_serialized_ioc_by_type(grouped_summary, third.type.value, third_serialized)
+        return serialized_iocs, grouped_summary
+
+    serialized_iocs: list[dict] = []
+    grouped_summary: dict[str, list[dict]] = {}
+    for ioc in iocs:
+        serialized = _serialize_ioc(ioc)
+        serialized_iocs.append(serialized)
+        _append_serialized_ioc_by_type(grouped_summary, ioc.type.value, serialized)
+    return serialized_iocs, grouped_summary
+
+
+def _serialize_results(
+    results: list[EnrichmentResult | EnrichmentError],
+    cached_markers: dict[str, str] | None = None,
+) -> list[dict]:
+    """Serialize enrichment results with direct accumulation."""
+    result_count = len(results)
+    if result_count == 0:
+        return []
+    if result_count == 1:
+        return [_serialize_result(results[0], cached_markers)]
+    if result_count == 2:
+        return [
+            _serialize_result(results[0], cached_markers),
+            _serialize_result(results[1], cached_markers),
+        ]
+    if result_count == 3:
+        return [
+            _serialize_result(results[0], cached_markers),
+            _serialize_result(results[1], cached_markers),
+            _serialize_result(results[2], cached_markers),
+        ]
+
+    serialized: list[dict] = []
+    for result in results:
+        serialized.append(_serialize_result(result, cached_markers))
+    return serialized
+
+
+def _online_limits_from_config() -> tuple[int, int]:
+    """Return Online enrichment admission limits from Flask config."""
+    return (
+        int(current_app.config.get("ONLINE_MAX_IOCS", 50)),
+        int(current_app.config.get("ONLINE_MAX_DISPATCHES", 200)),
+    )
+
+
 def _online_fanout_diagnostics(
     iocs: list[IOC],
     registry: object,
@@ -328,8 +572,7 @@ def _online_fanout_diagnostics(
         type_key = ioc.type.value
         if type_key not in provider_counts_by_type:
             try:
-                providers = registry.providers_for_type(ioc.type)  # type: ignore[attr-defined]
-                provider_counts_by_type[type_key] = len(providers)
+                provider_counts_by_type[type_key] = registry.provider_count_for_type(ioc.type)  # type: ignore[attr-defined]
             except Exception as exc:
                 logger.warning(
                     "Online fanout provider-count lookup failed for %s: %s",
@@ -389,8 +632,8 @@ def _run_enrichment_and_save(
         if status is None:
             _record_history_save_outcome("skipped")
             return
-        serialized_results = [_serialize_result(r) for r in status["results"]]
-        serialized_iocs = [_serialize_ioc(ioc) for ioc in iocs]
+        serialized_results = _serialize_results(status["results"])
+        serialized_iocs = _serialize_iocs(iocs)
         _record_history_save_attempt()
         history_store.save_analysis(  # type: ignore[union-attr]
             input_text=input_text,
@@ -410,6 +653,7 @@ def _setup_orchestrator(
     text: str,
     mode: str,
     history_store: object,
+    configured_providers: list[object] | None = None,
 ) -> tuple[str, EnrichmentOrchestrator, object]:
     """Create an orchestrator, register it, and submit the enrichment job.
 
@@ -422,7 +666,7 @@ def _setup_orchestrator(
     config_store = ConfigStore()
     cache_ttl_hours = config_store.get_cache_ttl()
     orchestrator = EnrichmentOrchestrator(
-        adapters=registry.configured(),
+        adapters=configured_providers if configured_providers is not None else registry.configured(),
         cache=cache,
         cache_ttl_seconds=cache_ttl_hours * 3600,
     )
@@ -483,14 +727,13 @@ def _get_enrichment_status(job_id: str):
         )
         return jsonify(payload), 404
 
-    serialized = [
-        _serialize_result(r, status.get("cached_markers")) for r in status["results"]
-    ]
+    cached_markers = status.get("cached_markers")
+    serialized = _serialize_results(status["results"], cached_markers)
 
     payload = _build_status_payload(status, serialized)
     status_code = (
         404
-        if payload["terminal"] and payload["terminal_reason"] in {"unknown", "evicted"}
+        if payload["terminal"] and payload["terminal_reason"] in _STATUS_NOT_FOUND_REASONS
         else 200
     )
     return jsonify(payload), status_code

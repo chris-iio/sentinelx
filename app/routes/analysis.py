@@ -1,17 +1,66 @@
 """Analysis routes: home page and IOC analysis endpoint."""
 
-import json
-
 from flask import (
     current_app, flash, redirect, render_template, request, url_for,
 )
 
 from app import limiter
+from app.json_utils import encode_json_object
 from app.pipeline.extractor import run_pipeline
-from app.pipeline.models import IOCType, group_by_type
+from app.pipeline.models import IOCType
+from app.text_utils import has_non_whitespace
 
 from . import bp
-from ._helpers import _online_fanout_diagnostics, _setup_orchestrator
+from ._helpers import (
+    _group_iocs_for_template,
+    _ioc_template_context,
+    _online_fanout_diagnostics,
+    _online_limits_from_config,
+    _setup_orchestrator,
+)
+
+_PROVIDER_COUNT_IOC_TYPES = (
+    IOCType.IPV4,
+    IOCType.IPV6,
+    IOCType.DOMAIN,
+    IOCType.URL,
+    IOCType.MD5,
+    IOCType.SHA1,
+    IOCType.SHA256,
+    IOCType.EMAIL,
+)
+
+
+def _provider_counts_json(registry) -> str:
+    """Return provider-count metadata without allocating provider lists."""
+    provider_counts: dict[str, int] = {}
+    for ioc_type in _PROVIDER_COUNT_IOC_TYPES:
+        provider_counts[ioc_type.value] = registry.provider_count_for_type(ioc_type)
+    return encode_json_object(provider_counts)
+
+
+def _provider_coverage(registry, configured=None) -> dict[str, int]:
+    """Return registered/configured provider coverage without copying all providers."""
+    registered_count = registry.registered_count()
+    configured_providers = registry.configured() if configured is None else configured
+    configured_count = len(configured_providers)
+    return {
+        "registered": registered_count,
+        "configured": configured_count,
+        "needs_key": registered_count - configured_count,
+    }
+
+
+def _enrichable_count(iocs, registry) -> int:
+    """Return total provider fanout while counting each IOC type once."""
+    counts_by_type: dict[IOCType, int] = {}
+    total = 0
+    for ioc in iocs:
+        ioc_type = ioc.type
+        if ioc_type not in counts_by_type:
+            counts_by_type[ioc_type] = registry.provider_count_for_type(ioc_type)
+        total += counts_by_type[ioc_type]
+    return total
 
 
 def _recent_analyses_context(limit: int = 4) -> dict:
@@ -49,7 +98,7 @@ def analyze():
     text = request.form.get("text", "")
     mode = request.form.get("mode", "offline")
 
-    if not text.strip():
+    if not has_non_whitespace(text):
         return render_template(
             "index.html",
             error="No input provided.",
@@ -57,22 +106,21 @@ def analyze():
         )
 
     iocs = run_pipeline(text)
-    grouped = group_by_type(iocs)
     total_count = len(iocs)
 
     template_extras: dict = {}
-    if mode == "online":
+    if mode == "online" and iocs:
         registry = current_app.registry
+        configured_providers = registry.configured()
 
-        if not registry.configured():
+        if not configured_providers:
             flash(
                 "Please configure at least one provider API key before using online mode",
                 "warning",
             )
             return redirect(url_for("main.settings_get"))
 
-        max_iocs = int(current_app.config.get("ONLINE_MAX_IOCS", 50))
-        max_dispatches = int(current_app.config.get("ONLINE_MAX_DISPATCHES", 200))
+        max_iocs, max_dispatches = _online_limits_from_config()
         fanout_diagnostics = _online_fanout_diagnostics(
             iocs,
             registry,
@@ -87,59 +135,26 @@ def analyze():
                 fanout_diagnostics["max_iocs"],
                 fanout_diagnostics["max_dispatches"],
             )
-            type_providers = {
-                ioc_type: registry.providers_for_type(ioc_type)
-                for ioc_type in IOCType
-                if ioc_type != IOCType.CVE
-            }
-            provider_counts = json.dumps({
-                t.value: len(ps) for t, ps in type_providers.items()
-            })
-            provider_coverage = {
-                "registered": len(registry.all()),
-                "configured": len(registry.configured()),
-                "needs_key": len(registry.all()) - len(registry.configured()),
-            }
             template_extras = {
                 "online_limit_diagnostics": fanout_diagnostics,
-                "provider_counts": provider_counts,
-                "provider_coverage": provider_coverage,
+                "provider_counts": _provider_counts_json(registry),
+                "provider_coverage": _provider_coverage(registry, configured_providers),
             }
         else:
             job_id, _, registry = _setup_orchestrator(
-                iocs, text, mode, current_app.history_store,
+                iocs, text, mode, current_app.history_store, configured_providers,
             )
 
-            type_providers = {
-                ioc_type: registry.providers_for_type(ioc_type)
-                for ioc_type in IOCType
-                if ioc_type != IOCType.CVE
-            }
-            enrichable_count = sum(
-                len(type_providers.get(ioc.type, []))
-                for ioc in iocs
-            )
-            provider_counts = json.dumps({
-                t.value: len(ps) for t, ps in type_providers.items()
-            })
-            provider_coverage = {
-                "registered": len(registry.all()),
-                "configured": len(registry.configured()),
-                "needs_key": len(registry.all()) - len(registry.configured()),
-            }
             template_extras = {
                 "job_id": job_id,
-                "enrichable_count": enrichable_count,
-                "provider_counts": provider_counts,
-                "provider_coverage": provider_coverage,
+                "enrichable_count": fanout_diagnostics["dispatch_count"],
+                "provider_counts": _provider_counts_json(registry),
+                "provider_coverage": _provider_coverage(registry, configured_providers),
             }
 
-    no_results = total_count == 0
     return render_template(
         "results.html",
-        grouped={} if no_results else grouped,
         mode=mode,
-        total_count=total_count,
-        no_results=no_results,
+        **_ioc_template_context(iocs),
         **template_extras,
     )

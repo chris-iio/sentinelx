@@ -208,6 +208,25 @@ class TestLookupPublicIP:
 
 class TestGeoFormatting:
 
+    def test_no_data_result_helper_preserves_informational_shape(self) -> None:
+        """IP Context no-data branches should share one result shape."""
+        import inspect
+
+        from app.enrichment.adapters.ip_api import _no_data_result
+
+        ioc = make_ipv4_ioc("95.172.185.24")
+        raw_stats = {"country_code": "DE"}
+        result = _no_data_result(ioc, "IP Context", raw_stats)
+
+        assert result.ioc is ioc
+        assert result.provider == "IP Context"
+        assert result.verdict == "no_data"
+        assert result.detection_count == 0
+        assert result.total_engines == 0
+        assert result.scan_date is None
+        assert result.raw_stats is raw_stats
+        assert "no_data_result(ioc, provider_name, raw_stats)" in inspect.getsource(_no_data_result)
+
     def test_geo_field_present(self) -> None:
         """raw_stats must contain a 'geo' pre-formatted string."""
         ioc = make_ipv4_ioc("95.172.185.24")
@@ -270,6 +289,13 @@ class TestGeoFormatting:
             "geo separator must be middle dot (U+00B7)"
         )
 
+    def test_geo_separator_is_static_module_constant(self) -> None:
+        """Geo formatting should reuse one separator literal."""
+        import app.enrichment.adapters.ip_api as ip_api
+
+        assert ip_api._GEO_SEPARATOR == " \u00b7 "
+        assert ip_api._parse_response.__code__.co_consts.count(" \u00b7 ") == 0
+
     def test_geo_format_cc_city_asn_isp(self) -> None:
         """geo string is formatted as 'CC · City · ASN (ISP)'."""
         ioc = make_ipv4_ioc("95.172.185.24")
@@ -286,6 +312,46 @@ class TestGeoFormatting:
         assert "Nuremberg" in geo
         assert "AS24940" in geo
         assert "Hetzner Online GmbH" in geo
+
+    def test_geo_format_exact_full_context(self) -> None:
+        """geo string should not need a temporary parts list to preserve formatting."""
+        ioc = make_ipv4_ioc("95.172.185.24")
+        mock_resp = make_mock_response(200, IPINFO_PUBLIC_IP_RESPONSE)
+
+        adapter = _make_adapter()
+        mock_adapter_session(adapter, response=mock_resp)
+        result = adapter.lookup(ioc)
+
+        assert isinstance(result, EnrichmentResult)
+        assert result.raw_stats["geo"] == "DE \u00b7 Nuremberg \u00b7 AS24940 (Hetzner Online GmbH)"
+
+    def test_org_parsing_does_not_allocate_split_parts(self) -> None:
+        """ASN/ISP parsing should avoid a split-list allocation."""
+        from app.enrichment.adapters.ip_api import _parse_response
+
+        class NoSplitText(str):
+            def split(self, *_args, **_kwargs):
+                raise AssertionError("IP Context org parsing should use partition")
+
+        body = dict(IPINFO_PUBLIC_IP_RESPONSE)
+        body["org"] = NoSplitText("AS24940 Hetzner Online GmbH")
+
+        result = _parse_response(make_ipv4_ioc("95.172.185.24"), body, "IP Context")
+
+        assert result.raw_stats["geo"] == "DE \u00b7 Nuremberg \u00b7 AS24940 (Hetzner Online GmbH)"
+        assert result.raw_stats["asname"] == "Hetzner Online GmbH"
+
+    def test_geo_format_exact_minimal_context(self) -> None:
+        """geo string omits separators for missing optional city and ASN fields."""
+        ioc = make_ipv4_ioc("8.8.8.8")
+        mock_resp = make_mock_response(200, IPINFO_MINIMAL_RESPONSE)
+
+        adapter = _make_adapter()
+        mock_adapter_session(adapter, response=mock_resp)
+        result = adapter.lookup(ioc)
+
+        assert isinstance(result, EnrichmentResult)
+        assert result.raw_stats["geo"] == "US"
 
 
 class TestFlagsFiltering:

@@ -14,6 +14,7 @@ All DNS calls are mocked using unittest.mock.patch -- no real DNS queries.
 """
 from __future__ import annotations
 
+import dis
 from unittest.mock import MagicMock, patch
 
 import dns.exception
@@ -48,7 +49,7 @@ def _make_adapter(allowed_hosts: list[str] | None = None):
 def _make_txt_answer(txt_string: str) -> MagicMock:
     """Return a mock DNS answer list whose first element has .strings containing TXT bytes.
 
-    The adapter calls: b"".join(list(answers)[0].strings).decode("utf-8", errors="replace")
+    The adapter decodes the first answer record's TXT chunks as UTF-8.
     """
     answer_record = MagicMock()
     answer_record.strings = [txt_string.encode("utf-8")]
@@ -169,6 +170,25 @@ class TestSuccessfulLookup:
             f"ASN context is informational, verdict must be 'no_data', got: {result.verdict!r}"
         )
 
+    def test_no_data_result_helper_preserves_informational_shape(self) -> None:
+        """Cymru empty misses and parsed context should share one no_data result shape."""
+        import inspect
+
+        from app.enrichment.adapters.asn_cymru import _no_data_result
+
+        raw_stats = {"asn": "23028"}
+
+        result = _no_data_result(IPV4_IOC, "ASN Intel", raw_stats)
+
+        assert result.ioc is IPV4_IOC
+        assert result.provider == "ASN Intel"
+        assert result.verdict == "no_data"
+        assert result.detection_count == 0
+        assert result.total_engines == 0
+        assert result.scan_date is None
+        assert result.raw_stats is raw_stats
+        assert "no_data_result(ioc, provider_name, raw_stats)" in inspect.getsource(_no_data_result)
+
     @pytest.mark.parametrize("field,expected", [
         ("asn", "23028"),
         ("prefix", "216.90.108.0/24"),
@@ -186,6 +206,115 @@ class TestSuccessfulLookup:
         assert isinstance(result, EnrichmentResult)
         assert result.raw_stats[field] == expected, (
             f"Expected {field}={expected!r}, got: {result.raw_stats.get(field)!r}"
+        )
+
+    def test_txt_answer_uses_first_record_without_materializing_all_answers(self) -> None:
+        """TXT extraction should read only the first answer record."""
+        answer_record = MagicMock()
+        answer_record.strings = [SAMPLE_TXT.encode("utf-8")]
+
+        def answers():
+            yield answer_record
+            raise AssertionError("ASN lookup should not materialize every TXT answer")
+
+        mock_resolver = MagicMock()
+        mock_resolver.resolve.return_value = answers()
+
+        with patch("dns.resolver.Resolver", return_value=mock_resolver):
+            result = _make_adapter().lookup(IPV4_IOC)
+
+        assert isinstance(result, EnrichmentResult)
+        assert result.raw_stats["asn"] == "23028"
+
+    def test_short_chunk_txt_answers_skip_join_iteration(self) -> None:
+        """Common one-, two-, and three-chunk Cymru TXT answers should decode without joining."""
+        from app.enrichment.adapters.asn_cymru import _decode_txt_strings
+
+        class ShortChunkStrings:
+            def __init__(self, chunks: tuple[bytes, ...]) -> None:
+                self.chunks = chunks
+
+            def __len__(self) -> int:
+                return len(self.chunks)
+
+            def __getitem__(self, index: int) -> bytes:
+                if index >= len(self.chunks):
+                    raise IndexError(index)
+                return self.chunks[index]
+
+            def __iter__(self):
+                raise AssertionError("short Cymru TXT chunks should not be joined through iteration")
+
+        assert _decode_txt_strings(ShortChunkStrings((SAMPLE_TXT.encode("utf-8"),))) == SAMPLE_TXT
+        assert _decode_txt_strings(ShortChunkStrings((b"23028 | ", b"216.90.108.0/24"))) == (
+            "23028 | 216.90.108.0/24"
+        )
+        assert _decode_txt_strings(ShortChunkStrings((b"23028 | ", b"216.90.", b"108.0/24"))) == (
+            "23028 | 216.90.108.0/24"
+        )
+
+    def test_multi_chunk_txt_answer_still_concatenates_segments(self) -> None:
+        """Segmented Cymru TXT answers keep DNS TXT concatenation semantics."""
+        from app.enrichment.adapters.asn_cymru import _decode_txt_strings
+
+        assert _decode_txt_strings([b"23028 | ", b"216.90.108.0/24"]) == (
+            "23028 | 216.90.108.0/24"
+        )
+
+    def test_txt_parse_does_not_allocate_split_parts(self) -> None:
+        """TXT parsing should extract fields directly instead of split-list allocation."""
+        from app.enrichment.adapters.asn_cymru import _parse_response
+
+        class NoSplitText(str):
+            def split(self, *_args, **_kwargs):
+                raise AssertionError("ASN TXT parsing should not split into a parts list")
+
+        result = _parse_response(IPV4_IOC, NoSplitText(SAMPLE_TXT), "ASN Intel")
+
+        assert result.raw_stats["asn"] == "23028"
+        assert result.raw_stats["prefix"] == "216.90.108.0/24"
+        assert result.raw_stats["rir"] == "arin"
+        assert result.raw_stats["allocated"] == "1998-09-25"
+
+    def test_txt_field_parser_does_not_build_intermediate_field_list(self) -> None:
+        """Field extraction should return direct tuple values without list accumulation."""
+        from app.enrichment.adapters.asn_cymru import _parse_txt_fields
+
+        opnames = {instruction.opname for instruction in dis.get_instructions(_parse_txt_fields)}
+
+        assert "BUILD_LIST" not in opnames
+        assert _parse_txt_fields(SAMPLE_TXT) == (
+            "23028",
+            "216.90.108.0/24",
+            "US",
+            "arin",
+            "1998-09-25",
+        )
+        assert _parse_txt_fields("23028 | 216.90.108.0/24") == (
+            "23028",
+            "216.90.108.0/24",
+            "",
+            "",
+            "",
+        )
+
+    def test_txt_field_parser_trims_ranges_before_slicing(self) -> None:
+        """TXT field extraction should avoid slice-then-strip field allocations."""
+        from app.enrichment.adapters.asn_cymru import (
+            _next_txt_field,
+            _parse_txt_fields,
+            _strip_txt_field,
+        )
+
+        assert "strip" not in _next_txt_field.__code__.co_names
+        assert "strip" not in _parse_txt_fields.__code__.co_names
+        assert _strip_txt_field("  arin  ", 0, 8) == "arin"
+        assert _parse_txt_fields(" 23028 | 216.90.108.0/24 | US | arin | 1998-09-25 ") == (
+            "23028",
+            "216.90.108.0/24",
+            "US",
+            "arin",
+            "1998-09-25",
         )
 
 

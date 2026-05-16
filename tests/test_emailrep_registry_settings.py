@@ -1,6 +1,7 @@
 """Focused EmailRep registry/settings metadata contract tests."""
 from __future__ import annotations
 
+from types import MappingProxyType
 from unittest.mock import MagicMock
 
 import pytest
@@ -9,16 +10,6 @@ from app.config import Config
 from app.enrichment.setup import PROVIDER_INFO, build_registry
 from app.pipeline.models import IOCType
 
-
-_KEY_REQUIRED_PROVIDER_IDS = {
-    "malwarebazaar",
-    "threatfox",
-    "urlhaus",
-    "otx",
-    "greynoise",
-    "abuseipdb",
-    "emailrep",
-}
 
 _NON_EMAIL_TYPES = (
     IOCType.IPV4,
@@ -33,14 +24,10 @@ _NON_EMAIL_TYPES = (
 
 
 def _config_store_with_provider_keys(provider_keys: dict[str, str | None]) -> MagicMock:
-    """Return a ConfigStore mock that records provider-key lookups by id."""
+    """Return a ConfigStore mock that serves a provider-key map."""
     config_store = MagicMock()
     config_store.get_vt_api_key.return_value = None
-
-    def _get_provider_key(provider_id: str) -> str | None:
-        return provider_keys.get(provider_id)
-
-    config_store.get_provider_key.side_effect = _get_provider_key
+    config_store.all_provider_keys.return_value = provider_keys
     return config_store
 
 
@@ -59,8 +46,10 @@ def test_emailrep_settings_metadata_and_allowed_host_contract() -> None:
     """Settings metadata advertises EmailRep as an email-only HTTPS key provider."""
     emailrep_entries = [entry for entry in PROVIDER_INFO if entry["id"] == "emailrep"]
 
+    assert isinstance(PROVIDER_INFO, tuple)
     assert len(emailrep_entries) == 1
     emailrep = emailrep_entries[0]
+    assert isinstance(emailrep, MappingProxyType)
     assert emailrep["name"] == "EmailRep"
     assert emailrep["requires_key"] is True
     assert str(emailrep["signup_url"]).startswith("https://")
@@ -104,32 +93,24 @@ def test_emailrep_key_does_not_add_non_email_provider_coverage(ioc_type: IOCType
 
 
 def test_build_registry_reads_emailrep_key_from_config_store() -> None:
-    """Registry composition reads the EmailRep key through the provider settings store."""
+    """Registry composition reads provider settings once and configures EmailRep."""
     config_store = _config_store_with_provider_keys({"emailrep": "emailrep-test-key"})
 
-    build_registry(
+    registry = build_registry(
         allowed_hosts=Config.ALLOWED_API_HOSTS,
         config_store=config_store,
     )
 
-    requested_provider_ids = {
-        call.args[0] for call in config_store.get_provider_key.call_args_list
-    }
-    assert requested_provider_ids == _KEY_REQUIRED_PROVIDER_IDS
-    config_store.get_provider_key.assert_any_call("emailrep")
+    config_store.all_provider_keys.assert_called_once_with()
+    config_store.get_provider_key.assert_not_called()
+    assert len(_emailrep_providers(registry, IOCType.EMAIL)) == 1
 
 
 def test_emailrep_key_lookup_error_is_treated_as_missing_key() -> None:
     """A local config read failure leaves EmailRep unconfigured instead of aborting startup."""
     config_store = MagicMock()
     config_store.get_vt_api_key.return_value = None
-
-    def _get_provider_key(provider_id: str) -> str | None:
-        if provider_id == "emailrep":
-            raise RuntimeError("local config store read failed")
-        return None
-
-    config_store.get_provider_key.side_effect = _get_provider_key
+    config_store.all_provider_keys.side_effect = RuntimeError("local config store read failed")
 
     registry = build_registry(
         allowed_hosts=Config.ALLOWED_API_HOSTS,
