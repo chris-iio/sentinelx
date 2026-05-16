@@ -355,6 +355,20 @@ M020_FINDINGS: tuple[BaselineFinding, ...] = (
         ),
     ),
     BaselineFinding(
+        bucket="do next",
+        finding="Refresh S05's closeout audit after every shipped or rejected rewrite so downstream proof stays current.",
+        seam="audit/proof handoff",
+        evidence_kind="code-path reasoning + generated artifact proof",
+        evidence_summary=(
+            "S05 depends on the generated M020 audit being the DB-independent handoff for shipped, rejected, deferred, and leave-alone outcomes. The runner already records command-surface rows, measurement captures, rerun lanes, and ranked finding rows, so the next optimization step is to keep refreshing `make audit-m020` after each implementation slice rather than letting S02-S04 proof drift from the final closeout artifact."
+        ),
+        continuity_guardrails="R040, R094, R095, R096, R097, R098, R099, R100",
+        rerun_lanes="`make audit-m020`; `python3 -m pytest -q tests/test_optimization_audit.py`; `make verify-fast`",
+        continuity_notes=(
+            "Preserve the generated artifact as the inspection surface for future agents: every closeout update must keep command-surface rows, failed-capture visibility, proof lanes, and ranked shipped/rejected/deferred/leave-alone outcomes synchronized."
+        ),
+    ),
+    BaselineFinding(
         bucket="later",
         finding="Defer frontend DOM virtualization until measured result-card counts justify the browser-visible regression surface.",
         seam="frontend/render",
