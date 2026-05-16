@@ -330,7 +330,7 @@ M020_FINDINGS: tuple[BaselineFinding, ...] = (
         seam="diagnostic export/sanitization",
         evidence_kind="code-path reasoning + focused regression proof",
         evidence_summary=(
-            "`app/diagnostics/policy.py` now owns `DiagnosticSanitizationPolicy` and `DIAGNOSTIC_SANITIZATION_POLICY`, an immutable caps object shared by `app/diagnostics/assembler.py`, `app/diagnostics/redaction.py`, and `app/diagnostics/sources.py`. "
+            "`app/diagnostics/policy.py` now owns `DiagnosticSanitizationPolicy` and `DIAGNOSTIC_SANITIZATION_POLICY`, an immutable caps object shared by `app/diagnostics/assembler.py`, `app/diagnostics/redaction.py`, and `app/diagnostics/sources.py` for the S03 diagnostics/redaction contract. "
             "Assembler archive-path and generated-filename bounds, runtime source byte/string/list/dict/depth caps, and redaction depth/label caps now derive from that policy while the existing optimized helper names remain stable. "
             "T02 inspected the production modules and left behavior alone because the shared policy extraction was already complete; the S03 outcome is therefore shipped as a centralization keep-decision, not rejected. "
             "Focused proof is `python3 -m pytest -q tests/test_diagnostic_export_assembler.py tests/test_diagnostic_redaction.py tests/test_diagnostic_export_sources.py`."
@@ -347,7 +347,7 @@ M020_FINDINGS: tuple[BaselineFinding, ...] = (
         seam="frontend/render",
         evidence_kind="work-count measurement + focused regression proof",
         evidence_summary=(
-            "`app/static/src/ts/modules/result-application.test.ts::measures large-result render pressure at the severity-change gate` builds a 240-card results fixture. "
+            "`app/static/src/ts/modules/result-application.test.ts::measures large-result render pressure at the severity-change gate` builds a 240-card results fixture for the S04 browser-visible deferment. "
             "After the initial clean verdict, a second provider result with the same severity performs zero `.ioc-card` whole-grid scans, zero dashboard recounts, and zero sort calls. A later malicious severity change performs exactly one document-level card scan for dashboard counts and one grid-level card scan for the debounced sort. Current evidence supports preserving the severity-change gate rather than promoting DOM virtualization."
         ),
         continuity_guardrails="R008, R009, R010, R019, R040, R096, R097, R098",
@@ -2748,7 +2748,8 @@ def render_m020_identity_section(document: AuditDocument) -> str:
             "- Milestone intent: M020 is an audit-led aggressive refactor and deep optimization pass, not a cosmetic cleanup pass.",
             "- Decisions: D081 uses audit-led rewrites; D082 keeps the strict proof bar; D083 preserves the analyst IOC triage loop as the integration contract.",
             "- Requirements: R094 requires this source-generated milestone audit surface; R095 ranks aggressive rewrite candidates; R096 ties shipped or rejected outcomes to evidence; R097 preserves analyst workflows; R098 requires focused, fast, deep, and final verification lanes; R099 preserves diagnostics, failure visibility, and redaction boundaries; R100 records durable generated audit and closeout outcomes.",
-        "- S01 produces this generated audit artifact and ranked rewrite list. S02 consumed the highest-confidence route-helper candidate. S03 shipped the diagnostics policy extraction. S04 measured and rejected/deferred frontend virtualization promotion. S05 refreshes final shipped/rejected outcomes and full verification proof.",
+            "- deferred-scope constraints: R101 major storage redesign, R102 major UI/product redesign, and R103 new external provider integration are constraints, not shipped optimizations. No new storage redesign, No broad UI/product redesign, and No external provider integration are claimed by M020 evidence; existing local proof only preserves current SQLite WAL-backed stores, analyst-visible surfaces, and current provider integrations.",
+        "- S01 produces this generated audit artifact and ranked rewrite list. S02 consumed the highest-confidence route-helper candidate for the S02 route/API/history contract, the analyst-visible route/API/history contract, and S02-S04 analyst-visible contract handoff. S03 shipped the diagnostics policy extraction. S04 measured and rejected/deferred frontend virtualization promotion. S05 refreshes final shipped/rejected outcomes and full verification proof.",
         ]
     )
 
