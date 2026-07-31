@@ -52,10 +52,75 @@ describe("settings init", () => {
     button.click();
     expect(input.type).toBe("text");
     expect(button.textContent).toBe("Hide");
+    expect(button.getAttribute("aria-pressed")).toBe("true");
 
     button.click();
     expect(input.type).toBe("password");
     expect(button.textContent).toBe("Show");
+    expect(button.getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("keeps configured state separate from an empty secret input", () => {
+    document.body.innerHTML = `
+      <section class="settings-section">
+        <span class="api-key-status--configured">Configured</span>
+        <form>
+          <button data-role="toggle-key" type="button">Show</button>
+          <input name="api_key" type="password" value="************7890" />
+        </form>
+      </section>
+    `;
+
+    init();
+
+    const input = document.querySelector<HTMLInputElement>("input")!;
+
+    expect(input.value).toBe("");
+    expect(input.getAttribute("data-configured")).toBe("true");
+    expect(input.placeholder).toBe("Configured — paste a new API key to replace it");
+  });
+
+  it("never submits the masked placeholder as a replacement credential", () => {
+    document.body.innerHTML = `
+      <section class="settings-section">
+        <form>
+          <button data-role="toggle-key" type="button">Show</button>
+          <input name="api_key" type="password" value="************7890" />
+        </form>
+      </section>
+    `;
+
+    init();
+
+    const form = document.querySelector<HTMLFormElement>("form")!;
+    const input = document.querySelector<HTMLInputElement>("input")!;
+    let submittedKey: FormDataEntryValue | null = null;
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      submittedKey = new FormData(form).get("api_key");
+    });
+
+    input.value = "************7890";
+    form.dispatchEvent(new SubmitEvent("submit", { bubbles: true, cancelable: true }));
+
+    expect(submittedKey).toBe("");
+  });
+
+  it("initializes honest Offline extraction state from the global page init", () => {
+    document.body.innerHTML = `
+      <main class="page-results" data-mode="offline">
+        <article class="ioc-card" data-verdict="no_data">
+          <span class="verdict-label">NO DATA</span>
+          <div class="ioc-context-line"></div>
+        </article>
+      </main>
+    `;
+
+    init();
+
+    const card = document.querySelector<HTMLElement>(".ioc-card")!;
+    expect(card.getAttribute("data-provider-query-state")).toBe("not_queried");
+    expect(card.querySelector(".verdict-label")?.textContent).toBe("EXTRACTED");
   });
 
   it("reuses one settings-section query for accordion and key toggles", () => {

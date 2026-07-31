@@ -15,6 +15,7 @@ All DNS calls are mocked using unittest.mock.patch -- no real DNS queries.
 from __future__ import annotations
 
 import dis
+import inspect
 from unittest.mock import MagicMock, patch
 
 import dns.exception
@@ -39,11 +40,11 @@ INVALID_IP_IOC = IOC(type=IOCType.IPV4, value="not-an-ip", raw_match="not-an-ip"
 SAMPLE_TXT = "23028 | 216.90.108.0/24 | US | arin | 1998-09-25"
 
 
-def _make_adapter(allowed_hosts: list[str] | None = None):
-    """Construct a CymruASNAdapter. allowed_hosts is accepted but unused (DNS is port 53)."""
+def _make_adapter():
+    """Construct a CymruASNAdapter. DNS uses port 53 directly, not HTTP allowlists."""
     from app.enrichment.adapters.asn_cymru import CymruASNAdapter
 
-    return CymruASNAdapter(allowed_hosts=allowed_hosts or [])
+    return CymruASNAdapter()
 
 
 def _make_txt_answer(txt_string: str) -> MagicMock:
@@ -131,6 +132,44 @@ class TestQueryConstruction:
         # Should not end with .origin.asn.cymru.com (IPv4 suffix)
         assert not query_name.endswith(".origin.asn.cymru.com"), (
             f"IPv6 query must use origin6 zone, not origin: {query_name!r}"
+        )
+
+    def test_lookup_delegates_dns_query_name_helper(self) -> None:
+        """lookup should not own IPv4/IPv6 Cymru zone replacement or resolver setup."""
+        from app.enrichment.adapters.asn_cymru import CymruASNAdapter
+
+        source = inspect.getsource(CymruASNAdapter.lookup)
+
+        assert "_cymru_query_name(ip)" in source
+        assert "_configured_resolver()" in source
+        assert ".replace(" not in source
+        assert "dns.resolver.Resolver" not in source
+        assert ".lifetime" not in source
+        assert "origin.asn.cymru.com" not in source
+        assert "origin6.asn.cymru.com" not in source
+
+    def test_configured_resolver_helper_preserves_lifetime_policy(self) -> None:
+        """Cymru resolver construction and timeout policy should live in one helper."""
+        from app.enrichment.adapters import asn_cymru
+
+        resolver = MagicMock()
+        with patch("dns.resolver.Resolver", return_value=resolver) as resolver_factory:
+            assert asn_cymru._configured_resolver() is resolver
+
+        resolver_factory.assert_called_once_with(configure=True)
+        assert resolver.lifetime == asn_cymru._RESOLVER_LIFETIME
+
+    def test_query_name_helper_preserves_ipv4_and_ipv6_zones(self) -> None:
+        """Cymru DNS query-name construction should live in one helper."""
+        import ipaddress
+
+        from app.enrichment.adapters.asn_cymru import _cymru_query_name
+
+        assert _cymru_query_name(ipaddress.ip_address("216.90.108.31")) == (
+            "31.108.90.216.origin.asn.cymru.com"
+        )
+        assert _cymru_query_name(ipaddress.ip_address("2001:4860:4860::8888")).endswith(
+            ".origin6.asn.cymru.com"
         )
 
 
@@ -227,8 +266,9 @@ class TestSuccessfulLookup:
         assert result.raw_stats["asn"] == "23028"
 
     def test_short_chunk_txt_answers_skip_join_iteration(self) -> None:
-        """Common one-, two-, and three-chunk Cymru TXT answers should decode without joining."""
+        """Common one-, two-, three-, and four-chunk Cymru TXT answers should decode without joining."""
         from app.enrichment.adapters.asn_cymru import _decode_txt_strings
+        from app.enrichment.adapters.dns_txt import decode_txt_chunks
 
         class ShortChunkStrings:
             def __init__(self, chunks: tuple[bytes, ...]) -> None:
@@ -245,6 +285,7 @@ class TestSuccessfulLookup:
             def __iter__(self):
                 raise AssertionError("short Cymru TXT chunks should not be joined through iteration")
 
+        assert _decode_txt_strings(ShortChunkStrings(())) == ""
         assert _decode_txt_strings(ShortChunkStrings((SAMPLE_TXT.encode("utf-8"),))) == SAMPLE_TXT
         assert _decode_txt_strings(ShortChunkStrings((b"23028 | ", b"216.90.108.0/24"))) == (
             "23028 | 216.90.108.0/24"
@@ -252,6 +293,11 @@ class TestSuccessfulLookup:
         assert _decode_txt_strings(ShortChunkStrings((b"23028 | ", b"216.90.", b"108.0/24"))) == (
             "23028 | 216.90.108.0/24"
         )
+        assert _decode_txt_strings(ShortChunkStrings((b"23028", b" | ", b"216.90.", b"108.0/24"))) == (
+            "23028 | 216.90.108.0/24"
+        )
+        assert "decode_txt_chunks" in _decode_txt_strings.__code__.co_names
+        assert "string_count == 4" in inspect.getsource(decode_txt_chunks)
 
     def test_multi_chunk_txt_answer_still_concatenates_segments(self) -> None:
         """Segmented Cymru TXT answers keep DNS TXT concatenation semantics."""
@@ -275,6 +321,31 @@ class TestSuccessfulLookup:
         assert result.raw_stats["prefix"] == "216.90.108.0/24"
         assert result.raw_stats["rir"] == "arin"
         assert result.raw_stats["allocated"] == "1998-09-25"
+
+    def test_parse_response_delegates_raw_stats_helper(self) -> None:
+        """Cymru parser should not own ASN raw_stats mechanics."""
+        from app.enrichment.adapters.asn_cymru import _parse_response
+
+        source = inspect.getsource(_parse_response)
+
+        assert "_asn_raw_stats(txt)" in source
+        assert "_parse_txt_fields(txt)" not in source
+        assert '"asn"' not in source
+        assert '"allocated"' not in source
+
+    def test_raw_stats_helper_preserves_key_order_and_values(self) -> None:
+        """Cymru raw_stats helper should preserve public metadata shape."""
+        from app.enrichment.adapters.asn_cymru import _asn_raw_stats
+
+        raw_stats = _asn_raw_stats(SAMPLE_TXT)
+
+        assert list(raw_stats) == ["asn", "prefix", "rir", "allocated"]
+        assert raw_stats == {
+            "asn": "23028",
+            "prefix": "216.90.108.0/24",
+            "rir": "arin",
+            "allocated": "1998-09-25",
+        }
 
     def test_txt_field_parser_does_not_build_intermediate_field_list(self) -> None:
         """Field extraction should return direct tuple values without list accumulation."""

@@ -36,9 +36,7 @@ function fallbackCopy(text: string, btn: HTMLElement): void {
   // Create a temporary textarea, select its content, and copy
   const tmp = document.createElement("textarea");
   tmp.value = text;
-  tmp.style.position = "fixed";
-  tmp.style.top = "-9999px";
-  tmp.style.left = "-9999px";
+  tmp.className = "clipboard-fallback";
   document.body.appendChild(tmp);
   tmp.focus();
   tmp.select();

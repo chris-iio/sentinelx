@@ -159,7 +159,7 @@ describe("formatDate", () => {
 /* ------------------------------------------------------------------ */
 
 describe("updateSummaryRow", () => {
-  it("VIS-02: creates micro-bar with correct segment classes and widths", () => {
+  it("VIS-02: creates one CSP-safe micro-bar unit per provider verdict", () => {
     const slot = makeSlot();
     const verdicts: Record<string, VerdictEntry[]> = {
       "1.2.3.4": [
@@ -176,18 +176,13 @@ describe("updateSummaryRow", () => {
     expect(microBar).not.toBeNull();
 
     const segments = microBar!.querySelectorAll<HTMLElement>(".micro-bar-segment");
-    expect(segments.length).toBe(3); // malicious, clean, no_data (0 suspicious skipped)
+    expect(segments.length).toBe(4);
 
-    // Verify segment classes
-    const segClasses = Array.from(segments).map((s) => s.className);
-    expect(segClasses[0]).toContain("micro-bar-segment--malicious");
-    expect(segClasses[1]).toContain("micro-bar-segment--clean");
-    expect(segClasses[2]).toContain("micro-bar-segment--no_data");
-
-    // Verify widths: 2/4=50%, 1/4=25%, 1/4=25%
-    expect(segments[0]!.style.width).toBe("50%");
-    expect(segments[1]!.style.width).toBe("25%");
-    expect(segments[2]!.style.width).toBe("25%");
+    const segClasses = Array.from(segments).map((segment) => segment.className);
+    expect(segClasses.filter((name) => name.includes("--malicious"))).toHaveLength(2);
+    expect(segClasses.filter((name) => name.includes("--clean"))).toHaveLength(1);
+    expect(segClasses.filter((name) => name.includes("--no_data"))).toHaveLength(1);
+    expect(Array.from(segments).every((segment) => segment.getAttribute("style") === null)).toBe(true);
   });
 
   it("VIS-02: micro-bar title attribute encodes counts", () => {

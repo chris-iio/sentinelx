@@ -17,8 +17,9 @@ For tests, pass a tmp_path to isolate from the real filesystem:
 from __future__ import annotations
 
 import configparser
-import os
 from pathlib import Path
+
+from . import config_files, config_values
 
 CONFIG_PATH = Path.home() / ".sentinelx" / "config.ini"
 _SECTION = "virustotal"
@@ -32,16 +33,6 @@ _SSH_NORMAL_HOURS_KEY = "normal_hours"
 _SSH_NORMAL_HOURS_DEFAULT = "06:00-22:00"
 
 
-def _provider_option_name(name: str) -> str:
-    """Normalize provider names to their config option key."""
-    return name.lower()
-
-
-def _configured_value(value: str | None) -> str | None:
-    """Return configured text values, treating empty strings as absent."""
-    return value or None
-
-
 class ConfigStore:
     """Persists and retrieves provider API keys using configparser INI format.
 
@@ -53,6 +44,7 @@ class ConfigStore:
     def __init__(self, config_path: Path | None = None) -> None:
         self._config_path = config_path if config_path is not None else CONFIG_PATH
         self._cached_cfg: configparser.ConfigParser | None = None
+        self._lock = config_files.config_lock_for_path(self._config_path)
 
     def _read_config(self) -> configparser.ConfigParser:
         """Read and return the config file as a ConfigParser instance.
@@ -61,28 +53,28 @@ class ConfigStore:
         cached parser without re-reading the file. The cache is invalidated
         by _save_config() so writes are always reflected on the next read.
         """
-        if self._cached_cfg is not None:
-            return self._cached_cfg
-        cfg = configparser.ConfigParser()
-        cfg.read(self._config_path)
-        self._cached_cfg = cfg
-        return cfg
+        with self._lock:
+            if self._cached_cfg is not None:
+                return self._cached_cfg
+            cfg = configparser.ConfigParser(interpolation=None)
+            cfg.read(self._config_path)
+            self._cached_cfg = cfg
+            return cfg
 
     def _save_config(self, cfg: configparser.ConfigParser) -> None:
-        """Write config to disk with owner-only permissions (SEC-17: 0o600)."""
-        self._config_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        fd = os.open(str(self._config_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(fd, "w") as fh:
-            cfg.write(fh)
-        self._cached_cfg = cfg
+        """Atomically write config to disk with owner-only permissions."""
+        with self._lock:
+            config_files.write_config_atomic(self._config_path, cfg)
+            self._cached_cfg = cfg
 
     def _set_value(self, section: str, key: str, value: str) -> None:
         """Set a single value in the config file, creating the section if needed."""
-        cfg = self._read_config()
-        if section not in cfg:
-            cfg[section] = {}
-        cfg[section][key] = value
-        self._save_config(cfg)
+        with self._lock:
+            cfg = config_files.copy_config(self._read_config())
+            if section not in cfg:
+                cfg[section] = {}
+            cfg[section][key] = value
+            self._save_config(cfg)
 
     def _get_value(self, section: str, key: str, fallback: str | None = None) -> str | None:
         """Read a single config value through the cached parser."""
@@ -94,7 +86,7 @@ class ConfigStore:
         Returns:
             The API key string, or None if not configured.
         """
-        return _configured_value(self._get_value(_SECTION, _KEY_NAME))
+        return config_values.configured_value(self._get_value(_SECTION, _KEY_NAME))
 
     def set_vt_api_key(self, key: str) -> None:
         """Write the VirusTotal API key to config file.
@@ -115,10 +107,10 @@ class ConfigStore:
         Returns:
             The stored API key string, or None if not configured.
         """
-        return _configured_value(
+        return config_values.configured_value(
             self._get_value(
                 _PROVIDERS_SECTION,
-                _provider_option_name(name),
+                config_values.provider_option_name(name),
             )
         )
 
@@ -131,7 +123,7 @@ class ConfigStore:
             name: Provider name (e.g., "GreyNoise", "abuseipdb"). Case-insensitive.
             key:  The API key to store.
         """
-        self._set_value(_PROVIDERS_SECTION, _provider_option_name(name), key)
+        self._set_value(_PROVIDERS_SECTION, config_values.provider_option_name(name), key)
 
     def get_cache_ttl(self) -> int:
         """Read the cache TTL in hours from config file.
@@ -139,13 +131,10 @@ class ConfigStore:
         Returns:
             TTL in hours. Defaults to 24 if not configured.
         """
-        value = self._get_value(_CACHE_SECTION, _CACHE_TTL_KEY)
-        if value is not None:
-            try:
-                return int(value)
-            except ValueError:
-                pass
-        return _CACHE_TTL_DEFAULT
+        return config_values.cache_ttl_hours(
+            self._get_value(_CACHE_SECTION, _CACHE_TTL_KEY),
+            default=_CACHE_TTL_DEFAULT,
+        )
 
     def set_cache_ttl(self, hours: int) -> None:
         """Write the cache TTL in hours to config file.
@@ -165,14 +154,10 @@ class ConfigStore:
             Dict mapping provider name (lowercase) to API key. Empty dict if
             no provider keys have been stored.
         """
-        cfg = self._read_config()
-        if _PROVIDERS_SECTION not in cfg:
-            return {}
-        section = cfg[_PROVIDERS_SECTION]
-        keys: dict[str, str] = {}
-        for name in section:
-            keys[name] = section[name]
-        return keys
+        return config_values.provider_keys_from_config(
+            self._read_config(),
+            providers_section=_PROVIDERS_SECTION,
+        )
 
     def get_ssh_normal_hours(self) -> str:
         """Read the normal hours window from [ssh] config section.

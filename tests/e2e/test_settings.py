@@ -302,8 +302,8 @@ def test_save_key_shows_success_flash(page: Page, live_server: str) -> None:
     sp.expect_status_configured("virustotal")
 
 
-def test_saved_key_is_masked_on_reload(page: Page, live_server: str) -> None:
-    """After saving a key, reloading shows a masked version."""
+def test_saved_key_is_not_rendered_back_into_the_form(page: Page, live_server: str) -> None:
+    """After saving a key, reload keeps the secret input empty and shows status."""
     sp = SettingsPage(page, live_server)
 
     sp.goto()
@@ -313,9 +313,11 @@ def test_saved_key_is_masked_on_reload(page: Page, live_server: str) -> None:
     sp.goto()
     sp.expand_provider("otx")
 
-    input_val = sp.api_key_input("otx").input_value()
-    assert input_val.endswith("1234"), f"Masked key should end with last 4 chars, got: {input_val}"
-    assert "****" in input_val or "***" in input_val, f"Should contain asterisks, got: {input_val}"
+    expect(sp.api_key_input("otx")).to_have_value("")
+    sp.expect_status_configured("otx")
+    expect(sp.provider_section("otx").locator("#api-key-help-otx")).to_contain_text(
+        "Enter a new key only to replace it"
+    )
 
 
 def test_save_key_for_non_vt_provider(page: Page, live_server: str) -> None:

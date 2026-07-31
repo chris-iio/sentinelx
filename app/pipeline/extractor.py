@@ -21,9 +21,9 @@ from collections.abc import Callable, Iterable
 import iocextract
 from iocsearcher.searcher import Searcher
 
-from app.pipeline.classifier import classify
-from app.pipeline.models import IOC, IOCType
-from app.pipeline.normalizer import normalize
+from .classifier import classify
+from .models import IOC, IOCType
+from .normalizer import normalize
 from app.text_utils import has_non_whitespace, stripped_text_or_none
 
 logger = logging.getLogger(__name__)
@@ -31,6 +31,12 @@ logger = logging.getLogger(__name__)
 # Module-level Searcher — created once, reused across calls (per iocsearcher docs)
 _searcher = Searcher()
 _EXPECTED_EXTRACTION_ERRORS = (ValueError, TypeError, AttributeError, UnicodeError)
+
+
+def _handle_extraction_error(source_name: str, exc: Exception) -> None:
+    if isinstance(exc, _EXPECTED_EXTRACTION_ERRORS):
+        return
+    logger.warning("Unexpected error in %s extraction", source_name, exc_info=True)
 
 
 def _consume_extraction_source(
@@ -43,10 +49,48 @@ def _consume_extraction_source(
     try:
         for value in source_factory():
             add_candidate(value, type_hint)
-    except _EXPECTED_EXTRACTION_ERRORS:
-        pass
-    except Exception:
-        logger.warning("Unexpected error in %s extraction", source_name, exc_info=True)
+    except Exception as exc:
+        _handle_extraction_error(source_name, exc)
+
+
+def _candidate_raw(candidate: dict) -> str:
+    """Return the raw candidate value from an extractor candidate row."""
+    return candidate["raw"]
+
+
+def _classify_candidate_raw(raw: str) -> IOC | None:
+    """Normalize and classify one raw candidate using the shared pipeline rule."""
+    return classify(normalize(raw), raw)
+
+
+def _append_candidate(
+    candidates: list[dict],
+    seen_raw: set[str],
+    raw: str,
+    type_hint: str,
+) -> None:
+    """Append a first-seen raw candidate after shared whitespace normalization."""
+    stripped_raw = stripped_text_or_none(raw)
+    if stripped_raw is not None and stripped_raw not in seen_raw:
+        seen_raw.add(stripped_raw)
+        candidates.append({"raw": stripped_raw, "type_hint": type_hint})
+
+
+def _ioc_identity(ioc: IOC) -> tuple[IOCType, str]:
+    """Return the semantic deduplication key for a classified IOC."""
+    return (ioc.type, ioc.value)
+
+
+def _append_unique_ioc_result(
+    results: list[IOC],
+    seen_keys: set[tuple[IOCType, str]],
+    ioc: IOC,
+) -> None:
+    key = _ioc_identity(ioc)
+    if key in seen_keys:
+        return
+    seen_keys.add(key)
+    results.append(ioc)
 
 
 def extract_iocs(text: str) -> list[dict]:
@@ -75,10 +119,7 @@ def extract_iocs(text: str) -> list[dict]:
 
     def _add(raw: str, type_hint: str) -> None:
         """Add candidate if not already present (dedup by raw value)."""
-        stripped_raw = stripped_text_or_none(raw)
-        if stripped_raw is not None and stripped_raw not in seen_raw:
-            seen_raw.add(stripped_raw)
-            candidates.append({"raw": stripped_raw, "type_hint": type_hint})
+        _append_candidate(candidates, seen_raw, raw, type_hint)
 
     # --- iocextract extractions ---
     _consume_extraction_source(
@@ -98,10 +139,8 @@ def extract_iocs(text: str) -> list[dict]:
     try:
         for ioc in _searcher.search_data(text):
             _add(ioc.value, ioc.name)
-    except _EXPECTED_EXTRACTION_ERRORS:
-        pass
-    except Exception:
-        logger.warning("Unexpected error in iocsearcher extraction", exc_info=True)
+    except Exception as exc:
+        _handle_extraction_error("iocsearcher", exc)
 
     return candidates
 
@@ -132,26 +171,21 @@ def run_pipeline(text: str) -> list[IOC]:
     if not candidates:
         return []
     if len(candidates) == 1:
-        raw = candidates[0]["raw"]
-        normalized_value = normalize(raw)
-        ioc = classify(normalized_value, raw)
+        ioc = _classify_candidate_raw(_candidate_raw(candidates[0]))
         return [] if ioc is None else [ioc]
     if len(candidates) == 2:
-        first_raw = candidates[0]["raw"]
+        first_raw = _candidate_raw(candidates[0])
+        second_raw = _candidate_raw(candidates[1])
         first_normalized = normalize(first_raw)
-        first_ioc = classify(first_normalized, first_raw)
-
-        second_raw = candidates[1]["raw"]
-        second_normalized = normalize(second_raw)
-        if second_normalized == first_normalized:
+        if normalize(second_raw) == first_normalized:
+            first_ioc = classify(first_normalized, first_raw)
             return [] if first_ioc is None else [first_ioc]
 
-        second_ioc = classify(second_normalized, second_raw)
+        first_ioc = classify(first_normalized, first_raw)
+        second_ioc = _classify_candidate_raw(second_raw)
         if first_ioc is None:
             return [] if second_ioc is None else [second_ioc]
-        if second_ioc is None or (
-            first_ioc.type == second_ioc.type and first_ioc.value == second_ioc.value
-        ):
+        if second_ioc is None or _ioc_identity(first_ioc) == _ioc_identity(second_ioc):
             return [first_ioc]
         return [first_ioc, second_ioc]
 
@@ -161,7 +195,7 @@ def run_pipeline(text: str) -> list[IOC]:
     seen_normalized: set[str] = set()
 
     for candidate in candidates:
-        raw = candidate["raw"]
+        raw = _candidate_raw(candidate)
         normalized_value = normalize(raw)
         if normalized_value in seen_normalized:
             continue
@@ -170,10 +204,6 @@ def run_pipeline(text: str) -> list[IOC]:
         ioc = classify(normalized_value, raw)
         if ioc is None:
             continue
-        key = (ioc.type, ioc.value)
-        if key in seen_keys:
-            continue
-        seen_keys.add(key)
-        results.append(ioc)
+        _append_unique_ioc_result(results, seen_keys, ioc)
 
     return results

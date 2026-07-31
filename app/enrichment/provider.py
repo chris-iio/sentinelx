@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
-from app.enrichment.models import EnrichmentError, EnrichmentResult
+from .models import EnrichmentError, EnrichmentResult
 from app.pipeline.models import IOC, IOCType
 
 

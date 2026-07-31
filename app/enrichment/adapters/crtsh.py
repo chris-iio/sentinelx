@@ -4,9 +4,8 @@ from __future__ import annotations
 from collections.abc import Iterator
 from heapq import nsmallest
 
-from app.enrichment.adapters.base import BaseHTTPAdapter
-from app.enrichment.http_safety import safe_request
-from app.enrichment.models import EnrichmentError, EnrichmentResult, error_result, no_data_result
+from .base import BaseHTTPAdapter
+from ..models import EnrichmentResult, no_data_result
 from app.pipeline.models import IOC, IOCType
 from app.text_utils import stripped_text_or_none
 
@@ -54,9 +53,54 @@ def _capped_sorted_subdomains(subdomains: set[str]) -> list[str]:
             if first > second:
                 first, second = second, first
         return [first, second, third]
+    if subdomain_count == 4:
+        first = ""
+        second = ""
+        third = ""
+        fourth = ""
+        for subdomain in subdomains:
+            if not first:
+                first = subdomain
+            elif not second:
+                second = subdomain
+            elif not third:
+                third = subdomain
+            else:
+                fourth = subdomain
+                break
+        if first > second:
+            first, second = second, first
+        if third > fourth:
+            third, fourth = fourth, third
+        if first > third:
+            first, third = third, first
+        if second > fourth:
+            second, fourth = fourth, second
+        if second > third:
+            second, third = third, second
+        return [first, second, third, fourth]
     if subdomain_count <= _SUBDOMAIN_CAP:
-        return sorted(subdomains)
+        ordered: list[str] = []
+        for subdomain in subdomains:
+            append_ordered_subdomain(ordered, subdomain)
+        return ordered
     return nsmallest(_SUBDOMAIN_CAP, subdomains)
+
+
+def append_ordered_subdomain(ordered: list[str], subdomain: str) -> None:
+    subdomain_count = len(ordered)
+    if subdomain_count == 0:
+        ordered.append(subdomain)
+        return
+
+    index = 0
+    while index < subdomain_count:
+        if subdomain <= ordered[index]:
+            ordered.insert(index, subdomain)
+            return
+        index += 1
+
+    ordered.append(subdomain)
 
 
 def _iter_name_values(name_value: str) -> Iterator[str]:
@@ -88,29 +132,16 @@ def _clean_name_value(raw_name: str) -> str | None:
 
 
 class CrtShAdapter(BaseHTTPAdapter):
-    """crt.sh CT search endpoint — overrides lookup() for JSON-list responses."""
+    """crt.sh CT search endpoint."""
 
     supported_types: frozenset[IOCType] = frozenset((IOCType.DOMAIN,))
     name = "Cert History"
     requires_api_key = False
 
-    def lookup(self, ioc: IOC) -> EnrichmentResult | EnrichmentError:
-        if ioc.type not in self.supported_types:
-            return error_result(ioc, self.name, "Unsupported type")
-
-        url = self._build_url(ioc)
-        result = safe_request(
-            self._session, url, self._allowed_hosts, ioc, self.name,
-        )
-        if isinstance(result, EnrichmentError):
-            return result
-        return _parse_response(ioc, result, self.name)
-
     def _build_url(self, ioc: IOC) -> str:
         return f"{CRTSH_BASE}/?q={ioc.value}&output=json"
 
-    def _parse_response(self, ioc: IOC, body: dict) -> EnrichmentResult:
-        # Not called by our lookup() override, but required by the abstract interface.
+    def _parse_response(self, ioc: IOC, body: list) -> EnrichmentResult:
         return _parse_response(ioc, body, self.name)  # type: ignore[arg-type]
 
 
@@ -125,6 +156,14 @@ def _parse_response(ioc: IOC, body: list, provider_name: str) -> EnrichmentResul
 
     cert_count = len(body)
 
+    return _crtsh_result(
+        ioc=ioc,
+        provider=provider_name,
+        raw_stats=_crtsh_raw_stats(body=body, cert_count=cert_count),
+    )
+
+
+def _crtsh_raw_stats(*, body: list, cert_count: int) -> dict:
     # Collect date range and subdomains from name_value (SANs).
     earliest = ""
     latest = ""
@@ -141,24 +180,24 @@ def _parse_response(ioc: IOC, body: list, provider_name: str) -> EnrichmentResul
         name_value = entry.get("name_value")
         if not name_value:
             continue
-        for raw_name in _iter_name_values(name_value):
-            cleaned = _clean_name_value(raw_name)
-            if cleaned is not None:
-                subdomain_set.add(cleaned)
+        add_name_value_subdomains(subdomain_set, name_value)
 
     # Sort alphabetically, cap at _SUBDOMAIN_CAP
     subdomains = _capped_sorted_subdomains(subdomain_set)
 
-    return _crtsh_result(
-        ioc=ioc,
-        provider=provider_name,
-        raw_stats={
-            "cert_count": cert_count,
-            "earliest": earliest,
-            "latest": latest,
-            "subdomains": subdomains,
-        },
-    )
+    return {
+        "cert_count": cert_count,
+        "earliest": earliest,
+        "latest": latest,
+        "subdomains": subdomains,
+    }
+
+
+def add_name_value_subdomains(subdomains: set[str], name_value: str) -> None:
+    for raw_name in _iter_name_values(name_value):
+        cleaned = _clean_name_value(raw_name)
+        if cleaned is not None:
+            subdomains.add(cleaned)
 
 
 def _crtsh_result(*, ioc: IOC, provider: str, raw_stats: dict) -> EnrichmentResult:

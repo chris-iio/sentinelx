@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-audit">
+    <a href="{{ url_for('main.audit_engagements_list') }}" class="back-link" aria-label="Back to audit engagements">← Engagements</a>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, message in messages %}
+    <div class="alert alert-{{ category }}" role="alert">{{ message }}</div>
+    {% endfor %}
+    {% endwith %}
+
+    <header class="audit-page-header">
+        <div>
+            <p class="audit-eyebrow">{{ engagement.platform }} · {{ engagement.status }}</p>
+            <h1 class="audit-heading">{{ engagement.name }}</h1>
+            <p class="audit-muted">
+                {% if engagement.url %}<a class="audit-link" href="{{ engagement.url }}" rel="noopener noreferrer">Program page</a> · {% endif %}
+                {{ stats.total }} finding{% if stats.total != 1 %}s{% endif %}
+                {% if engagement.deadline %} · deadline {{ engagement.deadline }}{% endif %}
+                · <a class="audit-link" href="{{ url_for('main.audit_report_download', engagement_id=engagement.id) }}">Download report (.md)</a>
+            </p>
+        </div>
+        <form method="post" action="{{ url_for('main.audit_engagement_status', engagement_id=engagement.id) }}" class="audit-inline-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <select class="form-input" name="status" aria-label="Engagement status">
+                {% for status in engagement_statuses %}
+                <option value="{{ status }}" {% if status == engagement.status %}selected{% endif %}>{{ status }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit" class="btn btn-secondary">Set status</button>
+        </form>
+    </header>
+
+    <ol class="audit-workflow" aria-label="Audit workflow">
+        <li><strong>Claim</strong><span>Draft a finding.</span></li>
+        <li><strong>Evidence</strong><span>Preserve provenance.</span></li>
+        <li><strong>Reproduce</strong><span>Run an exact check.</span></li>
+        <li><strong>Decide</strong><span>Set analyst status.</span></li>
+        <li><strong>Remediate</strong><span>Define the fix.</span></li>
+        <li><strong>Recheck</strong><span>Record regression proof.</span></li>
+    </ol>
+
+    {% if engagement.scope %}
+    <details class="audit-panel audit-scope">
+        <summary class="audit-summary">Engagement scope</summary>
+        <pre class="audit-pre">{{ engagement.scope }}</pre>
+    </details>
+    {% endif %}
+
+    <div class="audit-layout audit-layout--detail">
+        <section class="audit-panel" aria-labelledby="findings-heading">
+            <h2 id="findings-heading" class="audit-subheading">Findings</h2>
+            {% if findings %}
+            <div class="audit-list">
+                {% for finding in findings %}
+                <a class="audit-list-item" href="{{ url_for('main.audit_finding_detail', finding_id=finding.id) }}">
+                    <span class="audit-list-main">
+                        <strong>{{ finding.title }}</strong>
+                        <span>{{ finding.target or 'Target not recorded' }}</span>
+                    </span>
+                    <span class="audit-list-badges">
+                        <span class="audit-badge audit-badge--{{ finding.severity }}">{{ finding.severity }}</span>
+                        <span class="audit-badge audit-badge--status">{{ finding.status }}</span>
+                    </span>
+                </a>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="history-empty">No findings yet. Add an analyst claim or preview scanner output.</p>
+            {% endif %}
+        </section>
+
+        <section class="audit-panel" aria-labelledby="new-finding-heading">
+            <h2 id="new-finding-heading" class="audit-subheading">New draft claim</h2>
+            <form method="post" action="{{ url_for('main.audit_finding_create', engagement_id=engagement.id) }}" class="audit-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <label class="form-label" for="new-finding-title">Claim</label>
+                <input id="new-finding-title" class="form-input" type="text" name="title" maxlength="200" required placeholder="Missing access control in claim()">
+                <div class="audit-form-grid">
+                    <div>
+                        <label class="form-label" for="new-finding-severity">Severity</label>
+                        <select id="new-finding-severity" class="form-input" name="severity">
+                            {% for severity in severities %}<option value="{{ severity }}">{{ severity }}</option>{% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label" for="new-finding-target">Affected target</label>
+                        <input id="new-finding-target" class="form-input form-input--mono" type="text" name="target" maxlength="1024" placeholder="Vault.sol#L42">
+                    </div>
+                </div>
+                <label class="form-label" for="new-finding-evidence">Initial evidence</label>
+                <textarea id="new-finding-evidence" class="ioc-textarea ioc-textarea--compact" name="description" rows="4" maxlength="256000" placeholder="Observation and source revision"></textarea>
+                <input type="hidden" name="impact" value="">
+                <input type="hidden" name="poc" value="">
+                <input type="hidden" name="remediation" value="">
+                <div class="form-actions"><button type="submit" class="btn btn-primary">Create draft finding</button></div>
+            </form>
+        </section>
+    </div>
+
+    <section class="audit-panel" aria-labelledby="intake-heading">
+        <h2 id="intake-heading" class="audit-subheading">Scanner intake</h2>
+        <p class="audit-muted">Preview keeps provider output separate from analyst disposition. Import creates draft claims only.</p>
+        <form method="post" action="{{ url_for('main.audit_intake_preview', engagement_id=engagement.id) }}" class="audit-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <label class="form-label" for="scanner-output">Scanner JSON, severity lines, or notes</label>
+            <textarea id="scanner-output" class="ioc-textarea form-input--mono" name="text" rows="7" maxlength="262144" required placeholder="[HIGH] Missing access control&#10;contracts/Vault.sol#L42">{{ intake_text if intake_text is defined else '' }}</textarea>
+            <div class="form-actions"><button type="submit" class="btn btn-secondary">Preview candidates</button></div>
+        </form>
+
+        {% if intake_preview is defined %}
+        <div class="audit-preview" aria-live="polite">
+            <h3 class="audit-preview-heading">Preview · {{ intake_preview|length }} candidate{% if intake_preview|length != 1 %}s{% endif %}</h3>
+            <p class="audit-help">Nothing has been imported. Review each candidate before you create draft findings.</p>
+            <div class="audit-candidate-list">
+                {% for candidate in intake_preview %}
+                <article class="audit-candidate">
+                    <div><strong>{{ candidate.title }}</strong><span>{{ candidate.target or 'No target detected' }}</span></div>
+                    <span class="audit-badge audit-badge--{{ candidate.severity }}">{{ candidate.severity }}</span>
+                </article>
+                {% endfor %}
+            </div>
+            <form method="post" action="{{ url_for('main.audit_intake_import', engagement_id=engagement.id) }}" class="audit-import-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <textarea name="text" hidden>{{ intake_text }}</textarea>
+                <button type="submit" class="btn btn-primary">Import as draft findings</button>
+            </form>
+        </div>
+        {% endif %}
+    </section>
+
+    <section class="audit-panel" aria-labelledby="tools-heading">
+        <h2 id="tools-heading" class="audit-subheading">Reproducible tool run</h2>
+        <p class="audit-muted">Profiles use fixed arguments, explicit workspace roots, a small environment, bounded output, and runner validation.</p>
+        {% if workspace_roots %}
+        <p class="audit-help">Allowed roots: {% for root in workspace_roots %}<code>{{ root }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</p>
+        <form method="post" action="{{ url_for('main.audit_tool_run', engagement_id=engagement.id) }}" class="audit-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="audit-tool-grid">
+                <div>
+                    <label class="form-label" for="audit-profile">Fixed profile</label>
+                    <select id="audit-profile" class="form-input" name="profile" required>
+                        {% for name, profile in profiles.items() %}
+                        <option value="{{ name }}" {% if not profile.installed %}disabled{% endif %}>{{ name }}{% if not profile.installed %} · not installed{% endif %}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="form-label" for="audit-target">Target</label>
+                    <input id="audit-target" class="form-input form-input--mono" type="text" name="target" maxlength="1024" placeholder="Path under a root, host, or URL">
+                </div>
+                <div>
+                    <label class="form-label" for="audit-wordlist">Wordlist, if required</label>
+                    <input id="audit-wordlist" class="form-input form-input--mono" type="text" name="wordlist" maxlength="1024" placeholder="Path under a root">
+                </div>
+            </div>
+            <div class="form-actions"><button type="submit" class="btn btn-primary">Execute bounded check</button></div>
+        </form>
+        {% else %}
+        <div class="alert alert-info" role="status">Tool execution is disabled. Set <code>AUDIT_WORKSPACE_ROOTS</code> to one or more existing directories.</div>
+        {% endif %}
+
+        {% if run_preview is defined %}
+        <div class="audit-preview" aria-live="polite">
+            <div class="audit-run-header">
+                <div>
+                    <h3 class="audit-preview-heading">Executed run preview · {{ run_preview.profile }}</h3>
+                    <p class="audit-help">Started {{ run_preview.started_at }} · ended {{ run_preview.ended_at }}</p>
+                </div>
+                <span class="audit-badge audit-badge--status">
+                    {% if run_preview.timed_out %}timed out{% elif run_preview.exit_code == -1 and run_preview.error %}spawn error{% else %}exit {{ run_preview.exit_code }}{% endif %}
+                </span>
+            </div>
+            <dl class="audit-provenance">
+                <div><dt>Tool</dt><dd><code>{{ run_preview.argv[0] }}</code></dd></div>
+                <div><dt>Arguments</dt><dd><code>{{ run_preview.argv | join(' ') }}</code></dd></div>
+                <div><dt>Root</dt><dd><code>{{ run_preview.root or 'No path root used' }}</code></dd></div>
+                <div><dt>Target</dt><dd><code>{{ run_preview.target or 'No target required' }}</code></dd></div>
+                <div><dt>Output state</dt><dd>{% if run_preview.truncated %}Truncated{% else %}Complete within cap{% endif %}</dd></div>
+            </dl>
+            {% if run_preview.error %}<div class="alert alert-error" role="alert">{{ run_preview.error }}</div>{% endif %}
+            <pre class="audit-pre">{{ run_preview.output or 'No output.' }}</pre>
+            <h3 class="audit-preview-heading">Parsed candidates · {{ run_candidates|length }}</h3>
+            <p class="audit-help">Freeform output is not imported automatically. A tool run is evidence, not an analyst disposition.</p>
+            {% if run_candidates %}
+            <div class="audit-candidate-list">
+                {% for candidate in run_candidates %}
+                <article class="audit-candidate">
+                    <div><strong>{{ candidate.title }}</strong><span>{{ candidate.source }} · {{ candidate.target or 'No target detected' }}</span></div>
+                    <span class="audit-badge audit-badge--{{ candidate.severity }}">{{ candidate.severity }}</span>
+                </article>
+                {% endfor %}
+            </div>
+            {% endif %}
+            <form method="post" action="{{ url_for('main.audit_tool_run_import', engagement_id=engagement.id, run_id=run_preview.run_id) }}" class="audit-import-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-primary">Import structured drafts</button>
+            </form>
+        </div>
+        {% endif %}
+    </section>
+
+    <form method="post" action="{{ url_for('main.audit_engagement_delete', engagement_id=engagement.id) }}" class="audit-danger-zone">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-secondary">Delete engagement</button>
+    </form>
+</div>
+{% endblock %}

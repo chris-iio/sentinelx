@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-ctf">
+    <a href="{{ url_for('main.index') }}" class="back-link" aria-label="Back to home">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"
+             width="16" height="16">
+            <path d="M10 12L6 8l4-4"/>
+        </svg>
+        Back
+    </a>
+    <div class="ctf-card">
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for category, message in messages %}
+        <div class="alert alert-{{ category }}" role="alert">{{ message }}</div>
+        {% endfor %}
+        {% endwith %}
+
+        <h1 class="ctf-heading">CTF Events</h1>
+        <p class="ctf-muted">Track events like HackTheBox Cyber Apocalypse, their
+        challenges, notes, and captured flags — all local.
+        <a href="{{ url_for('main.ctf_toolkit') }}" class="ctf-link">Open the toolkit</a>
+        for offline crypto/forensics helpers.</p>
+
+        <form method="post" action="{{ url_for('main.ctf_event_create') }}" class="ctf-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <div class="ctf-form-row">
+                <input type="text" name="name" class="form-input" maxlength="120"
+                       placeholder="Event name (e.g. Cyber Apocalypse 2026)" required
+                       aria-label="Event name">
+                <input type="url" name="url" class="form-input" maxlength="500"
+                       placeholder="Event URL (optional)" aria-label="Event URL">
+                <button type="submit" class="btn btn-primary">Add event</button>
+            </div>
+        </form>
+
+        {% if events %}
+        <div class="recent-analyses-list">
+            {% for event in events %}
+            <a href="{{ url_for('main.ctf_event_detail', event_id=event.id) }}"
+               class="recent-analysis-row">
+                <span class="recent-analysis-text">{{ event.name }}</span>
+                <span class="recent-analysis-meta">
+                    <span class="recent-analysis-count">
+                        {{ event.solved_count }}/{{ event.challenge_count }} solved
+                    </span>
+                    <span class="recent-analysis-time">{{ event.created_at[:10] }}</span>
+                </span>
+            </a>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="history-empty">No events yet. Add your first CTF event above.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

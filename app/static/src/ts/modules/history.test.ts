@@ -52,6 +52,10 @@ const PARITY_RESULTS: EnrichmentItem[] = [
       classification: "benign",
     },
   },
+];
+
+const PARTIAL_RESULTS: EnrichmentItem[] = [
+  PARITY_RESULTS[0]!,
   {
     type: "error",
     ioc_value: "1.2.3.4",
@@ -93,13 +97,13 @@ function buildResultsDom(options: {
         </div>
       </div>
 
-      <div class="enrich-warning" id="enrich-warning" style="display:none;"></div>
+      <div class="enrich-warning" id="enrich-warning" hidden></div>
 
       <div class="enrich-progress" id="enrich-progress">
         <div class="enrich-progress-bar">
           <div class="enrich-progress-fill" id="enrich-progress-fill" style="width:0%;"></div>
         </div>
-        <span class="enrich-progress-text" id="enrich-progress-text">0/4 providers complete</span>
+        <span class="enrich-progress-text" id="enrich-progress-text">0/4 lookups complete</span>
       </div>
 
       <div class="verdict-dashboard" id="verdict-dashboard">
@@ -187,7 +191,7 @@ function readVisibleState() {
     runtime: root?.getAttribute("data-results-runtime"),
     progressComplete: progress?.classList.contains("complete") ?? false,
     progressText: normalizeText(progressText?.textContent),
-    warningDisplay: warning?.style.display ?? "",
+    warningDisplay: warning ? (warning.hidden ? "none" : warning.style.display) : "",
     warningText: normalizeText(warning?.textContent),
     exportEnabled: exportBtn ? !exportBtn.hasAttribute("disabled") : false,
     cardVerdict: card?.getAttribute("data-verdict"),
@@ -321,6 +325,21 @@ describe("history replay", () => {
     expect(summaryRow).toBeNull();
   });
 
+  it("labels saved provider failures as partial instead of complete", async () => {
+    buildResultsDom({ historyResults: JSON.stringify(PARTIAL_RESULTS) });
+
+    const { init } = await import("./history");
+    init();
+
+    const progress = document.getElementById("enrich-progress");
+    const progressText = document.getElementById("enrich-progress-text");
+    const exportBtn = document.getElementById("export-btn");
+
+    expect(progress?.classList.contains("complete")).toBe(false);
+    expect(progressText?.textContent).toBe("Enrichment saved with partial results");
+    expect(exportBtn?.hasAttribute("disabled")).toBe(false);
+  });
+
   it("reuses cached completion and export handles while replaying history results", async () => {
     buildResultsDom({ historyResults: JSON.stringify(PARITY_RESULTS) });
 
@@ -390,7 +409,7 @@ describe("history replay", () => {
     expect(fetchMock).not.toHaveBeenCalled();
     expect(root?.getAttribute("data-results-runtime")).toBeNull();
     expect(progress?.classList.contains("complete")).toBe(false);
-    expect(warning?.style.display).toBe("none");
+    expect(warning?.hidden).toBe(true);
     expect(warning?.textContent).toBe("");
     expect(exportBtn?.hasAttribute("disabled")).toBe(true);
   });

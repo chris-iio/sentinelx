@@ -33,9 +33,10 @@ class ProofHistoryStore:
 
 def _patch_route_runtime(monkeypatch: pytest.MonkeyPatch, app) -> None:  # noqa: ANN001
     import app.routes.diagnostics as diagnostics_route
+    import app.routes.diagnostic_export as export_helpers
 
     monkeypatch.setattr(diagnostics_route, "ConfigStore", ProofConfigStore)
-    monkeypatch.setattr(diagnostics_route, "_utcnow", lambda: FIXED_NOW)
+    monkeypatch.setattr(export_helpers, "utc_now", lambda: FIXED_NOW)
     app.cache_store = ProofCacheStore()
     app.history_store = ProofHistoryStore()
 

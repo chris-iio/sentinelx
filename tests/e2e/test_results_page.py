@@ -6,9 +6,8 @@ Covers all 4 FILTER requirements:
   FILTER-03 — text search input
   FILTER-04 — sticky positioning
 
-Uses offline mode so no API key is required.  All cards default to
-data-verdict="no_data" in offline mode — this is expected and the tests
-account for it.
+Uses Offline mode so no API key is required. All cards start with the explicit
+`data-verdict="not_queried"` state.
 
 Dashboard badge click-to-filter (verdict toggle shortcut) requires online
 mode and a VT API key, so those tests are skipped by default.
@@ -53,7 +52,7 @@ def test_filter_bar_renders(page: Page, index_url: str) -> None:
     # Filter bar wrapper is present
     expect(results.filter_bar).to_be_visible()
 
-    # 6 verdict buttons: All | Malicious | Suspicious | Clean | Known Good | No Data
+    # 6 verdict buttons: All | Malicious | Suspicious | Clean | Known Good | Extracted
     expect(results.filter_verdict_buttons).to_have_count(6)
 
     # "All Types" pill plus one pill per type present (ipv4, domain, md5)
@@ -86,15 +85,15 @@ def test_filter_bar_type_pills_match_result_types(page: Page, index_url: str) ->
 # ---------------------------------------------------------------------------
 
 
-def test_verdict_filter_no_data_shows_all_cards(page: Page, index_url: str) -> None:
-    """Clicking 'No Data' shows all cards because all are no_data in offline mode (FILTER-01)."""
+def test_verdict_filter_not_queried_shows_all_cards(page: Page, index_url: str) -> None:
+    """Clicking Extracted shows all Offline cards because none were queried."""
     results = _navigate_to_results(page, index_url)
 
     # All 5 cards should be visible initially
     expect(results.visible_cards).to_have_count(5)
 
-    # Click 'No Data' — all should remain visible
-    results.filter_by_verdict("no_data")
+    # Click Extracted — all should remain visible.
+    results.filter_by_verdict("not_queried")
     expect(results.visible_cards).to_have_count(5)
 
 
@@ -234,8 +233,8 @@ def test_combined_verdict_and_type_filters(page: Page, index_url: str) -> None:
     """Verdict filter and type pill combine with AND logic (FILTER-01 + FILTER-02)."""
     results = _navigate_to_results(page, index_url)
 
-    # 'No Data' verdict (all cards) + 'DOMAIN' type = 2 cards
-    results.filter_by_verdict("no_data")
+    # Extracted/not-queried state (all cards) + DOMAIN type = 2 cards.
+    results.filter_by_verdict("not_queried")
     results.filter_by_type("domain")
     expect(results.visible_cards).to_have_count(2)
 

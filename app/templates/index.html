@@ -30,7 +30,7 @@
                         autofocus
                         aria-label="IOC text input"
                     ></textarea>
-                    <span id="paste-feedback" class="paste-feedback" style="display:none;" aria-live="polite"></span>
+                    <span id="paste-feedback" class="paste-feedback" aria-live="polite" hidden></span>
                 </div>
 
                 <div class="form-options">
@@ -109,7 +109,7 @@
                 {% endfor %}
             </div>
             {% else %}
-            <p class="recent-analyses-empty" role="status">No analyses yet. Paste alert text to create the first saved analysis.</p>
+            <p class="recent-analyses-empty" role="status">No analyses yet. Complete an Online enrichment to create the first saved analysis; Offline extractions are not saved.</p>
             {% endif %}
         </aside>
     </section>

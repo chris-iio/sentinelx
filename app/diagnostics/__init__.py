@@ -2,13 +2,10 @@
 
 from app.diagnostics.assembler import (
     DiagnosticBundle,
-    DiagnosticSource,
     assemble_diagnostic_bundle,
 )
 from app.diagnostics.contract import (
-    DEFAULT_SOURCE_MAX_BYTES,
     DIAGNOSTIC_EXPORT_SCHEMA_VERSION,
-    MAX_SAFE_ERROR_SUMMARY_CHARS,
     DiagnosticManifest,
     DiagnosticSourceRecord,
     manifest_to_json,
@@ -19,11 +16,12 @@ from app.diagnostics.policy import (
     DIAGNOSTIC_SANITIZATION_POLICY,
     DiagnosticSanitizationPolicy,
 )
-from app.diagnostics.redaction import (
-    REDACTED_TEXT,
+from app.diagnostics.secret_inventory import (
     ConfiguredSecretInventory,
-    RedactionMetadata,
     collect_configured_secret_inventory,
+)
+from app.diagnostics.redaction import (
+    RedactionMetadata,
     redact_diagnostic_payload,
     redact_diagnostic_text,
 )
@@ -31,6 +29,12 @@ from app.diagnostics.sources import (
     DEFAULT_HISTORY_LIMIT,
     build_default_diagnostic_sources,
 )
+from app.diagnostics.source_preparation import DiagnosticSource
+from app.diagnostics.source_record_fields import (
+    DEFAULT_SOURCE_MAX_BYTES,
+    MAX_SAFE_ERROR_SUMMARY_CHARS,
+)
+from app.diagnostics.text_rules import REDACTED_TEXT
 
 __all__ = [
     "DEFAULT_HISTORY_LIMIT",

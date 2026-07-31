@@ -71,9 +71,10 @@
                                                    id="api-key-{{ provider.id }}"
                                                    name="api_key"
                                                    class="form-input form-input--mono"
-                                                   value="{{ provider.masked_key or '' }}"
-                                                   placeholder="Paste your {{ provider.name }} API key here"
-                                                   autocomplete="off"
+                                                   value=""
+                                                   placeholder="Paste a new {{ provider.name }} API key"
+                                                   autocomplete="new-password"
+                                                   aria-describedby="api-key-help-{{ provider.id }}"
                                                    spellcheck="false"/>
                                             <button type="button"
                                                     class="btn btn-secondary"
@@ -82,6 +83,10 @@
                                             >Show</button>
                                         </div>
                                     </div>
+
+                                    <p class="settings-info" id="api-key-help-{{ provider.id }}">
+                                        {% if provider.configured %}A key is configured. Enter a new key only to replace it.{% else %}No key is configured.{% endif %}
+                                    </p>
 
                                     <div class="form-actions">
                                         <button type="submit"
@@ -99,6 +104,45 @@
                 </section>
                 {% endfor %}
             </div>
+        </div>
+
+        {# ---- Provider Health ---- #}
+        <div class="settings-cache-section" aria-labelledby="provider-health-title">
+            <h2 class="settings-cache-title" id="provider-health-title">Provider Health</h2>
+            <p class="settings-info">
+                Local readiness view. SentinelX does not contact providers from this page;
+                live reachability and rate-limit errors are reported during enrichment.
+            </p>
+            <table class="provider-health-table">
+                <thead>
+                    <tr>
+                        <th scope="col">Provider</th>
+                        <th scope="col">Key</th>
+                        <th scope="col">Readiness</th>
+                        <th scope="col">IOC types</th>
+                        <th scope="col">Reachability</th>
+                        <th scope="col">Last checked</th>
+                        <th scope="col">Last error</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in provider_health_rows %}
+                    <tr data-provider-health="{{ row.name }}">
+                        <td>{{ row.name }}</td>
+                        <td>{{ row.key_status }}</td>
+                        <td>
+                            <span class="api-key-status api-key-status--{{ 'configured' if row.readiness_class == 'ready' else 'missing' }}">
+                                <span class="api-key-status-dot"></span> {{ row.readiness }}
+                            </span>
+                        </td>
+                        <td>{{ row.supported_ioc_types }}</td>
+                        <td>{{ row.reachability }}</td>
+                        <td>{{ row.last_checked }}</td>
+                        <td>{{ row.last_error }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
         </div>
 
         {# ---- Cache ---- #}

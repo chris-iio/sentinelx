@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-ctf">
+    <a href="{{ url_for('main.ctf_event_detail', event_id=challenge.event_id) }}"
+       class="back-link" aria-label="Back to event">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"
+             width="16" height="16">
+            <path d="M10 12L6 8l4-4"/>
+        </svg>
+        {{ event.name if event else 'Event' }}
+    </a>
+    <div class="ctf-card">
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for category, message in messages %}
+        <div class="alert alert-{{ category }}" role="alert">{{ message }}</div>
+        {% endfor %}
+        {% endwith %}
+
+        <h1 class="ctf-heading">{{ challenge.name }}</h1>
+        <p class="ctf-muted">
+            {{ challenge.category }} &middot; {{ challenge.difficulty }} &middot;
+            {{ challenge.points }} pts &middot;
+            <span class="ctf-badge ctf-badge--{{ challenge.status }}">{{ challenge.status }}</span>
+        </p>
+
+        {% if challenge.description %}
+        <p class="ctf-description">{{ challenge.description }}</p>
+        {% endif %}
+
+        <p class="ctf-muted">
+            <a href="{{ url_for('main.ctf_challenge_writeup', challenge_id=challenge.id) }}"
+               class="ctf-link">Export writeup (.md)</a>
+        </p>
+
+        <details class="ctf-note">
+            <summary class="ctf-run-summary">Methodology hints — {{ challenge.category }}</summary>
+            <ul class="ctf-hint-list">
+                {% for hint in hints %}
+                <li>{{ hint }}</li>
+                {% endfor %}
+            </ul>
+        </details>
+
+        <div class="ctf-actions">
+            <form method="post"
+                  action="{{ url_for('main.ctf_challenge_status', challenge_id=challenge.id) }}"
+                  class="ctf-inline-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <select name="status" class="form-input" aria-label="Status">
+                    {% for status in statuses %}
+                    <option value="{{ status }}"
+                            {% if status == challenge.status %}selected{% endif %}>
+                        {{ status }}
+                    </option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="btn btn-secondary">Set status</button>
+            </form>
+
+            <form method="post"
+                  action="{{ url_for('main.ctf_flag_add', challenge_id=challenge.id) }}"
+                  class="ctf-inline-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <input type="text" name="flag" class="form-input form-input--mono"
+                       maxlength="160" placeholder="HTB{...}" aria-label="Flag">
+                <button type="submit" class="btn btn-primary">Submit flag</button>
+            </form>
+        </div>
+
+        <h2 class="ctf-subheading">Recon &amp; enumeration</h2>
+        <form method="post"
+              action="{{ url_for('main.ctf_run_create', challenge_id=challenge.id) }}"
+              class="ctf-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <div class="ctf-form-row">
+                <select name="profile" class="form-input" aria-label="Run profile">
+                    {% for name, profile in profiles.items() %}
+                    <option value="{{ name }}" {% if not profile.installed %}disabled{% endif %}>
+                        {{ name }}{% if not profile.installed %} (not installed){% endif %}
+                    </option>
+                    {% endfor %}
+                </select>
+                <input type="text" name="target" class="form-input" maxlength="253"
+                       placeholder="Target (host, IPv4, or URL)" required
+                       aria-label="Target">
+                <input type="text" name="wordlist" class="form-input" maxlength="200"
+                       placeholder="Wordlist name (gobuster/ffuf)"
+                       aria-label="Wordlist">
+                <button type="submit" class="btn btn-primary">Run</button>
+            </div>
+            <p class="ctf-muted">Allowlisted profiles only — arguments are fixed,
+            targets validated, output capped. Flags in output are captured
+            automatically.</p>
+        </form>
+
+        {% if runs %}
+        <div class="ctf-note-list">
+            {% for run in runs %}
+            <details class="ctf-note">
+                <summary class="ctf-run-summary">
+                    {{ run.profile }} &middot; exit {{ run.exit_code }}
+                    {% if run.error %}&middot; error{% endif %}
+                    <span class="ctf-muted">{{ run.created_at[:16].replace('T', ' ') }}</span>
+                </summary>
+                <p class="ctf-note-meta"><code>{{ run.argv | join(' ') }}</code></p>
+                {% if run.error %}<p class="alert alert-error">{{ run.error }}</p>{% endif %}
+                <pre class="ctf-note-body">{{ run.output }}</pre>
+            </details>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <h2 class="ctf-subheading">Flag vault</h2>
+        {% if flags %}
+        <ul class="ctf-flag-list">
+            {% for entry in flags %}
+            <li>
+                <code class="ctf-flag">{{ entry.flag }}</code>
+                <span class="ctf-muted">via {{ entry.source }} &middot;
+                    {{ entry.created_at[:16].replace('T', ' ') }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="ctf-muted">No flags captured yet. Flags pasted into notes are
+        detected automatically.</p>
+        {% endif %}
+
+        <h2 class="ctf-subheading">Notes</h2>
+        <form method="post"
+              action="{{ url_for('main.ctf_note_add', challenge_id=challenge.id) }}"
+              class="ctf-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <textarea name="body" class="ioc-textarea" rows="4" maxlength="8000"
+                      placeholder="Findings, payloads, output — flags are auto-detected"
+                      required aria-label="Note text"></textarea>
+            <div class="form-actions">
+                <a href="{{ url_for('main.index') }}" class="btn btn-secondary">
+                    Open IOC workbench
+                </a>
+                <button type="submit" class="btn btn-primary">Add note</button>
+            </div>
+        </form>
+
+        {% if notes %}
+        <div class="ctf-note-list">
+            {% for note in notes %}
+            <article class="ctf-note">
+                <p class="ctf-note-meta">{{ note.created_at[:16].replace('T', ' ') }}</p>
+                <pre class="ctf-note-body">{{ note.body }}</pre>
+            </article>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <form method="post"
+              action="{{ url_for('main.ctf_challenge_delete', challenge_id=challenge.id) }}"
+              class="ctf-danger-zone">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <button type="submit" class="btn btn-secondary">Delete challenge</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

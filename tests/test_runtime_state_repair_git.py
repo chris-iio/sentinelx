@@ -65,6 +65,8 @@ def init_temp_repo(repo_root: Path) -> None:
     git(repo_root, "init")
     git(repo_root, "config", "user.name", "Runtime Repair Git Tests")
     git(repo_root, "config", "user.email", "runtime-repair-git-tests@example.com")
+    # Isolate tests from developer-global hooks (for example identity guards).
+    git(repo_root, "config", "core.hooksPath", os.devnull)
 
 
 def parse_actions(result: subprocess.CompletedProcess[str]) -> list[dict[str, object]]:

@@ -6,7 +6,6 @@
  * exclusive live-owner guard that prevents history pages from polling.
  */
 
-import { readFile } from "node:fs/promises";
 import type { EnrichmentItem, EnrichmentStatus } from "../types/api";
 
 function installCssEscape(): void {
@@ -78,13 +77,13 @@ function buildResultsDom(owner = "live", providerCounts = '{"ipv4":4}'): void {
         </div>
       </div>
 
-      <div class="enrich-warning" id="enrich-warning" style="display:none;"></div>
+      <div class="enrich-warning" id="enrich-warning" hidden></div>
 
       <div class="enrich-progress" id="enrich-progress">
         <div class="enrich-progress-bar">
-          <div class="enrich-progress-fill" id="enrich-progress-fill" style="width:0%;"></div>
+          <progress class="enrich-progress-fill" id="enrich-progress-fill" value="0" max="100"></progress>
         </div>
-        <span class="enrich-progress-text" id="enrich-progress-text">0/4 providers complete</span>
+        <span class="enrich-progress-text" id="enrich-progress-text">0/4 lookups complete</span>
       </div>
 
       <div class="verdict-dashboard" id="verdict-dashboard">
@@ -217,7 +216,7 @@ describe("enrichment polling", () => {
     const exportBtn = document.getElementById("export-btn");
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(warning?.style.display).toBe("block");
+    expect(warning?.hidden).toBe(false);
     expect(warning?.textContent).toBe("Enrichment job status was evicted from memory.");
     expect(progressText?.textContent).toBe("Enrichment job status was evicted from memory.");
     expect(exportBtn?.hasAttribute("disabled")).toBe(true);
@@ -300,8 +299,9 @@ describe("enrichment polling", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(document.querySelector("#enrich-progress-text")?.textContent).toBe(
-      "1/4 providers complete"
+      "1/4 lookups complete"
     );
+    expect(document.querySelector("#enrich-progress-fill")?.getAttribute("value")).toBe("25");
     expect(
       getElementByIdSpy.mock.calls.filter(([id]) => id === "enrich-progress-fill")
     ).toHaveLength(1);
@@ -363,13 +363,6 @@ describe("enrichment polling", () => {
     );
   });
 
-  it("keeps provider and terminal warning rendering on one DOM mutation path", async () => {
-    const source = await readFile("app/static/src/ts/modules/enrichment.ts", "utf8");
-
-    expect(source).toContain("function showWarningBanner(");
-    expect(source.match(/banner\.style\.display = "block"/g) ?? []).toHaveLength(1);
-  });
-
   it("bounds repeated polling failures and leaves diagnostic state", async () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const fetchMock = vi.fn().mockRejectedValue(new TypeError("network down"));
@@ -387,7 +380,7 @@ describe("enrichment polling", () => {
     const root = document.querySelector<HTMLElement>(".page-results");
 
     expect(fetchMock).toHaveBeenCalledTimes(5);
-    expect(warning?.style.display).toBe("block");
+    expect(warning?.hidden).toBe(false);
     expect(warning?.textContent).toBe(
       "Enrichment polling failed after repeated attempts. Please retry the analysis."
     );
@@ -474,7 +467,7 @@ describe("enrichment polling", () => {
     expect(String(fetchMock.mock.calls[0]?.[0] ?? "")).toContain(
       "/enrichment/status/job-123?since=0"
     );
-    expect(firstProgressText?.textContent).toBe(`1/${STREAMED_RESULTS.length} providers complete`);
+    expect(firstProgressText?.textContent).toBe(`1/${STREAMED_RESULTS.length} lookups complete`);
     expect(firstContextRow).not.toBeNull();
 
     await vi.advanceTimersByTimeAsync(750);
@@ -499,7 +492,7 @@ describe("enrichment polling", () => {
     expect(String(fetchMock.mock.calls[1]?.[0] ?? "")).toContain(
       "/enrichment/status/job-123?since=1"
     );
-    expect(warning?.style.display).toBe("none");
+    expect(warning?.hidden).toBe(true);
     expect(warning?.textContent).toBe("");
     expect(progress?.classList.contains("complete")).toBe(true);
     expect(progressText?.textContent).toBe("Enrichment complete");

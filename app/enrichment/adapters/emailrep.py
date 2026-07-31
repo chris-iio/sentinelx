@@ -1,10 +1,11 @@
 """EmailRep email reputation adapter."""
 from __future__ import annotations
 
+from typing import NamedTuple
 from urllib.parse import quote
 
-from app.enrichment.adapters.base import BaseHTTPAdapter
-from app.enrichment.models import EnrichmentResult, provider_result
+from .base import BaseHTTPAdapter
+from ..models import EnrichmentResult, provider_result
 from app.pipeline.models import IOC, IOCType
 
 EMAILREP_BASE = "https://emailrep.io"
@@ -36,6 +37,24 @@ _NO_REPUTATION_VALUES = frozenset(("none", "n/a", "unknown"))
 _DETECTION_VERDICTS = frozenset(("malicious", "suspicious"))
 
 
+class EmailRepSignals(NamedTuple):
+    details: dict
+    reputation: str
+    suspicious: bool
+    references: int
+
+
+def _emailrep_signals(body: dict) -> EmailRepSignals:
+    raw_details = body.get("details")
+    details = raw_details if isinstance(raw_details, dict) else {}
+    return EmailRepSignals(
+        details=details,
+        reputation=body.get("reputation") or "none",
+        suspicious=bool(body.get("suspicious", False)),
+        references=body.get("references", 0) or 0,
+    )
+
+
 class EmailRepAdapter(BaseHTTPAdapter):
     """EmailRep reputation endpoint — email-only, API-key-gated."""
 
@@ -63,46 +82,138 @@ def _risk_flags(details: dict) -> tuple[list[str], bool]:
         return [], False
     flags: list[str] = []
     has_malicious_flag = False
-    for field in _RISK_FLAG_FIELDS:
-        if details.get(field) is True:
-            flags.append(field)
-            if field in _MALICIOUS_FLAG_SET:
-                has_malicious_flag = True
-    for field, flag_name in _NEGATIVE_BOOLEAN_FLAGS:
-        if details.get(field) is False:
-            flags.append(flag_name)
-    if details.get("spoofable") is True:
-        flags.append("spoofable")
+    has_malicious_flag = (
+        _append_positive_risk_flag(flags, details, "blacklisted", True)
+        or has_malicious_flag
+    )
+    has_malicious_flag = (
+        _append_positive_risk_flag(flags, details, "malicious_activity", True)
+        or has_malicious_flag
+    )
+    has_malicious_flag = _append_positive_risk_flag(
+        flags,
+        details,
+        "malicious_activity_recent",
+        True,
+    ) or has_malicious_flag
+    has_malicious_flag = (
+        _append_positive_risk_flag(flags, details, "credentials_leaked", True)
+        or has_malicious_flag
+    )
+    has_malicious_flag = _append_positive_risk_flag(
+        flags,
+        details,
+        "credentials_leaked_recent",
+        True,
+    ) or has_malicious_flag
+    has_malicious_flag = (
+        _append_positive_risk_flag(flags, details, "data_breach", True)
+        or has_malicious_flag
+    )
+    _append_positive_risk_flag(flags, details, "new_domain", False)
+    _append_positive_risk_flag(flags, details, "suspicious_tld", False)
+    _append_positive_risk_flag(flags, details, "spam", False)
+    _append_positive_risk_flag(flags, details, "free_provider", False)
+    _append_positive_risk_flag(flags, details, "disposable", False)
+    _append_negative_risk_flag(flags, details, "deliverable", "deliverable_false")
+    _append_negative_risk_flag(flags, details, "valid_mx", "valid_mx_false")
+    _append_positive_risk_flag(flags, details, "spoofable", False)
     return flags, has_malicious_flag
 
 
+def _append_positive_risk_flag(
+    flags: list[str],
+    details: dict,
+    field: str,
+    malicious: bool,
+) -> bool:
+    if details.get(field) is True:
+        _append_risk_flag(flags, field)
+        return malicious
+    return False
+
+
+def _append_negative_risk_flag(
+    flags: list[str],
+    details: dict,
+    field: str,
+    flag_name: str,
+) -> None:
+    if details.get(field) is False:
+        _append_risk_flag(flags, flag_name)
+
+
+def _append_risk_flag(flags: list[str], flag_name: str) -> None:
+    flags.append(flag_name)
+
+
 def _parse_response(ioc: IOC, body: dict, provider_name: str) -> EnrichmentResult:
-    raw_details = body.get("details")
-    details = raw_details if isinstance(raw_details, dict) else {}
-    reputation = body.get("reputation") or "none"
-    suspicious = bool(body.get("suspicious", False))
-    references = body.get("references", 0) or 0
-    flags, has_malicious_flag = _risk_flags(details)
+    signals = _emailrep_signals(body)
+    flags, has_malicious_flag = _risk_flags(signals.details)
+    verdict = _emailrep_verdict(
+        reputation=signals.reputation,
+        suspicious=signals.suspicious,
+        flags=flags,
+        has_malicious_flag=has_malicious_flag,
+    )
 
+    return _emailrep_result(
+        ioc=ioc,
+        provider=provider_name,
+        verdict=verdict,
+        detection_count=_emailrep_detection_count(verdict, signals.references),
+        scan_date=signals.details.get("last_seen"),
+        raw_stats=_emailrep_raw_stats(
+            details=signals.details,
+            reputation=signals.reputation,
+            suspicious=signals.suspicious,
+            references=signals.references,
+            flags=flags,
+        ),
+    )
+
+
+def _emailrep_verdict(
+    *,
+    reputation: str,
+    suspicious: bool,
+    flags: list[str],
+    has_malicious_flag: bool,
+) -> str:
     if has_malicious_flag:
-        verdict = "malicious"
-    elif suspicious or flags or reputation == "low":
-        verdict = "suspicious"
-    elif reputation in _NO_REPUTATION_VALUES:
-        verdict = "no_data"
-    else:
-        verdict = "clean"
+        return "malicious"
+    if suspicious or flags or reputation == "low":
+        return "suspicious"
+    if reputation in _NO_REPUTATION_VALUES:
+        return "no_data"
+    return "clean"
 
-    detection_count = references if verdict in _DETECTION_VERDICTS else 0
+
+def _emailrep_detection_count(verdict: str, references: int) -> int:
+    if verdict in _DETECTION_VERDICTS:
+        return references
+    return 0
+
+
+def _emailrep_profiles(details: dict) -> list:
     raw_profiles = details.get("profiles") if details else None
-    profiles = raw_profiles if isinstance(raw_profiles, list) else []
+    return raw_profiles if isinstance(raw_profiles, list) else []
 
-    raw_stats = {
+
+def _emailrep_raw_stats(
+    *,
+    details: dict,
+    reputation: str,
+    suspicious: bool,
+    references: int,
+    flags: list[str],
+) -> dict:
+    return {
         "reputation": reputation,
         "suspicious": suspicious,
         "references": references,
         "risk_flags": flags,
-        "profiles": profiles,
+        "profiles": _emailrep_profiles(details),
         "domain_reputation": details.get("domain_reputation"),
         "first_seen": details.get("first_seen"),
         "last_seen": details.get("last_seen"),
@@ -117,15 +228,6 @@ def _parse_response(ioc: IOC, body: dict, provider_name: str) -> EnrichmentResul
         "spf_strict": details.get("spf_strict"),
         "dmarc_enforced": details.get("dmarc_enforced"),
     }
-
-    return _emailrep_result(
-        ioc=ioc,
-        provider=provider_name,
-        verdict=verdict,
-        detection_count=detection_count,
-        scan_date=details.get("last_seen"),
-        raw_stats=raw_stats,
-    )
 
 
 def _emailrep_result(

@@ -23,8 +23,8 @@
         <h2 class="detail-section-title">Provider Relationships</h2>
         <div
             id="relationship-graph"
-            data-graph-nodes="{{ graph_nodes | tojson }}"
-            data-graph-edges="{{ graph_edges | tojson }}"
+            data-graph-nodes="{{ graph_nodes | tojson | forceescape }}"
+            data-graph-edges="{{ graph_edges | tojson | forceescape }}"
         ></div>
     </div>
 
@@ -44,7 +44,7 @@
             <div class="detail-provider-header">
                 <span class="detail-provider-name">{{ result.provider }}</span>
                 <span class="verdict-badge verdict-badge--{{ result.verdict | default('no_data') }}">
-                    {{ result.verdict | default('no_data') | upper }}
+                    {{ result.verdict | default('no_data') | replace('_', ' ') | upper }}
                 </span>
             </div>
             <dl class="detail-result-fields">

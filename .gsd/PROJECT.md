@@ -20,7 +20,7 @@ Milestones are complete through M020. M020 broadened the optimization audit, gen
 ## Architecture / Key Patterns
 
 - Flask routes own request handling, intake/results/history/detail/settings/diagnostics surfaces, and enrichment status endpoints.
-- `app.routes._helpers` owns shared route IOC grouping/template/API payload helpers while route modules preserve compatibility seams and route-specific response behavior.
+- Thin route entry modules under `app/routes/` own Flask decorators and request-bound dependency wiring. Focused route modules own response decisions: `analysis_results.py`, `api_analysis.py`, and `history_replay.py` handle analysis/API/history flows; `ioc_payloads.py` owns shared IOC grouping and serialization; and `detail_graph.py`, `settings_view.py`, and `diagnostic_export.py` own their route-specific response contracts.
 - `app.pipeline` extracts, normalizes, and classifies IOCs.
 - `app.enrichment` owns provider registry, adapter contracts, orchestration, rate limits, retry/backoff, cache hits, and diagnostics.
 - SQLite-backed cache and history stores preserve enrichment responses and prior analyses locally; major storage redesign remains deferred until measurements justify it.

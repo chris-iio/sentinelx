@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from app.diagnostics.contract import DEFAULT_SOURCE_MAX_BYTES
+from .source_record_fields import DEFAULT_SOURCE_MAX_BYTES
 
 
 @dataclass(frozen=True, slots=True)

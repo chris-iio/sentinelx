@@ -1,6 +1,11 @@
 import type { EnrichmentItem } from "../types/api";
 import { copyAllIOCs, exportCSV, exportJSON } from "./export";
-import { initExportButton, sortDetailRows } from "./shared-rendering";
+import {
+  computeResultDisplay,
+  initExportButton,
+  initOfflineExtractionStates,
+  sortDetailRows,
+} from "./shared-rendering";
 import { readFileSync } from "node:fs";
 
 vi.mock("./export", () => ({
@@ -17,6 +22,57 @@ function appendRow(container: HTMLElement, provider: string, verdict: string): H
   container.appendChild(row);
   return row;
 }
+
+describe("result state rendering", () => {
+  afterEach(() => {
+    document.body.innerHTML = "";
+  });
+
+  it("marks Offline IOCs as extracted without claiming provider no-data", () => {
+    document.body.innerHTML = `
+      <main class="page-results" data-mode="offline">
+        <button data-filter-verdict="no_data">No Data</button>
+        <article class="ioc-card" data-verdict="no_data">
+          <span class="verdict-label verdict-label--no_data">NO DATA</span>
+          <div class="ioc-context-line"></div>
+        </article>
+      </main>
+    `;
+
+    initOfflineExtractionStates();
+
+    const card = document.querySelector<HTMLElement>(".ioc-card")!;
+    const label = card.querySelector<HTMLElement>(".verdict-label")!;
+    expect(card.getAttribute("data-verdict")).toBe("no_data");
+    expect(card.getAttribute("data-provider-query-state")).toBe("not_queried");
+    expect(label.textContent).toBe("EXTRACTED");
+    expect(label.getAttribute("aria-label")).toBe(
+      "Extracted locally; providers not queried"
+    );
+    expect(card.querySelector(".ioc-context-line")?.textContent).toBe(
+      "Extracted locally · Providers not queried"
+    );
+    expect(document.querySelector("[data-filter-verdict='no_data']")?.textContent).toBe(
+      "Extracted"
+    );
+  });
+
+  it("keeps an Online provider no-data result distinct from Offline extraction", () => {
+    const result = {
+      type: "result",
+      ioc_value: "unknown.example",
+      ioc_type: "domain",
+      provider: "VirusTotal",
+      verdict: "no_data",
+      detection_count: 0,
+      total_engines: 0,
+      scan_date: null,
+      raw_stats: {},
+    } satisfies EnrichmentItem;
+
+    expect(computeResultDisplay(result).statText).toBe("Not in database");
+  });
+});
 
 describe("sortDetailRows", () => {
   afterEach(() => {
@@ -43,6 +99,28 @@ describe("sortDetailRows", () => {
 
     expect(sortedProviders).toEqual(["Malicious", "Suspicious", "Clean", "Error"]);
     expect(verdictReads).toHaveLength(4);
+  });
+
+  it("sorts provider rows with the shared malicious-to-error precedence", () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    appendRow(container, "Error", "error");
+    appendRow(container, "Clean", "clean");
+    appendRow(container, "Known good", "known_good");
+    appendRow(container, "No data", "no_data");
+    appendRow(container, "Malicious", "malicious");
+    appendRow(container, "Suspicious", "suspicious");
+
+    sortDetailRows(container);
+
+    expect(Array.from(container.children, (row) => row.textContent)).toEqual([
+      "Malicious",
+      "Suspicious",
+      "Known good",
+      "Clean",
+      "No data",
+      "Error",
+    ]);
   });
 
   it("decorates rows with an indexed NodeList pass", () => {
@@ -193,7 +271,7 @@ describe("initExportButton", () => {
       <section class="page-results">
         <div class="export-group">
           <button id="export-btn" type="button">Export</button>
-          <div id="export-dropdown" style="display: none;">
+          <div id="export-dropdown" hidden>
             <button data-export="json" type="button"><span>JSON</span></button>
             <button data-export="csv" type="button"><span>CSV</span></button>
             <button data-export="iocs" type="button"><span>IOCs</span></button>
@@ -232,7 +310,7 @@ describe("initExportButton", () => {
       <section class="page-results">
         <div class="export-group">
           <button id="export-btn" type="button">Export</button>
-          <div id="export-dropdown" style="display: none;">
+          <div id="export-dropdown" hidden>
             <button data-export="json" type="button">JSON</button>
           </div>
         </div>
@@ -251,8 +329,44 @@ describe("initExportButton", () => {
 
     expect(getElementByIdSpy).not.toHaveBeenCalledWith("export-btn");
     expect(getElementByIdSpy).not.toHaveBeenCalledWith("export-dropdown");
-    expect(dropdown.style.display).toBe("none");
+    expect(dropdown.hidden).toBe(true);
     expect(exportJSON).toHaveBeenCalledWith(results);
+  });
+
+  it("opens with ArrowDown and closes with Escape while restoring focus", () => {
+    document.body.innerHTML = `
+      <section class="page-results">
+        <div class="export-group">
+          <button id="export-btn" type="button">Export</button>
+          <div id="export-dropdown" hidden>
+            <button data-export="json" type="button">JSON</button>
+          </div>
+        </div>
+      </section>
+    `;
+    const pageResults = document.querySelector<HTMLElement>(".page-results")!;
+    const exportButton = document.getElementById("export-btn")!;
+    const dropdown = document.getElementById("export-dropdown")!;
+    const action = dropdown.querySelector<HTMLButtonElement>("[data-export]")!;
+
+    initExportButton([], pageResults);
+
+    exportButton.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true })
+    );
+
+    expect(dropdown.hidden).toBe(false);
+    expect(exportButton.getAttribute("aria-expanded")).toBe("true");
+    expect(exportButton.getAttribute("aria-controls")).toBe("export-dropdown");
+    expect(action).toBe(document.activeElement);
+
+    action.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })
+    );
+
+    expect(dropdown.hidden).toBe(true);
+    expect(exportButton.getAttribute("aria-expanded")).toBe("false");
+    expect(exportButton).toBe(document.activeElement);
   });
 
   it("copies IOC values from accumulated results without scanning cards", () => {
@@ -260,7 +374,7 @@ describe("initExportButton", () => {
       <section class="page-results">
         <div class="export-group">
           <button id="export-btn" type="button">Export</button>
-          <div id="export-dropdown" style="display: none;">
+          <div id="export-dropdown" hidden>
             <button data-export="iocs" type="button"><span>IOCs</span></button>
           </div>
         </div>

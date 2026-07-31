@@ -52,6 +52,21 @@ from tests.helpers import (
 # Registry of all 16 adapters with expected contract values
 # ---------------------------------------------------------------------------
 
+
+def test_adapter_modules_use_relative_enrichment_imports() -> None:
+    """Adapter modules should not import enrichment siblings through the package facade."""
+    package_imports: list[str] = []
+
+    for path in sorted(Path("app/enrichment/adapters").glob("*.py")):
+        if path.name == "__init__.py":
+            continue
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if line.startswith("from app.enrichment") or line.startswith("import app.enrichment"):
+                package_imports.append(f"{path}:{line}")
+
+    assert package_imports == []
+
+
 @dataclass(frozen=True)
 class AdapterEntry:
     """One entry in the adapter registry — captures contract expectations."""
@@ -307,7 +322,7 @@ _THREATMINER = AdapterEntry(
 
 _DNS = AdapterEntry(
     adapter_class=DnsAdapter,
-    constructor_kwargs={"allowed_hosts": []},
+    constructor_kwargs={},
     name="DNS Records",
     requires_api_key=False,
     supported_types=frozenset({IOCType.DOMAIN}),
@@ -320,7 +335,7 @@ _DNS = AdapterEntry(
 
 _ASN_CYMRU = AdapterEntry(
     adapter_class=CymruASNAdapter,
-    constructor_kwargs={"allowed_hosts": []},
+    constructor_kwargs={},
     name="ASN Intel",
     requires_api_key=False,
     supported_types=frozenset({IOCType.IPV4, IOCType.IPV6}),
@@ -333,7 +348,7 @@ _ASN_CYMRU = AdapterEntry(
 
 _WHOIS = AdapterEntry(
     adapter_class=WhoisAdapter,
-    constructor_kwargs={"allowed_hosts": []},
+    constructor_kwargs={},
     name="WHOIS",
     requires_api_key=False,
     supported_types=frozenset({IOCType.DOMAIN}),

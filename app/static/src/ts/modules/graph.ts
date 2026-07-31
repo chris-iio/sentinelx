@@ -52,11 +52,18 @@ function svgEl(tag: string): SVGElement {
 function appendEmptyGraphMessage(container: HTMLElement): void {
   const msg = document.createElement("p");
   msg.className = "graph-empty";
+  msg.setAttribute("role", "status");
   msg.appendChild(document.createTextNode("No provider data to graph"));
   container.appendChild(msg);
 }
 
 type GraphPoint = { x: number; y: number };
+
+function parseGraphArray<T>(payload: string | null): T[] {
+  if (!payload || payload === "[]") return [];
+  const parsed: unknown = JSON.parse(payload);
+  return Array.isArray(parsed) ? (parsed as T[]) : [];
+}
 
 function providerOrbitPoint(index: number, total: number, cx: number, cy: number, radius: number): GraphPoint {
   if (total === 1) {
@@ -85,12 +92,12 @@ export function renderRelationshipGraph(container: HTMLElement): void {
     return;
   }
 
-  let nodes: GraphNode[] = [];
-  let edges: GraphEdge[] = [];
+  let nodes: GraphNode[];
+  let edges: GraphEdge[];
 
   try {
-    nodes = JSON.parse(nodesAttr) as GraphNode[];
-    edges = edgesAttr && edgesAttr !== "[]" ? (JSON.parse(edgesAttr) as GraphEdge[]) : [];
+    nodes = parseGraphArray<GraphNode>(nodesAttr);
+    edges = parseGraphArray<GraphEdge>(edgesAttr);
   } catch {
     // Malformed JSON — show empty state
     nodes = [];

@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-audit">
+    <header class="audit-page-header">
+        <div>
+            <p class="audit-eyebrow">Audit workspace</p>
+            <h1 class="audit-heading">Security engagements</h1>
+            <p class="audit-muted">Keep scope, evidence, checks, analyst decisions, and remediation in one local workbench.</p>
+        </div>
+    </header>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, message in messages %}
+    <div class="alert alert-{{ category }}" role="alert">{{ message }}</div>
+    {% endfor %}
+    {% endwith %}
+
+    <ol class="audit-workflow" aria-label="Audit workflow">
+        <li><strong>Claim</strong><span>State the finding.</span></li>
+        <li><strong>Evidence</strong><span>Preserve source and scope.</span></li>
+        <li><strong>Reproduce</strong><span>Run a bounded check.</span></li>
+        <li><strong>Decide</strong><span>Set analyst status.</span></li>
+        <li><strong>Remediate</strong><span>Define the fix.</span></li>
+        <li><strong>Recheck</strong><span>Record regression proof.</span></li>
+    </ol>
+
+    <div class="audit-layout">
+        <section class="audit-panel" aria-labelledby="new-engagement-heading">
+            <h2 id="new-engagement-heading" class="audit-subheading">New engagement</h2>
+            <form method="post" action="{{ url_for('main.audit_engagement_create') }}" class="audit-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <label class="form-label" for="audit-name">Name</label>
+                <input id="audit-name" class="form-input" type="text" name="name" maxlength="200" required placeholder="Protocol or program">
+
+                <div class="audit-form-grid">
+                    <div>
+                        <label class="form-label" for="audit-platform">Platform</label>
+                        <select id="audit-platform" class="form-input" name="platform">
+                            {% for platform in platforms %}
+                            <option value="{{ platform }}">{{ platform }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label" for="audit-deadline">Deadline</label>
+                        <input id="audit-deadline" class="form-input" type="text" name="deadline" maxlength="64" placeholder="2026-04-30">
+                    </div>
+                </div>
+
+                <label class="form-label" for="audit-url">Program URL</label>
+                <input id="audit-url" class="form-input" type="url" name="url" maxlength="2048" placeholder="https://…">
+
+                <label class="form-label" for="audit-prize">Prize pool or terms</label>
+                <input id="audit-prize" class="form-input" type="text" name="prize_pool" maxlength="100" placeholder="$50,000 or private review">
+
+                <label class="form-label" for="audit-scope">Scope</label>
+                <textarea id="audit-scope" class="ioc-textarea ioc-textarea--compact" name="scope" rows="5" maxlength="100000" placeholder="Repositories, revisions, contracts, exclusions, and assumptions"></textarea>
+
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Create engagement</button>
+                </div>
+            </form>
+        </section>
+
+        <section class="audit-panel" aria-labelledby="engagements-heading">
+            <h2 id="engagements-heading" class="audit-subheading">Engagements</h2>
+            {% if engagements %}
+            <div class="audit-list">
+                {% for engagement in engagements %}
+                <a class="audit-list-item" href="{{ url_for('main.audit_engagement_detail', engagement_id=engagement.id) }}">
+                    <span class="audit-list-main">
+                        <strong>{{ engagement.name }}</strong>
+                        <span>{{ engagement.platform }} · {{ engagement.finding_count }} finding{% if engagement.finding_count != 1 %}s{% endif %}</span>
+                    </span>
+                    <span class="audit-badge audit-badge--status">{{ engagement.status }}</span>
+                </a>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="history-empty">No audit engagements yet. Create one to define scope before you collect findings.</p>
+            {% endif %}
+        </section>
+    </div>
+</div>
+{% endblock %}

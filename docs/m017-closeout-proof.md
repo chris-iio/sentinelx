@@ -31,7 +31,7 @@ Evidence sources:
 - `.gsd/milestones/M017/slices/S03/S03-SUMMARY.md`
 - `.gsd/milestones/M017/M017-AUDIT.md`
 - `app/enrichment/orchestrator.py::get_incremental_status()`
-- `app/routes/_helpers.py::_get_enrichment_status()`
+- `app/routes/enrichment_jobs.py::_get_enrichment_status()`
 
 The generated audit records the `status-snapshot-scaling` capture: at 5000 retained results, full `get_status()` snapshot work measured slower than `get_incremental_status(since=4990)`, while the incremental path preserved `next_since` and tail-row continuity. S03 therefore satisfies the M017 evidence bar with measurement plus code-path proof and regression coverage.
 

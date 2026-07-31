@@ -8,7 +8,7 @@
         <div class="mode-indicator mode-{{ mode }}">
             Results -
             {% if mode == "offline" %}
-                Offline Mode
+                Offline Extraction
             {% else %}
                 Online Mode
             {% endif %}
@@ -24,8 +24,8 @@
 
         {% if mode == "online" and job_id %}
         <div class="export-group">
-            <button class="btn btn-export" id="export-btn" type="button" disabled>Export</button>
-            <div id="export-dropdown" class="export-dropdown" style="display:none;">
+            <button class="btn btn-export" id="export-btn" type="button" aria-expanded="false" aria-controls="export-dropdown" disabled>Export</button>
+            <div id="export-dropdown" class="export-dropdown" hidden>
                 <button type="button" class="export-dropdown-item" data-export="json">Export JSON</button>
                 <button type="button" class="export-dropdown-item" data-export="csv">Export CSV</button>
                 <button type="button" class="export-dropdown-item" data-export="iocs">Copy all IOCs</button>
@@ -36,11 +36,17 @@
         <a href="{{ url_for('main.index') }}" class="btn btn-secondary back-link">&larr; Back to input</a>
     </div>
 
+    {% if mode == "offline" and not no_results and total_count > 0 %}
+    <p class="offline-results-note" role="status">
+        Indicators were extracted locally. Provider reputation was not queried.
+    </p>
+    {% endif %}
+
     {# Warning banner — hidden by default; JS shows it for rate-limit or auth errors #}
-    <div class="enrich-warning" id="enrich-warning" style="display:none;"></div>
+    <div class="enrich-warning" id="enrich-warning" role="alert" aria-live="assertive" hidden></div>
 
     {% if online_limit_diagnostics is defined %}
-    <div class="enrich-warning" id="online-limit-warning" style="display:block;">
+    <div class="enrich-warning" id="online-limit-warning" role="alert">
         Online enrichment was not started because this submission would create
         {{ online_limit_diagnostics.dispatch_count }} provider lookup{{ "s" if online_limit_diagnostics.dispatch_count != 1 }}
         across {{ online_limit_diagnostics.ioc_count }} IOC{{ "s" if online_limit_diagnostics.ioc_count != 1 }}.
@@ -53,9 +59,9 @@
     {# Global progress bar — only rendered in online mode with an active job #}
     <div class="enrich-progress" id="enrich-progress">
         <div class="enrich-progress-bar">
-            <div class="enrich-progress-fill" id="enrich-progress-fill" style="width:0%;"></div>
+            <progress class="enrich-progress-fill" id="enrich-progress-fill" value="0" max="100" aria-label="Enrichment lookup progress"></progress>
         </div>
-        <span class="enrich-progress-text" id="enrich-progress-text">0/{{ enrichable_count }} providers complete</span>
+        <span class="enrich-progress-text" id="enrich-progress-text" role="status" aria-live="polite">0/{{ enrichable_count }} lookups complete</span>
     </div>
     {% endif %}
 
@@ -79,7 +85,27 @@
         {# Flatten all IOCs from grouped dict into a flat card list #}
         {% for ioc_type, iocs in grouped.items() %}
             {% for ioc in iocs %}
+            {% if mode == "offline" %}
+            <div class="ioc-card" data-ioc-value="{{ ioc.value }}" data-ioc-type="{{ ioc.type.value }}" data-verdict="not_queried">
+                <div class="ioc-card-header">
+                    <div class="ioc-row-left">
+                        <span class="verdict-label verdict-label--not-queried" aria-label="Extracted locally; providers not queried">EXTRACTED</span>
+                        <span class="ioc-type-badge ioc-type-badge--{{ ioc.type.value }}">{{ ioc.type.value | upper }}</span>
+                        <code class="ioc-value">{{ ioc.value }}</code>
+                    </div>
+                    <div class="ioc-card-actions">
+                        <button class="btn btn-copy copy-btn" data-value="{{ ioc.value }}" data-ioc-type="{{ ioc.type.value }}" type="button" aria-label="Copy {{ ioc.value }}">Copy</button>
+                        <a href="{{ url_for('main.ioc_detail', ioc_type=ioc.type.value, ioc_value=ioc.value) }}" class="btn btn-detail" aria-label="View details for {{ ioc.value }}">Detail</a>
+                    </div>
+                </div>
+                {% if ioc.raw_match != ioc.value %}
+                <div class="ioc-original">Original: {{ ioc.raw_match }}</div>
+                {% endif %}
+                <div class="ioc-context-line">Extracted locally · Providers not queried</div>
+            </div>
+            {% else %}
             {% include "partials/_ioc_card.html" %}
+            {% endif %}
             {% endfor %}
         {% endfor %}
     </div>

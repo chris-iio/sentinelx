@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -52,6 +53,8 @@ def init_temp_repo(repo_root: Path) -> str:
     git(repo_root, "init")
     git(repo_root, "config", "user.name", "Runtime Boundary Tests")
     git(repo_root, "config", "user.email", "runtime-boundary-tests@example.com")
+    # Isolate tests from developer-global hooks (for example identity guards).
+    git(repo_root, "config", "core.hooksPath", os.devnull)
     return git(repo_root, "branch", "--show-current").stdout.strip() or "master"
 
 

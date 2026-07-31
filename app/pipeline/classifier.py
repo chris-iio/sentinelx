@@ -26,7 +26,7 @@ from __future__ import annotations
 import ipaddress
 import re
 
-from app.pipeline.models import IOC, IOCType
+from .models import IOC, IOCType
 from app.text_utils import stripped_text_or_none
 
 # ---------------------------------------------------------------------------
@@ -63,7 +63,7 @@ def _looks_like_ip_literal(value: str) -> bool:
         return True
     if "." not in value:
         return False
-    for char in value:
+    for char in value:  # noqa: SIM110 - tests guard direct scan without builtins.all.
         if char != "." and not char.isdecimal():
             return False
     return True

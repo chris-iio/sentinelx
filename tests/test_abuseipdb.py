@@ -12,8 +12,17 @@ All HTTP calls are mocked using unittest.mock.patch -- no real API calls.
 """
 from __future__ import annotations
 
+import inspect
+
 from app.enrichment.models import EnrichmentError, EnrichmentResult
-from app.enrichment.adapters.abuseipdb import AbuseIPDBAdapter, _abuseipdb_result, _parse_response
+from app.enrichment.adapters.abuseipdb import (
+    AbuseIPDBAdapter,
+    _abuseipdb_raw_stats,
+    _abuseipdb_result,
+    _abuseipdb_signals,
+    _abuseipdb_verdict,
+    _parse_response,
+)
 from tests.helpers import (
     make_mock_response,
     mock_adapter_session,
@@ -225,6 +234,52 @@ class TestAbuseIPDBLookup:
         assert result.scan_date == "2024-01-15T09:00:00+00:00"
         assert result.raw_stats is raw_stats
 
+    def test_parse_response_delegates_verdict_and_raw_stats_helpers(self) -> None:
+        """Response parsing should coordinate helpers instead of owning scoring branches."""
+        source = inspect.getsource(_parse_response)
+
+        assert "_abuseipdb_signals(body)" in source
+        assert "_abuseipdb_verdict(signals.score, signals.total_reports)" in source
+        assert "_abuseipdb_raw_stats(" in source
+        assert 'body.get("data"' not in source
+        assert "if score >= 75" not in source
+        assert '"abuseConfidenceScore": score' not in source
+
+    def test_verdict_helper_preserves_thresholds(self) -> None:
+        """Threshold semantics should live in the verdict helper."""
+        assert _abuseipdb_verdict(75, 1) == "malicious"
+        assert _abuseipdb_verdict(74, 1) == "suspicious"
+        assert _abuseipdb_verdict(25, 1) == "suspicious"
+        assert _abuseipdb_verdict(24, 1) == "clean"
+        assert _abuseipdb_verdict(0, 0) == "no_data"
+
+    def test_raw_stats_helper_preserves_key_order_and_values(self) -> None:
+        """The shared raw_stats envelope should keep public fields stable."""
+        data = ABUSEIPDB_SUSPICIOUS_RESPONSE["data"]
+
+        raw_stats = _abuseipdb_raw_stats(
+            data=data,
+            score=data["abuseConfidenceScore"],
+            total_reports=data["totalReports"],
+            distinct_users=data["numDistinctUsers"],
+            last_reported_at=data["lastReportedAt"],
+        )
+
+        assert list(raw_stats) == [
+            "abuseConfidenceScore",
+            "totalReports",
+            "numDistinctUsers",
+            "countryCode",
+            "isp",
+            "usageType",
+            "lastReportedAt",
+            "isWhitelisted",
+        ]
+        assert raw_stats["abuseConfidenceScore"] == data["abuseConfidenceScore"]
+        assert raw_stats["totalReports"] == data["totalReports"]
+        assert raw_stats["numDistinctUsers"] == data["numDistinctUsers"]
+        assert raw_stats["lastReportedAt"] == data["lastReportedAt"]
+
     def test_missing_data_envelope_reuses_static_empty_mapping(self) -> None:
         """Missing data envelopes should not allocate a per-call default dict."""
         ioc = make_ipv4_ioc("1.2.3.4")
@@ -240,6 +295,28 @@ class TestAbuseIPDBLookup:
         assert result.verdict == "no_data"
         assert result.detection_count == 0
         assert result.total_engines == 0
+
+    def test_signal_helper_preserves_data_defaults_and_identity(self) -> None:
+        """AbuseIPDB data-envelope extraction should live in one signal helper."""
+        class NoDefaultBody(dict):
+            def get(self, key, default=None):
+                if key == "data" and default is not None:
+                    raise AssertionError("missing AbuseIPDB data should use the shared empty mapping")
+                return super().get(key, default)
+
+        data = ABUSEIPDB_SUSPICIOUS_RESPONSE["data"]
+        signals = _abuseipdb_signals(NoDefaultBody({"data": data}))
+        empty_signals = _abuseipdb_signals(NoDefaultBody())
+
+        assert signals.data is data
+        assert signals.score == data["abuseConfidenceScore"]
+        assert signals.total_reports == data["totalReports"]
+        assert signals.distinct_users == data["numDistinctUsers"]
+        assert signals.last_reported_at == data["lastReportedAt"]
+        assert empty_signals.score == 0
+        assert empty_signals.total_reports == 0
+        assert empty_signals.distinct_users == 0
+        assert empty_signals.last_reported_at is None
 
     def test_ipv6_lookup_works(self) -> None:
         """IPv6 IOC with high confidence score -> verdict 'malicious'."""
@@ -342,3 +419,5 @@ class TestAbuseIPDBErrors:
         assert result.provider == "AbuseIPDB"
         assert "429" in result.error
         assert "rate limit" in result.error.lower() or "Rate limit" in result.error
+        assert AbuseIPDBAdapter._rate_limit_on_429 is True
+        assert "_make_pre_raise_hook" not in inspect.getsource(AbuseIPDBAdapter)

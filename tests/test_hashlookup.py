@@ -10,7 +10,12 @@ import inspect
 from types import MappingProxyType
 
 from app.enrichment.models import EnrichmentError, EnrichmentResult
-from app.enrichment.adapters.hashlookup import HashlookupAdapter
+from app.enrichment.adapters.hashlookup import (
+    HashlookupAdapter,
+    _hashlookup_raw_stats,
+    _hashlookup_signals,
+    _parse_response,
+)
 from tests.helpers import (
     make_mock_response,
     make_md5_ioc,
@@ -186,6 +191,56 @@ class TestLookupFound:
         assert result.raw_stats["source"] == "NSRL"  # default fallback
         assert result.raw_stats["db"] == ""
 
+    def test_parse_response_delegates_raw_stats_helper(self) -> None:
+        """Hashlookup parser should not own NSRL raw_stats mechanics."""
+        source = inspect.getsource(_parse_response)
+
+        assert "_hashlookup_signals(body)" in source
+        assert "_hashlookup_raw_stats(signals)" in source
+        assert '"file_name"' not in source
+        assert '"source"' not in source
+        assert '"db"' not in source
+        assert 'body.get("FileName"' not in source
+
+    def test_signal_helper_preserves_defaults(self) -> None:
+        """Hashlookup response-field extraction should live in one signal helper."""
+        class NoDefaultBody(dict):
+            def get(self, key, default=None):
+                if default is None and key not in self:
+                    raise AssertionError(f"missing explicit default for {key}")
+                return super().get(key, default)
+
+        signals = _hashlookup_signals(NoDefaultBody(HASHLOOKUP_FOUND_MD5_RESPONSE))
+        empty_signals = _hashlookup_signals(NoDefaultBody({}))
+
+        assert signals.file_name == "calc.exe"
+        assert signals.source == "NSRL"
+        assert signals.db == "RDS_2022.09.1_Modern"
+        assert empty_signals.file_name == ""
+        assert empty_signals.source == "NSRL"
+        assert empty_signals.db == ""
+
+    def test_raw_stats_helper_preserves_key_order_and_defaults(self) -> None:
+        """Hashlookup raw_stats helper should preserve public metadata shape."""
+        signals = _hashlookup_signals(HASHLOOKUP_FOUND_MD5_RESPONSE)
+        empty_signals = _hashlookup_signals({})
+
+        assert list(_hashlookup_raw_stats(signals)) == [
+            "file_name",
+            "source",
+            "db",
+        ]
+        assert _hashlookup_raw_stats(signals) == {
+            "file_name": "calc.exe",
+            "source": "NSRL",
+            "db": "RDS_2022.09.1_Modern",
+        }
+        assert _hashlookup_raw_stats(empty_signals) == {
+            "file_name": "",
+            "source": "NSRL",
+            "db": "",
+        }
+
 
 class TestLookupNotFound:
 
@@ -206,9 +261,8 @@ class TestLookupNotFound:
         assert result.total_engines == 0
         assert result.scan_date is None
         assert result.raw_stats == {}
-        assert "no_data_result(ioc, self.name)" in inspect.getsource(
-            HashlookupAdapter._make_pre_raise_hook,
-        )
+        assert HashlookupAdapter._no_data_on_404 is True
+        assert "_make_pre_raise_hook" not in inspect.getsource(HashlookupAdapter)
 
     def test_404_returns_result_not_error(self) -> None:
         """404 response -> isinstance(result, EnrichmentResult) is True, NOT EnrichmentError."""

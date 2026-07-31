@@ -140,7 +140,7 @@ def test_online_email_with_emailrep_key_reports_one_email_provider(client, tmp_p
     html = response.data.decode("utf-8")
     provider_counts = _provider_counts_from_html(html)
     assert provider_counts["email"] == 1
-    assert "0/1 providers complete" in html
+    assert "0/1 lookups complete" in html
     assert EMAILREP_TEST_KEY not in html
 
 
@@ -155,5 +155,5 @@ def test_online_email_without_emailrep_key_reports_zero_email_providers(client, 
     html = response.data.decode("utf-8")
     provider_counts = _provider_counts_from_html(html)
     assert provider_counts["email"] == 0
-    assert "0/0 providers complete" in html
+    assert "0/0 lookups complete" in html
     assert "EmailRep" not in html

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import importlib.util
+import inspect
 import json
 import os
 import re
@@ -61,6 +62,8 @@ def init_temp_repo(repo_root: Path) -> None:
     git(repo_root, "init")
     git(repo_root, "config", "user.name", "Runtime Repair Tests")
     git(repo_root, "config", "user.email", "runtime-repair-tests@example.com")
+    # Isolate tests from developer-global hooks (for example identity guards).
+    git(repo_root, "config", "core.hooksPath", os.devnull)
 
 
 def write_file(repo_root: Path, relative_path: str, content: str) -> Path:
@@ -137,6 +140,13 @@ def test_repair_target_tuple_helper_skips_iteration_for_short_sequences() -> Non
         ".planning",
         ".bg-shell",
     )
+    assert repair.repair_target_tuple(NoIterTargets([".gsd", ".planning", ".bg-shell", ".codex"])) == (
+        ".gsd",
+        ".planning",
+        ".bg-shell",
+        ".codex",
+    )
+    assert "target_count == 4" in inspect.getsource(repair.repair_target_tuple)
 
 
 def test_quarantine_stamp_validation_reuses_compiled_pattern(monkeypatch) -> None:
@@ -428,6 +438,95 @@ def test_repair_report_reuses_single_action_count_accumulator(monkeypatch):
     assert report.summary.noop_count == 0
 
 
+def test_repair_report_counts_short_action_sequences_without_iteration(monkeypatch):
+    repair = load_repair_module()
+
+    class NoIterActions:
+        def __init__(self, items):
+            self.items = items
+
+        def __len__(self):
+            return len(self.items)
+
+        def __getitem__(self, index):
+            return self.items[index]
+
+        def __iter__(self):
+            raise AssertionError("short repair action counting should not iterate")
+
+    def fail_sum(*_args, **_kwargs):
+        raise AssertionError("short repair action counting should not call sum")
+
+    monkeypatch.setattr("builtins.sum", fail_sum)
+
+    deindex = repair.RepairAction(
+        path=".gsd/audit/events.jsonl",
+        issue_code=repair.ISSUE_TRACKED_TRANSIENT,
+        classification="transient",
+        action=repair.ACTION_DEINDEX,
+        status="planned",
+        mutate=True,
+        tracked=True,
+        ignored=True,
+        rationale="tracked transient",
+    )
+    quarantine = repair.RepairAction(
+        path=".gsd/state.json",
+        issue_code=repair.ISSUE_UNIGNORED_TRANSIENT,
+        classification="transient",
+        action=repair.ACTION_QUARANTINE,
+        status="pending",
+        mutate=True,
+        tracked=False,
+        ignored=False,
+        rationale="unignored transient",
+    )
+    blocked = repair.RepairAction(
+        path=".planning/STATE.md",
+        issue_code=repair.ISSUE_MANUAL_REVIEW,
+        classification="manual-review",
+        action=repair.ACTION_BLOCKED,
+        status="blocked",
+        mutate=False,
+        tracked=True,
+        ignored=False,
+        rationale="manual review",
+    )
+    failed = repair.RepairAction(
+        path=".gsd/exec/fail.stdout",
+        issue_code=repair.ISSUE_TRACKED_TRANSIENT,
+        classification="transient",
+        action=repair.ACTION_DEINDEX,
+        status="failed",
+        mutate=True,
+        tracked=True,
+        ignored=True,
+        rationale="failed transient",
+    )
+
+    empty_counts = repair._count_repair_actions(NoIterActions([]))
+    single_counts = repair._count_repair_actions(NoIterActions([deindex]))
+    pair_counts = repair._count_repair_actions(NoIterActions([deindex, blocked]))
+    three_counts = repair._count_repair_actions(NoIterActions([deindex, quarantine, blocked]))
+    four_counts = repair._count_repair_actions(NoIterActions([deindex, quarantine, blocked, failed]))
+
+    assert empty_counts.summary.noop_count == 1
+    assert single_counts.summary.deindex_count == 1
+    assert pair_counts.summary.blocked_count == 1
+    assert pair_counts.actionable_issue_count == 1
+    assert three_counts.summary.deindex_count == 1
+    assert three_counts.summary.quarantine_count == 1
+    assert three_counts.summary.blocked_count == 1
+    assert three_counts.actionable_issue_count == 2
+    assert four_counts.summary.deindex_count == 1
+    assert four_counts.summary.quarantine_count == 1
+    assert four_counts.summary.blocked_count == 1
+    assert four_counts.summary.failed_count == 1
+    assert four_counts.actionable_issue_count == 3
+    assert "_repair_action_count_components" in repair._count_repair_actions.__code__.co_names
+    assert "action_count == 4" in SCRIPT.read_text(encoding="utf-8")
+
+
 def test_text_report_shell_quotes_action_commands():
     repair = load_repair_module()
     action = repair.RepairAction(
@@ -576,13 +675,19 @@ def test_repair_action_tuple_helper_skips_iteration_for_short_action_sequences()
         second_action,
         action,
     )
+    assert repair.repair_actions_tuple(NoIterActions([action, second_action, action, second_action])) == (
+        action,
+        second_action,
+        action,
+        second_action,
+    )
     assert "repair_actions_tuple" in repair.plan_repair_actions.__code__.co_names
     assert "repair_actions_tuple" in repair.execute_plan.__code__.co_names
     assert "repair_actions_tuple" in repair.build_repair_report.__code__.co_names
 
 
-def test_apply_tracked_transient_uses_existing_command_tuple(monkeypatch, tmp_path: Path):
-    """Tracked-transient repair should avoid copying the command before subprocess execution."""
+def test_apply_tracked_transient_resolves_git_before_subprocess(monkeypatch, tmp_path: Path):
+    """Tracked-transient repair should resolve git before subprocess execution."""
     repair = load_repair_module()
     action = repair.RepairAction(
         path=".gsd/audit/events.jsonl",
@@ -601,9 +706,10 @@ def test_apply_tracked_transient_uses_existing_command_tuple(monkeypatch, tmp_pa
     target.write_text('{"event":"kept"}\n', encoding="utf-8")
 
     def fake_run(command, **_kwargs):
-        assert command is action.command
+        assert command == ("/usr/bin/git", "rm", "--cached", "--", ".gsd/audit/events.jsonl")
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
+    monkeypatch.setattr(repair.shutil, "which", lambda tool: f"/usr/bin/{tool}")
     monkeypatch.setattr(repair.subprocess, "run", fake_run)
 
     result = repair.apply_tracked_transient_repair(action, tmp_path)
@@ -706,9 +812,16 @@ def test_repair_report_json_serializes_actions_directly() -> None:
         repair.repair_action_to_dict(action),
         repair.repair_action_to_dict(action),
     ]
+    assert repair.repair_actions_to_dicts(NoIterActions([action, action, action, action])) == [
+        repair.repair_action_to_dict(action),
+        repair.repair_action_to_dict(action),
+        repair.repair_action_to_dict(action),
+        repair.repair_action_to_dict(action),
+    ]
     assert "repair_actions_to_dicts" in repair.repair_report_to_dict.__code__.co_names
     assert "repair_summary_to_dict" in repair.repair_report_to_dict.__code__.co_names
     assert "repair_action_to_dict" in repair.repair_actions_to_dicts.__code__.co_names
+    assert "append_repair_action_dict" in repair.repair_actions_to_dicts.__code__.co_names
     assert "len" in repair.repair_actions_to_dicts.__code__.co_names
     assert "asdict" not in repair.repair_report_to_dict.__code__.co_names
     assert "asdict" not in repair.repair_action_to_dict.__code__.co_names
@@ -719,6 +832,29 @@ def test_repair_report_json_serializes_actions_directly() -> None:
         for const in repair.repair_actions_to_dicts.__code__.co_consts
         if hasattr(const, "co_name")
     }
+
+
+def test_repair_action_append_helper_owns_long_path_mutation() -> None:
+    repair = load_repair_module()
+    action = repair.RepairAction(
+        path=".gsd/state-manifest.json",
+        issue_code=repair.ISSUE_TRACKED_TRANSIENT,
+        classification="transient",
+        action=repair.ACTION_DEINDEX,
+        status="planned",
+        mutate=False,
+        tracked=True,
+        ignored=False,
+        rationale="tracked durable state",
+    )
+
+    serialized: list[dict[str, object]] = []
+    repair.append_repair_action_dict(serialized, action)
+    source = inspect.getsource(repair.repair_actions_to_dicts)
+
+    assert serialized == [repair.repair_action_to_dict(action)]
+    assert "append_repair_action_dict(serialized, action)" in source
+    assert "serialized.append(repair_action_to_dict(action))" not in source
 
 
 def test_repair_records_use_slots_to_avoid_instance_dict() -> None:

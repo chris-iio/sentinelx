@@ -10,7 +10,15 @@ from __future__ import annotations
 
 import inspect
 
-from app.enrichment.adapters.emailrep import EmailRepAdapter, _emailrep_result
+from app.enrichment.adapters.emailrep import (
+    EmailRepAdapter,
+    _emailrep_detection_count,
+    _emailrep_profiles,
+    _emailrep_raw_stats,
+    _emailrep_result,
+    _emailrep_signals,
+    _emailrep_verdict,
+)
 from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.pipeline.models import IOC, IOCType
 from tests.helpers import make_domain_ioc, make_mock_response, mock_adapter_session
@@ -203,10 +211,24 @@ class TestEmailRepLookup:
 
         source = inspect.getsource(emailrep._parse_response)
         risk_source = inspect.getsource(emailrep._risk_flags)
+        positive_append_source = inspect.getsource(emailrep._append_positive_risk_flag)
+        negative_append_source = inspect.getsource(emailrep._append_negative_risk_flag)
+        shared_append_source = inspect.getsource(emailrep._append_risk_flag)
 
         assert '{"none", "n/a", "unknown"}' not in source
         assert '{"malicious", "suspicious"}' not in source
         assert "field in _MALICIOUS_FLAGS" not in risk_source
+        assert "for field in _RISK_FLAG_FIELDS" not in risk_source
+        assert "for field, flag_name in _NEGATIVE_BOOLEAN_FLAGS" not in risk_source
+        assert '_append_positive_risk_flag(flags, details, "blacklisted", True)' in risk_source
+        assert '_append_positive_risk_flag(flags, details, "spoofable", False)' in risk_source
+        assert '_append_negative_risk_flag(flags, details, "valid_mx", "valid_mx_false")' in risk_source
+        assert 'flags.append("spoofable")' not in risk_source
+        assert "_append_risk_flag(flags, field)" in positive_append_source
+        assert "_append_risk_flag(flags, flag_name)" in negative_append_source
+        assert "flags.append(" not in positive_append_source
+        assert "flags.append(" not in negative_append_source
+        assert "flags.append(flag_name)" in shared_append_source
         assert isinstance(emailrep._NO_REPUTATION_VALUES, frozenset)
         assert isinstance(emailrep._DETECTION_VERDICTS, frozenset)
         assert isinstance(emailrep._MALICIOUS_FLAG_SET, frozenset)
@@ -274,6 +296,132 @@ class TestEmailRepLookup:
         assert result.verdict == "no_data"
         assert result.raw_stats["profiles"] == []
         assert type(result.raw_stats["profiles"]) is list
+
+    def test_parse_response_delegates_verdict_count_and_raw_stats_helpers(self) -> None:
+        """EmailRep parser should not own verdict/count/raw_stats mechanics."""
+        from app.enrichment.adapters import emailrep
+
+        source = inspect.getsource(emailrep._parse_response)
+
+        assert "_emailrep_signals(body)" in source
+        assert "_emailrep_verdict(" in source
+        assert "_emailrep_detection_count(verdict, signals.references)" in source
+        assert "_emailrep_raw_stats(" in source
+        assert 'body.get("details"' not in source
+        assert 'body.get("reputation"' not in source
+        assert "if has_malicious_flag" not in source
+        assert "verdict in _DETECTION_VERDICTS" not in source
+        assert '"risk_flags"' not in source
+        assert '"domain_reputation"' not in source
+
+    def test_signal_helper_preserves_defaults_and_details_reuse(self) -> None:
+        """EmailRep response field extraction should live in one signal helper."""
+        class NoDefaultBody(dict):
+            def get(self, key, default=None):
+                expected_defaults = {
+                    "details": None,
+                    "reputation": None,
+                    "suspicious": False,
+                    "references": 0,
+                }
+                if default != expected_defaults[key]:
+                    raise AssertionError("EmailRep signal defaults should stay provider-specific")
+                return super().get(key, default)
+
+        details = {"last_seen": "2024-01-01"}
+        signals = _emailrep_signals(
+            NoDefaultBody({
+                "details": details,
+                "reputation": "",
+                "suspicious": None,
+                "references": None,
+            })
+        )
+
+        assert signals.details is details
+        assert signals.reputation == "none"
+        assert signals.suspicious is False
+        assert signals.references == 0
+
+    def test_verdict_and_detection_helpers_preserve_semantics(self) -> None:
+        """EmailRep verdict/count helpers should preserve reputation behavior."""
+        assert _emailrep_verdict(
+            reputation="low",
+            suspicious=False,
+            flags=[],
+            has_malicious_flag=True,
+        ) == "malicious"
+        assert _emailrep_verdict(
+            reputation="low",
+            suspicious=False,
+            flags=[],
+            has_malicious_flag=False,
+        ) == "suspicious"
+        assert _emailrep_verdict(
+            reputation="none",
+            suspicious=False,
+            flags=[],
+            has_malicious_flag=False,
+        ) == "no_data"
+        assert _emailrep_verdict(
+            reputation="high",
+            suspicious=False,
+            flags=[],
+            has_malicious_flag=False,
+        ) == "clean"
+        assert _emailrep_detection_count("malicious", 4) == 4
+        assert _emailrep_detection_count("suspicious", 2) == 2
+        assert _emailrep_detection_count("clean", 79) == 0
+        assert _emailrep_detection_count("no_data", 7) == 0
+
+    def test_raw_stats_helper_preserves_key_order_and_list_identity(self) -> None:
+        """Raw stats helper should preserve EmailRep metadata shape."""
+        flags = ["blacklisted"]
+        profiles = ["linkedin"]
+        raw_stats = _emailrep_raw_stats(
+            details={
+                "profiles": profiles,
+                "domain_reputation": "low",
+                "first_seen": "01/02/2024",
+                "last_seen": "04/05/2024",
+            },
+            reputation="low",
+            suspicious=True,
+            references=4,
+            flags=flags,
+        )
+
+        assert list(raw_stats) == [
+            "reputation",
+            "suspicious",
+            "references",
+            "risk_flags",
+            "profiles",
+            "domain_reputation",
+            "first_seen",
+            "last_seen",
+            "domain_exists",
+            "new_domain",
+            "suspicious_tld",
+            "free_provider",
+            "disposable",
+            "deliverable",
+            "valid_mx",
+            "spoofable",
+            "spf_strict",
+            "dmarc_enforced",
+        ]
+        assert raw_stats["risk_flags"] is flags
+        assert raw_stats["profiles"] is profiles
+        assert raw_stats["domain_reputation"] == "low"
+
+    def test_profiles_helper_reuses_lists_and_normalizes_missing_values(self) -> None:
+        """EmailRep profiles should reuse API lists and normalize non-lists."""
+        profiles = ["linkedin"]
+
+        assert _emailrep_profiles({"profiles": profiles}) is profiles
+        assert _emailrep_profiles({}) == []
+        assert _emailrep_profiles({"profiles": "linkedin"}) == []
 
     def test_result_helper_preserves_provider_envelope(self) -> None:
         """EmailRep result construction should keep the provider envelope centralized."""

@@ -7,7 +7,8 @@ from unittest.mock import MagicMock
 import pytest
 
 from app.config import Config
-from app.enrichment.setup import PROVIDER_INFO, build_registry
+from app.enrichment.provider_catalog import PROVIDER_INFO
+from app.enrichment.setup import build_registry
 from app.pipeline.models import IOCType
 
 

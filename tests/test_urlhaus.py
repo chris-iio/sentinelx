@@ -6,10 +6,17 @@ All HTTP calls are mocked using unittest.mock.patch -- no real API calls.
 """
 from __future__ import annotations
 
+import inspect
 from types import MappingProxyType
 
 from app.enrichment.models import EnrichmentError, EnrichmentResult
-from app.enrichment.adapters.urlhaus import URLhausAdapter, _parse_response
+from app.enrichment.adapters.urlhaus import (
+    URLhausAdapter,
+    _parse_response,
+    _urlhaus_raw_stats,
+    _urlhaus_signals,
+    _urlhaus_verdict,
+)
 from tests.helpers import (
     make_mock_response,
     mock_adapter_session,
@@ -264,6 +271,90 @@ class TestURLhausLookup:
         assert result.verdict == "no_data"
         assert result.raw_stats["blacklists"] == {}
         assert type(result.raw_stats["blacklists"]) is dict
+
+    def test_parse_response_delegates_verdict_and_raw_stats_helpers(self) -> None:
+        """Parser should not own URLhaus verdict or raw_stats mechanics."""
+        source = inspect.getsource(_parse_response)
+
+        assert "_urlhaus_signals(body)" in source
+        assert "_urlhaus_verdict(signals.query_status, signals.urls_count)" in source
+        assert "_urlhaus_raw_stats(" in source
+        assert 'body.get("query_status"' not in source
+        assert 'body.get("urls_count"' not in source
+        assert '"is_listed"' not in source
+        assert '"blacklists"' not in source
+        assert '"signature"' not in source
+
+    def test_signal_helper_preserves_defaults_and_metadata_identity(self) -> None:
+        """URLhaus response-field extraction should live in one signal helper."""
+        class NoDefaultBody(dict):
+            def get(self, key, default=None):
+                expected_defaults = {
+                    "query_status": "",
+                    "urls_count": 0,
+                    "tags": None,
+                    "blacklists": None,
+                    "signature": None,
+                }
+                if default != expected_defaults[key]:
+                    raise AssertionError("URLhaus signal defaults should stay provider-specific")
+                return super().get(key, default)
+
+        tags = ["exe"]
+        blacklists = {"spamhaus_dbl": "not listed"}
+        signals = _urlhaus_signals(
+            NoDefaultBody({
+                "query_status": "ok",
+                "urls_count": None,
+                "tags": tags,
+                "blacklists": blacklists,
+                "signature": "Emotet",
+            })
+        )
+        missing = _urlhaus_signals(NoDefaultBody({}))
+
+        assert signals.query_status == "ok"
+        assert signals.urls_count == 0
+        assert signals.tags is tags
+        assert signals.blacklists is blacklists
+        assert signals.signature == "Emotet"
+        assert missing.query_status == ""
+        assert missing.urls_count == 0
+        assert missing.blacklists == {}
+        assert type(missing.blacklists) is dict
+
+    def test_verdict_helper_preserves_status_and_count_semantics(self) -> None:
+        """URLhaus verdict helper should preserve listed, host, and no-result behavior."""
+        assert _urlhaus_verdict("is_listed", 0) == ("malicious", 1)
+        assert _urlhaus_verdict("ok", 3) == ("malicious", 3)
+        assert _urlhaus_verdict("ok", 0) == ("no_data", 0)
+        assert _urlhaus_verdict("no_results", 7) == ("no_data", 0)
+        assert _urlhaus_verdict("no_result", 7) == ("no_data", 0)
+
+    def test_raw_stats_helper_preserves_key_order_and_blacklist_identity(self) -> None:
+        """Raw stats helper should preserve URLhaus metadata shape."""
+        blacklists = {"spamhaus_dbl": "not listed"}
+        tags = ["exe"]
+        raw_stats = _urlhaus_raw_stats(
+            signals=_urlhaus_signals({
+                "query_status": "ok",
+                "blacklists": blacklists,
+                "tags": tags,
+                "signature": "Emotet",
+                "urls_count": 3,
+            }),
+        )
+
+        assert list(raw_stats) == [
+            "query_status",
+            "urls_count",
+            "tags",
+            "blacklists",
+            "signature",
+        ]
+        assert raw_stats["blacklists"] is blacklists
+        assert raw_stats["tags"] is tags
+        assert raw_stats["signature"] == "Emotet"
 
     def test_url_endpoint_uses_data_not_json(self) -> None:
         """URLhaus POST must use data= (form-encoded), not json=."""

@@ -90,13 +90,29 @@ describe("computeWorstVerdict", () => {
     expect(computeWorstVerdict(entries)).toBe("suspicious");
   });
 
-  it("known_good overrides all other verdicts (design rule)", () => {
-    const entries: VerdictEntry[] = [
-      entry({ provider: "VT", verdict: "malicious" }),
-      entry({ provider: "NSRL", verdict: "known_good" }),
-      entry({ provider: "TF", verdict: "suspicious" }),
-    ];
-    expect(computeWorstVerdict(entries)).toBe("known_good");
+  it("does not let known_good erase malicious or suspicious conflicts", () => {
+    expect(
+      computeWorstVerdict([
+        entry({ provider: "VT", verdict: "malicious" }),
+        entry({ provider: "NSRL", verdict: "known_good" }),
+      ])
+    ).toBe("malicious");
+    expect(
+      computeWorstVerdict([
+        entry({ provider: "NSRL", verdict: "known_good" }),
+        entry({ provider: "TF", verdict: "suspicious" }),
+      ])
+    ).toBe("suspicious");
+  });
+
+  it("known_good wins over clean or absent data", () => {
+    expect(
+      computeWorstVerdict([
+        entry({ provider: "VT", verdict: "clean" }),
+        entry({ provider: "NSRL", verdict: "known_good" }),
+        entry({ provider: "MB", verdict: "no_data" }),
+      ])
+    ).toBe("known_good");
   });
 
   it("known_good alone returns known_good", () => {
@@ -144,13 +160,13 @@ describe("computeAttribution", () => {
     expect(result.text).toBe("VirusTotal: 0/72 engines");
   });
 
-  it("breaks ties by verdict severity descending", () => {
+  it("breaks ties with the shared verdict precedence", () => {
     const entries = [
       entry({ provider: "ThreatFox", verdict: "malicious", totalEngines: 10, statText: "10 matches" }),
       entry({ provider: "VirusTotal", verdict: "clean", totalEngines: 10, statText: "0/10 engines" }),
     ];
     const result = computeAttribution(entries);
-    // malicious (severity 4) > clean (severity 2), so ThreatFox wins the tie
+    // A malicious result has precedence over a clean result.
     expect(result.provider).toBe("ThreatFox");
   });
 
@@ -247,6 +263,20 @@ describe("findWorstEntry", () => {
     expect(result!.verdict).toBe("malicious");
   });
 
+  it("keeps known_good below suspicious conflicts and above clean", () => {
+    const conflict = findWorstEntry([
+      entry({ provider: "NSRL", verdict: "known_good" }),
+      entry({ provider: "TF", verdict: "suspicious" }),
+    ]);
+    const benign = findWorstEntry([
+      entry({ provider: "VT", verdict: "clean" }),
+      entry({ provider: "NSRL", verdict: "known_good" }),
+    ]);
+
+    expect(conflict?.provider).toBe("TF");
+    expect(benign?.provider).toBe("NSRL");
+  });
+
   it("returns the first entry when all have equal severity", () => {
     const entries = [
       entry({ provider: "VT", verdict: "clean" }),
@@ -274,7 +304,7 @@ describe("findWorstEntry", () => {
   });
 
   it("correctly ranks error below no_data below clean", () => {
-    // severity order: error(0) < no_data(1) < clean(2) < suspicious(3) < malicious(4)
+    // Precedence increases from error to no_data to clean.
     const entries = [
       entry({ provider: "E", verdict: "error" }),
       entry({ provider: "N", verdict: "no_data" }),

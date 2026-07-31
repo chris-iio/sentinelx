@@ -38,11 +38,11 @@ DOMAIN_IOC = IOC(type=IOCType.DOMAIN, value="example.com", raw_match="example.co
 IPV4_IOC = IOC(type=IOCType.IPV4, value="1.2.3.4", raw_match="1.2.3.4")
 
 
-def _make_adapter(allowed_hosts: list[str] | None = None):
-    """Construct a WhoisAdapter. allowed_hosts is accepted but unused (WHOIS is port 43)."""
+def _make_adapter():
+    """Construct a WhoisAdapter. WHOIS uses port 43 directly, not HTTP allowlists."""
     from app.enrichment.adapters.whois_lookup import WhoisAdapter
 
-    return WhoisAdapter(allowed_hosts=allowed_hosts or [])
+    return WhoisAdapter()
 
 
 def _make_whois_response(
@@ -160,6 +160,93 @@ class TestSuccessfulLookup:
         assert first["name_servers"] is not second["name_servers"]
         assert first["lookup_errors"] is not second["lookup_errors"]
         assert with_errors["lookup_errors"] is errors
+
+    def test_lookup_delegates_successful_raw_stats_extraction(self) -> None:
+        """Successful lookup should keep field parsing out of the public method."""
+        from app.enrichment.adapters.whois_lookup import WhoisAdapter, _whois_raw_stats
+
+        lookup_source = inspect.getsource(WhoisAdapter.lookup)
+        helper_source = inspect.getsource(_whois_raw_stats)
+
+        assert "_whois_raw_stats(w)" in lookup_source
+        assert "w.registrar" not in lookup_source
+        assert "lookup_errors.append" not in lookup_source
+        assert "_safe_whois_field" in helper_source
+        assert '"registrar": registrar' in helper_source
+
+    def test_whois_raw_stats_helper_preserves_shape_and_list_identity(self) -> None:
+        """Shared successful raw_stats extraction should keep the response contract stable."""
+        from app.enrichment.adapters.whois_lookup import _whois_raw_stats
+
+        name_servers = ["NS1.EXAMPLE.COM", "NS2.EXAMPLE.COM"]
+        response = _make_whois_response(
+            creation_date=datetime(2020, 1, 1, tzinfo=timezone.utc),
+            expiration_date=datetime(2025, 1, 1, tzinfo=timezone.utc),
+            name_servers=name_servers,
+        )
+
+        raw_stats = _whois_raw_stats(response)
+
+        assert list(raw_stats) == [
+            "registrar",
+            "creation_date",
+            "expiration_date",
+            "name_servers",
+            "org",
+            "lookup_errors",
+        ]
+        assert raw_stats["name_servers"] is name_servers
+        assert raw_stats["creation_date"] == "2020-01-01T00:00:00+00:00"
+        assert raw_stats["expiration_date"] == "2025-01-01T00:00:00+00:00"
+        assert raw_stats["lookup_errors"] == []
+
+    def test_whois_raw_stats_helper_records_parse_errors(self) -> None:
+        """Per-field parse failures should degrade to defaults with lookup_errors."""
+        from app.enrichment.adapters import whois_lookup
+        from app.enrichment.adapters.whois_lookup import _whois_raw_stats
+
+        class BrokenWhoisResponse:
+            @property
+            def registrar(self):
+                raise RuntimeError("bad registrar")
+
+            @property
+            def creation_date(self):
+                raise RuntimeError("bad creation")
+
+            @property
+            def expiration_date(self):
+                raise RuntimeError("bad expiration")
+
+            @property
+            def name_servers(self):
+                raise RuntimeError("bad nameservers")
+
+            @property
+            def org(self):
+                raise RuntimeError("bad org")
+
+        raw_stats = _whois_raw_stats(BrokenWhoisResponse())
+        safe_field_source = inspect.getsource(whois_lookup._safe_whois_field)
+        append_source = inspect.getsource(whois_lookup._append_lookup_parse_error)
+
+        assert raw_stats == {
+            "registrar": None,
+            "creation_date": None,
+            "expiration_date": None,
+            "name_servers": [],
+            "org": None,
+            "lookup_errors": [
+                "registrar: parse error",
+                "creation_date: parse error",
+                "expiration_date: parse error",
+                "name_servers: parse error",
+                "org: parse error",
+            ],
+        }
+        assert "_append_lookup_parse_error(lookup_errors, field_name)" in safe_field_source
+        assert "lookup_errors.append(" not in safe_field_source
+        assert 'lookup_errors.append(f"{field_name}: parse error")' in append_source
 
 
 # ---------------------------------------------------------------------------
@@ -452,9 +539,14 @@ class TestUnexpectedException:
 
     def test_unexpected_exception_logs_via_logger(self) -> None:
         """Unexpected exceptions are logged via logger.exception()."""
-        with patch("app.enrichment.adapters.whois_lookup.whois.whois", side_effect=RuntimeError("boom")):
-            with patch("app.enrichment.adapters.whois_lookup.logger") as mock_logger:
-                _make_adapter().lookup(DOMAIN_IOC)
+        with (
+            patch(
+                "app.enrichment.adapters.whois_lookup.whois.whois",
+                side_effect=RuntimeError("boom"),
+            ),
+            patch("app.enrichment.adapters.whois_lookup.logger") as mock_logger,
+        ):
+            _make_adapter().lookup(DOMAIN_IOC)
 
         mock_logger.exception.assert_called_once()
 
@@ -543,14 +635,20 @@ class TestNormaliseNameServers:
         assert _normalise_name_servers(servers) is servers
 
     def test_normalise_name_servers_accumulates_iterables_without_list_constructor(self) -> None:
+        from app.enrichment.adapters import whois_lookup
         from app.enrichment.adapters.whois_lookup import _normalise_name_servers
 
         servers = ("NS1.EXAMPLE.COM", "NS2.EXAMPLE.COM")
+        source = inspect.getsource(_normalise_name_servers)
+        append_source = inspect.getsource(whois_lookup._append_name_server)
 
         assert _normalise_name_servers(servers) == ["NS1.EXAMPLE.COM", "NS2.EXAMPLE.COM"]
-        assert "return list(" not in inspect.getsource(_normalise_name_servers)
+        assert "return list(" not in source
+        assert "_append_name_server(name_servers, item)" in source
+        assert "name_servers.append(item)" not in source
+        assert "name_servers.append(item)" in append_source
 
-    def test_normalise_name_servers_skips_iteration_for_empty_single_pair_or_three_tuple(self) -> None:
+    def test_normalise_name_servers_skips_iteration_for_empty_single_pair_three_or_four_tuple(self) -> None:
         from app.enrichment.adapters.whois_lookup import _normalise_name_servers
 
         class NoIterTuple(tuple):
@@ -567,5 +665,13 @@ class TestNormaliseNameServers:
             "NS1.EXAMPLE.COM",
             "NS2.EXAMPLE.COM",
             "NS3.EXAMPLE.COM",
+        ]
+        assert _normalise_name_servers(
+            NoIterTuple(("NS1.EXAMPLE.COM", "NS2.EXAMPLE.COM", "NS3.EXAMPLE.COM", "NS4.EXAMPLE.COM"))
+        ) == [
+            "NS1.EXAMPLE.COM",
+            "NS2.EXAMPLE.COM",
+            "NS3.EXAMPLE.COM",
+            "NS4.EXAMPLE.COM",
         ]
         assert "len" in _normalise_name_servers.__code__.co_names

@@ -14,18 +14,36 @@ from __future__ import annotations
 
 import inspect
 import threading
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+import app.enrichment.attempt_execution as attempt_execution_module
+import app.enrichment.cache_payloads as cache_payloads
+import app.enrichment.diagnostic_state as diagnostic_state_module
+import app.enrichment.dispatch_plan as dispatch_plan_module
+import app.enrichment.job_execution as job_execution_module
+import app.enrichment.lookup_execution as lookup_execution_module
+import app.enrichment.job_state as job_state_module
+import app.enrichment.retry_policy as retry_policy
 from app.enrichment.models import EnrichmentError, EnrichmentResult
+from app.enrichment.diagnostics import (
+    _job_diagnostics_defaults,
+    _normalize_provider_name,
+    _provider_diagnostics_bucket,
+    append_provider_diagnostics_snapshot,
+    apply_cache_update,
+    apply_error_update,
+    apply_latency_update,
+    apply_retry_update,
+    build_dispatch_diagnostics,
+    record_dispatch_pair,
+)
 from app.enrichment.orchestrator import (
     EnrichmentOrchestrator,
     _BACKOFF_BASE,
     _MAX_RATE_LIMIT_RETRIES,
-    _cached_enrichment_result,
-    _normalize_provider_name,
-    _provider_diagnostics_bucket,
 )
 from app.pipeline.models import IOC, IOCType
 
@@ -33,6 +51,21 @@ from app.pipeline.models import IOC, IOCType
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def test_top_level_enrichment_modules_use_relative_sibling_imports():
+    """Top-level enrichment modules should not import siblings through the package facade."""
+    package_imports: list[str] = []
+
+    for path in sorted(Path("app/enrichment").glob("*.py")):
+        if path.name == "__init__.py":
+            continue
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if line.startswith("from app.enrichment") or line.startswith("import app.enrichment"):
+                package_imports.append(f"{path}:{line}")
+
+    assert package_imports == []
+
 
 def _make_ioc(type_: IOCType, value: str) -> IOC:
     return IOC(type=type_, value=value, raw_match=value)
@@ -298,11 +331,30 @@ class TestLRUEviction:
         assert first_status["status"] == "failed"
         assert first_status["terminal"] is True
         assert first_status["terminal_reason"] == "evicted"
-        assert first_status["error"] == "Enrichment job status was evicted from memory."
+        assert first_status["error"] == job_state_module.EVICTED_JOB_ERROR
         # Most recent job must still be present as a normal completed job
         latest_status = orchestrator.get_status("job-lru-5")
         assert latest_status is not None
         assert latest_status["status"] == "complete"
+
+    def test_registered_job_is_pollable_while_queued(self, mock_adapter):
+        """Registration exposes one explicit queued state before execution starts."""
+        ioc = _make_ioc(IOCType.IPV4, "203.0.113.20")
+        orchestrator = _make_orchestrator(mock_adapter)
+
+        orchestrator.register_queued_job("job-queued", [ioc])
+
+        status = orchestrator.get_status("job-queued")
+        assert status == {
+            "total": 1,
+            "done": 0,
+            "results": [],
+            "complete": False,
+            "status": "queued",
+            "terminal": False,
+            "terminal_reason": None,
+            "error": None,
+        }
 
 
 class TestJobFailureSemantics:
@@ -318,13 +370,14 @@ class TestJobFailureSemantics:
 
         status = orchestrator.get_status("job-hard-fail")
         assert status is not None
-        assert status["complete"] is True
+        assert status["complete"] is False
         assert status["status"] == "failed"
         assert status["terminal"] is True
-        assert status["terminal_reason"] == "job_failed"
-        assert status["error"] == "adapter exploded"
-        assert status["done"] == 0
-        assert status["results"] == []
+        assert status["terminal_reason"] == "provider_failure"
+        assert status["error"] == "1 of 1 enrichment lookups failed"
+        assert status["done"] == 1
+        assert len(status["results"]) == 1
+        assert status["results"][0].error == "provider lookup failed: adapter exploded"
 
 
 # ---------------------------------------------------------------------------
@@ -368,15 +421,13 @@ class TestMultiAdapterDispatch:
 
     def test_zero_dispatch_job_skips_thread_pool(self, monkeypatch):
         """Jobs with no matching adapter work should complete without executor setup."""
-        import app.enrichment.orchestrator as orchestrator_module
-
         ioc = _make_ioc(IOCType.DOMAIN, "evil.com")
         adapter = _make_mock_adapter(supported_types={IOCType.MD5})
 
         def fail_thread_pool(*_args, **_kwargs):
             raise AssertionError("zero-dispatch jobs should not construct a thread pool")
 
-        monkeypatch.setattr(orchestrator_module, "ThreadPoolExecutor", fail_thread_pool)
+        monkeypatch.setattr(job_execution_module, "ThreadPoolExecutor", fail_thread_pool)
 
         orchestrator = EnrichmentOrchestrator(adapters=[adapter], max_workers=4)
         orchestrator.enrich_all("job-zero-dispatch", [ioc])
@@ -390,6 +441,160 @@ class TestMultiAdapterDispatch:
         assert status["complete"] is True
         assert status["status"] == "complete"
         assert adapter.lookup.call_count == 0
+
+    def test_orchestrator_delegates_dispatch_setup_helpers(self):
+        """Dispatch-pair and semaphore setup should live outside the orchestrator class."""
+        init_source = inspect.getsource(EnrichmentOrchestrator.__init__)
+        enrich_source = inspect.getsource(EnrichmentOrchestrator.enrich_all)
+        dispatch_source = inspect.getsource(dispatch_plan_module.build_dispatch_pairs)
+        semaphore_source = inspect.getsource(dispatch_plan_module.build_provider_semaphores)
+        append_semaphore_source = inspect.getsource(dispatch_plan_module.append_provider_semaphore)
+
+        assert "build_provider_semaphores(" in init_source
+        assert "build_dispatch_pairs(" in enrich_source
+        assert "for ioc in iocs" not in enrich_source
+        assert "for ioc in iocs" in dispatch_source
+        assert "append_provider_semaphore(" in semaphore_source
+        assert "Semaphore(" not in semaphore_source
+        assert "Semaphore(" in append_semaphore_source
+
+        nested_code_names = {
+            const.co_name
+            for const in dispatch_plan_module.build_dispatch_pairs.__code__.co_consts
+            if hasattr(const, "co_name")
+        }
+        assert "<listcomp>" not in nested_code_names
+
+    def test_dispatch_pair_builder_skips_iteration_for_four_or_fewer_iocs(self):
+        """Tiny dispatch lists should avoid setting up the generic IOC scan."""
+        class NoIterIocs(list):
+            def __iter__(self):
+                raise AssertionError("short IOC dispatch setup should not iterate iocs")
+
+            def __getitem__(self, index):
+                if isinstance(index, slice):
+                    raise AssertionError("short IOC dispatch setup should not slice iocs")
+                return super().__getitem__(index)
+
+        ipv4 = _make_ioc(IOCType.IPV4, "198.51.100.8")
+        domain = _make_ioc(IOCType.DOMAIN, "example.com")
+        md5 = _make_ioc(IOCType.MD5, "a" * 32)
+        sha1 = _make_ioc(IOCType.SHA1, "b" * 40)
+        unsupported = _make_mock_adapter(supported_types={IOCType.DOMAIN})
+        supported = _make_mock_adapter(supported_types={IOCType.IPV4})
+        hash_adapter = _make_mock_adapter(supported_types={IOCType.MD5, IOCType.SHA1})
+
+        assert dispatch_plan_module.build_dispatch_pairs([supported], NoIterIocs([])) == []
+        assert dispatch_plan_module.build_dispatch_pairs(
+            [unsupported, supported],
+            NoIterIocs([ipv4]),
+        ) == [(supported, ipv4)]
+        assert dispatch_plan_module.build_dispatch_pairs(
+            [unsupported, supported, hash_adapter],
+            NoIterIocs([ipv4, domain, md5, sha1]),
+        ) == [
+            (supported, ipv4),
+            (unsupported, domain),
+            (hash_adapter, md5),
+            (hash_adapter, sha1),
+        ]
+        assert "len" in dispatch_plan_module.build_dispatch_pairs.__code__.co_names
+        dispatch_source = inspect.getsource(dispatch_plan_module.build_dispatch_pairs)
+        assert "ioc_count == 1" in dispatch_source
+        assert "ioc_count == 4" in dispatch_source
+        assert "append_supported_dispatch_pairs" in dispatch_plan_module.build_dispatch_pairs.__code__.co_names
+        supported_source = inspect.getsource(dispatch_plan_module.append_supported_dispatch_pairs)
+        append_source = inspect.getsource(dispatch_plan_module.append_dispatch_pair)
+        assert "append_dispatch_pair(pairs, adapter, ioc)" in supported_source
+        assert "pairs.append((adapter, ioc))" not in supported_source
+        assert "pairs.append((adapter, ioc))" in append_source
+
+    def test_dispatch_execution_uses_a_bounded_active_future_set(self):
+        """Dispatch submits new work only when an active worker slot is available."""
+        source = inspect.getsource(job_execution_module.run_dispatch_pairs)
+
+        assert "len(active) < max_workers" in source
+        assert "wait(active, return_when=FIRST_COMPLETED)" in source
+        assert "pool.submit" not in source
+        assert "submit_dispatch_pair" in source
+
+    def test_dispatch_execution_refills_only_after_a_future_finishes(self, monkeypatch):
+        """More dispatches than workers never create a larger active future set."""
+        class NoIterPairs(list):
+            def __iter__(self):
+                raise AssertionError("short dispatch execution should not iterate pairs")
+
+            def __getitem__(self, index):
+                if isinstance(index, slice):
+                    raise AssertionError("short dispatch execution should not slice pairs")
+                return super().__getitem__(index)
+
+        class FakeFuture:
+            def __init__(self, value):
+                self._value = value
+
+            def result(self):
+                return self._value
+
+        class FakePool:
+            submitted: list[tuple[str, object, IOC]] = []
+
+            def __init__(self, *, max_workers: int) -> None:
+                self.max_workers = max_workers
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_exc_info):
+                return False
+
+            def submit(self, lookup, job_id, adapter, ioc):
+                self.submitted.append((job_id, adapter, ioc))
+                return FakeFuture(lookup(job_id, adapter, ioc))
+
+        def lookup(job_id, adapter, ioc):
+            return _make_result(ioc, provider=adapter.name)
+
+        recorded: list[tuple[str, str]] = []
+
+        def record_result(job_id, result):
+            recorded.append((job_id, result.provider))
+
+        adapter = _make_mock_adapter(supported_types={IOCType.IPV4})
+        adapter.name = "ProviderA"
+        iocs = [
+            _make_ioc(IOCType.IPV4, "198.51.100.10"),
+            _make_ioc(IOCType.IPV4, "198.51.100.11"),
+            _make_ioc(IOCType.IPV4, "198.51.100.12"),
+            _make_ioc(IOCType.IPV4, "198.51.100.13"),
+        ]
+
+        active_sizes: list[int] = []
+
+        def complete_one(futures, return_when):
+            active_sizes.append(len(futures))
+            return {next(iter(futures))}, set()
+
+        monkeypatch.setattr(job_execution_module, "ThreadPoolExecutor", FakePool)
+        monkeypatch.setattr(job_execution_module, "wait", complete_one)
+
+        job_execution_module.run_dispatch_pairs(
+            "job-dispatch-exec",
+            NoIterPairs([(adapter, ioc) for ioc in iocs]),
+            max_workers=2,
+            lookup=lookup,
+            record_result=record_result,
+        )
+
+        assert len(FakePool.submitted) == 4
+        assert recorded == [
+            ("job-dispatch-exec", "ProviderA"),
+            ("job-dispatch-exec", "ProviderA"),
+            ("job-dispatch-exec", "ProviderA"),
+            ("job-dispatch-exec", "ProviderA"),
+        ]
+        assert "submit_dispatch_pair" in job_execution_module.run_dispatch_pairs.__code__.co_names
+        assert active_sizes == [2, 2, 2, 1]
 
     def test_multi_adapter_total_counts_all_dispatches(self):
         """2 IOCs x 2 adapters (both supporting both types) = total of 4 dispatches."""
@@ -555,6 +760,47 @@ class TestPerProviderSemaphore:
         assert len(orch_keyed._semaphores) == 1, "Keyed adapter must get exactly one semaphore"
         assert "VirusTotal" in orch_keyed._semaphores
         assert len(orch_mixed._semaphores) == 1, "Mixed: only keyed adapter gets semaphore"
+
+    def test_provider_semaphore_builder_skips_iteration_for_four_or_fewer_adapters(self):
+        """Small adapter sets should not enter the generic semaphore loop."""
+        class NoIterAdapters(list):
+            def __iter__(self):
+                raise AssertionError("short semaphore setup should not iterate adapters")
+
+            def __getitem__(self, index):
+                if isinstance(index, slice):
+                    raise AssertionError("short semaphore setup should not slice adapters")
+                return super().__getitem__(index)
+
+        public_adapter = _make_public_adapter("DNS", supported_types={IOCType.IPV4})
+        keyed_adapter = _make_keyed_adapter("VirusTotal", supported_types={IOCType.IPV4})
+        fallback_adapter = _make_keyed_adapter(" Raw Name ", supported_types={IOCType.IPV4})
+        normalized_adapter = _make_keyed_adapter(" \n\t ", supported_types={IOCType.IPV4})
+
+        semaphores = dispatch_plan_module.build_provider_semaphores(
+            NoIterAdapters([
+                public_adapter,
+                keyed_adapter,
+                fallback_adapter,
+                normalized_adapter,
+            ]),
+            {"VirusTotal": 2, " Raw Name ": 3, "unknown": 1},
+        )
+
+        assert set(semaphores) == {"VirusTotal", "Raw Name", "unknown"}
+        assert semaphores["VirusTotal"]._value == 2
+        assert semaphores["Raw Name"]._value == 3
+        assert semaphores["unknown"]._value == 1
+
+        source = inspect.getsource(dispatch_plan_module.build_provider_semaphores)
+        append_source = inspect.getsource(dispatch_plan_module.append_provider_semaphore)
+        direct_source = source.split("for adapter in adapters:", 1)[0]
+        fallback_source = source.split("for adapter in adapters:", 1)[1]
+        assert "adapter_count == 4" in source
+        assert "append_provider_semaphore(semaphores, adapters[0], concurrency)" in direct_source
+        assert "append_provider_semaphore(semaphores, adapter, concurrency)" in fallback_source
+        assert "semaphores[provider_name] = Semaphore(limit)" not in source
+        assert "semaphores[provider_name] = Semaphore(limit)" in append_source
 
     def test_provider_concurrency_override(self):
         """provider_concurrency dict overrides the default cap of 4.
@@ -742,6 +988,95 @@ class TestBackoff429:
             "'Rate limit exceeded' (no 429 code) must still trigger backoff sleep"
         )
 
+    def test_orchestrator_delegates_retry_policy_helpers(self):
+        """Retry classification and delay math should live outside orchestrator flow."""
+        import inspect
+
+        source = inspect.getsource(EnrichmentOrchestrator._do_lookup)
+        retry_source = inspect.getsource(lookup_execution_module.run_lookup_with_retries)
+
+        assert _BACKOFF_BASE == retry_policy.BACKOFF_BASE
+        assert _MAX_RATE_LIMIT_RETRIES == retry_policy.MAX_RATE_LIMIT_RETRIES
+        assert retry_policy.rate_limit_backoff_delay(2, lambda _a, _b: 0.5) == 30.5
+        assert retry_policy.is_rate_limit_error(
+            _make_error(_make_ioc(IOCType.IPV4, "203.0.113.1"), msg="HTTP 429")
+        )
+        assert "run_lookup_with_retries(" in source
+        assert "rate_limit_backoff_delay(" not in source
+        assert "NON_RATE_LIMIT_RETRY_DELAY" not in source
+        assert "rate_limit_backoff_delay(" in retry_source
+        assert "NON_RATE_LIMIT_RETRY_DELAY" in retry_source
+        assert "is_rate_limit_error(" in retry_source
+        assert not hasattr(EnrichmentOrchestrator, "_is_rate_limit_error")
+
+    def test_orchestrator_delegates_retry_execution_loop(self):
+        """Retry loops and backoff sleeps should live outside _do_lookup."""
+        import inspect
+
+        source = inspect.getsource(EnrichmentOrchestrator._do_lookup)
+        retry_source = inspect.getsource(lookup_execution_module.run_lookup_with_retries)
+
+        assert "run_lookup_with_retries(" in source
+        assert "record_retry=self._record_retry" in source
+        assert "for attempt_number in range" not in source
+        assert "sleep(" not in source
+        assert "for attempt_number in range" in retry_source
+        assert "sleep(delay)" in retry_source
+        assert "record_retry(job_id, provider_name, True)" in retry_source
+        assert "record_retry(job_id, provider_name, False)" in retry_source
+        assert not hasattr(EnrichmentOrchestrator, "_record_rate_limit_retry")
+        assert not hasattr(EnrichmentOrchestrator, "_record_non_rate_limit_retry")
+
+    def test_orchestrator_delegates_semaphore_attempt_boundary(self):
+        """Semaphore acquire/release should live inside retry helper attempts."""
+        import inspect
+
+        source = inspect.getsource(EnrichmentOrchestrator._do_lookup)
+        retry_source = inspect.getsource(lookup_execution_module.run_lookup_with_retries)
+        helper_source = inspect.getsource(lookup_execution_module.run_attempt_with_semaphore)
+
+        class RecordingSemaphore:
+            def __init__(self):
+                self.calls: list[str] = []
+
+            def acquire(self):
+                self.calls.append("acquire")
+
+            def release(self):
+                self.calls.append("release")
+
+        calls: list[tuple[str, str, str]] = []
+        semaphore = RecordingSemaphore()
+        ioc = _make_ioc(IOCType.IPV4, "203.0.113.10")
+        result = _make_result(ioc, provider="ProviderA")
+
+        def attempt(job_id, adapter, seen_ioc, provider_name):
+            calls.append((job_id, seen_ioc.value, provider_name))
+            return result
+
+        returned = lookup_execution_module.run_attempt_with_semaphore(
+            "job-1",
+            object(),
+            ioc,
+            "ProviderA",
+            semaphore,
+            attempt=attempt,
+        )
+
+        assert returned is result
+        assert calls == [("job-1", "203.0.113.10", "ProviderA")]
+        assert semaphore.calls == ["acquire", "release"]
+        assert "attempt=attempt" in source
+        assert "partial(" in source
+        assert "run_single_attempt" in source
+        assert "run_attempt_with_semaphore(" not in source
+        assert "run_attempt_with_semaphore(" in retry_source
+        assert not hasattr(EnrichmentOrchestrator, "_attempt_with_semaphore")
+        assert ".acquire()" not in source
+        assert ".release()" not in source
+        assert ".acquire()" in helper_source
+        assert ".release()" in helper_source
+
 
 # ---------------------------------------------------------------------------
 # Tests — M004 S01 concurrency correctness fixes
@@ -869,7 +1204,7 @@ class TestGetStatusListSnapshot:
         """Full status snapshots should copy results with direct accumulation."""
         import inspect
 
-        from app.enrichment.orchestrator import EnrichmentOrchestrator
+        from app.enrichment import status_snapshots
 
         ioc = _make_ioc(IOCType.IPV4, "1.2.3.4")
         result = _make_result(ioc)
@@ -885,12 +1220,28 @@ class TestGetStatusListSnapshot:
             }
 
         status = orchestrator.get_status("job-direct-copy")
-        source = inspect.getsource(EnrichmentOrchestrator._status_snapshot)
+        source = inspect.getsource(status_snapshots.status_snapshot)
 
         assert status["results"] == [result]
         assert status["results"] is not orchestrator._jobs["job-direct-copy"]["results"]
         assert "list(results)" not in source
-        assert "_copy_results_tail(results, 0)" in source
+        assert "copy_results_tail(results, 0)" in source
+
+    def test_status_accessors_delegate_live_terminal_record_resolution(self):
+        """Live/terminal job lookup branching should live in job_state helpers."""
+        status_source = inspect.getsource(EnrichmentOrchestrator.get_status)
+        incremental_source = inspect.getsource(EnrichmentOrchestrator.get_incremental_status)
+        diagnostics_source = inspect.getsource(EnrichmentOrchestrator.get_diagnostics)
+        resolver_source = inspect.getsource(job_state_module.resolved_job_record)
+
+        assert "resolved_job_record(" in status_source
+        assert "resolved_job_record(" in incremental_source
+        assert "resolved_job_record(" in diagnostics_source
+        assert "_terminal_jobs.get(" not in status_source
+        assert "_terminal_jobs.get(" not in incremental_source
+        assert "_terminal_jobs.get(" not in diagnostics_source
+        assert "jobs.get(job_id)" in resolver_source
+        assert "terminal_jobs.get(job_id)" in resolver_source
 
 
 class TestIncrementalStatusSnapshot:
@@ -936,19 +1287,76 @@ class TestIncrementalStatusSnapshot:
     def test_get_incremental_status_copies_tail_without_list_constructor(self, mock_adapter):
         """Incremental tails should be accumulated directly from bounded iteration."""
         import inspect
-        import app.enrichment.orchestrator as orchestrator_module
+        from app.enrichment import status_snapshots
 
-        source = inspect.getsource(orchestrator_module.EnrichmentOrchestrator._incremental_status_snapshot)
+        source = inspect.getsource(status_snapshots.incremental_status_snapshot)
+        tail_decision_source = inspect.getsource(status_snapshots.incremental_tail_results)
+        tail_source = inspect.getsource(status_snapshots.copy_results_tail)
+        append_source = inspect.getsource(status_snapshots.append_result_tail_item)
 
         assert "list(islice(" not in source
-        assert "self._copy_results_tail(results, since)" in source
-        assert "self._copy_results_tail(results, start)" in source
+        assert "incremental_tail_results(results, result_count, start)" in source
+        assert "copy_results_tail(results, start)" not in source
+        assert "copy_results_tail(results, start)" in tail_decision_source
+        assert "start >= result_count" in tail_decision_source
+        assert "append_result_tail_item(copied_results, result)" in tail_source
+        assert "copied_results.append(result)" not in tail_source
+        assert "copied_results.append(result)" in append_source
+
+    def test_incremental_status_reuses_cache_marker_key_helper(self, mock_adapter):
+        """Incremental cached-marker alignment should share the cache key helper."""
+        from app.enrichment import status_snapshots
+
+        source = inspect.getsource(status_snapshots.append_cached_marker_for_result)
+
+        assert status_snapshots.cache_marker_key is cache_payloads.cache_marker_key
+        assert "cache_marker_key(result.ioc, result.provider)" in source
+        assert 'result.ioc.value + "|"' not in source
+
+    def test_aligned_cached_markers_skips_iteration_for_short_tails(self, mock_adapter):
+        """Small marker alignment should index copied tails directly."""
+        from app.enrichment.status_snapshots import aligned_cached_markers_snapshot
+
+        ioc_a = _make_ioc(IOCType.IPV4, "198.51.100.60")
+        ioc_b = _make_ioc(IOCType.IPV4, "198.51.100.61")
+        ioc_c = _make_ioc(IOCType.IPV4, "198.51.100.62")
+        ioc_d = _make_ioc(IOCType.IPV4, "198.51.100.63")
+        result_a = _make_result(ioc_a, provider="ProviderA")
+        result_b = _make_result(ioc_b, provider="ProviderB")
+        result_c = _make_result(ioc_c, provider="ProviderC")
+        result_d = _make_result(ioc_d, provider="ProviderD")
+
+        class NoIterTail(list):
+            def __iter__(self):
+                raise AssertionError("short marker alignment should not iterate")
+
+            def __getitem__(self, index):
+                if isinstance(index, slice):
+                    raise AssertionError("marker alignment should not slice tails")
+                return super().__getitem__(index)
+
+        tail_results = NoIterTail([result_a, result_b, result_c, result_d])
+        markers = {
+            f"{ioc_a.value}|ProviderA": "2024-01-01T00:00:00Z",
+            f"{ioc_c.value}|ProviderC": "2024-01-03T00:00:00Z",
+        }
+
+        assert aligned_cached_markers_snapshot(tail_results, markers) == {
+            f"{ioc_a.value}|ProviderA": "2024-01-01T00:00:00Z",
+            f"{ioc_c.value}|ProviderC": "2024-01-03T00:00:00Z",
+        }
+        source = inspect.getsource(aligned_cached_markers_snapshot)
+        assert "result_count == 4" in source
+        assert "append_cached_marker_for_result(" in source
 
     def test_copy_results_tail_skips_iteration_for_short_tails(self, mock_adapter):
-        """Tail copying should avoid iterator setup when the requested tail has two or fewer results."""
-        orchestrator = _make_orchestrator(mock_adapter)
+        """Tail copying should avoid iterator setup when the requested tail has four or fewer results."""
+        from app.enrichment.status_snapshots import copy_results_tail
+
         first = _make_result(_make_ioc(IOCType.IPV4, "198.51.100.50"))
         second = _make_result(_make_ioc(IOCType.IPV4, "198.51.100.51"))
+        third = _make_result(_make_ioc(IOCType.IPV4, "198.51.100.52"))
+        fourth = _make_result(_make_ioc(IOCType.IPV4, "198.51.100.53"))
 
         class NoIterResults(list):
             def __iter__(self):
@@ -959,12 +1367,17 @@ class TestIncrementalStatusSnapshot:
                     raise AssertionError("tail copying should not slice results")
                 return super().__getitem__(index)
 
-        results = NoIterResults([first, second])
+        results = NoIterResults([first, second, third, fourth])
 
-        assert orchestrator._copy_results_tail(results, 2) == []
-        assert orchestrator._copy_results_tail(results, 1) == [second]
-        assert orchestrator._copy_results_tail(results, 0) == [first, second]
-        assert "len" in orchestrator._copy_results_tail.__code__.co_names
+        assert copy_results_tail(results, 4) == []
+        assert copy_results_tail(results, 3) == [fourth]
+        assert copy_results_tail(results, 2) == [third, fourth]
+        assert copy_results_tail(results, 1) == [second, third, fourth]
+        assert copy_results_tail(results, 0) == [first, second, third, fourth]
+        assert not hasattr(EnrichmentOrchestrator, "_copy_results_tail")
+        assert "len" in copy_results_tail.__code__.co_names
+        assert "start == result_count - 4" in inspect.getsource(copy_results_tail)
+        assert "start == result_count - 3" in inspect.getsource(copy_results_tail)
 
     def test_get_incremental_status_returns_tail_and_aligned_cached_markers(self, mock_adapter):
         """Tail reads should include only requested results and matching cache markers."""
@@ -1045,15 +1458,15 @@ class TestIncrementalStatusSnapshot:
         assert snapshot["results"] == [result]
         assert "_diagnostics" not in snapshot
 
-    def test_get_incremental_status_preserves_negative_since_behavior(self, mock_adapter):
-        """Negative since values should keep slice semantics without slicing results."""
+    def test_get_incremental_status_clamps_negative_since_to_zero(self, mock_adapter):
+        """Negative since values should return the full retained result set."""
         orchestrator = _make_orchestrator(mock_adapter)
         iocs = [_make_ioc(IOCType.IPV4, f"203.0.113.{i}") for i in range(3)]
 
         class NoSliceResults(list):
             def __getitem__(self, index):
                 if isinstance(index, slice):
-                    raise AssertionError("negative incremental cursors should use bounded iteration")
+                    raise AssertionError("incremental cursors should use bounded iteration")
                 return super().__getitem__(index)
 
         results = NoSliceResults(
@@ -1075,7 +1488,7 @@ class TestIncrementalStatusSnapshot:
 
         snapshot = orchestrator.get_incremental_status("job-negative-since", since=-1)
         assert snapshot is not None
-        assert snapshot["results"] == [results[-1]]
+        assert snapshot["results"] == [results[0], results[1], results[2]]
         assert snapshot["next_since"] == 3
         assert snapshot["cached_markers"] == {}
 
@@ -1125,8 +1538,8 @@ class TestIncrementalStatusSnapshot:
         assert snapshot is not None
         assert snapshot["status"] == "failed"
         assert snapshot["terminal"] is True
-        assert snapshot["terminal_reason"] == "job_failed"
-        assert snapshot["error"] == "adapter exploded"
+        assert snapshot["terminal_reason"] == "provider_failure"
+        assert snapshot["error"] == "1 of 1 enrichment lookups failed"
         assert snapshot["results"] == []
         assert snapshot["next_since"] == 4
         assert snapshot["cached_markers"] == {}
@@ -1197,8 +1610,6 @@ class TestCachedMarkersLock:
 
     def test_cached_markers_snapshot_copies_directly(self, mock_adapter):
         """cached_markers should return an isolated snapshot without dict() copying."""
-        import inspect
-
         orchestrator = _make_orchestrator(mock_adapter)
         with orchestrator._lock:
             orchestrator._cached_markers["1.2.3.4|VirusTotal"] = "2026-05-01T00:00:00Z"
@@ -1208,9 +1619,44 @@ class TestCachedMarkersLock:
 
         source = inspect.getsource(EnrichmentOrchestrator.cached_markers.fget)
         assert "dict(self._cached_markers)" not in source
+        assert "cached_markers_snapshot(" in source
+        helper_source = inspect.getsource(job_state_module.cached_markers_snapshot)
+        assert "dict(" not in helper_source
         assert orchestrator.cached_markers == {
             "1.2.3.4|VirusTotal": "2026-05-01T00:00:00Z"
         }
+
+    def test_cached_markers_snapshot_short_paths_skip_fallback_loop(self):
+        """Small marker snapshots should copy directly while staying isolated."""
+        helper_source = inspect.getsource(job_state_module.cached_markers_snapshot)
+        append_source = inspect.getsource(job_state_module.append_cached_marker_snapshot_entry)
+        direct_path, fallback = helper_source.split("snapshot: dict[str, str] = {}", 1)
+
+        assert "for key in markers" not in direct_path
+        assert "for key in markers" in fallback
+        assert "append_cached_marker_snapshot_entry(snapshot, markers, key)" in fallback
+        assert "snapshot[key] = markers[key]" not in fallback
+        assert "snapshot[key] = markers[key]" in append_source
+
+        empty = job_state_module.cached_markers_snapshot({})
+        single = job_state_module.cached_markers_snapshot({"one": "1"})
+        pair_source = {"one": "1", "two": "2"}
+        triple_source = {"one": "1", "two": "2", "three": "3"}
+        four_source = {"one": "1", "two": "2", "three": "3", "four": "4"}
+        pair = job_state_module.cached_markers_snapshot(pair_source)
+        triple = job_state_module.cached_markers_snapshot(triple_source)
+        four = job_state_module.cached_markers_snapshot(four_source)
+
+        pair_source["one"] = "tampered"
+        triple_source["three"] = "tampered"
+        four_source["four"] = "tampered"
+
+        assert empty == {}
+        assert single == {"one": "1"}
+        assert pair == {"one": "1", "two": "2"}
+        assert triple == {"one": "1", "two": "2", "three": "3"}
+        assert four == {"one": "1", "two": "2", "three": "3", "four": "4"}
+        assert "marker_count == 4" in helper_source
 
     def test_cache_hit_hydration_preserves_cached_payload(self):
         """Cache hits should not remove cached_at from the cache payload dict."""
@@ -1238,7 +1684,61 @@ class TestCachedMarkersLock:
         status = orchestrator.get_status("job-cache-payload")
         assert isinstance(status["results"][0], EnrichmentResult)
         assert cached_payload["cached_at"] == "2024-01-01T00:00:00"
-        assert "pop" not in inspect.getsource(_cached_enrichment_result)
+        assert "pop" not in inspect.getsource(cache_payloads.cached_enrichment_result)
+
+    def test_orchestrator_delegates_cache_payload_helpers(self):
+        """Cache marker and payload shaping should live outside the orchestrator."""
+        ioc = _make_ioc(IOCType.IPV4, "203.0.113.44")
+        result = _make_result(ioc, provider="CacheProvider")
+        source = inspect.getsource(EnrichmentOrchestrator._do_lookup)
+        attempt_source = inspect.getsource(attempt_execution_module.run_single_attempt)
+
+        assert "_cached_enrichment_result" not in inspect.getsource(EnrichmentOrchestrator)
+        assert not hasattr(EnrichmentOrchestrator, "_single_attempt")
+        assert attempt_execution_module.cached_enrichment_result is (
+            cache_payloads.cached_enrichment_result
+        )
+        assert cache_payloads.cache_marker_key(ioc, "CacheProvider") == (
+            "203.0.113.44|CacheProvider"
+        )
+        assert cache_payloads.cache_payload_for_result(result) == {
+            "provider": "CacheProvider",
+            "verdict": "clean",
+            "detection_count": 0,
+            "total_engines": 10,
+            "scan_date": None,
+            "raw_stats": {},
+        }
+        assert "partial(" in source
+        assert "run_single_attempt," in source
+        assert "cache_marker_key(" not in source
+        assert "cache_payload_for_result(" not in source
+        assert "cache_marker_key(" in attempt_source
+        assert "cache_payload_for_result(" in attempt_source
+
+    def test_orchestrator_delegates_single_attempt_execution(self):
+        """Cache, adapter, and latency attempt flow should live outside orchestrator."""
+        source = inspect.getsource(EnrichmentOrchestrator._do_lookup)
+        attempt_source = inspect.getsource(attempt_execution_module.run_single_attempt)
+        marker_source = inspect.getsource(EnrichmentOrchestrator._record_cached_marker)
+        marker_helper_source = inspect.getsource(job_state_module.record_cached_marker)
+
+        assert "run_single_attempt," in source
+        assert "partial(" in source
+        assert not hasattr(EnrichmentOrchestrator, "_single_attempt")
+        assert "adapter.lookup(" not in source
+        assert "self._cache.get(" not in source
+        assert "self._cache.put(" not in source
+        assert "record_latency(" in attempt_source
+        assert "adapter.lookup(" in attempt_source
+        assert "cache.get(" in attempt_source
+        assert "cache.put(" in attempt_source
+        assert "record_cache=self._record_cache" in source
+        assert not hasattr(EnrichmentOrchestrator, "_record_cache_event")
+        assert "with self._lock:" in marker_source
+        assert "record_cached_marker(" in marker_source
+        assert "self._cached_markers[cache_key]" not in marker_source
+        assert "markers[cache_key] = cached_at" in marker_helper_source
 
 
 class TestJobDiagnostics:
@@ -1246,20 +1746,41 @@ class TestJobDiagnostics:
 
     def test_dispatch_diagnostics_reuses_provider_bucket_without_setdefault(self):
         """Initial dispatch diagnostics should avoid eager default bucket allocation."""
+        class NoIterPairs(list):
+            def __iter__(self):
+                raise AssertionError("short dispatch diagnostics should not iterate pairs")
+
+            def __getitem__(self, index):
+                if isinstance(index, slice):
+                    raise AssertionError("short dispatch diagnostics should not slice pairs")
+                return super().__getitem__(index)
+
         ioc_a = _make_ioc(IOCType.IPV4, "198.51.100.10")
         ioc_b = _make_ioc(IOCType.IPV4, "198.51.100.11")
+        ioc_c = _make_ioc(IOCType.IPV4, "198.51.100.12")
+        ioc_d = _make_ioc(IOCType.IPV4, "198.51.100.13")
         adapter = _make_public_adapter("VirusTotal", supported_types={IOCType.IPV4})
-        orchestrator = _make_orchestrator(adapter)
 
-        diagnostics = orchestrator._build_dispatch_diagnostics([
+        diagnostics = build_dispatch_diagnostics(NoIterPairs([
             (adapter, ioc_a),
             (adapter, ioc_b),
-        ])
+            (adapter, ioc_c),
+            (adapter, ioc_d),
+        ]))
 
-        assert diagnostics["dispatch_count"] == 2
-        assert diagnostics["providers"]["VirusTotal"]["dispatch_count"] == 2
-        assert "setdefault" not in EnrichmentOrchestrator._build_dispatch_diagnostics.__code__.co_names
+        assert diagnostics["dispatch_count"] == 4
+        assert diagnostics["providers"]["VirusTotal"]["dispatch_count"] == 4
+        assert not hasattr(EnrichmentOrchestrator, "_build_dispatch_diagnostics")
+        assert "setdefault" not in build_dispatch_diagnostics.__code__.co_names
         assert "setdefault" not in _provider_diagnostics_bucket.__code__.co_names
+        assert "record_dispatch_pair" in build_dispatch_diagnostics.__code__.co_names
+        source = inspect.getsource(build_dispatch_diagnostics)
+        assert "pair_count == 4" in source
+        assert "for dispatch_pair in dispatch_pairs:" in source
+        assert "record_dispatch_pair(diagnostics, dispatch_pair)" in source
+        assert "for adapter, _ioc in dispatch_pairs:" not in source
+        assert "record_dispatch_pair(diagnostics, (adapter, _ioc))" not in source
+        assert "_provider_diagnostics_bucket" in record_dispatch_pair.__code__.co_names
 
     def test_diagnostics_track_cache_hits_misses_and_unknown_provider_bucket(self):
         """Blank adapter names should fall into a bounded unknown bucket."""
@@ -1317,6 +1838,81 @@ class TestJobDiagnostics:
         assert _normalize_provider_name(NoStripProviderName("  VirusTotal  ")) == "VirusTotal"
         assert _normalize_provider_name(NoStripProviderName(" \n\t ")) == "unknown"
         assert "strip" not in _normalize_provider_name.__code__.co_names
+
+    def test_orchestrator_delegates_diagnostic_update_helpers(self):
+        """Counter mutation mechanics should live outside the orchestrator lock wrapper."""
+        diagnostics = _job_diagnostics_defaults()
+        provider = _provider_diagnostics_bucket(diagnostics["providers"], "VirusTotal")
+
+        apply_cache_update(diagnostics, provider, hit=True)
+        apply_cache_update(diagnostics, provider, hit=False)
+        apply_retry_update(diagnostics, provider, rate_limit=True)
+        apply_latency_update(diagnostics, provider, latency_seconds=1.25)
+        apply_latency_update(diagnostics, provider, latency_seconds=-5.0)
+        apply_error_update(diagnostics, provider)
+
+        record_cache_source = inspect.getsource(EnrichmentOrchestrator._record_cache)
+        record_retry_source = inspect.getsource(EnrichmentOrchestrator._record_retry)
+        record_latency_source = inspect.getsource(EnrichmentOrchestrator._record_latency)
+        record_error_source = inspect.getsource(EnrichmentOrchestrator._record_error)
+        update_source = inspect.getsource(EnrichmentOrchestrator._update_job_diagnostics)
+        helper_source = inspect.getsource(diagnostic_state_module.apply_job_diagnostics_update)
+
+        assert diagnostics["cache_hits"] == 1
+        assert diagnostics["cache_misses"] == 1
+        assert diagnostics["retry_count"] == 1
+        assert diagnostics["rate_limit_retry_count"] == 1
+        assert diagnostics["attempt_count"] == 2
+        assert diagnostics["latency_total_seconds"] == pytest.approx(1.25)
+        assert diagnostics["latency_max_seconds"] == pytest.approx(1.25)
+        assert diagnostics["error_count"] == 1
+        assert provider["cache_hits"] == 1
+        assert provider["cache_misses"] == 1
+        assert provider["retry_count"] == 1
+        assert provider["rate_limit_retry_count"] == 1
+        assert provider["attempt_count"] == 2
+        assert provider["latency_total_seconds"] == pytest.approx(1.25)
+        assert provider["latency_max_seconds"] == pytest.approx(1.25)
+        assert provider["error_count"] == 1
+        assert "apply_cache_update" in record_cache_source
+        assert "apply_retry_update" in record_retry_source
+        assert "apply_latency_update" in record_latency_source
+        assert "apply_error_update" in record_error_source
+        assert "def apply(" not in record_retry_source
+        assert "def apply(" not in record_latency_source
+        assert "def apply(" not in record_error_source
+        assert "lambda" not in record_cache_source
+        assert "apply_job_diagnostics_update(" in update_source
+        assert "update(diagnostics, provider, **update_kwargs)" in helper_source
+
+    def test_orchestrator_delegates_diagnostic_state_repair(self):
+        """Malformed diagnostic-state repair should live outside the orchestrator."""
+        update_source = inspect.getsource(EnrichmentOrchestrator._update_job_diagnostics)
+        helper_source = inspect.getsource(diagnostic_state_module.apply_job_diagnostics_update)
+
+        jobs = {"job-1": {"_diagnostics": {"providers": "bad"}}}
+        calls: list[tuple[int, int]] = []
+
+        def update(diagnostics, provider) -> None:
+            calls.append((len(diagnostics), len(provider)))
+            diagnostics["error_count"] += 1
+            provider["error_count"] += 1
+
+        diagnostic_state_module.apply_job_diagnostics_update(
+            jobs,
+            "job-1",
+            " VirusTotal ",
+            update,
+        )
+
+        diagnostics = jobs["job-1"]["_diagnostics"]
+        assert diagnostics["error_count"] == 1
+        assert diagnostics["providers"]["VirusTotal"]["error_count"] == 1
+        assert calls
+        assert "_coerce_job_diagnostics(" not in update_source
+        assert "_provider_diagnostics_defaults(" not in update_source
+        assert "_coerce_job_diagnostics(" in helper_source
+        assert "_provider_diagnostics_defaults(" in helper_source
 
     def test_diagnostics_track_rate_limit_retry_error_and_latency_aggregates(self):
         """429 retries should increment retry counters without changing retry flow."""
@@ -1406,6 +2002,8 @@ class TestJobDiagnostics:
 
     def test_get_diagnostics_falls_back_to_safe_defaults_for_malformed_state(self, mock_adapter):
         """Malformed internal diagnostics should coerce to bounded safe defaults."""
+        import app.enrichment.diagnostics as diagnostics_module
+
         orchestrator = _make_orchestrator(mock_adapter)
         with orchestrator._lock:
             orchestrator._jobs["job-malformed-diagnostics"] = {
@@ -1455,3 +2053,48 @@ class TestJobDiagnostics:
                 },
             },
         }
+        provider_source = inspect.getsource(diagnostics_module._coerce_provider_diagnostics)
+        job_source = inspect.getsource(diagnostics_module._coerce_job_diagnostics)
+        append_source = inspect.getsource(
+            diagnostics_module.append_provider_diagnostics_snapshot
+        )
+        counter_source = inspect.getsource(diagnostics_module._coerce_diagnostic_counters)
+        float_source = inspect.getsource(diagnostics_module._coerce_diagnostic_floats)
+        merge_source = inspect.getsource(diagnostics_module._merge_provider_diagnostics)
+        assert "for field in _DIAGNOSTIC_COUNTER_FIELDS" not in provider_source
+        assert "for field in _DIAGNOSTIC_COUNTER_FIELDS" not in job_source
+        assert "for field in _DIAGNOSTIC_COUNTER_FIELDS" not in merge_source
+        assert "for field in _DIAGNOSTIC_FLOAT_FIELDS" not in provider_source
+        assert "for field in _DIAGNOSTIC_FLOAT_FIELDS" not in job_source
+        assert "append_provider_diagnostics_snapshot(" in job_source
+        assert "provider_name not in providers" not in job_source
+        assert "_merge_provider_diagnostics(existing, provider_snapshot)" in append_source
+        assert '_coerce_diagnostic_counter(diagnostics, data, "dispatch_count")' in counter_source
+        assert '_coerce_diagnostic_counter(diagnostics, data, "error_count")' in counter_source
+        assert '_coerce_diagnostic_float(diagnostics, data, "latency_total_seconds")' in float_source
+        assert '_coerce_diagnostic_float(diagnostics, data, "latency_max_seconds")' in float_source
+        assert 'target["dispatch_count"] += int(source["dispatch_count"])' in merge_source
+        assert 'target["error_count"] += int(source["error_count"])' in merge_source
+
+    def test_provider_diagnostics_snapshot_append_merges_duplicate_names(self):
+        """Provider repair should isolate insert-or-merge mechanics in one helper."""
+        import app.enrichment.diagnostics as diagnostics_module
+
+        providers: dict[str, dict[str, int | float]] = {}
+        first = _job_diagnostics_defaults()["providers"]
+        first_provider = _provider_diagnostics_bucket(first, "VirusTotal")
+        first_provider["dispatch_count"] = 1
+        first_provider["latency_max_seconds"] = 0.25
+        second = _job_diagnostics_defaults()["providers"]
+        second_provider = _provider_diagnostics_bucket(second, "VirusTotal")
+        second_provider["dispatch_count"] = 2
+        second_provider["latency_max_seconds"] = 0.75
+
+        append_provider_diagnostics_snapshot(providers, "VirusTotal", first_provider)
+        append_provider_diagnostics_snapshot(providers, "VirusTotal", second_provider)
+
+        assert providers["VirusTotal"]["dispatch_count"] == 3
+        assert providers["VirusTotal"]["latency_max_seconds"] == pytest.approx(0.75)
+        assert "append_provider_diagnostics_snapshot" in inspect.getsource(
+            diagnostics_module._coerce_job_diagnostics
+        )

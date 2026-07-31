@@ -4,10 +4,26 @@ Tests the full pipeline: extract -> normalize -> classify -> deduplicate.
 Verifies that run_pipeline() returns correctly typed, deduplicated IOC objects.
 """
 
+import inspect
 from pathlib import Path
 
+from app.pipeline import extractor
 from app.pipeline.extractor import _consume_extraction_source, run_pipeline
 from app.pipeline.models import IOC, IOCType, append_ioc_by_type, group_by_type
+
+
+def test_pipeline_modules_use_relative_sibling_imports() -> None:
+    """Pipeline internals should not import siblings through the package facade."""
+    package_imports: list[str] = []
+
+    for path in sorted(Path("app/pipeline").glob("*.py")):
+        if path.name == "__init__.py":
+            continue
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if line.startswith("from app.pipeline") or line.startswith("import app.pipeline"):
+                package_imports.append(f"{path}:{line}")
+
+    assert package_imports == []
 
 
 class TestRunPipelineDeduplication:
@@ -113,7 +129,9 @@ class TestExtractionSourceConsumption:
         source = Path("app/pipeline/extractor.py").read_text(encoding="utf-8")
         assert added == [("http://evil.example", "url")]
         assert source.count("_consume_extraction_source(") == 5
-        assert source.count("Unexpected error in %s extraction") == 1
+        assert source.count("_handle_extraction_error(") == 3
+        assert source.count("logger.warning(") == 1
+        assert "except _EXPECTED_EXTRACTION_ERRORS" not in source
 
 
 class TestRunPipelineTypes:
@@ -187,6 +205,24 @@ class TestRunPipelineTypes:
             IOC(type=IOCType.DOMAIN, value="shared.example", raw_match="first.example")
         ]
 
+    def test_pipeline_dedup_rules_are_shared_helpers(self):
+        """Fast and long paths should share candidate classification and identity rules."""
+        run_source = inspect.getsource(extractor.run_pipeline)
+
+        assert "_classify_candidate_raw" in run_source
+        assert "_ioc_identity" in run_source
+        assert "_append_unique_ioc_result" in run_source
+        assert "_candidate_raw" in run_source
+        assert run_source.count('["raw"]') == 0
+        assert "first_ioc.type == second_ioc.type" not in run_source
+        assert "first_ioc.value == second_ioc.value" not in run_source
+        assert "results.append(ioc)" not in run_source
+        assert "normalize(raw)" in inspect.getsource(extractor._classify_candidate_raw)
+        assert "candidate[\"raw\"]" in inspect.getsource(extractor._candidate_raw)
+        append_source = inspect.getsource(extractor._append_unique_ioc_result)
+        assert "_ioc_identity(ioc)" in append_source
+        assert "results.append(ioc)" in append_source
+
     def test_ipv4_classified(self):
         text = "Suspicious IP 10.0.0.1 observed in traffic"
         results = run_pipeline(text)
@@ -246,7 +282,7 @@ class TestRunPipelineReturnType:
 class TestGroupByType:
     """Tests for template grouping helper."""
 
-    def test_group_by_type_skips_iteration_for_empty_single_pair_or_three_ioc_lists(self):
+    def test_group_by_type_skips_iteration_for_up_to_four_ioc_lists(self):
         class NoIterList(list):
             def __iter__(self):
                 raise AssertionError("short IOC grouping should not iterate")
@@ -259,6 +295,7 @@ class TestGroupByType:
         ioc = IOC(type=IOCType.IPV4, value="1.1.1.1", raw_match="1.1.1.1")
         second_ipv4 = IOC(type=IOCType.IPV4, value="8.8.8.8", raw_match="8.8.8.8")
         third_ipv4 = IOC(type=IOCType.IPV4, value="9.9.9.9", raw_match="9.9.9.9")
+        fourth_ipv4 = IOC(type=IOCType.IPV4, value="4.4.4.4", raw_match="4.4.4.4")
         domain = IOC(type=IOCType.DOMAIN, value="example.com", raw_match="example.com")
 
         assert group_by_type(NoIterList()) == {}
@@ -277,7 +314,17 @@ class TestGroupByType:
             IOCType.IPV4: [ioc, second_ipv4],
             IOCType.DOMAIN: [domain],
         }
+        assert group_by_type(NoIterList([ioc, second_ipv4, third_ipv4, fourth_ipv4])) == {
+            IOCType.IPV4: [ioc, second_ipv4, third_ipv4, fourth_ipv4]
+        }
+        assert group_by_type(NoIterList([ioc, domain, second_ipv4, fourth_ipv4])) == {
+            IOCType.IPV4: [ioc, second_ipv4, fourth_ipv4],
+            IOCType.DOMAIN: [domain],
+        }
         assert "len" in group_by_type.__code__.co_names
+        assert "first.type == second.type == third.type == fourth.type" in Path("app/pipeline/models.py").read_text(
+            encoding="utf-8"
+        )
 
     def test_append_ioc_by_type_preserves_order_without_setdefault_empty_list_work(self):
         iocs = [

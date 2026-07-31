@@ -5,11 +5,12 @@ Verifies read/write behavior and directory creation.
 """
 from __future__ import annotations
 
+import inspect
 from pathlib import Path
 from unittest.mock import patch
 
-
-from app.enrichment.config_store import ConfigStore, _configured_value
+import app.enrichment.config_values as config_values
+from app.enrichment.config_store import ConfigStore
 
 
 class TestConfigStoreGetKey:
@@ -81,6 +82,97 @@ class TestConfigStoreSetAndGet:
 
         read.assert_not_called()
 
+    def test_save_uses_atomic_replace_with_owner_only_permissions(self, tmp_path: Path) -> None:
+        """Writes should replace the destination atomically without leaving temp files."""
+        import app.enrichment.config_files as config_files
+
+        config_path = tmp_path / "config.ini"
+        store = ConfigStore(config_path=config_path)
+        replace_calls: list[tuple[Path, Path]] = []
+        original_replace = config_files.os.replace
+
+        def record_replace(source, destination) -> None:
+            replace_calls.append((Path(source), Path(destination)))
+            original_replace(source, destination)
+
+        with patch("app.enrichment.config_files.os.replace", record_replace):
+            store.set_vt_api_key("atomic-key")
+
+        assert store.get_vt_api_key() == "atomic-key"
+        assert replace_calls
+        assert replace_calls[-1][1] == config_path
+        assert not list(tmp_path.glob(".config.ini.*.tmp"))
+        assert config_path.stat().st_mode & 0o777 == 0o600
+
+    def test_failed_atomic_replace_preserves_disk_and_cache(self, tmp_path: Path) -> None:
+        """A failed replace should leave the last saved config visible."""
+        config_path = tmp_path / "config.ini"
+        store = ConfigStore(config_path=config_path)
+        store.set_vt_api_key("original-key")
+
+        with patch(
+            "app.enrichment.config_files.os.replace",
+            side_effect=OSError("synthetic replace failure"),
+        ):
+            try:
+                store.set_provider_key("greynoise", "new-key")
+            except OSError:
+                pass
+            else:  # pragma: no cover - defensive assertion branch
+                raise AssertionError("expected synthetic replace failure")
+
+        assert store.get_vt_api_key() == "original-key"
+        assert store.get_provider_key("greynoise") is None
+        assert ConfigStore(config_path=config_path).get_provider_key("greynoise") is None
+        assert not list(tmp_path.glob(".config.ini.*.tmp"))
+
+    def test_config_store_delegates_file_mechanics_to_config_files(self) -> None:
+        """ConfigStore should keep low-level lock/copy/write mechanics out of the domain class."""
+        import inspect
+
+        save_source = inspect.getsource(ConfigStore._save_config)
+        set_source = inspect.getsource(ConfigStore._set_value)
+
+        assert "config_files.config_lock_for_path(" in inspect.getsource(ConfigStore.__init__)
+        assert "write_config_atomic(" in save_source
+        assert "mkstemp" not in save_source
+        assert "config_files.copy_config(" in set_source
+
+    def test_config_copy_accumulates_sections_without_constructor_copies(self) -> None:
+        """Config copies should avoid dict-comprehension and dict(section) copies."""
+        import configparser
+        import inspect
+
+        import app.enrichment.config_files as config_files
+
+        cfg = configparser.ConfigParser()
+        cfg["virustotal"] = {"api_key": "vt-key"}
+        cfg["providers"] = {"greynoise": "grey-key"}
+
+        copied = config_files.copy_config(cfg)
+        copied["providers"]["greynoise"] = "changed"
+        source = inspect.getsource(config_files.copy_config)
+
+        assert cfg["providers"]["greynoise"] == "grey-key"
+        assert copied["providers"]["greynoise"] == "changed"
+        assert "read_dict" not in source
+        assert "dict(" not in source
+        assert "append_config_section(copied, cfg, section)" in source
+        assert "copied.add_section(section)" not in source
+        assert "copied.add_section(section)" in inspect.getsource(
+            config_files.append_config_section
+        )
+        assert "append_config_option" not in config_files.copy_config.__code__.co_names
+        assert "append_config_option" in config_files.append_config_section.__code__.co_names
+        assert "copied.set(section, option, source_section[option])" not in source
+        assert "copied.set(section, option, source_section[option])" in inspect.getsource(
+            config_files.append_config_option
+        )
+        assert all(
+            getattr(const, "co_name", None) != "<dictcomp>"
+            for const in config_files.copy_config.__code__.co_consts
+        )
+
     def test_getters_share_cached_value_helper(self, tmp_path: Path, monkeypatch) -> None:
         """Config getters should route through one cached value-read helper."""
         store = ConfigStore(config_path=tmp_path / "config.ini")
@@ -115,10 +207,28 @@ class TestConfigStoreSetAndGet:
         """API-key getters should share one empty-string normalization helper."""
         source = Path("app/enrichment/config_store.py").read_text(encoding="utf-8")
 
-        assert _configured_value("") is None
-        assert _configured_value(None) is None
-        assert _configured_value("key") == "key"
-        assert source.count("_configured_value(") == 3
+        assert config_values.configured_value("") is None
+        assert config_values.configured_value(None) is None
+        assert config_values.configured_value("key") == "key"
+        assert "_configured_value" not in source
+        assert source.count("config_values.configured_value(") == 2
+
+    def test_config_store_delegates_value_helpers(self) -> None:
+        """Config value normalization should live outside the persistence facade."""
+        import inspect
+
+        ttl_source = inspect.getsource(ConfigStore.get_cache_ttl)
+        provider_keys_source = inspect.getsource(ConfigStore.all_provider_keys)
+        provider_keys_helper_source = inspect.getsource(config_values.provider_keys_from_config)
+
+        assert config_values.cache_ttl_hours("7", default=24) == 7
+        assert config_values.cache_ttl_hours("bad", default=24) == 24
+        assert "pass" not in inspect.getsource(config_values.cache_ttl_hours)
+        assert "cache_ttl_hours(" in ttl_source
+        assert "int(" not in ttl_source
+        assert "provider_keys_from_config(" in provider_keys_source
+        assert "for name in section" not in provider_keys_source
+        assert "for name in section" in provider_keys_helper_source
 
 
 class TestConfigStoreMultiProvider:
@@ -140,6 +250,16 @@ class TestConfigStoreMultiProvider:
         store.set_provider_key("greynoise", "key123")
         assert store.get_provider_key("greynoise") == "key123"
 
+    def test_provider_keys_with_percent_signs_roundtrip_literally(self, tmp_path: Path) -> None:
+        config_path = tmp_path / "config.ini"
+        key = "prefix%literal%(not-interpolation)s"
+
+        ConfigStore(config_path=config_path).set_provider_key("greynoise", key)
+
+        reopened = ConfigStore(config_path=config_path)
+        assert reopened.get_provider_key("greynoise") == key
+        assert reopened.all_provider_keys() == {"greynoise": key}
+
     def test_set_provider_key_overwrites_existing(self, tmp_path: Path) -> None:
         """Calling set_provider_key twice uses the latest value."""
         store = ConfigStore(config_path=tmp_path / "config.ini")
@@ -160,15 +280,13 @@ class TestConfigStoreMultiProvider:
         self, tmp_path: Path, monkeypatch
     ) -> None:
         """Provider get/set should use one normalization helper for option names."""
-        import app.enrichment.config_store as config_store
-
         calls: list[str] = []
 
         def normalize(name: str) -> str:
             calls.append(name)
             return name.lower()
 
-        monkeypatch.setattr(config_store, "_provider_option_name", normalize)
+        monkeypatch.setattr(config_values, "provider_option_name", normalize)
 
         store = ConfigStore(config_path=tmp_path / "config.ini")
         store.set_provider_key("GreyNoise", "key-xyz")
@@ -220,15 +338,20 @@ class TestConfigStoreMultiProvider:
         """all_provider_keys should not rely on constructor-style section copying."""
 
         class ProviderSection:
-            def __init__(self) -> None:
+            def __init__(self, values: dict[str, str]) -> None:
                 self.reads = 0
-                self._values = {
-                    "greynoise": "gn-key",
-                    "abuseipdb": "ab-key",
-                }
+                self.iterations = 0
+                self._values = values
+
+            def __len__(self) -> int:
+                return len(self._values)
 
             def __iter__(self):
-                return iter(self._values)
+                for key in self._values:
+                    self.iterations += 1
+                    if self.iterations > len(self._values):
+                        raise AssertionError("provider key copy should stop at section length")
+                    yield key
 
             def __getitem__(self, key: str) -> str:
                 self.reads += 1
@@ -238,8 +361,8 @@ class TestConfigStoreMultiProvider:
                 raise AssertionError("all_provider_keys should not copy the section via dict()")
 
         class FakeConfig:
-            def __init__(self) -> None:
-                self.section = ProviderSection()
+            def __init__(self, values: dict[str, str]) -> None:
+                self.section = ProviderSection(values)
 
             def __contains__(self, section: str) -> bool:
                 return section == "providers"
@@ -249,15 +372,47 @@ class TestConfigStoreMultiProvider:
                     raise KeyError(section)
                 return self.section
 
-        fake_config = FakeConfig()
+        fake_config = FakeConfig({
+            "greynoise": "gn-key",
+            "abuseipdb": "ab-key",
+            "emailrep": "email-key",
+            "urlhaus": "urlhaus-key",
+        })
         store = ConfigStore(config_path=tmp_path / "config.ini")
         store._cached_cfg = fake_config  # type: ignore[assignment]
 
         assert store.all_provider_keys() == {
             "greynoise": "gn-key",
             "abuseipdb": "ab-key",
+            "emailrep": "email-key",
+            "urlhaus": "urlhaus-key",
         }
-        assert fake_config.section.reads == 2
+        assert fake_config.section.reads == 4
+        assert fake_config.section.iterations == 4
+        assert "len" in config_values.provider_keys_from_config.__code__.co_names
+        assert "key_count == 4" in inspect.getsource(config_values.provider_keys_from_config)
+
+    def test_provider_key_fallback_delegates_append_mutation(self) -> None:
+        """Long provider-key copies should delegate the per-key mutation."""
+
+        section = {
+            "greynoise": "gn-key",
+            "abuseipdb": "ab-key",
+            "emailrep": "email-key",
+            "urlhaus": "urlhaus-key",
+            "otx": "otx-key",
+        }
+        provider_keys_source = inspect.getsource(config_values.provider_keys_from_config)
+        fallback_source = provider_keys_source.split("keys: dict[str, str] = {}")[1]
+        append_source = inspect.getsource(config_values.append_provider_key)
+
+        assert config_values.provider_keys_from_config(
+            {"providers": section},
+            providers_section="providers",
+        ) == section
+        assert "append_provider_key(keys, section, name)" in fallback_source
+        assert "keys[name] = section[name]" not in fallback_source
+        assert "keys[name] = section[name]" in append_source
 
 
 class TestSshSection:

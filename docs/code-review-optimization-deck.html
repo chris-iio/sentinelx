@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SentinelX Code Review + Optimization Deck</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg:#07111f; --panel:#101b2e; --panel2:#13223a; --ink:#eef6ff; --muted:#9fb1c8;
+      --cyan:#5ee7ff; --green:#72f1b8; --amber:#ffd166; --red:#ff6b6b; --line:#263a57;
+    }
+    *{box-sizing:border-box}
+    html{scroll-behavior:smooth}
+    body{margin:0;background:radial-gradient(circle at 15% 8%,#16406e,transparent 30%),radial-gradient(circle at 90% 20%,#1e1b4b,transparent 28%),var(--bg);color:var(--ink);font:18px/1.45 Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif}
+    main{scroll-snap-type:y mandatory;height:100vh;overflow-y:auto}
+    section{min-height:100vh;scroll-snap-align:start;padding:7vh 8vw;display:flex;flex-direction:column;justify-content:center;border-bottom:1px solid #22324d}
+    h1{font-size:clamp(44px,7vw,92px);line-height:.95;margin:0 0 24px;letter-spacing:-.05em}
+    h2{font-size:clamp(34px,5vw,62px);line-height:1;margin:0 0 22px;letter-spacing:-.04em}
+    h3{color:var(--cyan);margin:.25rem 0 .55rem}
+    p{max-width:980px}.kicker{color:var(--green);text-transform:uppercase;letter-spacing:.16em;font-weight:900;font-size:.85rem}.muted,.small{color:var(--muted)}.small{font-size:14px}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:18px}.two{grid-template-columns:repeat(auto-fit,minmax(360px,1fr))}
+    .card{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid #29405f;border-radius:22px;padding:24px;box-shadow:0 20px 60px #0006}
+    .metric{font-size:48px;font-weight:950;color:var(--cyan);letter-spacing:-.05em}.good{color:var(--green)}.warn{color:var(--amber)}.bad{color:var(--red)}
+    table{width:100%;border-collapse:collapse;background:#0d1728;border-radius:16px;overflow:hidden}th,td{padding:12px 14px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}th{color:var(--green);font-size:.82rem;text-transform:uppercase;letter-spacing:.08em}tr:last-child td{border-bottom:0}
+    code{background:#162640;padding:2px 6px;border-radius:7px;color:#bfdbfe}.tag{display:inline-block;border:1px solid #446184;border-radius:99px;padding:4px 10px;margin:3px;color:#d8e9ff;background:#0e1a2d}
+    pre{background:#07101e;border:1px solid var(--line);border-radius:16px;padding:16px;overflow:auto;color:#dbeafe;font-size:15px}.index a{display:block;color:var(--ink);text-decoration:none;padding:10px 12px;border:1px solid var(--line);border-radius:12px;margin:8px 0;background:#0d1728}.index a:hover{border-color:var(--cyan)}
+    .footer{position:fixed;right:18px;bottom:12px;color:#71849f;font-size:12px}.num{color:var(--cyan);font-weight:900;margin-right:.5rem}
+    @media(max-width:760px){section{padding:5vh 5vw}.two{grid-template-columns:1fr}.metric{font-size:38px}}
+  </style>
+</head>
+<body>
+<main>
+  <section id="cover">
+    <div class="kicker">SentinelX</div>
+    <h1>Code Review + Optimization Deck</h1>
+    <p>Review of the current codebase, verification posture, simplifier pass, optimization seams, and recommended next actions.</p>
+    <p class="small">Generated 2026-05-16 · Source: <code>docs/code-review-optimization-deck.html</code></p>
+  </section>
+
+  <section id="index">
+    <h2>Index</h2>
+    <div class="grid index">
+      <div>
+        <a href="#summary"><span class="num">01</span>Executive summary</a>
+        <a href="#shape"><span class="num">02</span>Codebase shape</a>
+        <a href="#architecture"><span class="num">03</span>Architecture review</a>
+        <a href="#security"><span class="num">04</span>Security review</a>
+      </div>
+      <div>
+        <a href="#verification"><span class="num">05</span>Verification evidence</a>
+        <a href="#simplifier"><span class="num">06</span>Simplifier pass</a>
+        <a href="#optimization"><span class="num">07</span>Optimization review</a>
+        <a href="#risks"><span class="num">08</span>Risks and cleanup</a>
+      </div>
+      <div>
+        <a href="#recommendations"><span class="num">09</span>Recommendations</a>
+        <a href="#appendix"><span class="num">10</span>Appendix: changed files</a>
+      </div>
+    </div>
+  </section>
+
+  <section id="summary">
+    <h2>01 · Executive summary</h2>
+    <div class="grid">
+      <div class="card"><div class="metric good">Healthy</div><h3>Overall codebase</h3><p>Clear seams, strong tests, and mature local-tool guardrails. Most issues are cleanup/hardening, not redesign blockers.</p></div>
+      <div class="card"><div class="metric good">Green</div><h3>Regression lane</h3><p>Non-E2E Python tests pass after optimization changes: <code>1568 passed, 126 deselected</code>.</p></div>
+      <div class="card"><div class="metric good">Clean</div><h3>Simplifier lint</h3><p>Ruff SIM now reports <code>All checks passed!</code> for <code>app</code> and <code>tools</code>.</p></div>
+    </div>
+  </section>
+
+  <section id="shape">
+    <h2>02 · Codebase shape</h2>
+    <div class="grid">
+      <div class="card"><div class="metric">59</div><p>Python files in <code>app/</code>, about <strong>9.3k LOC</strong>.</p></div>
+      <div class="card"><div class="metric">82</div><p>Python test files, about <strong>31.5k LOC</strong>.</p></div>
+      <div class="card"><div class="metric">35</div><p>TypeScript source/test files, about <strong>8.8k LOC</strong>.</p></div>
+      <div class="card"><div class="metric">5</div><p>Checked-in Python tools, about <strong>6.7k LOC</strong>.</p></div>
+    </div>
+  </section>
+
+  <section id="architecture">
+    <h2>03 · Architecture review</h2>
+    <div class="grid two">
+      <div class="card"><h3>Strong module seams</h3><ul><li><code>app/pipeline/</code>: offline extraction, normalization, classification.</li><li><code>app/enrichment/</code>: adapters, registry, orchestration, cache/history.</li><li><code>app/routes/</code>: HTML and JSON route surfaces.</li><li><code>app/diagnostics/</code>: export assembly, policy, redaction.</li></ul></div>
+      <div class="card"><h3>Good local-app assumptions</h3><ul><li>SQLite stores are appropriate for single-user/local workflows.</li><li>In-memory limiter is acceptable for local mode.</li><li>Provider fanout has explicit admission limits.</li><li>Runtime state has dedicated boundary/repair tooling.</li></ul></div>
+    </div>
+  </section>
+
+  <section id="security">
+    <h2>04 · Security review</h2>
+    <table>
+      <tr><th>Area</th><th>Current posture</th><th>Assessment</th></tr>
+      <tr><td>Browser/app headers</td><td>CSP, content-type nosniff, frame options, referrer policy, permissions policy.</td><td class="good">Strong baseline</td></tr>
+      <tr><td>Input controls</td><td>Trusted hosts, 5 MB max content length, CSRF for HTML forms.</td><td class="good">Appropriate</td></tr>
+      <tr><td>API routes</td><td>Stateless JSON, CSRF-exempt by design, rate-limited.</td><td class="good">Reasonable for local tool</td></tr>
+      <tr><td>Outbound HTTP</td><td>Central <code>safe_request()</code> applies host allowlist, timeout, no redirects, streaming, 1 MB cap.</td><td class="good">Well designed</td></tr>
+      <tr><td>Config validation</td><td>Startup validation now checks effective admission limits, host lists, and SameSite policy after app overrides.</td><td class="good">Tightened</td></tr>
+    </table>
+  </section>
+
+  <section id="verification">
+    <h2>05 · Verification evidence</h2>
+    <div class="card">
+      <pre><code>make verify
+Backend non-E2E: 1568 passed, 126 deselected
+Vitest: 17 files passed, 194 tests passed
+TypeScript: npx tsc --noEmit passed
+Build: Tailwind + esbuild completed
+E2E: 126 passed
+
+After simplifier changes:
+.venv/bin/ruff check app tools --select SIM --output-format=concise
+All checks passed!
+
+python3 -m pytest -q -m 'not e2e'
+1568 passed, 126 deselected</code></pre>
+      <p class="small">Note: Tailwind emitted a non-blocking Browserslist/caniuse-lite update warning during full verification.</p>
+    </div>
+  </section>
+
+  <section id="simplifier">
+    <h2>06 · Simplifier pass</h2>
+    <div class="grid">
+      <div class="card"><div class="metric">8</div><h3>Applied simplifications</h3><p>Loop-to-predicate helpers, <code>contextlib.suppress</code>, direct return simplification, and a bytes/string ternary cleanup.</p></div>
+      <div class="card"><div class="metric warn">3</div><h3>Suppressed suggestions</h3><p>Kept direct scans where tests explicitly prevent generator allocation or patched builtins. Added targeted <code># noqa: SIM110</code>.</p></div>
+      <div class="card"><div class="metric">7</div><h3>Files touched</h3><p>Small, targeted changes only; no product behavior changes intended.</p></div>
+    </div>
+  </section>
+
+  <section id="optimization">
+    <h2>07 · Optimization review</h2>
+    <table>
+      <tr><th>Seam</th><th>What looks good</th><th>Optimization stance</th></tr>
+      <tr><td>Pipeline</td><td>Pure functions, no network calls, dedupe and normalization isolated.</td><td>Mostly leave alone; simplify only with benchmarks/tests.</td></tr>
+      <tr><td>Enrichment runtime</td><td>Provider semaphores, retries, cache integration, bounded job diagnostics.</td><td>Do not rewrite speculatively; complexity reflects quota/failure semantics.</td></tr>
+      <tr><td>HTTP safety</td><td>Single canonical request path with SSRF and response-size controls.</td><td>Preserve centralization; adapter changes should use this path.</td></tr>
+      <tr><td>Persistence</td><td>SQLite WAL, busy timeout, persistent stores.</td><td>Appropriate for local use; measure before batching/queue redesign.</td></tr>
+      <tr><td>Frontend</td><td>Vitest coverage across modules and result rendering.</td><td>Use existing <code>make verify-fast</code> and E2E lane for UI-impacting changes.</td></tr>
+    </table>
+  </section>
+
+  <section id="risks">
+    <h2>08 · Risks and cleanup</h2>
+    <div class="grid two">
+      <div class="card"><h3 class="warn">Generated files</h3><p><code>__pycache__</code> directories exist in app/tests/tools. Keep ignored and remove from release artifacts.</p></div>
+      <div class="card"><h3 class="good">Config validation tightened</h3><p>Effective app config is validated after overrides, including admission limits, trusted hosts, allowed API hosts, and SameSite value.</p></div>
+      <div class="card"><h3 class="good">Supply-chain convenience targets hardened</h3><p>Tailwind/esbuild installer targets now verify downloaded binaries against pinned SHA-256 checksums.</p></div>
+      <div class="card"><h3 class="warn">Broad exception handlers</h3><p>Many are intentional bounded-failure paths. Continue annotating broad catches so reviewers can distinguish safety policy from accidental swallowing.</p></div>
+    </div>
+  </section>
+
+  <section id="recommendations">
+    <h2>09 · Recommendations</h2>
+    <ol>
+      <li><strong>Keep the architecture.</strong> The current seams are clear and testable.</li>
+      <li><strong>Keep config validation tight.</strong> Continue validating effective app config after overrides.</li>
+      <li><strong>Clean generated artifacts before release.</strong> Exclude caches, local state, secret-bearing files, and dependency directories.</li>
+      <li><strong>Maintain checksum-pinned binary downloads.</strong> Update hashes only with intentional tool upgrades.</li>
+      <li><strong>Preserve verification lanes.</strong> Use <code>make verify-fast</code> for routine changes and <code>make verify-deep</code> for browser/enrichment flow changes.</li>
+    </ol>
+  </section>
+
+  <section id="appendix">
+    <h2>10 · Appendix: changed files</h2>
+    <table>
+      <tr><th>File</th><th>Change</th></tr>
+      <tr><td><code>app/health_contract.py</code></td><td>Key checks simplified to <code>all()</code>.</td></tr>
+      <tr><td><code>app/sqlite.py</code></td><td>PRAGMA suppression uses <code>contextlib.suppress</code>.</td></tr>
+      <tr><td><code>app/text_utils.py</code></td><td>Non-whitespace helper uses <code>any()</code>.</td></tr>
+      <tr><td><code>tools/dev_server.py</code></td><td>Best-effort cleanup suppression uses <code>contextlib.suppress</code>.</td></tr>
+      <tr><td><code>tools/runtime_state_boundary.py</code></td><td>Ternary decode simplification; direct pattern scan retained with <code>noqa</code>.</td></tr>
+      <tr><td><code>tools/security_check.py</code></td><td>Skip return simplified; direct test-indicator scan retained with <code>noqa</code>.</td></tr>
+      <tr><td><code>app/pipeline/classifier.py</code></td><td>Direct IP-literal scan retained with <code>noqa</code> due allocation guard test.</td></tr>
+    </table>
+    <p><span class="tag">Ruff SIM clean</span><span class="tag">Non-E2E green</span><span class="tag">Targeted refactor</span><span class="tag">No intended behavior change</span></p>
+  </section>
+</main>
+<div class="footer">Use ↑/↓ or scroll · Index links are clickable</div>
+</body>
+</html>

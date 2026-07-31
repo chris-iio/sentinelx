@@ -13,7 +13,7 @@ from whois.exceptions import (
     WhoisQuotaExceededError,
 )
 
-from app.enrichment.models import EnrichmentError, EnrichmentResult, error_result, no_data_result
+from ..models import EnrichmentError, EnrichmentResult, error_result, no_data_result
 from app.pipeline.models import IOC, IOCType
 
 logger = logging.getLogger(__name__)
@@ -48,10 +48,16 @@ def _normalise_name_servers(value: object) -> list[str]:
             return [value[0], value[1]]
         if value_count == 3:
             return [value[0], value[1], value[2]]
+        if value_count == 4:
+            return [value[0], value[1], value[2], value[3]]
     name_servers: list[str] = []
     for item in value:
-        name_servers.append(item)
+        _append_name_server(name_servers, item)
     return name_servers
+
+
+def _append_name_server(name_servers: list[str], item: str) -> None:
+    name_servers.append(item)
 
 
 def _empty_whois_raw_stats(lookup_errors: list[str] | None = None) -> dict:
@@ -65,6 +71,64 @@ def _empty_whois_raw_stats(lookup_errors: list[str] | None = None) -> dict:
     }
 
 
+def _safe_whois_field(
+    whois_response: object,
+    field_name: str,
+    lookup_errors: list[str],
+    *,
+    normalizer=None,
+    default=None,
+):
+    """Read one WHOIS field, recording parse errors without failing the lookup."""
+    try:
+        value = getattr(whois_response, field_name)
+        if normalizer is not None:
+            return normalizer(value)
+        return value
+    except Exception:
+        _append_lookup_parse_error(lookup_errors, field_name)
+        return default
+
+
+def _append_lookup_parse_error(lookup_errors: list[str], field_name: str) -> None:
+    lookup_errors.append(f"{field_name}: parse error")
+
+
+def _whois_raw_stats(whois_response: object) -> dict:
+    """Extract the stable successful WHOIS raw_stats envelope."""
+    lookup_errors: list[str] = []
+    registrar = _safe_whois_field(whois_response, "registrar", lookup_errors)
+    creation_date = _safe_whois_field(
+        whois_response,
+        "creation_date",
+        lookup_errors,
+        normalizer=_normalise_datetime,
+    )
+    expiration_date = _safe_whois_field(
+        whois_response,
+        "expiration_date",
+        lookup_errors,
+        normalizer=_normalise_datetime,
+    )
+    name_servers = _safe_whois_field(
+        whois_response,
+        "name_servers",
+        lookup_errors,
+        normalizer=_normalise_name_servers,
+        default=[],
+    )
+    org = _safe_whois_field(whois_response, "org", lookup_errors)
+
+    return {
+        "registrar": registrar,
+        "creation_date": creation_date,
+        "expiration_date": expiration_date,
+        "name_servers": name_servers,
+        "org": org,
+        "lookup_errors": lookup_errors,
+    }
+
+
 class WhoisAdapter:
     """WHOIS domain registration data — port 43, not HTTP.
 
@@ -74,11 +138,6 @@ class WhoisAdapter:
     name = "WHOIS"
     supported_types: frozenset[IOCType] = frozenset((IOCType.DOMAIN,))
     requires_api_key = False
-
-    def __init__(self, allowed_hosts: list[str]) -> None:
-        # Accepted for API compatibility with Provider protocol; intentionally unused.
-        # WHOIS uses port 43 directly — no HTTP, no SSRF surface.
-        pass
 
     def is_configured(self) -> bool:
         return True
@@ -114,53 +173,10 @@ class WhoisAdapter:
             )
             return error_result(ioc, self.name, "Unexpected WHOIS lookup error")
 
-        lookup_errors: list[str] = []
-
-        # Extract and normalise fields, handling parse/TLD errors gracefully.
-        try:
-            registrar = w.registrar
-        except Exception:
-            registrar = None
-            lookup_errors.append("registrar: parse error")
-
-        try:
-            creation_date = _normalise_datetime(w.creation_date)
-        except Exception:
-            creation_date = None
-            lookup_errors.append("creation_date: parse error")
-
-        try:
-            expiration_date = _normalise_datetime(w.expiration_date)
-        except Exception:
-            expiration_date = None
-            lookup_errors.append("expiration_date: parse error")
-
-        try:
-            raw_ns = w.name_servers
-            name_servers = _normalise_name_servers(raw_ns)
-        except Exception:
-            name_servers = []
-            lookup_errors.append("name_servers: parse error")
-
-        try:
-            org = w.org
-        except Exception:
-            org = None
-            lookup_errors.append("org: parse error")
-
-        raw_stats: dict = {
-            "registrar": registrar,
-            "creation_date": creation_date,
-            "expiration_date": expiration_date,
-            "name_servers": name_servers,
-            "org": org,
-            "lookup_errors": lookup_errors,
-        }
-
         return _whois_result(
             ioc=ioc,
             provider=self.name,
-            raw_stats=raw_stats,
+            raw_stats=_whois_raw_stats(w),
         )
 
 

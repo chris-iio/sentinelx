@@ -27,22 +27,20 @@ export interface VerdictEntry {
 /**
  * Compute the worst (highest severity) verdict from a list of VerdictEntry records.
  *
- * known_good from any provider overrides all other verdicts at summary level.
- * This is an intentional design decision: known_good (e.g. NSRL match) means
- * the IOC is a recognized safe artifact regardless of other signals.
- *
- * Source: main.js computeWorstVerdict() (lines 542-551).
+ * Precedence is malicious > suspicious > known_good > clean > no_data > error.
+ * A known-good signal wins over benign or absent data, but it cannot erase a
+ * suspicious or malicious signal from another provider.
  */
 export function computeWorstVerdict(entries: VerdictEntry[]): VerdictKey {
-  let worst: VerdictKey = "no_data";
+  if (entries.length === 0) return "no_data";
+
+  let worst: VerdictKey = "error";
   for (let i = 0; i < entries.length; i++) {
     const entry = entries[i];
     if (!entry) continue;
-    if (entry.verdict === "known_good") {
-      return "known_good";
-    }
     if (verdictSeverityIndex(entry.verdict) > verdictSeverityIndex(worst)) {
       worst = entry.verdict;
+      if (worst === "malicious") return worst;
     }
   }
   return worst;

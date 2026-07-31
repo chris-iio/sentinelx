@@ -83,10 +83,12 @@ class TestPutAndGet:
 
     def test_empty_payload_uses_shared_json_literal_constant(self) -> None:
         """Empty cache payload paths should share one literal constant."""
+        from app.json_utils import EMPTY_JSON_OBJECT
+
         source = Path("app/cache/store.py").read_text(encoding="utf-8")
 
-        assert cache_store_module._EMPTY_JSON_OBJECT == "{}"
-        assert source.count('_EMPTY_JSON_OBJECT') == 1
+        assert EMPTY_JSON_OBJECT == "{}"
+        assert "_EMPTY_JSON_OBJECT" not in source
         assert "encode_json_object" in source
         assert "decode_json_object" in source
         assert 'result_json == "{}"' not in source
@@ -94,8 +96,10 @@ class TestPutAndGet:
 
     def test_payload_encoding_and_decoding_share_empty_fast_path(self) -> None:
         """Cache payload helpers should centralize empty JSON fast paths."""
-        assert cache_store_module._encode_result_json({}) == cache_store_module._EMPTY_JSON_OBJECT
-        assert cache_store_module._decode_result_json(cache_store_module._EMPTY_JSON_OBJECT) == {}
+        from app.json_utils import EMPTY_JSON_OBJECT
+
+        assert cache_store_module._encode_result_json({}) == EMPTY_JSON_OBJECT
+        assert cache_store_module._decode_result_json(EMPTY_JSON_OBJECT) == {}
         assert "_encode_result_json" in CacheStore.put.__code__.co_names
         assert "_cache_entry" in CacheStore.get.__code__.co_names
         assert "_cache_entry" in CacheStore.get_all_for_ioc.__code__.co_names
@@ -296,7 +300,7 @@ class TestGetAllForIoc:
         results = cache.get_all_for_ioc("9.9.9.9", "ipv4")
         assert results == []
 
-    def test_get_all_for_ioc_empty_single_and_pair_paths_use_row_count(
+    def test_get_all_for_ioc_empty_single_pair_and_three_paths_use_row_count(
         self, cache: CacheStore
     ) -> None:
         """Short detail-cache reads should return before accumulator looping."""
@@ -309,25 +313,74 @@ class TestGetAllForIoc:
 
         class NoIterRows(list):
             def __iter__(self):
-                raise AssertionError("pair cache detail rows should not iterate")
+                raise AssertionError("short cache detail rows should not iterate")
 
         class FakeCursor:
+            def __init__(self, rows: NoIterRows) -> None:
+                self._rows = rows
+
             def fetchall(self):
-                return NoIterRows([
-                    ("VT", '{"verdict":"clean"}', "2026-01-01T00:00:00Z"),
-                    ("OTX", '{"verdict":"no_data"}', "2026-01-01T00:00:01Z"),
-                ])
+                return self._rows
 
         class FakeConn:
-            def execute(self, *_args, **_kwargs):
-                return FakeCursor()
+            def __init__(self, rows: NoIterRows) -> None:
+                self._rows = rows
 
-        cache._conn = FakeConn()  # type: ignore[assignment]
+            def execute(self, *_args, **_kwargs):
+                return FakeCursor(self._rows)
+
+        cache._conn = FakeConn(NoIterRows([
+            ("VT", '{"verdict":"clean"}', "2026-01-01T00:00:00Z"),
+            ("OTX", '{"verdict":"no_data"}', "2026-01-01T00:00:01Z"),
+        ]))  # type: ignore[assignment]
         pair_results = cache.get_all_for_ioc("1.2.3.4", "ipv4")
 
         assert [result["provider"] for result in pair_results] == ["VT", "OTX"]
         assert [result["verdict"] for result in pair_results] == ["clean", "no_data"]
+
+        cache._conn = FakeConn(NoIterRows([
+            ("VT", '{"verdict":"clean"}', "2026-01-01T00:00:00Z"),
+            ("OTX", '{"verdict":"no_data"}', "2026-01-01T00:00:01Z"),
+            ("GN", '{"verdict":"suspicious"}', "2026-01-01T00:00:02Z"),
+        ]))  # type: ignore[assignment]
+        three_results = cache.get_all_for_ioc("1.2.3.4", "ipv4")
+
+        assert [result["provider"] for result in three_results] == ["VT", "OTX", "GN"]
+        assert [result["verdict"] for result in three_results] == [
+            "clean",
+            "no_data",
+            "suspicious",
+        ]
+
+        cache._conn = FakeConn(NoIterRows([
+            ("VT", '{"verdict":"clean"}', "2026-01-01T00:00:00Z"),
+            ("OTX", '{"verdict":"no_data"}', "2026-01-01T00:00:01Z"),
+            ("GN", '{"verdict":"suspicious"}', "2026-01-01T00:00:02Z"),
+            ("SHODAN", '{"verdict":"malicious"}', "2026-01-01T00:00:03Z"),
+        ]))  # type: ignore[assignment]
+        four_results = cache.get_all_for_ioc("1.2.3.4", "ipv4")
+
+        assert [result["provider"] for result in four_results] == ["VT", "OTX", "GN", "SHODAN"]
+        assert [result["verdict"] for result in four_results] == [
+            "clean",
+            "no_data",
+            "suspicious",
+            "malicious",
+        ]
         assert "len" in CacheStore.get_all_for_ioc.__code__.co_names
+        assert "row_count == 4" in Path("app/cache/store.py").read_text(encoding="utf-8")
+
+    def test_get_all_for_ioc_delegates_long_path_append(self) -> None:
+        source = Path("app/cache/store.py").read_text(encoding="utf-8")
+        get_all_source = source.split("def get_all_for_ioc", 1)[1].split(
+            "\n    def stats",
+            1,
+        )[0]
+        append_source = source.split("def _append_cache_entry", 1)[1]
+
+        assert "_append_cache_entry(results, result_json, cached_at, provider)" in get_all_source
+        assert "results.append(_cache_entry(result_json, cached_at, provider))" not in get_all_source
+        assert "results.append(_cache_entry(result_json, cached_at, provider))" in append_source
 
     def test_get_all_for_ioc_includes_cached_at_and_provider(
         self, cache: CacheStore

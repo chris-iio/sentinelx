@@ -56,6 +56,30 @@ describe("sortCardsBySeverity", () => {
     expect(verdictReads).toHaveLength(4);
   });
 
+  it("sorts every verdict with known_good below conflicts and above clean", async () => {
+    const grid = document.createElement("div");
+    grid.id = "ioc-cards-grid";
+    document.body.appendChild(grid);
+    appendCard(grid, "error.example", "error");
+    appendCard(grid, "clean.example", "clean");
+    appendCard(grid, "trusted.example", "known_good");
+    appendCard(grid, "unknown.example", "no_data");
+    appendCard(grid, "bad.example", "malicious");
+    appendCard(grid, "suspicious.example", "suspicious");
+
+    sortCardsBySeverity();
+    await vi.advanceTimersByTimeAsync(150);
+
+    expect(Array.from(grid.children, (card) => (card as HTMLElement).dataset.iocValue)).toEqual([
+      "bad.example",
+      "suspicious.example",
+      "trusted.example",
+      "clean.example",
+      "unknown.example",
+      "error.example",
+    ]);
+  });
+
   it("decorates cards with an indexed NodeList pass before sorting", async () => {
     const grid = document.createElement("div");
     grid.id = "ioc-cards-grid";

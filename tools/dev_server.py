@@ -21,6 +21,7 @@ contents or leaking provider configuration.
 from __future__ import annotations
 
 import argparse
+import http.client
 import json
 import os
 import signal
@@ -30,19 +31,23 @@ import sys
 import tempfile
 import time
 from collections.abc import Mapping, Sequence
+from contextlib import suppress
 from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
-from urllib import error, request
 
 SCRIPT_PATH = Path(__file__).resolve()
 REPO_ROOT = SCRIPT_PATH.parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from app.health_contract import HEALTH_PATH, is_valid_health_payload
-from app.time_utils import utc_iso_seconds, utc_now as utc_datetime_now, utc_timestamp_slug
+from app.health_contract import HEALTH_PATH, is_valid_health_payload  # noqa: E402
+from app.time_utils import (  # noqa: E402
+    utc_iso_seconds,
+    utc_now as utc_datetime_now,
+    utc_timestamp_slug,
+)
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 5000
@@ -122,12 +127,45 @@ def validate_payload_keys(
         raise StatusContractError(f"{payload_name} payload has unexpected keys: {unexpected}.")
 
     missing_keys: list[str] = []
-    for key in required_keys:
-        if key not in payload:
-            missing_keys.append(key)
+    append_missing_payload_keys(missing_keys, payload, required_keys)
     if missing_keys:
         missing = format_key_names(missing_keys)
         raise StatusContractError(f"{payload_name} payload is missing required keys: {missing}.")
+
+
+def append_missing_payload_keys(
+    missing_keys: list[str],
+    payload: Mapping[str, Any],
+    required_keys: frozenset[str],
+) -> None:
+    """Append missing required keys while avoiding known contract iteration."""
+    if required_keys is _PROBE_PAYLOAD_REQUIRED_KEYS:
+        if "status" not in payload:
+            missing_keys.append("status")
+        if "checked_at" not in payload:
+            missing_keys.append("checked_at")
+        if "url" not in payload:
+            missing_keys.append("url")
+        return
+
+    if required_keys is _STATUS_PAYLOAD_REQUIRED_KEYS:
+        if "status" not in payload:
+            missing_keys.append("status")
+        if "host" not in payload:
+            missing_keys.append("host")
+        if "port" not in payload:
+            missing_keys.append("port")
+        if "updated_at" not in payload:
+            missing_keys.append("updated_at")
+        if "restart_count" not in payload:
+            missing_keys.append("restart_count")
+        if "probe" not in payload:
+            missing_keys.append("probe")
+        return
+
+    for key in required_keys:
+        if key not in payload:
+            missing_keys.append(key)
 
 
 def format_key_names(keys: Sequence[str]) -> str:
@@ -153,6 +191,22 @@ def format_key_names(keys: Sequence[str]) -> str:
             if first > second:
                 first, second = second, first
         return first + ", " + second + ", " + third
+    if key_count == 4:
+        first = keys[0]
+        second = keys[1]
+        third = keys[2]
+        fourth = keys[3]
+        if first > second:
+            first, second = second, first
+        if third > fourth:
+            third, fourth = fourth, third
+        if first > third:
+            first, third = third, first
+        if second > fourth:
+            second, fourth = fourth, second
+        if second > third:
+            second, third = third, second
+        return first + ", " + second + ", " + third + ", " + fourth
     return ", ".join(sorted(keys))
 
 
@@ -572,33 +626,32 @@ def probe_health(
 ) -> HealthProbeResult:
     """Probe the fixed local health contract without leaking response contents."""
     checked_at = utc_now()
-    url = build_health_url(host, port)
-    req = request.Request(url, headers={"Accept": "application/json"})  # noqa: S310
+    safe_host = normalize_host(host)
+    safe_port = normalize_port(port)
+    url = build_health_url(safe_host, safe_port)
+    connection = http.client.HTTPConnection(safe_host, safe_port, timeout=timeout)
 
     try:
-        with request.urlopen(req, timeout=timeout) as response:  # noqa: S310
-            http_status = response.getcode()
-            body = response.read()
-    except error.HTTPError as exc:
+        connection.request("GET", HEALTH_PATH, headers={"Accept": "application/json"})
+        response = connection.getresponse()
+        http_status = response.status
+        body = response.read()
+    except ConnectionRefusedError:
         return HealthProbeResult(
-            status="malformed",
+            status="refused",
             checked_at=checked_at,
             url=url,
-            http_status=exc.code,
-            detail=f"unexpected HTTP {exc.code}",
+            detail="connection refused",
         )
-    except error.URLError as exc:
-        reason = exc.reason
-        if isinstance(reason, socket.timeout) or "timed out" in str(reason).lower():
-            return HealthProbeResult(
-                status="timeout",
-                checked_at=checked_at,
-                url=url,
-                detail="request timed out",
-            )
-        if isinstance(reason, ConnectionRefusedError) or (
-            isinstance(reason, OSError) and getattr(reason, "errno", None) in CONNECTION_REFUSED_ERRNOS
-        ):
+    except (socket.timeout, TimeoutError):
+        return HealthProbeResult(
+            status="timeout",
+            checked_at=checked_at,
+            url=url,
+            detail="request timed out",
+        )
+    except OSError as exc:
+        if getattr(exc, "errno", None) in CONNECTION_REFUSED_ERRNOS:
             return HealthProbeResult(
                 status="refused",
                 checked_at=checked_at,
@@ -609,15 +662,17 @@ def probe_health(
             status="refused",
             checked_at=checked_at,
             url=url,
-            detail=str(reason or exc),
+            detail=str(exc),
         )
-    except (socket.timeout, TimeoutError):
+    except http.client.HTTPException as exc:
         return HealthProbeResult(
-            status="timeout",
+            status="malformed",
             checked_at=checked_at,
             url=url,
-            detail="request timed out",
+            detail=str(exc),
         )
+    finally:
+        connection.close()
 
     if http_status != 200:
         return HealthProbeResult(
@@ -661,11 +716,9 @@ def process_is_running(pid: int | None) -> bool:
     if pid is None or pid <= 0:
         return False
     proc_stat = Path(f"/proc/{pid}/stat")
-    try:
+    with suppress(OSError):
         if _proc_stat_state(proc_stat.read_text(encoding="utf-8")) == "Z":
             return False
-    except OSError:
-        pass
 
     try:
         os.kill(pid, 0)
@@ -844,7 +897,8 @@ def _signal_managed_process(pid: int, sig: int) -> None:
         except ProcessLookupError:
             raise
         except OSError:
-            pass
+            os.kill(pid, sig)
+            return
     os.kill(pid, sig)
 
 
@@ -901,7 +955,12 @@ def serve_child(host: str, port: int) -> int:
     return 0
 
 
-def _launch_child_process(paths: DevServerPaths, host: str, port: int, log_path: Path) -> subprocess.Popen[bytes]:
+def _launch_child_process(
+    paths: DevServerPaths,
+    host: str,
+    port: int,
+    log_path: Path,
+) -> subprocess.Popen[bytes]:
     """Spawn the managed dev-server child with stdout/stderr redirected to a log."""
     project_root = code_repo_root()
     command = [
@@ -915,7 +974,7 @@ def _launch_child_process(paths: DevServerPaths, host: str, port: int, log_path:
     ]
 
     with log_path.open("ab") as log_handle:
-        process = subprocess.Popen(
+        process = subprocess.Popen(  # noqa: S603 - fixed self-spawn command, no shell.
             command,
             cwd=str(project_root),
             stdin=subprocess.DEVNULL,
@@ -1044,10 +1103,8 @@ def command_start(
             return 0
         time.sleep(args.probe_interval)
 
-    try:
+    with suppress(DevServerError):
         stop_managed_process(process.pid, timeout=args.shutdown_timeout)
-    except DevServerError:
-        pass
 
     failure = replace(
         starting,

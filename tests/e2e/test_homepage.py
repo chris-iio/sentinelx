@@ -22,7 +22,7 @@ def test_page_title(page: Page, index_url: str) -> None:
 
 
 def test_header_branding(page: Page, index_url: str) -> None:
-    """Page shows hero brand and floating settings icon — no tagline."""
+    """Page shows the shell brand and settings control without a tagline."""
     idx = IndexPage(page, index_url.rstrip("/"))
     idx.goto()
 

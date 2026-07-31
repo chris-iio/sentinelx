@@ -12,8 +12,16 @@ All HTTP calls are mocked using unittest.mock.patch -- no real API calls.
 """
 from __future__ import annotations
 
+import inspect
+
 from app.enrichment.models import EnrichmentResult
-from app.enrichment.adapters.greynoise import GreyNoiseAdapter
+from app.enrichment.adapters.greynoise import (
+    GreyNoiseAdapter,
+    _greynoise_raw_stats,
+    _greynoise_signals,
+    _greynoise_verdict,
+    _parse_response,
+)
 from tests.helpers import (
     make_mock_response,
     make_ipv4_ioc,
@@ -115,6 +123,98 @@ class TestGreyNoiseLookup:
         assert result.total_engines == 1
         assert result.scan_date == "2024-01-13"
         assert result.raw_stats == {"noise": True}
+
+    def test_parse_response_delegates_verdict_and_raw_stats_helpers(self) -> None:
+        """Response parsing should not own verdict priority or raw_stats literals."""
+        source = inspect.getsource(_parse_response)
+        adapter_source = inspect.getsource(GreyNoiseAdapter)
+
+        assert "_greynoise_signals(body)" in source
+        assert "_greynoise_verdict(" in source
+        assert "_greynoise_raw_stats(" in source
+        assert 'body.get("riot"' not in source
+        assert "if riot:" not in source
+        assert '"noise": noise' not in source
+        assert "_make_pre_raise_hook" not in adapter_source
+        assert "_no_data_on_404 = True" in adapter_source
+
+    def test_signal_helper_preserves_defaults_and_key_fallbacks(self) -> None:
+        """GreyNoise field extraction should live in one signal helper."""
+        class NoDefaultBody(dict):
+            def get(self, key, default=None):
+                expected_defaults = {
+                    "riot": False,
+                    "noise": False,
+                    "classification": "",
+                    "name": "",
+                    "link": "",
+                    "last_seen": None,
+                }
+                if default != expected_defaults[key]:
+                    raise AssertionError("GreyNoise signal defaults should remain provider-specific")
+                return super().get(key, default)
+
+        signals = _greynoise_signals(
+            NoDefaultBody({
+                "classification": None,
+                "name": None,
+                "link": None,
+            })
+        )
+
+        assert signals.riot is False
+        assert signals.noise is False
+        assert signals.classification == ""
+        assert signals.name == ""
+        assert signals.link == ""
+        assert signals.last_seen is None
+
+    def test_verdict_helper_preserves_priority(self) -> None:
+        """RIOT clean should outrank malicious/noise, then malicious, then noise."""
+        assert _greynoise_verdict(
+            riot=True,
+            noise=True,
+            classification="malicious",
+        ) == ("clean", 0)
+        assert _greynoise_verdict(
+            riot=False,
+            noise=True,
+            classification="malicious",
+        ) == ("malicious", 1)
+        assert _greynoise_verdict(
+            riot=False,
+            noise=True,
+            classification="benign",
+        ) == ("suspicious", 1)
+        assert _greynoise_verdict(
+            riot=False,
+            noise=False,
+            classification="",
+        ) == ("no_data", 0)
+
+    def test_raw_stats_helper_preserves_key_order_and_values(self) -> None:
+        """The shared raw_stats envelope should keep public fields stable."""
+        raw_stats = _greynoise_raw_stats(
+            noise=True,
+            riot=False,
+            classification="malicious",
+            name="unknown",
+            link="https://viz.greynoise.io/ip/1.2.3.4",
+            last_seen="2024-01-14",
+        )
+
+        assert list(raw_stats) == [
+            "noise",
+            "riot",
+            "classification",
+            "name",
+            "link",
+            "last_seen",
+        ]
+        assert raw_stats["noise"] is True
+        assert raw_stats["riot"] is False
+        assert raw_stats["classification"] == "malicious"
+        assert raw_stats["last_seen"] == "2024-01-14"
 
     def test_riot_true_returns_clean(self) -> None:
         """riot=True IP -> verdict 'clean' with detection_count=0 (known benign service like Google DNS)."""
@@ -242,4 +342,3 @@ class TestGreyNoiseLookup:
         assert headers["key"] == "myapikey"
         assert "Key" not in headers, "Header must be lowercase 'key', not capital 'Key'"
         assert "Authorization" not in headers, "Header must be 'key', not 'Authorization'"
-

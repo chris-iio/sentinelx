@@ -87,10 +87,25 @@ def group_by_type(iocs: list[IOC]) -> dict[IOCType, list[IOC]]:
         first = iocs[0]
         second = iocs[1]
         third = iocs[2]
+        if first.type == second.type == third.type:
+            return {first.type: [first, second, third]}
         result: dict[IOCType, list[IOC]] = {}
         append_ioc_by_type(result, first)
         append_ioc_by_type(result, second)
         append_ioc_by_type(result, third)
+        return result
+    if ioc_count == 4:
+        first = iocs[0]
+        second = iocs[1]
+        third = iocs[2]
+        fourth = iocs[3]
+        if first.type == second.type == third.type == fourth.type:
+            return {first.type: [first, second, third, fourth]}
+        result: dict[IOCType, list[IOC]] = {}
+        append_ioc_by_type(result, first)
+        append_ioc_by_type(result, second)
+        append_ioc_by_type(result, third)
+        append_ioc_by_type(result, fourth)
         return result
 
     result: dict[IOCType, list[IOC]] = {}

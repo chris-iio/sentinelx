@@ -4,6 +4,7 @@ from __future__ import annotations
 import importlib.util
 import inspect
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -42,6 +43,13 @@ def init_temp_repo(repo_root: Path) -> None:
     )
     subprocess.run(
         ["git", "config", "user.email", "runtime-boundary-tests@example.com"],
+        cwd=repo_root,
+        capture_output=True,
+        check=True,
+    )
+    # Isolate tests from developer-global hooks (for example identity guards).
+    subprocess.run(
+        ["git", "config", "core.hooksPath", os.devnull],
         cwd=repo_root,
         capture_output=True,
         check=True,
@@ -116,6 +124,50 @@ def test_empty_classify_paths_skips_normalization(monkeypatch):
     assert boundary.classify_paths((), Path.cwd()) == ()
 
 
+def test_classify_paths_delegates_result_append(monkeypatch, tmp_path: Path) -> None:
+    boundary = load_boundary_module()
+    calls: list[tuple[str, str]] = []
+    classified = boundary.ClassificationResult(
+        input_path="ignored",
+        normalized_path=".gsd/state-manifest.json",
+        classification=boundary.CLASS_TRANSIENT,
+        issue_code=boundary.ISSUE_UNIGNORED_TRANSIENT,
+        matched_rules=("gsd-runtime-files",),
+        rationale="runtime state",
+    )
+
+    monkeypatch.setattr(
+        boundary,
+        "normalize_repo_relative_path",
+        lambda path, _repo_root: f".gsd/{path}",
+    )
+
+    def classify(relative_path: str):
+        calls.append(("classify", relative_path))
+        return classified
+
+    monkeypatch.setattr(boundary, "classify_relative_path", classify)
+    source = inspect.getsource(boundary.classify_paths)
+    append_source = inspect.getsource(boundary.append_classification_result)
+
+    results = boundary.classify_paths(["state-manifest.json"], tmp_path)
+
+    assert calls == [("classify", ".gsd/state-manifest.json")]
+    assert results == (
+        boundary.ClassificationResult(
+            input_path="state-manifest.json",
+            normalized_path=".gsd/state-manifest.json",
+            classification=boundary.CLASS_TRANSIENT,
+            issue_code=boundary.ISSUE_UNIGNORED_TRANSIENT,
+            matched_rules=("gsd-runtime-files",),
+            rationale="runtime state",
+        ),
+    )
+    assert "append_classification_result(" in source
+    assert "results.append(" not in source
+    assert "results.append(" in append_source
+
+
 def test_classification_result_tuple_helper_skips_iteration_for_short_sequences() -> None:
     boundary = load_boundary_module()
     result = boundary.ClassificationResult(
@@ -146,6 +198,17 @@ def test_classification_result_tuple_helper_skips_iteration_for_short_sequences(
     assert boundary.classification_results_tuple(NoIterResults([])) == ()
     assert boundary.classification_results_tuple(NoIterResults([result])) == (result,)
     assert boundary.classification_results_tuple(NoIterResults([result, result])) == (result, result)
+    assert boundary.classification_results_tuple(NoIterResults([result, result, result])) == (
+        result,
+        result,
+        result,
+    )
+    assert boundary.classification_results_tuple(NoIterResults([result, result, result, result])) == (
+        result,
+        result,
+        result,
+        result,
+    )
     assert "classification_results_tuple" in boundary.classify_paths.__code__.co_names
 
 
@@ -217,6 +280,13 @@ def test_rule_names_skips_list_for_empty_single_or_pair_rules() -> None:
     assert boundary.rule_names(()) == ()
     assert boundary.rule_names(NoIterRules([rule])) == ("single",)
     assert boundary.rule_names(NoIterRules([rule, rule])) == ("single", "single")
+    assert boundary.rule_names(NoIterRules([rule, rule, rule])) == ("single", "single", "single")
+    assert boundary.rule_names(NoIterRules([rule, rule, rule, rule])) == (
+        "single",
+        "single",
+        "single",
+        "single",
+    )
 
 
 def test_matched_rule_formatting_skips_join_for_empty_single_or_pair_rules() -> None:
@@ -238,6 +308,12 @@ def test_matched_rule_formatting_skips_join_for_empty_single_or_pair_rules() -> 
     assert boundary.format_matched_rules(()) == "-"
     assert boundary.format_matched_rules(NoIterRules(["single"])) == "single"
     assert boundary.format_matched_rules(NoIterRules(["first", "second"])) == "first,second"
+    assert boundary.format_matched_rules(NoIterRules(["first", "second", "third"])) == (
+        "first,second,third"
+    )
+    assert boundary.format_matched_rules(NoIterRules(["first", "second", "third", "fourth"])) == (
+        "first,second,third,fourth"
+    )
     assert "_classification_text_line" in boundary.render_classify_text.__code__.co_names
     assert "format_matched_rules" in boundary._classification_text_line.__code__.co_names
     assert "format_matched_rules" in boundary.render_audit_text.__code__.co_names
@@ -267,6 +343,22 @@ def test_classify_text_rendering_skips_iteration_for_empty_single_or_pair_result
         matched_rules=("planning-legacy",),
         rationale="manual review",
     )
+    third = boundary.ClassificationResult(
+        input_path="README.md",
+        normalized_path="README.md",
+        classification=boundary.CLASS_DURABLE,
+        issue_code=None,
+        matched_rules=("durable-source",),
+        rationale="durable source",
+    )
+    fourth = boundary.ClassificationResult(
+        input_path=".codex/session.json",
+        normalized_path=".codex/session.json",
+        classification=boundary.CLASS_MANUAL_REVIEW,
+        issue_code=boundary.ISSUE_MANUAL_REVIEW,
+        matched_rules=("codex-runtime",),
+        rationale="manual review",
+    )
 
     class NoIterResults:
         def __init__(self, items):
@@ -289,6 +381,18 @@ def test_classify_text_rendering_skips_iteration_for_empty_single_or_pair_result
         "transient\t.gsd/state.json\tissue=unignored-transient\trules=gsd-runtime-files\n"
         "manual-review\t.planning/notes.md\tissue=manual-review-path\trules=planning-legacy"
     )
+    assert boundary.render_classify_text(NoIterResults([result, second, third])) == (
+        "transient\t.gsd/state.json\tissue=unignored-transient\trules=gsd-runtime-files\n"
+        "manual-review\t.planning/notes.md\tissue=manual-review-path\trules=planning-legacy\n"
+        "durable\tREADME.md\tissue=-\trules=durable-source"
+    )
+    assert boundary.render_classify_text(NoIterResults([result, second, third, fourth])) == (
+        "transient\t.gsd/state.json\tissue=unignored-transient\trules=gsd-runtime-files\n"
+        "manual-review\t.planning/notes.md\tissue=manual-review-path\trules=planning-legacy\n"
+        "durable\tREADME.md\tissue=-\trules=durable-source\n"
+        "manual-review\t.codex/session.json\tissue=manual-review-path\trules=codex-runtime"
+    )
+    assert "result_count == 4" in inspect.getsource(boundary.render_classify_text)
     assert "_classification_text_line" in boundary.render_classify_text.__code__.co_names
 
 
@@ -418,6 +522,13 @@ def test_policy_rules_tuple_helper_skips_iteration_for_short_sequences() -> None
     assert boundary.policy_rules_tuple(NoIterRules([])) == ()
     assert boundary.policy_rules_tuple(NoIterRules([rule])) == (rule,)
     assert boundary.policy_rules_tuple(NoIterRules([rule, rule])) == (rule, rule)
+    assert boundary.policy_rules_tuple(NoIterRules([rule, rule, rule])) == (rule, rule, rule)
+    assert boundary.policy_rules_tuple(NoIterRules([rule, rule, rule, rule])) == (
+        rule,
+        rule,
+        rule,
+        rule,
+    )
 
 
 def test_format_command_args_shell_quotes_display_values():
@@ -513,11 +624,33 @@ def test_boundary_json_serialization_uses_direct_accumulation():
         boundary.classification_to_dict(result),
         boundary.classification_to_dict(result),
     ]
+    assert boundary.classifications_to_dicts(NoIterSequence([result, result, result])) == [
+        boundary.classification_to_dict(result),
+        boundary.classification_to_dict(result),
+        boundary.classification_to_dict(result),
+    ]
+    assert boundary.classifications_to_dicts(NoIterSequence([result, result, result, result])) == [
+        boundary.classification_to_dict(result),
+        boundary.classification_to_dict(result),
+        boundary.classification_to_dict(result),
+        boundary.classification_to_dict(result),
+    ]
     assert boundary.audit_report_to_dict(report)["findings"] == [
         boundary.audit_finding_to_dict(finding)
     ]
     assert boundary.audit_findings_to_dicts(()) == []
     assert boundary.audit_findings_to_dicts(NoIterSequence([finding, finding])) == [
+        boundary.audit_finding_to_dict(finding),
+        boundary.audit_finding_to_dict(finding),
+    ]
+    assert boundary.audit_findings_to_dicts(NoIterSequence([finding, finding, finding])) == [
+        boundary.audit_finding_to_dict(finding),
+        boundary.audit_finding_to_dict(finding),
+        boundary.audit_finding_to_dict(finding),
+    ]
+    assert boundary.audit_findings_to_dicts(NoIterSequence([finding, finding, finding, finding])) == [
+        boundary.audit_finding_to_dict(finding),
+        boundary.audit_finding_to_dict(finding),
         boundary.audit_finding_to_dict(finding),
         boundary.audit_finding_to_dict(finding),
     ]
@@ -537,6 +670,43 @@ def test_boundary_json_serialization_uses_direct_accumulation():
     assert "audit_findings_to_dicts" in boundary.audit_report_to_dict.__code__.co_names
     assert "len" in boundary.classifications_to_dicts.__code__.co_names
     assert "len" in boundary.audit_findings_to_dicts.__code__.co_names
+    assert "append_classification_dict" in boundary.classifications_to_dicts.__code__.co_names
+    assert "append_audit_finding_dict" in boundary.audit_findings_to_dicts.__code__.co_names
+
+
+def test_boundary_json_append_helpers_own_long_path_mutation() -> None:
+    boundary = load_boundary_module()
+    result = boundary.ClassificationResult(
+        input_path=".gsd/state-manifest.json",
+        normalized_path=".gsd/state-manifest.json",
+        classification=boundary.CLASS_TRANSIENT,
+        issue_code=boundary.ISSUE_UNIGNORED_TRANSIENT,
+        matched_rules=("gsd-runtime-files",),
+        rationale="runtime state",
+    )
+    finding = boundary.AuditFinding(
+        path=".gsd/state-manifest.json",
+        classification=boundary.CLASS_TRANSIENT,
+        issue_code=boundary.ISSUE_UNIGNORED_TRANSIENT,
+        matched_rules=("gsd-runtime-files",),
+        rationale="runtime state",
+        tracked=False,
+        ignored=False,
+    )
+
+    serialized_classifications: list[dict[str, object]] = []
+    serialized_findings: list[dict[str, object]] = []
+    boundary.append_classification_dict(serialized_classifications, result)
+    boundary.append_audit_finding_dict(serialized_findings, finding)
+    classifications_source = inspect.getsource(boundary.classifications_to_dicts)
+    findings_source = inspect.getsource(boundary.audit_findings_to_dicts)
+
+    assert serialized_classifications == [boundary.classification_to_dict(result)]
+    assert serialized_findings == [boundary.audit_finding_to_dict(finding)]
+    assert "append_classification_dict(serialized, result)" in classifications_source
+    assert "serialized.append(classification_to_dict(result))" not in classifications_source
+    assert "append_audit_finding_dict(serialized, finding)" in findings_source
+    assert "serialized.append(audit_finding_to_dict(finding))" not in findings_source
 
 
 def test_boundary_records_use_slots_to_avoid_instance_dict() -> None:
@@ -748,22 +918,30 @@ def test_audit_text_renders_issue_counts_without_sorting(monkeypatch):
 
     assert text.index("- unignored-transient: 1") < text.index("- manual-review-path: 1")
     assert "- tracked-transient:" not in text
-    assert "ALL_ISSUE_CODES" in boundary.render_audit_text.__code__.co_names
+    assert "append_issue_count_lines" in boundary.render_audit_text.__code__.co_names
+    assert "ALL_ISSUE_CODES" not in boundary.render_audit_text.__code__.co_names
+    issue_count_source = inspect.getsource(boundary.append_issue_count_lines)
+    assert "for issue_code in ALL_ISSUE_CODES" not in issue_count_source
+    assert "ISSUE_UNIGNORED_TRANSIENT" in issue_count_source
+    assert "ISSUE_UNKNOWN_ROOT" in issue_count_source
 
 
 def test_audit_candidate_discovery_skips_sort_for_zero_one_two_or_three_paths(monkeypatch, tmp_path):
-    """Targeted boundary audits should not sort small candidate sets."""
+    """Targeted boundary audits should not sort candidate sets."""
     boundary = load_boundary_module()
     repo_root = tmp_path
     single = repo_root / ".gsd" / "state-manifest.json"
     second = repo_root / ".gsd" / "runtime" / "state.json"
     third = repo_root / ".bg-shell" / "manifest.json"
+    fourth = repo_root / ".planning" / "notes.md"
     single.parent.mkdir(parents=True)
     second.parent.mkdir(parents=True)
     third.parent.mkdir(parents=True)
+    fourth.parent.mkdir(parents=True)
     single.write_text("{}\n", encoding="utf-8")
     second.write_text("{}\n", encoding="utf-8")
     third.write_text("{}\n", encoding="utf-8")
+    fourth.write_text("notes\n", encoding="utf-8")
 
     def fail_sorted(*_args, **_kwargs):
         raise AssertionError("small audit candidate discovery should not sort")
@@ -787,6 +965,20 @@ def test_audit_candidate_discovery_skips_sort_for_zero_one_two_or_three_paths(mo
         ".gsd/runtime/state.json",
         ".gsd/state-manifest.json",
     )
+    assert boundary.iter_audit_candidate_paths(
+        (
+            ".gsd/state-manifest.json",
+            ".gsd/runtime/state.json",
+            ".bg-shell/manifest.json",
+            ".planning/notes.md",
+        ),
+        repo_root,
+    ) == (
+        ".bg-shell/manifest.json",
+        ".gsd/runtime/state.json",
+        ".gsd/state-manifest.json",
+        ".planning/notes.md",
+    )
     assert boundary.ordered_discovered_paths(
         {".gsd/state-manifest.json", ".gsd/runtime/state.json"},
         ".gsd/state-manifest.json",
@@ -802,11 +994,39 @@ def test_audit_candidate_discovery_skips_sort_for_zero_one_two_or_three_paths(mo
         ".gsd/runtime/state.json",
         ".gsd/state-manifest.json",
     )
+    assert boundary.ordered_discovered_paths(
+        {
+            ".gsd/state-manifest.json",
+            ".gsd/runtime/state.json",
+            ".bg-shell/manifest.json",
+            ".planning/notes.md",
+        },
+        ".gsd/state-manifest.json",
+    ) == (
+        ".bg-shell/manifest.json",
+        ".gsd/runtime/state.json",
+        ".gsd/state-manifest.json",
+        ".planning/notes.md",
+    )
+    ordered_paths: list[str] = []
+    boundary.append_ordered_path(ordered_paths, ".gsd/state-manifest.json")
+    boundary.append_ordered_path(ordered_paths, ".bg-shell/manifest.json")
+    boundary.append_ordered_path(ordered_paths, ".planning/notes.md")
+    boundary.append_ordered_path(ordered_paths, ".gsd/runtime/state.json")
+    assert ordered_paths == [
+        ".bg-shell/manifest.json",
+        ".gsd/runtime/state.json",
+        ".gsd/state-manifest.json",
+        ".planning/notes.md",
+    ]
     source = SCRIPT.read_text(encoding="utf-8")
     helper_source = source[
         source.index("def iter_audit_candidate_paths") : source.index("def run_git_command")
     ]
     assert "next(iter(discovered))" not in helper_source
+    assert "sorted(" not in helper_source
+    assert "path_count == 4" in inspect.getsource(boundary.ordered_discovered_paths)
+    assert "append_ordered_path" in boundary.ordered_discovered_paths.__code__.co_names
     assert "ordered_discovered_paths" in boundary.iter_audit_candidate_paths.__code__.co_names
 
 
@@ -826,19 +1046,22 @@ def test_empty_audit_candidate_discovery_skips_normalization_and_set(monkeypatch
     assert boundary.iter_audit_candidate_paths((), tmp_path) == ()
 
 
-def test_audit_paths_skips_finding_sort_for_zero_one_two_or_three_findings(monkeypatch, tmp_path):
-    """Targeted boundary audits should not sort small finding collections."""
+def test_audit_paths_skips_finding_sort_for_zero_one_two_three_or_four_findings(monkeypatch, tmp_path):
+    """Targeted boundary audits should not sort finding collections."""
     boundary = load_boundary_module()
     repo_root = tmp_path
     single = repo_root / ".gsd" / "state-manifest.json"
     manual = repo_root / ".planning" / "notes.md"
     bg_shell = repo_root / ".bg-shell" / "manifest.json"
+    second_runtime = repo_root / ".gsd" / "runtime" / "state.json"
     single.parent.mkdir(parents=True)
     manual.parent.mkdir(parents=True)
     bg_shell.parent.mkdir(parents=True)
+    second_runtime.parent.mkdir(parents=True)
     single.write_text("{}\n", encoding="utf-8")
     manual.write_text("notes\n", encoding="utf-8")
     bg_shell.write_text("{}\n", encoding="utf-8")
+    second_runtime.write_text("{}\n", encoding="utf-8")
 
     def fail_sorted(*_args, **_kwargs):
         raise AssertionError("small audit finding sets should not sort")
@@ -854,6 +1077,15 @@ def test_audit_paths_skips_finding_sort_for_zero_one_two_or_three_findings(monke
         (".gsd/state-manifest.json", ".planning/notes.md", ".bg-shell/manifest.json"),
         repo_root,
     )
+    quad_report = boundary.audit_paths(
+        (
+            ".gsd/state-manifest.json",
+            ".planning/notes.md",
+            ".bg-shell/manifest.json",
+            ".gsd/runtime/state.json",
+        ),
+        repo_root,
+    )
 
     assert empty_report.findings == ()
     assert len(single_report.findings) == 1
@@ -867,7 +1099,62 @@ def test_audit_paths_skips_finding_sort_for_zero_one_two_or_three_findings(monke
         (boundary.ISSUE_UNIGNORED_TRANSIENT, ".bg-shell/manifest.json"),
         (boundary.ISSUE_UNIGNORED_TRANSIENT, ".gsd/state-manifest.json"),
     ]
+    assert [(finding.issue_code, finding.path) for finding in quad_report.findings] == [
+        (boundary.ISSUE_MANUAL_REVIEW, ".planning/notes.md"),
+        (boundary.ISSUE_UNIGNORED_TRANSIENT, ".bg-shell/manifest.json"),
+        (boundary.ISSUE_UNIGNORED_TRANSIENT, ".gsd/runtime/state.json"),
+        (boundary.ISSUE_UNIGNORED_TRANSIENT, ".gsd/state-manifest.json"),
+    ]
+    ordered_findings = []
+    boundary.append_ordered_audit_finding(ordered_findings, quad_report.findings[3])
+    boundary.append_ordered_audit_finding(ordered_findings, quad_report.findings[0])
+    boundary.append_ordered_audit_finding(ordered_findings, quad_report.findings[2])
+    boundary.append_ordered_audit_finding(ordered_findings, quad_report.findings[1])
+    assert ordered_findings == list(quad_report.findings)
+    assert "append_ordered_audit_finding" in boundary.ordered_audit_findings.__code__.co_names
     assert "ordered_audit_findings" in boundary.audit_paths.__code__.co_names
+
+
+def test_ordered_audit_findings_skips_iteration_for_four_findings() -> None:
+    boundary = load_boundary_module()
+
+    manual = boundary.AuditFinding(
+        path=".planning/notes.md",
+        classification=boundary.CLASS_MANUAL_REVIEW,
+        issue_code=boundary.ISSUE_MANUAL_REVIEW,
+        matched_rules=("planning-legacy",),
+        rationale="manual review",
+    )
+    gsd = boundary.AuditFinding(
+        path=".gsd/state-manifest.json",
+        classification=boundary.CLASS_TRANSIENT,
+        issue_code=boundary.ISSUE_UNIGNORED_TRANSIENT,
+        matched_rules=("gsd-runtime-files",),
+        rationale="unignored transient",
+    )
+    bg_shell = boundary.AuditFinding(
+        path=".bg-shell/manifest.json",
+        classification=boundary.CLASS_TRANSIENT,
+        issue_code=boundary.ISSUE_UNIGNORED_TRANSIENT,
+        matched_rules=("bg-shell-runtime",),
+        rationale="unignored transient",
+    )
+    runtime = boundary.AuditFinding(
+        path=".gsd/runtime/state.json",
+        classification=boundary.CLASS_TRANSIENT,
+        issue_code=boundary.ISSUE_UNIGNORED_TRANSIENT,
+        matched_rules=("gsd-runtime-files",),
+        rationale="unignored transient",
+    )
+
+    class NoIterFindings(list):
+        def __iter__(self):
+            raise AssertionError("four audit findings should not iterate")
+
+    ordered = boundary.ordered_audit_findings(NoIterFindings([gsd, manual, runtime, bg_shell]))
+
+    assert ordered == (manual, bg_shell, runtime, gsd)
+    assert "finding_count == 4" in inspect.getsource(boundary.ordered_audit_findings)
 
 
 def test_empty_git_path_sets_reuse_shared_empty_without_set_allocation(monkeypatch, tmp_path):
@@ -906,11 +1193,12 @@ def test_git_inspection_return_codes_use_shared_static_membership(monkeypatch, t
         calls.append(tuple(args))
         return subprocess.CompletedProcess(args=args, returncode=1, stdout=b"changed\0", stderr=b"")
 
+    monkeypatch.setattr(boundary.shutil, "which", lambda tool: f"/usr/bin/{tool}")
     monkeypatch.setattr(boundary.subprocess, "run", fake_run)
 
     assert boundary.GIT_INSPECTION_OK_RETURN_CODES == frozenset((0, 1))
     assert boundary.run_git_command(tmp_path, ["diff", "--name-only"]) == b"changed\0"
-    assert calls == [("git", "diff", "--name-only")]
+    assert calls == [("/usr/bin/git", "diff", "--name-only")]
 
     source = SCRIPT.read_text(encoding="utf-8")
     helper_source = source[

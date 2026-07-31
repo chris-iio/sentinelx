@@ -13,6 +13,9 @@ the required abstract methods and class attributes. Verifies:
 """
 from __future__ import annotations
 
+import inspect
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import patch
 
 import pytest
@@ -21,7 +24,11 @@ from app.enrichment.adapters.base import (
     BaseHTTPAdapter,
     _EMPTY_ALLOWED_HOSTS,
     _EMPTY_AUTH_HEADERS,
+    append_auth_header_snapshot,
+    _auth_headers_snapshot,
     _allowed_hosts_membership,
+    _no_data_on_404_hook,
+    _rate_limit_on_429,
 )
 from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.enrichment.provider import Provider
@@ -143,6 +150,62 @@ class StubHookAdapter(BaseHTTPAdapter):
         return _hook
 
 
+class StubPolicyHookAdapter(StubAdapter):
+    """Adapter stub that uses BaseHTTPAdapter generic status hook flags."""
+
+    _no_data_on_404 = True
+    _rate_limit_on_429 = True
+
+
+class StubListBodyAdapter(BaseHTTPAdapter):
+    """Adapter stub that parses successful JSON list bodies."""
+    name = "ListBodyProvider"
+    supported_types = frozenset({IOCType.DOMAIN})
+    requires_api_key = False
+
+    def _build_url(self, ioc: IOC) -> str:
+        return f"https://api.list.test/{ioc.value}"
+
+    def _parse_response(self, ioc: IOC, body) -> EnrichmentResult:
+        return EnrichmentResult(
+            ioc=ioc,
+            provider=self.name,
+            verdict="no_data",
+            detection_count=0,
+            total_engines=0,
+            scan_date=None,
+            raw_stats={"row_count": len(body)},
+        )
+
+
+class StubMappingHeaderAdapter(BaseHTTPAdapter):
+    """Key-required adapter stub with a custom mapping header source."""
+    name = "MappingHeaderProvider"
+    supported_types = frozenset({IOCType.IPV4})
+    requires_api_key = True
+
+    def __init__(self, allowed_hosts, *, header_source, api_key: str = "k") -> None:
+        self.header_source = header_source
+        super().__init__(allowed_hosts, api_key=api_key)
+
+    def _build_url(self, ioc: IOC) -> str:
+        return f"https://api.header.test/{ioc.value}"
+
+    def _parse_response(self, ioc: IOC, body: dict) -> EnrichmentResult:
+        return EnrichmentResult(
+            ioc=ioc,
+            provider=self.name,
+            verdict="clean",
+            detection_count=0,
+            total_engines=1,
+            scan_date=None,
+            raw_stats=body,
+        )
+
+    def _auth_headers(self):
+        return self.header_source
+
+
 # ---------------------------------------------------------------------------
 # 1. Provider protocol conformance
 # ---------------------------------------------------------------------------
@@ -235,7 +298,17 @@ class TestLookupDispatch:
 
         assert isinstance(result, EnrichmentResult)
         assert result.verdict == "clean"
-        assert result.raw_stats == body
+
+    @patch("app.enrichment.adapters.base.safe_request")
+    def test_successful_json_list_body_is_parsed(self, mock_sr):
+        """Successful JSON arrays should flow to _parse_response."""
+        mock_sr.return_value = [{"id": 1}, {"id": 2}]
+
+        adapter = StubListBodyAdapter(allowed_hosts=["api.list.test"])
+        result = adapter.lookup(make_domain_ioc("example.com"))
+
+        assert isinstance(result, EnrichmentResult)
+        assert result.raw_stats == {"row_count": 2}
 
     @patch("app.enrichment.adapters.base.safe_request")
     def test_allowed_hosts_are_cached_as_membership_set(self, mock_sr):
@@ -260,6 +333,30 @@ class TestLookupDispatch:
         assert _allowed_hosts_membership(allowed_hosts) is allowed_hosts
         assert adapter._allowed_hosts is allowed_hosts
 
+    @patch("app.enrichment.adapters.base.safe_request")
+    def test_concurrent_lookup_uses_thread_local_sessions(self, mock_sr):
+        barrier = threading.Barrier(2)
+        session_ids: list[int] = []
+        header_values: list[str | None] = []
+
+        def capture_session(session, *_args, **_kwargs):
+            session_ids.append(id(session))
+            header_values.append(dict(session.headers).get("X-Api-Key"))
+            barrier.wait(timeout=2)
+            return {"verdict": "clean"}
+
+        mock_sr.side_effect = capture_session
+        adapter = StubKeyAdapter(allowed_hosts=["api.key.test"], api_key="thread-secret")
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            first = pool.submit(adapter.lookup, make_ipv4_ioc("8.8.8.8"))
+            second = pool.submit(adapter.lookup, make_ipv4_ioc("1.1.1.1"))
+
+        assert isinstance(first.result(), EnrichmentResult)
+        assert isinstance(second.result(), EnrichmentResult)
+        assert len(set(session_ids)) == 2
+        assert header_values == ["thread-secret", "thread-secret"]
+
     def test_empty_allowed_hosts_reuse_shared_empty_snapshot(self, monkeypatch):
         class NoIterEmptyList(list):
             def __iter__(self):
@@ -272,7 +369,7 @@ class TestLookupDispatch:
         assert _allowed_hosts_membership(allowed_hosts) is _EMPTY_ALLOWED_HOSTS
         assert adapter._allowed_hosts is _EMPTY_ALLOWED_HOSTS
 
-    def test_single_pair_and_three_allowed_hosts_skip_general_iteration(self):
+    def test_single_pair_three_or_four_allowed_hosts_skip_general_iteration(self):
         class NoIterHosts(list):
             def __iter__(self):
                 raise AssertionError("short allowed_hosts should use indexed fast paths")
@@ -285,16 +382,29 @@ class TestLookupDispatch:
         single = NoIterHosts(["api.stub.test"])
         pair = NoIterHosts(["api.stub.test", "unused.example"])
         three = NoIterHosts(["api.stub.test", "unused.example", "third.example"])
+        four = NoIterHosts([
+            "api.stub.test",
+            "unused.example",
+            "third.example",
+            "fourth.example",
+        ])
 
         single_membership = _allowed_hosts_membership(single)
         pair_membership = _allowed_hosts_membership(pair)
         three_membership = _allowed_hosts_membership(three)
+        four_membership = _allowed_hosts_membership(four)
         adapter = StubAdapter(allowed_hosts=pair)
         pair.append("late-added.example")
 
         assert single_membership == frozenset(("api.stub.test",))
         assert pair_membership == frozenset(("api.stub.test", "unused.example"))
         assert three_membership == frozenset(("api.stub.test", "unused.example", "third.example"))
+        assert four_membership == frozenset((
+            "api.stub.test",
+            "unused.example",
+            "third.example",
+            "fourth.example",
+        ))
         assert adapter._allowed_hosts == frozenset(("api.stub.test", "unused.example"))
         assert "late-added.example" not in adapter._allowed_hosts
 
@@ -346,6 +456,88 @@ class TestAuthHeaders:
     def test_override_sets_session_headers(self):
         adapter = StubKeyAdapter(allowed_hosts=[], api_key="my-secret")
         assert dict(adapter._session.headers).get("X-Api-Key") == "my-secret"
+
+    def test_auth_headers_snapshot_accumulates_without_constructor_copy(self):
+        class HeaderSource(dict):
+            def items(self):
+                raise AssertionError("auth header snapshot should avoid items-view allocation")
+
+            def copy(self):
+                raise AssertionError("auth header snapshot should avoid mapping copy")
+
+        headers = HeaderSource({"X-Api-Key": "initial-secret"})
+        snapshot = _auth_headers_snapshot(headers)
+        headers["X-Api-Key"] = "mutated-secret"
+
+        assert snapshot["X-Api-Key"] == "initial-secret"
+        assert _auth_headers_snapshot({}) is _EMPTY_AUTH_HEADERS
+        source_names = _auth_headers_snapshot.__code__.co_names
+        assert "dict" not in source_names
+        assert "items" not in source_names
+        assert "copy" not in source_names
+
+    def test_auth_headers_snapshot_delegates_fallback_mutation(self):
+        headers = {
+            "X-Api-Key": "key",
+            "Auth-Key": "auth",
+            "X-Trace": "trace",
+            "X-Tenant": "tenant",
+            "X-Extra": "extra",
+        }
+        copied_headers: dict[str, str] = {}
+
+        append_auth_header_snapshot(copied_headers, headers, "X-Extra")
+        snapshot = _auth_headers_snapshot(headers)
+
+        assert copied_headers == {"X-Extra": "extra"}
+        assert snapshot["X-Extra"] == "extra"
+        source = inspect.getsource(_auth_headers_snapshot)
+        helper_source = inspect.getsource(append_auth_header_snapshot)
+        assert "append_auth_header_snapshot(copied_headers, headers, key)" in source
+        assert "copied_headers[key] = headers[key]" not in source
+        assert "copied_headers[key] = headers[key]" in helper_source
+
+    def test_auth_headers_snapshot_short_paths_skip_fallback_loop(self):
+        class ShortHeaderSource(dict):
+            iterations = 0
+
+            def __iter__(self):
+                for key in super().__iter__():
+                    type(self).iterations += 1
+                    if type(self).iterations > len(self):
+                        raise AssertionError("short auth header snapshot should stop at length")
+                    yield key
+
+            def items(self):
+                raise AssertionError("auth header snapshot should avoid items-view allocation")
+
+        source = ShortHeaderSource({
+            "X-Api-Key": "key",
+            "Auth-Key": "auth",
+            "X-Trace": "trace",
+            "X-Tenant": "tenant",
+        })
+        snapshot = _auth_headers_snapshot(source)
+        source["X-Api-Key"] = "mutated"
+
+        assert snapshot == {
+            "X-Api-Key": "key",
+            "Auth-Key": "auth",
+            "X-Trace": "trace",
+            "X-Tenant": "tenant",
+        }
+        assert ShortHeaderSource.iterations == 4
+        assert "header_count == 4" in inspect.getsource(_auth_headers_snapshot)
+
+    def test_adapter_auth_header_cache_uses_immutable_snapshot(self):
+        headers = {"X-Api-Key": "initial-secret"}
+        adapter = StubMappingHeaderAdapter(allowed_hosts=[], header_source=headers)
+        headers["X-Api-Key"] = "mutated-secret"
+
+        assert adapter._auth_header_cache["X-Api-Key"] == "initial-secret"
+        assert dict(adapter._session.headers).get("X-Api-Key") == "initial-secret"
+        with pytest.raises(TypeError):
+            adapter._auth_header_cache["X-Api-Key"] = "changed"  # type: ignore[index]
 
 
 # ---------------------------------------------------------------------------
@@ -425,6 +617,60 @@ class TestPreRaiseHook:
         # should propagate it without calling _parse_response
         assert isinstance(result, EnrichmentResult)
         assert result.verdict == "no_data"
+
+    def test_shared_404_hook_returns_no_data_result(self):
+        ioc = make_ipv4_ioc("192.0.2.1")
+        hook = _no_data_on_404_hook(ioc, "ExampleProvider")
+
+        result = hook(make_mock_response(404))
+
+        assert isinstance(result, EnrichmentResult)
+        assert result.ioc is ioc
+        assert result.provider == "ExampleProvider"
+        assert result.verdict == "no_data"
+        assert result.raw_stats == {}
+
+    def test_shared_404_hook_ignores_other_statuses(self):
+        hook = _no_data_on_404_hook(make_ipv4_ioc("192.0.2.1"), "ExampleProvider")
+
+        assert hook(make_mock_response(500)) is None
+
+    def test_shared_429_helper_returns_rate_limit_error(self):
+        ioc = make_ipv4_ioc("192.0.2.1")
+
+        result = _rate_limit_on_429(make_mock_response(429), ioc, "ExampleProvider")
+
+        assert isinstance(result, EnrichmentError)
+        assert result.ioc is ioc
+        assert result.provider == "ExampleProvider"
+        assert result.error == "Rate limit exceeded (429)"
+
+    def test_shared_429_helper_ignores_other_statuses(self):
+        result = _rate_limit_on_429(
+            make_mock_response(500),
+            make_ipv4_ioc("192.0.2.1"),
+            "ExampleProvider",
+        )
+
+        assert result is None
+
+    def test_generic_status_policy_flags_build_shared_hook(self):
+        ioc = make_ipv4_ioc("192.0.2.1")
+        adapter = StubPolicyHookAdapter(allowed_hosts=["api.test"])
+
+        hook = adapter._make_pre_raise_hook(ioc)
+
+        assert hook is not None
+        no_data = hook(make_mock_response(404))
+        rate_limit = hook(make_mock_response(429))
+        pass_through = hook(make_mock_response(500))
+        assert isinstance(no_data, EnrichmentResult)
+        assert no_data.provider == "StubProvider"
+        assert no_data.verdict == "no_data"
+        assert isinstance(rate_limit, EnrichmentError)
+        assert rate_limit.provider == "StubProvider"
+        assert rate_limit.error == "Rate limit exceeded (429)"
+        assert pass_through is None
 
 
 # ---------------------------------------------------------------------------

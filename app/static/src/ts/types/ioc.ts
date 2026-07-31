@@ -14,9 +14,8 @@
  * Source: main.js VERDICT_LABELS keys (lines 231–237).
  * Used as discriminant values throughout enrichment result processing.
  *
- * Note: known_good is intentionally excluded from VERDICT_SEVERITY — it is
- * not a severity level but a classification override. verdictSeverityIndex()
- * returns -1 for known_good, which is correct and intentional.
+ * Summary and display ordering use one precedence contract. A known-good
+ * result does not override a suspicious or malicious result.
  */
 import { pageResultsElement } from "../utils/dom";
 
@@ -46,8 +45,8 @@ type IocType =
   | "sha256";
 
 /**
- * Returns the severity index for a verdict key.
- * Higher index = higher severity. Returns -1 if not found (e.g. known_good).
+ * Return the shared verdict precedence rank.
+ * Worst to best is malicious > suspicious > known_good > clean > no_data > error.
  */
 export function verdictSeverityIndex(verdict: VerdictKey): number {
   switch (verdict) {
@@ -57,21 +56,19 @@ export function verdictSeverityIndex(verdict: VerdictKey): number {
       return 1;
     case "clean":
       return 2;
-    case "suspicious":
-      return 3;
-    case "malicious":
-      return 4;
     case "known_good":
-      return -1;
-    default:
-      return -1;
+      return 3;
+    case "suspicious":
+      return 4;
+    case "malicious":
+      return 5;
   }
 }
 
 /**
  * Human-readable display labels for each verdict key.
  *
- * Typed as `Record<VerdictKey, string>` to ensure all five keys are present
+ * Typed as `Record<VerdictKey, string>` to ensure all six keys are present
  * and that indexing with an invalid key produces a compile error under
  * `noUncheckedIndexedAccess`.
  *

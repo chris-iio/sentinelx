@@ -1,6 +1,6 @@
 # SentinelX optimization audit workflow
 
-M013 adds a checked-in workflow for running and recording a full-stack optimization pass without turning the results into ad hoc prose.
+M013 introduced the checked-in workflow for running and recording a full-stack optimization pass without turning the results into ad hoc prose. That history remains durable; the current completed milestone surface is M020, and the runner now accepts an explicit `--milestone-id` for milestone-local generation.
 
 ## Goals
 
@@ -17,24 +17,31 @@ M013 adds a checked-in workflow for running and recording a full-stack optimizat
 
 ```bash
 python3 tools/optimization_audit.py --help
-make audit-m013-template
-make audit-m013
+make audit-m020-template
+make audit-m020
 ```
+
+The Make targets are the current M020 convenience wrappers. The direct CLI is the generic runner surface: pass `--milestone-id` and an explicit milestone-local output path.
 
 ### Direct CLI usage
 
 ```bash
 python3 tools/optimization_audit.py \
+  --milestone-id M020 \
   --mode template \
-  --output .gsd/milestones/M013/M013-AUDIT-TEMPLATE.md
+  --output .gsd/milestones/M020/M020-AUDIT-TEMPLATE.md
 
 python3 tools/optimization_audit.py \
+  --milestone-id M020 \
   --mode baseline \
-  --output .gsd/milestones/M013/M013-AUDIT.md
+  --output .gsd/milestones/M020/M020-AUDIT.md
 ```
 
-`template` mode writes the reusable blank scaffold.
-`baseline` mode writes the current M013 baseline findings, seam notes, guardrail coverage, and lightweight local measurement captures, including a synthetic runtime/provider diagnostics pass sourced from the orchestrator.
+`template` mode writes the reusable blank scaffold. `baseline` mode writes the working audit; `--milestone-id M020` selects the M020-specific aggressive-rewrite contract, ranked outcomes, seam notes, guardrail coverage, verification guidance, and lightweight local measurement captures. M013 remains the CLI default when no milestone ID is supplied.
+
+### M013 history
+
+M013 remains the workflow's origin and its artifacts remain under `.gsd/milestones/M013/`. The legacy `make audit-m013-template` and `make audit-m013` targets are still present for reproducing that milestone, but they are not the current rerun surface.
 
 ### Optional command captures
 
@@ -107,10 +114,10 @@ Explicit keep-decisions for seams that are already intentionally shaped and do n
 
 ## Recommended downstream usage
 
-1. Refresh `.gsd/milestones/M013/M013-AUDIT.md` from the runner so the ranked buckets stay current.
+1. Refresh `.gsd/milestones/M020/M020-AUDIT.md` with `make audit-m020` or the equivalent `--milestone-id M020` baseline command so the completed milestone's shipped, rejected, deferred, and leave-alone outcomes remain reproducible.
 2. Re-run `make verify-fast` for every shipped optimization and record the fresh evidence in the task summary or as an audit capture.
 3. Re-run `make verify-deep` whenever the change touches live enrichment orchestration, polling/status behavior, shared result application, or analyst-visible DOM/state; deterministic mocked-online browser proof is part of the contract for those seams.
 4. Compare the updated ranked rows, rerun lanes, and continuity notes in place instead of creating disconnected one-off notes.
 5. Add command captures whenever a claim can be anchored to measured output.
 6. Keep `leave alone` rows current. They are part of the audit proof, not filler.
-7. For the runtime/provider seam specifically, use the synthetic `runtime-provider-diagnostics` capture to separate a narrow cache-hit/dispatch ship target from explicit backoff/session keep-decisions.
+7. For the runtime/provider seam specifically, use the synthetic `runtime-provider-diagnostics` capture to distinguish measured dispatch/retry behavior from explicit concurrency, backoff, and session keep-decisions.

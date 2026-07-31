@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-ctf">
+    <a href="{{ url_for('main.ctf_events_list') }}" class="back-link"
+       aria-label="Back to events">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"
+             width="16" height="16">
+            <path d="M10 12L6 8l4-4"/>
+        </svg>
+        Events
+    </a>
+    <div class="ctf-card">
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for category, message in messages %}
+        <div class="alert alert-{{ category }}" role="alert">{{ message }}</div>
+        {% endfor %}
+        {% endwith %}
+
+        <h1 class="ctf-heading">{{ event.name }}</h1>
+        <p class="ctf-muted">
+            {% if event.url %}<a href="{{ event.url }}" class="ctf-link"
+               rel="noopener noreferrer">{{ event.url }}</a> &middot; {% endif %}
+            {{ stats.solved }}/{{ stats.total }} solved &middot; {{ stats.points }} pts
+            &middot;
+            <a href="{{ url_for('main.ctf_event_writeup', event_id=event.id) }}"
+               class="ctf-link">Export writeup (.md)</a>
+        </p>
+
+        <form method="post"
+              action="{{ url_for('main.ctf_challenge_create', event_id=event.id) }}"
+              class="ctf-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <div class="ctf-form-row">
+                <input type="text" name="name" class="form-input" maxlength="160"
+                       placeholder="Challenge name" required aria-label="Challenge name">
+                <select name="category" class="form-input" aria-label="Category">
+                    {% for category in categories %}
+                    <option value="{{ category }}">{{ category }}</option>
+                    {% endfor %}
+                </select>
+                <select name="difficulty" class="form-input" aria-label="Difficulty">
+                    {% for difficulty in difficulties %}
+                    <option value="{{ difficulty }}">{{ difficulty }}</option>
+                    {% endfor %}
+                </select>
+                <input type="number" name="points" class="form-input ctf-points-input"
+                       min="0" max="100000" value="0" aria-label="Points">
+                <button type="submit" class="btn btn-primary">Add challenge</button>
+            </div>
+            <textarea name="description" class="ioc-textarea ioc-textarea--compact" rows="2" maxlength="4000"
+                      placeholder="Description / starting intel (optional)"
+                      aria-label="Challenge description"></textarea>
+        </form>
+
+        {% if challenges %}
+        <table class="ctf-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Category</th>
+                    <th>Difficulty</th>
+                    <th>Pts</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for challenge in challenges %}
+                <tr>
+                    <td>
+                        <a href="{{ url_for('main.ctf_challenge_detail', challenge_id=challenge.id) }}"
+                           class="ctf-link">{{ challenge.name }}</a>
+                    </td>
+                    <td>{{ challenge.category }}</td>
+                    <td>{{ challenge.difficulty }}</td>
+                    <td>{{ challenge.points }}</td>
+                    <td>
+                        <span class="ctf-badge ctf-badge--{{ challenge.status }}">
+                            {{ challenge.status }}
+                        </span>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="history-empty">No challenges yet. Add the first one above.</p>
+        {% endif %}
+
+        <form method="post"
+              action="{{ url_for('main.ctf_event_delete', event_id=event.id) }}"
+              class="ctf-danger-zone">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <button type="submit" class="btn btn-secondary">Delete event</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

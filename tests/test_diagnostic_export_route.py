@@ -39,9 +39,10 @@ def _archive_entries(archive_bytes: bytes) -> dict[str, bytes]:
 
 def _patch_route_runtime(monkeypatch: pytest.MonkeyPatch, app) -> None:  # noqa: ANN001
     import app.routes.diagnostics as diagnostics_route
+    import app.routes.diagnostic_export as export_helpers
 
     monkeypatch.setattr(diagnostics_route, "ConfigStore", RouteConfigStore)
-    monkeypatch.setattr(diagnostics_route, "_utcnow", lambda: FIXED_NOW)
+    monkeypatch.setattr(export_helpers, "utc_now", lambda: FIXED_NOW)
     app.cache_store = RouteCacheStore()
     app.history_store = RouteHistoryStore()
 
@@ -83,14 +84,14 @@ def test_diagnostic_export_route_returns_zip_headers_manifest_and_redacted_paylo
 def test_diagnostic_export_route_logs_bounded_assembly_error(
     app, client, monkeypatch: pytest.MonkeyPatch, caplog  # noqa: ANN001
 ) -> None:
-    import app.routes.diagnostics as diagnostics_route
+    import app.routes.diagnostic_export as export_helpers
 
     _patch_route_runtime(monkeypatch, app)
 
     def fail_assembly(*args, **kwargs):  # noqa: ANN002, ANN003
         raise RuntimeError(f"boom with {ROUTE_SECRET}")
 
-    monkeypatch.setattr(diagnostics_route, "assemble_diagnostic_bundle", fail_assembly)
+    monkeypatch.setattr(export_helpers, "assemble_diagnostic_bundle", fail_assembly)
 
     with caplog.at_level("ERROR", logger="app.routes.diagnostics"):
         response = client.get("/diagnostics/export")
@@ -112,7 +113,7 @@ def test_diagnostic_export_route_logs_bounded_assembly_error(
 def test_diagnostic_export_route_is_rate_limited(
     app, client, monkeypatch: pytest.MonkeyPatch  # noqa: ANN001
 ) -> None:
-    import app.routes.diagnostics as diagnostics_route
+    import app.routes.diagnostic_export as export_helpers
 
     _patch_route_runtime(monkeypatch, app)
     fake_manifest = DiagnosticManifest(
@@ -135,8 +136,98 @@ def test_diagnostic_export_route_is_rate_limited(
         manifest=fake_manifest,  # type: ignore[arg-type]
         archive_paths=("manifest.json",),
     )
-    monkeypatch.setattr(diagnostics_route, "assemble_diagnostic_bundle", lambda *args, **kwargs: fake_bundle)
+    monkeypatch.setattr(export_helpers, "assemble_diagnostic_bundle", lambda *args, **kwargs: fake_bundle)
 
     responses = [client.get("/diagnostics/export") for _ in range(4)]
 
     assert [response.status_code for response in responses] == [200, 200, 200, 429]
+
+
+def test_diagnostic_export_route_delegates_response_helper() -> None:
+    """The Flask route should not own diagnostic export response construction."""
+    import inspect
+
+    import app.routes.diagnostic_export as export_helpers
+    import app.routes.diagnostics as diagnostics_route
+
+    route_source = inspect.getsource(diagnostics_route.diagnostics_export)
+    route_helper_source = inspect.getsource(export_helpers.diagnostic_export_route_response)
+    helper_source = inspect.getsource(export_helpers.diagnostic_export_response)
+    failure_source = inspect.getsource(export_helpers.diagnostic_export_failure_response)
+    applier_source = inspect.getsource(export_helpers.apply_diagnostic_export_http_response)
+
+    assert "diagnostic_export_route_response(" in route_source
+    assert "cache_store=current_app.cache_store" in route_source
+    assert "history_store=current_app.history_store" in route_source
+    assert "utc_now" not in route_source
+    assert not hasattr(diagnostics_route, "_utcnow")
+    assert "diagnostic_export_response(" not in route_source
+    assert "diagnostic_export_failure_response()" not in route_source
+    assert "ConfigStore()" not in route_source
+    assert "app=current_app" not in route_source
+    assert "logger.error(" not in route_source
+    assert "build_default_diagnostic_sources(" not in route_source
+    assert "assemble_diagnostic_bundle(" not in route_source
+    assert "Content-Disposition" not in route_source
+    assert "X-Diagnostic-Sources" not in route_source
+    assert "Diagnostic export failed. Check server logs." not in route_source
+    assert "Response(" not in route_source
+    assert "config_store_factory()" in route_helper_source
+    assert "resolved_now_factory = utc_now if now_factory is None else now_factory" in route_helper_source
+    assert "resolved_now_factory()" in route_helper_source
+    assert "app.cache_store" not in route_helper_source
+    assert "app.history_store" not in route_helper_source
+    assert "cache_store=cache_store" in route_helper_source
+    assert "history_store=history_store" in route_helper_source
+    assert "failure_logger.error(" in route_helper_source
+    assert "diagnostic_export_failure_response()" in route_helper_source
+    assert "apply_diagnostic_export_http_response(" in route_helper_source
+    assert "build_default_diagnostic_sources(" in helper_source
+    assert "assemble_diagnostic_bundle(" in helper_source
+    assert "Content-Disposition" in helper_source
+    assert "return Response(" not in helper_source
+    assert export_helpers.DIAGNOSTIC_EXPORT_FAILURE_BODY == (
+        "Diagnostic export failed. Check server logs."
+    )
+    assert "DIAGNOSTIC_EXPORT_FAILURE_BODY" in failure_source
+    assert "mimetype=\"text/plain\"" in failure_source
+    assert "return Response(" not in failure_source
+    assert "response_factory(" in applier_source
+
+
+def test_diagnostic_export_route_response_accepts_explicit_clock(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Route helper clock capture should be injectable without monkeypatching utc_now."""
+    import inspect
+
+    import app.routes.diagnostic_export as export_helpers
+
+    calls: list[dict[str, object]] = []
+    config_store = RouteConfigStore()
+    cache_store = RouteCacheStore()
+    history_store = RouteHistoryStore()
+
+    def export_response(**kwargs):
+        calls.append(kwargs)
+        return export_helpers.DiagnosticExportHttpResponse("ok", mimetype="text/plain")
+
+    monkeypatch.setattr(export_helpers, "diagnostic_export_response", export_response)
+
+    response = export_helpers.diagnostic_export_route_response(
+        cache_store=cache_store,
+        history_store=history_store,
+        now_factory=lambda: FIXED_NOW,
+        config_store_factory=lambda: config_store,
+        failure_logger=object(),
+    )
+    helper_source = inspect.getsource(export_helpers.diagnostic_export_route_response)
+
+    assert response.status_code == 200
+    assert response.get_data(as_text=True) == "ok"
+    assert calls == [{
+        "timestamp": FIXED_NOW,
+        "config_store": config_store,
+        "cache_store": cache_store,
+        "history_store": history_store,
+    }]
+    assert "now_factory" in helper_source
+    assert "utc_now()" not in helper_source

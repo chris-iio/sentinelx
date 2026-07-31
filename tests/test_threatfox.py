@@ -16,9 +16,12 @@ from app.pipeline.models import IOCType
 from app.enrichment.adapters.threatfox import (
     TFAdapter,
     _HASH_TYPES,
+    _higher_confidence_record,
     _parse_response,
     _select_best_record,
+    _threatfox_raw_stats,
     _threatfox_result,
+    _threatfox_verdict,
 )
 from tests.helpers import (
     make_mock_response,
@@ -176,7 +179,6 @@ class TestEdgeCases:
         assert result.total_engines == 0
         assert result.scan_date is None
         assert result.raw_stats == {}
-        assert 'no_data_result(ioc, "ThreatFox")' in inspect.getsource(_parse_response)
 
     def test_ok_with_empty_data_returns_no_data_before_record_selection(self, monkeypatch) -> None:
         """ThreatFox ok responses without records should not build an empty suspicious hit."""
@@ -252,10 +254,44 @@ class TestEdgeCases:
         assert result.scan_date == "2024-01-15 12:00:00 UTC"
         assert result.raw_stats is raw_stats
 
+    def test_parse_response_delegates_verdict_and_raw_stats_helpers(self) -> None:
+        """ThreatFox parser should not own confidence verdicting or raw_stats literals."""
+        source = inspect.getsource(_parse_response)
+
+        assert 'abusech_data_records(body, no_data_status="no_result")' in source
+        assert "_threatfox_verdict(confidence_level)" in source
+        assert "_threatfox_raw_stats(best, confidence_level)" in source
+        assert 'body.get("data")' not in source
+        assert 'body.get("query_status"' not in source
+        assert "CONFIDENCE_THRESHOLD else" not in source
+        assert '"threat_type": best.get("threat_type")' not in source
+
+    def test_raw_stats_helper_preserves_key_order_and_values(self) -> None:
+        """Selected-record metadata should keep the public raw_stats shape stable."""
+        record = _tf_hit_response(confidence_level=90)["data"][0]
+
+        raw_stats = _threatfox_raw_stats(record, 90)
+
+        assert list(raw_stats) == [
+            "threat_type",
+            "malware_printable",
+            "confidence_level",
+            "ioc_type_desc",
+        ]
+        assert raw_stats["threat_type"] == record["threat_type"]
+        assert raw_stats["malware_printable"] == record["malware_printable"]
+        assert raw_stats["confidence_level"] == 90
+        assert raw_stats["ioc_type_desc"] == record["ioc_type_desc"]
+
 
 # -- Task 1 Tests: Confidence threshold boundary tests -------------------------
 
 class TestConfidenceThreshold:
+    def test_verdict_helper_preserves_confidence_threshold(self) -> None:
+        """Threshold semantics should live in the verdict helper."""
+        assert _threatfox_verdict(75) == "malicious"
+        assert _threatfox_verdict(74) == "suspicious"
+
     def test_confidence_threshold_boundary_75(self) -> None:
         """confidence_level=75 exactly -> verdict=malicious (>=75 threshold)."""
         ioc = make_sha256_ioc("c" * 64)
@@ -372,3 +408,35 @@ class TestMultipleResults:
 
         assert best["confidence_level"] == 100
         assert best["malware_printable"] == "Perfect"
+
+    def test_best_record_selection_skips_iteration_for_zero_to_four_records(self) -> None:
+        """Short ThreatFox result sets should use direct indexed comparisons."""
+
+        class NoIterRecords(list):
+            def __iter__(self) -> Iterator[dict]:
+                raise AssertionError("short ThreatFox record selection should not iterate")
+
+        low = {"confidence_level": 20, "malware_printable": "Low"}
+        high = {"confidence_level": 90, "malware_printable": "High"}
+        mid = {"confidence_level": 50, "malware_printable": "Mid"}
+        fourth = {"confidence_level": 75, "malware_printable": "Fourth"}
+
+        assert _select_best_record([]) == {}
+        assert _select_best_record(NoIterRecords([high])) is high
+        assert _select_best_record(NoIterRecords([high, low])) is high
+        assert _select_best_record(NoIterRecords([low, high])) is high
+        assert _select_best_record(NoIterRecords([mid, low, high])) is high
+        assert _select_best_record(NoIterRecords([mid, low, fourth, high])) is high
+
+    def test_best_record_selection_delegates_pair_comparison_before_loop(self) -> None:
+        """ThreatFox short-path comparison should stay isolated from the fallback loop."""
+        source = inspect.getsource(_select_best_record)
+        direct_path, fallback = source.split("best: dict = {}", 1)
+
+        assert "_higher_confidence_record(first, second)" in direct_path
+        assert "_higher_confidence_record(_higher_confidence_record(first, second), third)" in direct_path
+        assert "for record in data" not in direct_path
+        assert "for record in data" in fallback
+        assert _higher_confidence_record({"confidence_level": 75}, {"confidence_level": 74}) == {
+            "confidence_level": 75
+        }

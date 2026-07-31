@@ -14,12 +14,55 @@ Usage:
 """
 from __future__ import annotations
 
-from app.enrichment.provider import Provider
+from .provider import Provider
 from app.pipeline.models import IOCType
 
 
 def _provider_supports_configured_type(provider: Provider, ioc_type: IOCType) -> bool:
     return provider.is_configured() and ioc_type in provider.supported_types
+
+
+def append_registered_provider(
+    providers: list[Provider],
+    registry: dict[str, Provider],
+    name: str,
+) -> None:
+    """Append one provider from the registry map."""
+    providers.append(registry[name])
+
+
+def append_configured_provider(providers: list[Provider], provider: Provider) -> None:
+    """Append a provider when it is configured."""
+    if provider.is_configured():
+        providers.append(provider)
+
+
+def increment_configured_provider_count(count: int, provider: Provider) -> int:
+    """Return the updated configured-provider count."""
+    if provider.is_configured():
+        return count + 1
+    return count
+
+
+def append_provider_for_type(
+    providers: list[Provider],
+    provider: Provider,
+    ioc_type: IOCType,
+) -> None:
+    """Append a provider when it is configured and supports the IOC type."""
+    if _provider_supports_configured_type(provider, ioc_type):
+        providers.append(provider)
+
+
+def increment_provider_type_count(
+    count: int,
+    provider: Provider,
+    ioc_type: IOCType,
+) -> int:
+    """Return the updated count for configured providers supporting an IOC type."""
+    if _provider_supports_configured_type(provider, ioc_type):
+        return count + 1
+    return count
 
 
 class ProviderRegistry:
@@ -66,7 +109,7 @@ class ProviderRegistry:
 
         providers: list[Provider] = []
         for name in self._providers:
-            providers.append(self._providers[name])
+            append_registered_provider(providers, self._providers, name)
         return providers
 
     def registered_count(self) -> int:
@@ -87,9 +130,7 @@ class ProviderRegistry:
 
         providers: list[Provider] = []
         for name in self._providers:
-            provider = self._providers[name]
-            if provider.is_configured():
-                providers.append(provider)
+            append_configured_provider(providers, self._providers[name])
         return providers
 
     def configured_count(self) -> int:
@@ -99,8 +140,7 @@ class ProviderRegistry:
 
         count = 0
         for name in self._providers:
-            if self._providers[name].is_configured():
-                count += 1
+            count = increment_configured_provider_count(count, self._providers[name])
         return count
 
     def providers_for_type(self, ioc_type: IOCType) -> list[Provider]:
@@ -121,9 +161,7 @@ class ProviderRegistry:
 
         providers: list[Provider] = []
         for name in self._providers:
-            provider = self._providers[name]
-            if _provider_supports_configured_type(provider, ioc_type):
-                providers.append(provider)
+            append_provider_for_type(providers, self._providers[name], ioc_type)
         return providers
 
     def provider_count_for_type(self, ioc_type: IOCType) -> int:
@@ -143,6 +181,5 @@ class ProviderRegistry:
         count = 0
         for name in self._providers:
             provider = self._providers[name]
-            if _provider_supports_configured_type(provider, ioc_type):
-                count += 1
+            count = increment_provider_type_count(count, provider, ioc_type)
         return count

@@ -1,4 +1,4 @@
-import { renderRelationshipGraph } from "./graph";
+import { init, renderRelationshipGraph } from "./graph";
 import { readFileSync } from "node:fs";
 
 describe("renderRelationshipGraph", () => {
@@ -53,6 +53,42 @@ describe("renderRelationshipGraph", () => {
     expect(container.textContent).toContain("1.2.3.4");
   });
 
+  it("initializes real safely embedded graph data after HTML parsing", () => {
+    const nodes = [
+      { id: "ioc", label: "1.2.3.4", verdict: "ioc", role: "ioc" },
+      {
+        id: "R&D \"Intel\"",
+        label: "R&D \"Intel\"",
+        verdict: "suspicious",
+        role: "provider",
+      },
+    ];
+    const edges = [
+      { from: "ioc", to: "R&D \"Intel\"", verdict: "suspicious" },
+    ];
+    const escapeAttribute = (value: unknown) =>
+      JSON.stringify(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("\"", "&quot;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;");
+
+    document.body.innerHTML = `
+      <div
+        id="relationship-graph"
+        data-graph-nodes="${escapeAttribute(nodes)}"
+        data-graph-edges="${escapeAttribute(edges)}"
+      ></div>
+    `;
+
+    init();
+
+    const container = document.getElementById("relationship-graph")!;
+    expect(container.querySelectorAll(".graph-node--provider")).toHaveLength(1);
+    expect(container.querySelectorAll(".graph-edges line")).toHaveLength(1);
+    expect(container.textContent).toContain("R&D \"Intel\"");
+  });
+
   it("walks parsed graph arrays without iterator allocation", () => {
     document.body.innerHTML = `<div id="relationship-graph"></div>`;
     const container = document.getElementById("relationship-graph") as HTMLElement;
@@ -92,6 +128,7 @@ describe("renderRelationshipGraph", () => {
     renderRelationshipGraph(container);
 
     expect(container.querySelector(".graph-empty")?.textContent).toBe("No provider data to graph");
+    expect(container.querySelector(".graph-empty")?.getAttribute("role")).toBe("status");
   });
 
   it("skips JSON parsing when graph nodes are the literal empty payload", () => {

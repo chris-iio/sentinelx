@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 import importlib.util
+import inspect
 import json
 import sys
 from pathlib import Path
 from types import MappingProxyType, SimpleNamespace
 
 SCRIPT = Path("tools/security_check.py")
+MAKEFILE = Path("Makefile")
 
 
 def load_security_check_module():
@@ -20,6 +22,31 @@ def load_security_check_module():
     return module
 
 
+def test_security_check_is_part_of_fast_verification_lane() -> None:
+    """The standard fast gate should fail on scanner-detected security regressions."""
+    makefile = MAKEFILE.read_text(encoding="utf-8")
+    verify_fast = makefile[makefile.index("verify-fast:") : makefile.index("## Deep verification lane")]
+
+    assert "security-check" in makefile[makefile.index(".PHONY:") : makefile.index("$(TAILWIND):")]
+    assert "security-check:" in makefile
+    assert "python3 tools/security_check.py --path app --json" in makefile
+    assert "python3 tools/security_check.py --path tools --json" in makefile
+    assert "$(MAKE) security-check" in verify_fast
+    assert verify_fast.index("$(MAKE) security-check") < verify_fast.index("python3 -m pytest")
+
+
+def test_requests_timeout_rule_does_not_flag_an_explicit_timeout() -> None:
+    security_check = load_security_check_module()
+    rule = next(rule for rule in security_check.RULES if rule.rule_id == "MISSING-TIMEOUT")
+    regex = security_check.re.compile(rule.pattern, security_check.re.IGNORECASE)
+
+    safe = "requests.post(url, json=payload, timeout=(5, 30))"
+    unsafe = "requests.post(url, json=payload)"
+
+    assert security_check.scan_text(Path("app/safe.py"), safe, rule, regex) == []
+    assert len(security_check.scan_text(Path("app/unsafe.py"), unsafe, rule, regex)) == 1
+
+
 def test_bandit_count_helper_avoids_sum_generator(monkeypatch):
     """Bandit HIGH/MEDIUM counting should use a direct scan."""
     security_check = load_security_check_module()
@@ -30,14 +57,26 @@ def test_bandit_count_helper_avoids_sum_generator(monkeypatch):
     monkeypatch.setattr("builtins.sum", fail_sum)
 
     assert security_check.count_bandit_high_medium([
-        {"issue_severity": "HIGH"},
-        {"issue_severity": "medium"},
-        {"issue_severity": "LOW"},
-        {"issue_severity": ""},
+        {"issue_severity": "HIGH", "issue_confidence": "LOW"},
+        {"issue_severity": "medium", "issue_confidence": "LOW"},
+        {"issue_severity": "LOW", "issue_confidence": "HIGH"},
+        {"issue_severity": "", "issue_confidence": "HIGH"},
     ]) == 2
     assert security_check.BANDIT_FAIL_SEVERITIES == frozenset(("HIGH", "MEDIUM"))
     assert "BANDIT_FAIL_SEVERITIES" in security_check.count_bandit_high_medium.__code__.co_names
     assert 'in ("HIGH", "MEDIUM")' not in SCRIPT.read_text(encoding="utf-8")
+
+
+def test_bandit_medium_severity_fails_gate(monkeypatch, tmp_path, capsys) -> None:
+    """A Bandit medium-severity count must be reported and block the gate."""
+    security_check = load_security_check_module()
+    monkeypatch.setattr(sys, "argv", [str(SCRIPT), "--path", str(tmp_path), "--json"])
+    monkeypatch.setattr(security_check, "run_scan", lambda _root: [])
+    monkeypatch.setattr(security_check, "run_bandit", lambda _root: (True, 1, 2))
+
+    assert security_check.main() == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["bandit"] == {"ran": True, "high_medium": 1, "total": 2}
 
 
 def test_pip_audit_count_helper_avoids_sum_generator(monkeypatch):
@@ -63,7 +102,7 @@ def test_external_tool_runners_use_shared_count_helpers(monkeypatch, tmp_path):
     calls: list[tuple[str, object]] = []
 
     def fake_run(command, **_kwargs):
-        if command[0] == "bandit":
+        if command[0].endswith("/bandit"):
             return SimpleNamespace(
                 stdout=json.dumps({
                     "results": [
@@ -86,7 +125,7 @@ def test_external_tool_runners_use_shared_count_helpers(monkeypatch, tmp_path):
         calls.append(("pip-audit", dependencies))
         return 1
 
-    monkeypatch.setattr(security_check.shutil, "which", lambda _tool: "/usr/bin/tool")
+    monkeypatch.setattr(security_check.shutil, "which", lambda tool: f"/usr/bin/{tool}")
     monkeypatch.setattr(security_check.subprocess, "run", fake_run)
     monkeypatch.setattr(security_check, "count_bandit_high_medium", count_bandit)
     monkeypatch.setattr(security_check, "count_pip_audit_vulns", count_pip_audit)
@@ -131,11 +170,39 @@ def test_scan_report_counts_cache_finding_scan() -> None:
             snippet="test",
             fix="fix",
         ),
+        security_check.Finding(
+            file="app/example.py",
+            line=3,
+            severity="MEDIUM",
+            rule_id="SEC-TEST",
+            message="test",
+            snippet="test",
+            fix="fix",
+        ),
+        security_check.Finding(
+            file="app/example.py",
+            line=4,
+            severity="LOW",
+            rule_id="SEC-TEST",
+            message="test",
+            snippet="test",
+            fix="fix",
+        ),
+        security_check.Finding(
+            file="app/example.py",
+            line=5,
+            severity="LOW",
+            rule_id="SEC-TEST",
+            message="test",
+            snippet="test",
+            fix="fix",
+        ),
     ])
     report = security_check.ScanReport(findings=findings)
 
     assert report.counts["HIGH"] == 1
-    assert report.counts["LOW"] == 1
+    assert report.counts["LOW"] == 3
+    assert report.counts["MEDIUM"] == 1
     assert report.counts["HIGH"] == 1
     assert CountingFindings.iterations == 1
 
@@ -231,7 +298,7 @@ def test_scan_report_counts_returns_mutation_isolated_copy() -> None:
 
 
 def test_count_findings_by_severity_uses_short_paths() -> None:
-    """Empty/single severity counts should avoid the general findings loop."""
+    """Short severity counts should avoid the general findings loop."""
     security_check = load_security_check_module()
     finding = security_check.Finding(
         file="app/example.py",
@@ -242,6 +309,33 @@ def test_count_findings_by_severity_uses_short_paths() -> None:
         snippet="test",
         fix="fix",
     )
+    second = security_check.Finding(
+        file="app/second.py",
+        line=2,
+        severity="LOW",
+        rule_id="SEC-SECOND",
+        message="second",
+        snippet="second",
+        fix="fix",
+    )
+    third = security_check.Finding(
+        file="app/third.py",
+        line=3,
+        severity="HIGH",
+        rule_id="SEC-THIRD",
+        message="third",
+        snippet="third",
+        fix="fix",
+    )
+    fourth = security_check.Finding(
+        file="app/fourth.py",
+        line=4,
+        severity="MEDIUM",
+        rule_id="SEC-FOURTH",
+        message="fourth",
+        snippet="fourth",
+        fix="fix",
+    )
 
     class NoIterFindings(list):
         def __iter__(self):
@@ -249,10 +343,18 @@ def test_count_findings_by_severity_uses_short_paths() -> None:
 
     empty_counts = security_check.count_findings_by_severity(NoIterFindings())
     single_counts = security_check.count_findings_by_severity(NoIterFindings([finding]))
+    pair_counts = security_check.count_findings_by_severity(NoIterFindings([finding, second]))
+    three_counts = security_check.count_findings_by_severity(NoIterFindings([finding, second, third]))
+    four_counts = security_check.count_findings_by_severity(
+        NoIterFindings([finding, second, third, fourth])
+    )
     empty_counts["LOW"] = 99
 
     assert security_check._ZERO_SEVERITY_COUNTS["LOW"] == 0
     assert single_counts == {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 0, "LOW": 0}
+    assert pair_counts == {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 0, "LOW": 1}
+    assert three_counts == {"CRITICAL": 0, "HIGH": 2, "MEDIUM": 0, "LOW": 1}
+    assert four_counts == {"CRITICAL": 0, "HIGH": 2, "MEDIUM": 1, "LOW": 1}
     assert "len" in security_check.count_findings_by_severity.__code__.co_names
     assert "_ZERO_SEVERITY_COUNTS" in security_check.count_findings_by_severity.__code__.co_names
 
@@ -287,7 +389,21 @@ def test_format_json_serializes_findings_with_direct_helper() -> None:
         snippet="third",
         fix="fix",
     )
-    report = security_check.ScanReport(findings=[finding], bandit_ran=True)
+    fourth = security_check.Finding(
+        file="app/fourth.py",
+        line=4,
+        severity="HIGH",
+        rule_id="SEC-FOURTH",
+        message="fourth",
+        snippet="fourth",
+        fix="fix",
+    )
+    report = security_check.ScanReport(
+        findings=[finding],
+        bandit_ran=True,
+        bandit_high_medium=2,
+        bandit_total=3,
+    )
 
     payload = json.loads(security_check.format_json(report))
 
@@ -310,10 +426,19 @@ def test_format_json_serializes_findings_with_direct_helper() -> None:
         security_check.finding_to_dict(second),
         security_check.finding_to_dict(third),
     ]
+    assert security_check.findings_to_dicts(NoIterFindings([finding, second, third, fourth])) == [
+        security_check.finding_to_dict(finding),
+        security_check.finding_to_dict(second),
+        security_check.finding_to_dict(third),
+        security_check.finding_to_dict(fourth),
+    ]
     assert "len" in security_check.findings_to_dicts.__code__.co_names
     assert payload["summary"]["HIGH"] == 1
+    assert payload["bandit"] == {"ran": True, "high_medium": 2, "total": 3}
+    assert "high" not in payload["bandit"]
     assert "findings_to_dicts" in security_check.format_json.__code__.co_names
     assert "finding_to_dict" in security_check.findings_to_dicts.__code__.co_names
+    assert "append_finding_dict" in security_check.findings_to_dicts.__code__.co_names
     assert "asdict" not in security_check.finding_to_dict.__code__.co_names
     assert "asdict" not in SCRIPT.read_text(encoding="utf-8")
     assert "<listcomp>" not in {
@@ -323,7 +448,29 @@ def test_format_json_serializes_findings_with_direct_helper() -> None:
     }
 
 
-def test_ordered_findings_skips_sort_for_three_findings() -> None:
+def test_append_finding_dict_owns_long_path_mutation() -> None:
+    """Long scanner finding serialization should share one append helper."""
+    security_check = load_security_check_module()
+    finding = security_check.Finding(
+        file="app/example.py",
+        line=1,
+        severity="HIGH",
+        rule_id="SEC-TEST",
+        message="test",
+        snippet="test",
+        fix="fix",
+    )
+
+    serialized: list[dict[str, object]] = []
+    security_check.append_finding_dict(serialized, finding)
+    source = inspect.getsource(security_check.findings_to_dicts)
+
+    assert serialized == [security_check.finding_to_dict(finding)]
+    assert "append_finding_dict(serialized, finding)" in source
+    assert "serialized.append(finding_to_dict(finding))" not in source
+
+
+def test_ordered_findings_skips_sort_for_four_findings() -> None:
     security_check = load_security_check_module()
     low = security_check.Finding(
         file="app/low.py",
@@ -352,17 +499,39 @@ def test_ordered_findings_skips_sort_for_three_findings() -> None:
         snippet="medium",
         fix="fix",
     )
+    critical = security_check.Finding(
+        file="app/critical.py",
+        line=4,
+        severity="CRITICAL",
+        rule_id="SEC-CRITICAL",
+        message="critical",
+        snippet="critical",
+        fix="fix",
+    )
 
-    class NoSortFindings(list):
+    class NoIterSortFindings(list):
+        def __iter__(self):
+            raise AssertionError("four security findings should not iterate")
+
         def sort(self, *_args, **_kwargs):
-            raise AssertionError("three security findings should not call list.sort()")
+            raise AssertionError("four security findings should not sort")
 
-    findings = NoSortFindings([low, high, medium])
+    findings = NoIterSortFindings([low, high, medium, critical])
 
     ordered = security_check.ordered_findings(findings)
 
     assert ordered is findings
-    assert ordered == [high, medium, low]
+    assert ordered == [critical, high, medium, low]
+    assert "finding_count == 4" in inspect.getsource(security_check.ordered_findings)
+    assert "append_ordered_finding" in security_check.ordered_findings.__code__.co_names
+    assert "sort" not in security_check.ordered_findings.__code__.co_names
+
+    direct_ordered = []
+    security_check.append_ordered_finding(direct_ordered, low)
+    security_check.append_ordered_finding(direct_ordered, high)
+    security_check.append_ordered_finding(direct_ordered, medium)
+    security_check.append_ordered_finding(direct_ordered, critical)
+    assert direct_ordered == [critical, high, medium, low]
 
 
 def test_should_skip_scans_path_parts_without_set_materialization(monkeypatch) -> None:
@@ -379,6 +548,28 @@ def test_should_skip_scans_path_parts_without_set_materialization(monkeypatch) -
     assert security_check._should_skip(Path("app/routes/api.py")) is False
 
 
+def test_collect_files_delegates_append_mutation(tmp_path) -> None:
+    """Scanner file discovery should keep filtering separate from accumulation."""
+    security_check = load_security_check_module()
+    app_dir = tmp_path / "app"
+    cache_dir = app_dir / "__pycache__"
+    app_dir.mkdir()
+    cache_dir.mkdir()
+    included = app_dir / "module.py"
+    excluded = cache_dir / "ignored.py"
+    included.write_text("print('ok')\n", encoding="utf-8")
+    excluded.write_text("print('skip')\n", encoding="utf-8")
+    source = inspect.getsource(security_check.collect_files)
+    append_source = inspect.getsource(security_check.append_collected_file)
+
+    files = security_check.collect_files(tmp_path, "*.py")
+
+    assert files == [included]
+    assert "append_collected_file(files, p)" in source
+    assert "files.append(p)" not in source
+    assert "files.append(path)" in append_source
+
+
 def test_is_test_file_scans_indicators_without_any(monkeypatch) -> None:
     """Test-file detection should avoid generator setup for each scanned path."""
     security_check = load_security_check_module()
@@ -389,7 +580,14 @@ def test_is_test_file_scans_indicators_without_any(monkeypatch) -> None:
     monkeypatch.setattr("builtins.any", fail_any)
 
     assert security_check._is_test_file(Path("tests/test_api.py")) is True
+    assert security_check._is_test_file(Path("app/testing/helpers.py")) is True
+    assert security_check._is_test_file(Path("app/conftest.py")) is True
     assert security_check._is_test_file(Path("app/routes/api.py")) is False
+    source = SCRIPT.read_text(encoding="utf-8")
+    is_test_source = source[source.index("def _is_test_file") : source.index("def _should_skip")]
+    assert "for indicator in TEST_INDICATORS" not in is_test_source
+    assert '"test_" in path_str' in is_test_source
+    assert '"testing/" in path_str' in is_test_source
 
 
 def test_run_scan_reads_each_file_once_per_glob_group(monkeypatch, tmp_path) -> None:
@@ -436,6 +634,42 @@ def test_run_scan_reads_each_file_once_per_glob_group(monkeypatch, tmp_path) -> 
     assert [finding.rule_id for finding in findings] == ["DANGEROUS-EVAL", "SHELL-TRUE"]
     assert "scan_text" in security_check.run_scan.__code__.co_names
     assert "setdefault" not in security_check.run_scan.__code__.co_names
+
+
+def test_run_scan_delegates_compiled_rule_grouping() -> None:
+    """Rule grouping should keep regex compilation out of the scan loop."""
+    security_check = load_security_check_module()
+    rule = security_check.Rule(
+        pattern=r"\beval\s*\(",
+        glob="*.py",
+        severity="CRITICAL",
+        rule_id="DANGEROUS-EVAL",
+        message="eval",
+        fix="fix",
+    )
+    second = security_check.Rule(
+        pattern=r"shell\s*=\s*True",
+        glob="*.py",
+        severity="CRITICAL",
+        rule_id="SHELL-TRUE",
+        message="shell",
+        fix="fix",
+    )
+    by_glob: dict[str, list[tuple[object, object]]] = {}
+
+    security_check.append_compiled_rule(by_glob, rule)
+    security_check.append_compiled_rule(by_glob, second)
+
+    assert [compiled_rule.rule_id for compiled_rule, _regex in by_glob["*.py"]] == [
+        "DANGEROUS-EVAL",
+        "SHELL-TRUE",
+    ]
+    assert all(regex.flags & security_check.re.IGNORECASE for _rule, regex in by_glob["*.py"])
+    run_scan_source = inspect.getsource(security_check.run_scan)
+    helper_source = inspect.getsource(security_check.append_compiled_rule)
+    assert "append_compiled_rule(by_glob, rule)" in run_scan_source
+    assert "re.compile(rule.pattern" not in run_scan_source
+    assert "re.compile(rule.pattern" in helper_source
 
 
 def test_run_scan_streams_applicable_rules_without_active_rule_list(monkeypatch, tmp_path) -> None:
@@ -566,4 +800,24 @@ def test_scan_text_scans_lines_without_splitlines_allocation() -> None:
 
     assert [finding.line for finding in findings] == [4]
     assert findings[0].snippet == "eval('2')"
+    assert "next_scan_line" in security_check.scan_text.__code__.co_names
     assert "splitlines" not in security_check.scan_text.__code__.co_names
+
+
+def test_next_scan_line_owns_line_boundary_progression() -> None:
+    """Line boundary walking should stay out of scan_text's rule loop."""
+    security_check = load_security_check_module()
+    text = "first\r\nsecond\nthird\rfourth"
+
+    first, offset = security_check.next_scan_line(text, 0)
+    second, offset = security_check.next_scan_line(text, offset)
+    third, offset = security_check.next_scan_line(text, offset)
+    fourth, offset = security_check.next_scan_line(text, offset)
+
+    assert (first, second, third, fourth) == ("first", "second", "third", "fourth")
+    assert offset == len(text) + 1
+    source = SCRIPT.read_text(encoding="utf-8")
+    scan_source = source[source.index("def scan_text") : source.index("def next_scan_line")]
+    line_source = source[source.index("def next_scan_line") : source.index("def bounded_stripped_snippet")]
+    assert "while end < text_length" not in scan_source
+    assert "while end < text_length" in line_source

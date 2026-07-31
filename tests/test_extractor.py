@@ -4,6 +4,7 @@ Uses both iocextract and iocsearcher under the hood.
 Tests cover all required IOC types and edge cases.
 """
 
+import inspect
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -167,7 +168,7 @@ class TestExtractEdgeCases:
 
     def test_expected_extraction_errors_share_one_policy(self):
         """All library extraction paths should use the shared expected-error tuple."""
-        source = extractor_module.extract_iocs.__code__.co_names
+        source = extractor_module._handle_extraction_error.__code__.co_names
 
         assert extractor_module._EXPECTED_EXTRACTION_ERRORS == (
             ValueError,
@@ -176,6 +177,7 @@ class TestExtractEdgeCases:
             UnicodeError,
         )
         assert "_EXPECTED_EXTRACTION_ERRORS" in source
+        assert "_handle_extraction_error" in extractor_module.extract_iocs.__code__.co_names
 
     def test_expected_extraction_errors_fail_closed_without_warning(self):
         """Expected library errors should be swallowed while other sources continue."""
@@ -252,6 +254,11 @@ class TestDeduplicationInExtract:
             {"raw": "192.0.2.10", "type_hint": "ipv4"},
             {"raw": "CVE-2026-12345", "type_hint": "cve"},
         ]
+        extract_source = inspect.getsource(extractor_module.extract_iocs)
+        append_source = inspect.getsource(extractor_module._append_candidate)
+        assert "_append_candidate(candidates, seen_raw, raw, type_hint)" in extract_source
+        assert 'candidates.append({"raw": stripped_raw, "type_hint": type_hint})' not in extract_source
+        assert 'candidates.append({"raw": stripped_raw, "type_hint": type_hint})' in append_source
 
 
 class TestExtractEmail:

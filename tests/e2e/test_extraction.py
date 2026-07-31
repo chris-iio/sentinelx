@@ -213,7 +213,7 @@ def test_cards_have_type_badges(page: Page, index_url: str) -> None:
 
 
 def test_cards_have_verdict_labels(page: Page, index_url: str) -> None:
-    """Each IOC card has a verdict label (defaults to NO DATA in offline mode)."""
+    """Offline cards state that extraction ran but providers were not queried."""
     idx = IndexPage(page, index_url.rstrip("/"))
     idx.goto()
     idx.extract_iocs(IPV4_ONLY)
@@ -221,11 +221,14 @@ def test_cards_have_verdict_labels(page: Page, index_url: str) -> None:
     results = ResultsPage(page)
     labels = results.verdict_labels("ipv4")
     expect(labels).to_have_count(2)
-    expect(labels.first).to_have_text("NO DATA")
+    expect(labels.first).to_have_text("EXTRACTED")
+    expect(labels.first).to_have_attribute(
+        "aria-label", "Extracted locally; providers not queried"
+    )
 
 
 def test_cards_have_data_verdict_attribute(page: Page, index_url: str) -> None:
-    """Each IOC card has a data-verdict attribute (defaults to no_data)."""
+    """Each Offline IOC card carries the explicit not-queried state."""
     idx = IndexPage(page, index_url.rstrip("/"))
     idx.goto()
     idx.extract_iocs(IPV4_ONLY)
@@ -237,7 +240,9 @@ def test_cards_have_data_verdict_attribute(page: Page, index_url: str) -> None:
     for i in range(count):
         card = cards.nth(i)
         verdict = card.get_attribute("data-verdict")
-        assert verdict == "no_data", f"Card {i} should have data-verdict='no_data', got '{verdict}'"
+        assert verdict == "not_queried", (
+            f"Card {i} should have data-verdict='not_queried', got '{verdict}'"
+        )
 
 
 def test_cards_have_data_ioc_value_attribute(page: Page, index_url: str) -> None:

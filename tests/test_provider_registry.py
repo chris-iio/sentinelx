@@ -7,6 +7,7 @@ avoid coupling tests to real adapter implementations.
 from __future__ import annotations
 
 import builtins
+import inspect
 
 import pytest
 
@@ -163,6 +164,21 @@ class TestRegistryRegister:
 
         assert registry.all() == [provider]
 
+    def test_all_delegates_registered_provider_append(self) -> None:
+        """all() should keep the provider append mutation in one helper."""
+        provider = _make_ip_provider()
+        providers = []
+        registry_map = {"IPProvider": provider}
+        all_source = inspect.getsource(ProviderRegistry.all)
+        append_source = inspect.getsource(registry_module.append_registered_provider)
+
+        registry_module.append_registered_provider(providers, registry_map, "IPProvider")
+
+        assert providers == [provider]
+        assert "append_registered_provider(providers, self._providers, name)" in all_source
+        assert "providers.append(self._providers[name])" not in all_source
+        assert "providers.append(registry[name])" in append_source
+
     def test_registered_count_does_not_allocate_provider_list(self, monkeypatch) -> None:
         """registered_count() should count registry entries without copying providers."""
         registry = ProviderRegistry()
@@ -222,6 +238,23 @@ class TestRegistryConfigured:
         monkeypatch.setattr(registry, "configured", fail_configured)
 
         assert registry.configured_count() == 1
+
+    def test_configured_count_delegates_count_step(self) -> None:
+        """configured_count() should share one helper for the count decision."""
+        configured = _make_ip_provider(name="Configured", configured=True)
+        unconfigured = _make_hash_provider(name="Unconfigured", configured=False)
+
+        assert registry_module.increment_configured_provider_count(0, configured) == 1
+        assert registry_module.increment_configured_provider_count(1, unconfigured) == 1
+
+        count_source = inspect.getsource(ProviderRegistry.configured_count)
+        helper_source = inspect.getsource(registry_module.increment_configured_provider_count)
+        assert (
+            "increment_configured_provider_count(count, self._providers[name])"
+            in count_source
+        )
+        assert "count += 1" not in count_source
+        assert "return count + 1" in helper_source
 
 
 # ---------------------------------------------------------------------------
@@ -328,6 +361,26 @@ class TestRegistryListReturningFilters:
         assert registry.configured() == [configured]
         assert registry.providers_for_type(IOCType.IPV4) == [configured]
 
+    def test_list_filters_delegate_append_mutation(self) -> None:
+        """Configured/type list filters should share helper-owned append mutation."""
+        configured_source = inspect.getsource(ProviderRegistry.configured)
+        type_source = inspect.getsource(ProviderRegistry.providers_for_type)
+        configured_append_source = inspect.getsource(registry_module.append_configured_provider)
+        type_append_source = inspect.getsource(registry_module.append_provider_for_type)
+
+        assert (
+            "append_configured_provider(providers, self._providers[name])"
+            in configured_source
+        )
+        assert "providers.append(provider)" not in configured_source
+        assert (
+            "append_provider_for_type(providers, self._providers[name], ioc_type)"
+            in type_source
+        )
+        assert "providers.append(provider)" not in type_source
+        assert "providers.append(provider)" in configured_append_source
+        assert "providers.append(provider)" in type_append_source
+
 
 # ---------------------------------------------------------------------------
 # provider_count_for_type()
@@ -401,3 +454,17 @@ class TestRegistryProviderCountForType:
 
         assert registry.provider_count_for_type(IOCType.IPV4) == 1
         assert calls == [("IP", IOCType.IPV4)]
+
+    def test_count_delegates_type_count_step(self) -> None:
+        """provider_count_for_type() should share one helper for count mutation."""
+        provider = _make_ip_provider(name="IP", configured=True)
+        nonmatching = _make_hash_provider(name="Hash", configured=True)
+
+        assert registry_module.increment_provider_type_count(0, provider, IOCType.IPV4) == 1
+        assert registry_module.increment_provider_type_count(1, nonmatching, IOCType.IPV4) == 1
+
+        count_source = inspect.getsource(ProviderRegistry.provider_count_for_type)
+        helper_source = inspect.getsource(registry_module.increment_provider_type_count)
+        assert "increment_provider_type_count(count, provider, ioc_type)" in count_source
+        assert "count += 1" not in count_source
+        assert "return count + 1" in helper_source

@@ -16,7 +16,6 @@ Examples:
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import re
 import shutil
@@ -137,7 +136,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--repo-root",
         default=".",
-        help="Repository root used to normalize paths and run git commands (default: current directory).",
+        help=(
+            "Repository root used to normalize paths and run git commands "
+            "(default: current directory)."
+        ),
     )
     parser.add_argument(
         "--format",
@@ -164,7 +166,8 @@ def normalize_repair_targets(paths: Sequence[str], repo_root: Path) -> tuple[str
         root = repo_path_root(relative_path)
         if root not in KNOWN_BOUNDARY_ROOTS:
             raise BoundaryPathError(
-                f"Repair paths must stay within supported boundary roots ({SUPPORTED_BOUNDARY_ROOTS_DISPLAY}); "
+                "Repair paths must stay within supported boundary roots "
+                f"({SUPPORTED_BOUNDARY_ROOTS_DISPLAY}); "
                 f"got '{path_value}'."
             )
         normalized.append(relative_path)
@@ -186,6 +189,8 @@ def repair_target_tuple(targets: Sequence[str]) -> tuple[str, ...]:
         return (targets[0], targets[1])
     if target_count == 3:
         return (targets[0], targets[1], targets[2])
+    if target_count == 4:
+        return (targets[0], targets[1], targets[2], targets[3])
     return tuple(targets)
 
 
@@ -194,7 +199,8 @@ def current_quarantine_stamp() -> str:
     if configured:
         if not QUARANTINE_STAMP_PATTERN.fullmatch(configured):
             raise RepairError(
-                f"{QUARANTINE_STAMP_ENV} must contain only letters, numbers, dot, underscore, or hyphen."
+                f"{QUARANTINE_STAMP_ENV} must contain only letters, numbers, "
+                "dot, underscore, or hyphen."
             )
         return configured
     return utc_timestamp_slug()
@@ -213,7 +219,11 @@ def plan_action_for_finding(
     if finding.issue_code == ISSUE_TRACKED_TRANSIENT:
         command = ("git", "rm", "--cached", "--", finding.path)
         status = "planned" if dry_run else "pending"
-        detail = "would remove from the git index while preserving the working tree" if dry_run else None
+        detail = (
+            "would remove from the git index while preserving the working tree"
+            if dry_run
+            else None
+        )
         return RepairAction(
             path=finding.path,
             issue_code=finding.issue_code,
@@ -224,7 +234,8 @@ def plan_action_for_finding(
             tracked=finding.tracked,
             ignored=finding.ignored,
             rationale=(
-                "Tracked transient runtime state should be deindexed so it stops blocking normal git workflows."
+                "Tracked transient runtime state should be deindexed so it "
+                "stops blocking normal git workflows."
             ),
             command=command,
             detail=detail,
@@ -244,8 +255,9 @@ def plan_action_for_finding(
             tracked=finding.tracked,
             ignored=finding.ignored,
             rationale=(
-                "Unignored transient runtime state should move into the ignored quarantine subtree so the repo "
-                "converges back to the supported boundary."
+                "Unignored transient runtime state should move into the "
+                "ignored quarantine subtree so the repo converges back to the "
+                "supported boundary."
             ),
             destination=destination,
             detail=detail,
@@ -258,7 +270,10 @@ def plan_action_for_finding(
     elif finding.issue_code == ISSUE_UNKNOWN_ROOT:
         detail = "unknown boundary roots fail closed and never receive automatic mutation"
     else:
-        detail = "unsupported issue code stays blocked until the action table is extended explicitly"
+        detail = (
+            "unsupported issue code stays blocked until the action table is "
+            "extended explicitly"
+        )
 
     return RepairAction(
         path=finding.path,
@@ -282,7 +297,13 @@ def plan_repair_actions(report: AuditReport, *, dry_run: bool) -> tuple[RepairAc
     for finding in report.findings:
         if finding.issue_code == ISSUE_UNIGNORED_TRANSIENT and quarantine_stamp is None:
             quarantine_stamp = current_quarantine_stamp()
-        actions.append(plan_action_for_finding(finding, dry_run=dry_run, quarantine_stamp=quarantine_stamp or ""))
+        actions.append(
+            plan_action_for_finding(
+                finding,
+                dry_run=dry_run,
+                quarantine_stamp=quarantine_stamp or "",
+            )
+        )
     return repair_actions_tuple(actions)
 
 
@@ -299,18 +320,34 @@ def repair_actions_tuple(actions: Sequence[RepairAction]) -> tuple[RepairAction,
         return (actions[0], actions[1])
     if action_count == 3:
         return (actions[0], actions[1], actions[2])
+    if action_count == 4:
+        return (actions[0], actions[1], actions[2], actions[3])
     return tuple(actions)
 
 
-def replace_action(action: RepairAction, *, status: str, detail: str, destination: str | None = None) -> RepairAction:
+def replace_action(
+    action: RepairAction,
+    *,
+    status: str,
+    detail: str,
+    destination: str | None = None,
+) -> RepairAction:
     if destination is not None:
         return dataclass_replace(action, status=status, detail=detail, destination=destination)
     return dataclass_replace(action, status=status, detail=detail)
 
 
+def git_executable_path() -> str:
+    git_path = shutil.which("git")
+    if git_path is None:
+        raise RepairError("git executable was not found on PATH.")
+    return git_path
+
+
 def git_path_is_ignored(repo_root: Path, path: str) -> bool:
-    completed = subprocess.run(
-        ["git", "check-ignore", "-q", "--", path],
+    git_path = git_executable_path()
+    completed = subprocess.run(  # noqa: S603 - fixed git executable, no shell.
+        [git_path, "check-ignore", "-q", "--", path],
         cwd=repo_root,
         capture_output=True,
         text=True,
@@ -326,10 +363,15 @@ def git_path_is_ignored(repo_root: Path, path: str) -> bool:
 
 def apply_tracked_transient_repair(action: RepairAction, repo_root: Path) -> RepairAction:
     if action.issue_code != ISSUE_TRACKED_TRANSIENT or not action.command:
-        raise RepairError(f"Unsupported tracked-transient mutation request for issue code '{action.issue_code}'.")
+        raise RepairError(
+            "Unsupported tracked-transient mutation request for issue code "
+            f"'{action.issue_code}'."
+        )
 
-    completed = subprocess.run(
-        action.command,
+    git_path = git_executable_path()
+    resolved_command = (git_path, *action.command[1:])
+    completed = subprocess.run(  # noqa: S603 - fixed git executable, no shell.
+        resolved_command,
         cwd=repo_root,
         capture_output=True,
         text=True,
@@ -355,12 +397,19 @@ def apply_tracked_transient_repair(action: RepairAction, repo_root: Path) -> Rep
 
 def apply_unignored_transient_repair(action: RepairAction, repo_root: Path) -> RepairAction:
     if action.issue_code != ISSUE_UNIGNORED_TRANSIENT or not action.destination:
-        raise RepairError(f"Unsupported unignored-transient mutation request for issue code '{action.issue_code}'.")
+        raise RepairError(
+            "Unsupported unignored-transient mutation request for issue code "
+            f"'{action.issue_code}'."
+        )
 
     source = repo_root / action.path
     destination = repo_root / action.destination
     if not source.exists():
-        return replace_action(action, status="failed", detail="source path disappeared before quarantine could run")
+        return replace_action(
+            action,
+            status="failed",
+            detail="source path disappeared before quarantine could run",
+        )
     if destination.exists():
         return replace_action(
             action,
@@ -378,7 +427,11 @@ def apply_unignored_transient_repair(action: RepairAction, repo_root: Path) -> R
     try:
         shutil.move(str(source), str(destination))
     except OSError as exc:
-        return replace_action(action, status="failed", detail=f"failed to move into quarantine: {exc}")
+        return replace_action(
+            action,
+            status="failed",
+            detail=f"failed to move into quarantine: {exc}",
+        )
 
     if source.exists():
         return replace_action(
@@ -390,7 +443,10 @@ def apply_unignored_transient_repair(action: RepairAction, repo_root: Path) -> R
         return replace_action(
             action,
             status="failed",
-            detail=f"quarantine move completed without leaving a destination file: {action.destination}",
+            detail=(
+                "quarantine move completed without leaving a destination "
+                f"file: {action.destination}"
+            ),
         )
 
     return replace_action(
@@ -400,7 +456,12 @@ def apply_unignored_transient_repair(action: RepairAction, repo_root: Path) -> R
     )
 
 
-def execute_plan(actions: Sequence[RepairAction], repo_root: Path, *, dry_run: bool) -> tuple[RepairAction, ...]:
+def execute_plan(
+    actions: Sequence[RepairAction],
+    repo_root: Path,
+    *,
+    dry_run: bool,
+) -> tuple[RepairAction, ...]:
     if not actions:
         return ()
     if dry_run:
@@ -424,7 +485,96 @@ _COUNTED_ACTION_STATUSES = frozenset(("planned", "pending", "applied"))
 _UNAPPLIED_ACTION_STATUSES = frozenset(("planned", "pending"))
 
 
+def _repair_action_count_components(action: RepairAction) -> tuple[int, int, int, int, int]:
+    actionable = 1 if action.issue_code in SUPPORTED_MUTATION_ISSUES else 0
+    blocked = 1 if action.status == "blocked" else 0
+    failed = 1 if action.status == "failed" else 0
+    deindex = 0
+    quarantine = 0
+    if action.status in _COUNTED_ACTION_STATUSES:
+        if action.action == ACTION_DEINDEX:
+            deindex = 1
+        elif action.action == ACTION_QUARANTINE:
+            quarantine = 1
+    return deindex, quarantine, blocked, failed, actionable
+
+
+def _repair_action_counts_from_components(
+    deindex_count: int,
+    quarantine_count: int,
+    blocked_count: int,
+    failed_count: int,
+    actionable_issue_count: int,
+    *,
+    noop_count: int,
+) -> RepairActionCounts:
+    return RepairActionCounts(
+        summary=RepairSummary(
+            deindex_count=deindex_count,
+            quarantine_count=quarantine_count,
+            blocked_count=blocked_count,
+            failed_count=failed_count,
+            noop_count=noop_count,
+        ),
+        actionable_issue_count=actionable_issue_count,
+        blocked_issue_count=blocked_count,
+        failed_issue_count=failed_count,
+    )
+
+
 def _count_repair_actions(actions: Sequence[RepairAction]) -> RepairActionCounts:
+    action_count = len(actions)
+    if action_count == 0:
+        return _repair_action_counts_from_components(0, 0, 0, 0, 0, noop_count=1)
+    if action_count == 1:
+        deindex, quarantine, blocked, failed, actionable = _repair_action_count_components(
+            actions[0]
+        )
+        return _repair_action_counts_from_components(
+            deindex,
+            quarantine,
+            blocked,
+            failed,
+            actionable,
+            noop_count=0,
+        )
+    if action_count == 2:
+        first = _repair_action_count_components(actions[0])
+        second = _repair_action_count_components(actions[1])
+        return _repair_action_counts_from_components(
+            first[0] + second[0],
+            first[1] + second[1],
+            first[2] + second[2],
+            first[3] + second[3],
+            first[4] + second[4],
+            noop_count=0,
+        )
+    if action_count == 3:
+        first = _repair_action_count_components(actions[0])
+        second = _repair_action_count_components(actions[1])
+        third = _repair_action_count_components(actions[2])
+        return _repair_action_counts_from_components(
+            first[0] + second[0] + third[0],
+            first[1] + second[1] + third[1],
+            first[2] + second[2] + third[2],
+            first[3] + second[3] + third[3],
+            first[4] + second[4] + third[4],
+            noop_count=0,
+        )
+    if action_count == 4:
+        first = _repair_action_count_components(actions[0])
+        second = _repair_action_count_components(actions[1])
+        third = _repair_action_count_components(actions[2])
+        fourth = _repair_action_count_components(actions[3])
+        return _repair_action_counts_from_components(
+            first[0] + second[0] + third[0] + fourth[0],
+            first[1] + second[1] + third[1] + fourth[1],
+            first[2] + second[2] + third[2] + fourth[2],
+            first[3] + second[3] + third[3] + fourth[3],
+            first[4] + second[4] + third[4] + fourth[4],
+            noop_count=0,
+        )
+
     deindex_count = 0
     quarantine_count = 0
     blocked_count = 0
@@ -446,18 +596,13 @@ def _count_repair_actions(actions: Sequence[RepairAction]) -> RepairActionCounts
         elif action.action == ACTION_QUARANTINE:
             quarantine_count += 1
 
-    noop_count = 1 if not actions else 0
-    return RepairActionCounts(
-        summary=RepairSummary(
-            deindex_count=deindex_count,
-            quarantine_count=quarantine_count,
-            blocked_count=blocked_count,
-            failed_count=failed_count,
-            noop_count=noop_count,
-        ),
-        actionable_issue_count=actionable_issue_count,
-        blocked_issue_count=blocked_count,
-        failed_issue_count=failed_count,
+    return _repair_action_counts_from_components(
+        deindex_count,
+        quarantine_count,
+        blocked_count,
+        failed_count,
+        actionable_issue_count,
+        noop_count=0,
     )
 
 
@@ -523,11 +668,25 @@ def repair_actions_to_dicts(actions: Sequence[RepairAction]) -> list[dict[str, o
             repair_action_to_dict(actions[1]),
             repair_action_to_dict(actions[2]),
         ]
+    if action_count == 4:
+        return [
+            repair_action_to_dict(actions[0]),
+            repair_action_to_dict(actions[1]),
+            repair_action_to_dict(actions[2]),
+            repair_action_to_dict(actions[3]),
+        ]
 
     serialized: list[dict[str, object]] = []
     for action in actions:
-        serialized.append(repair_action_to_dict(action))
+        append_repair_action_dict(serialized, action)
     return serialized
+
+
+def append_repair_action_dict(
+    serialized: list[dict[str, object]],
+    action: RepairAction,
+) -> None:
+    serialized.append(repair_action_to_dict(action))
 
 
 def repair_action_to_dict(action: RepairAction) -> dict[str, object]:
@@ -562,7 +721,8 @@ def render_text(report: RepairReport) -> str:
         detail = action.detail or "-"
         lines.append(
             f"- [{action.issue_code}] {action.action} {action.path} status={action.status} "
-            f"tracked={tracked} ignored={ignored} command={command} destination={destination} detail={detail}"
+            f"tracked={tracked} ignored={ignored} command={command} "
+            f"destination={destination} detail={detail}"
         )
     return "\n".join(lines)
 

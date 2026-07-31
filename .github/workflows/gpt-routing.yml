@@ -1,0 +1,63 @@
+name: GPT Routing Policy
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'AGENTS.md'
+      - '.agents/**'
+      - '.claude/**'
+      - '.codex/**'
+      - '.github/workflows/gpt-routing.yml'
+      - '.reports/dead-code-analysis.md'
+      - 'docs/plans/2026-03-02-universal-threat-intel-hub-design.md'
+      - 'docs/plans/2026-03-02-universal-threat-intel-hub.md'
+      - 'docs/plans/2026-03-04-settings-page-redesign.md'
+      - 'scripts/audit-gpt-routing.ts'
+      - 'tests/audit-gpt-routing.test.ts'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'AGENTS.md'
+      - '.agents/**'
+      - '.claude/**'
+      - '.codex/**'
+      - '.github/workflows/gpt-routing.yml'
+      - '.reports/dead-code-analysis.md'
+      - 'docs/plans/2026-03-02-universal-threat-intel-hub-design.md'
+      - 'docs/plans/2026-03-02-universal-threat-intel-hub.md'
+      - 'docs/plans/2026-03-04-settings-page-redesign.md'
+      - 'scripts/audit-gpt-routing.ts'
+      - 'tests/audit-gpt-routing.test.ts'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gpt-routing-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    name: GPT Routing Policy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '22.18.0'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test routing audit
+        run: npm exec vitest -- run tests/audit-gpt-routing.test.ts
+
+      - name: Audit tracked routing policy
+        run: node --no-warnings=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/audit-gpt-routing.ts

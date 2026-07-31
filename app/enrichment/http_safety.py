@@ -17,11 +17,11 @@ import json
 import logging
 from collections.abc import Collection
 from typing import Any, Callable
-from urllib.parse import urlparse
+from urllib.parse import ParseResult, urlparse
 
 import requests
 
-from app.enrichment.models import EnrichmentError, IOC, error_result
+from .models import EnrichmentError, IOC, error_result
 
 logger = logging.getLogger(__name__)
 
@@ -45,17 +45,30 @@ def validate_endpoint(url: str, allowed_hosts: Collection[str]) -> None:
         ValueError: If the URL hostname is not in the allowlist.
     """
     if not allowed_hosts:
-        raise ValueError("Endpoint rejected because allowed_hosts is empty (SSRF allowlist SEC-16).")
-
-    parsed = urlparse(url)
-    if parsed.hostname not in allowed_hosts:
         raise ValueError(
-            f"Endpoint hostname {parsed.hostname!r} not in allowed_hosts "
+            "Endpoint rejected because allowed_hosts is empty (SSRF allowlist SEC-16)."
+        )
+
+    hostname = _validated_endpoint_hostname(urlparse(url))
+    if hostname not in allowed_hosts:
+        raise ValueError(
+            f"Endpoint hostname {hostname!r} not in allowed_hosts "
             f"(SSRF allowlist SEC-16). Allowed: {allowed_hosts!r}"
         )
 
 
-def read_limited(resp: requests.Response) -> dict:
+def _validated_endpoint_hostname(parsed: ParseResult) -> str:
+    """Return the validated hostname from a parsed provider endpoint."""
+    if parsed.scheme != "https":
+        raise ValueError("Endpoint rejected because provider URLs must use HTTPS.")
+    if parsed.username is not None or parsed.password is not None:
+        raise ValueError("Endpoint rejected because provider URLs must not include userinfo.")
+    if parsed.hostname is None:
+        raise ValueError("Endpoint rejected because provider URLs must include a hostname.")
+    return parsed.hostname
+
+
+def read_limited(resp: requests.Response) -> Any:
     """Read streaming response with byte cap (SEC-05).
 
     Reads response body in 8 KB chunks. Raises ValueError if total
@@ -129,7 +142,7 @@ def safe_request(
                         (short-circuit for 404→no_data patterns).
 
     Returns:
-        Parsed JSON body as dict on success, or EnrichmentError on failure.
+        Parsed JSON body on success, or EnrichmentError on failure.
     """
     try:
         validate_endpoint(url, allowed_hosts)

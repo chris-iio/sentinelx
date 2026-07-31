@@ -85,6 +85,42 @@ export function computeResultDisplay(result: EnrichmentItem): ResultDisplay {
 }
 
 /**
+ * Mark locally extracted Offline results separately from provider no-data results.
+ * Preserve the server verdict because filters use the explicit not-queried state.
+ */
+export function initOfflineExtractionStates(
+  pageResults: HTMLElement | null = pageResultsElement()
+): void {
+  if (!pageResults || pageResults.getAttribute("data-mode") !== "offline") return;
+
+  const cards = pageResults.querySelectorAll<HTMLElement>(
+    ".ioc-card[data-verdict='no_data'], .ioc-card[data-verdict='not_queried']"
+  );
+  for (let i = 0; i < cards.length; i += 1) {
+    const card = cards[i];
+    if (!card) continue;
+
+    card.setAttribute("data-provider-query-state", "not_queried");
+
+    const label = card.querySelector<HTMLElement>(".verdict-label");
+    if (label) {
+      label.textContent = "EXTRACTED";
+      label.setAttribute("aria-label", "Extracted locally; providers not queried");
+    }
+
+    const context = card.querySelector<HTMLElement>(".ioc-context-line");
+    if (context) {
+      context.textContent = "Extracted locally · Providers not queried";
+    }
+  }
+
+  const noDataFilter = pageResults.querySelector<HTMLElement>(
+    "[data-filter-verdict='no_data'], [data-filter-verdict='not_queried']"
+  );
+  if (noDataFilter) noDataFilter.textContent = "Extracted";
+}
+
+/**
  * Inject a "View full detail →" link footer into the .enrichment-details panel
  * for a given enrichment slot. Reads data-ioc-type and data-ioc-value from the
  * ancestor .ioc-card and constructs href as /ioc/<type>/<encoded-value>.
@@ -124,7 +160,7 @@ export function injectDetailLink(
 
 /**
  * Sort all .provider-detail-row elements in a container by severity descending.
- * malicious (index 4) first, error (index 0) last.
+ * malicious (rank 5) first, error (rank 0) last.
  *
  * This is the synchronous core — enrichment.ts wraps it in a debounce timer,
  * history.ts calls it directly after replay.
@@ -211,20 +247,58 @@ export function initExportButton(
   if (!pageResults) return;
   if (pageResults.getAttribute("data-results-export-wired") === "true") return;
 
-  const exportBtn = cachedElements.exportButton ?? document.getElementById("export-btn");
-  const dropdown = cachedElements.dropdown ?? document.getElementById("export-dropdown");
-  if (!exportBtn || !dropdown) return;
+  const resolvedExportBtn = cachedElements.exportButton ?? document.getElementById("export-btn");
+  const resolvedDropdown = cachedElements.dropdown ?? document.getElementById("export-dropdown");
+  if (!resolvedExportBtn || !resolvedDropdown) return;
+  const exportBtn: HTMLElement = resolvedExportBtn;
+  const dropdown: HTMLElement = resolvedDropdown;
+
+  function setExpanded(expanded: boolean): void {
+    dropdown.hidden = !expanded;
+    exportBtn.setAttribute("aria-expanded", String(expanded));
+  }
+
+  function closeDropdown(restoreFocus: boolean): void {
+    setExpanded(false);
+    if (restoreFocus) exportBtn.focus();
+  }
+
+  function openDropdown(focusFirstAction: boolean): void {
+    setExpanded(true);
+    if (focusFirstAction) {
+      dropdown.querySelector<HTMLElement>("[data-export]")?.focus();
+    }
+  }
+
+  exportBtn.setAttribute("aria-expanded", String(!dropdown.hidden));
+  if (dropdown.id) exportBtn.setAttribute("aria-controls", dropdown.id);
 
   exportBtn.addEventListener("click", function () {
-    const isVisible = dropdown.style.display !== "none";
-    dropdown.style.display = isVisible ? "none" : "";
+    setExpanded(dropdown.hasAttribute("hidden"));
+  });
+
+  exportBtn.addEventListener("keydown", function (event) {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      openDropdown(true);
+    } else if (event.key === "Escape" && !dropdown.hidden) {
+      event.preventDefault();
+      closeDropdown(false);
+    }
+  });
+
+  dropdown.addEventListener("keydown", function (event) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeDropdown(true);
+    }
   });
 
   // Close dropdown when clicking outside
   document.addEventListener("click", function (e) {
-    const target = e.target as HTMLElement;
-    if (!target.closest(".export-group")) {
-      dropdown.style.display = "none";
+    const target = e.target;
+    if (!(target instanceof Element) || !target.closest(".export-group")) {
+      closeDropdown(false);
     }
   });
 
@@ -243,7 +317,7 @@ export function initExportButton(
     } else if (action === "iocs") {
       copyAllIOCs(btn, allResults);
     }
-    dropdown.style.display = "none";
+    closeDropdown(true);
   });
 
   pageResults.setAttribute("data-results-export-wired", "true");

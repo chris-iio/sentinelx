@@ -10,7 +10,13 @@ import inspect
 from types import MappingProxyType
 
 from app.enrichment.models import EnrichmentResult
-from app.enrichment.adapters.otx import OTXAdapter, _parse_response
+from app.enrichment.adapters.otx import (
+    OTXAdapter,
+    _otx_raw_stats,
+    _otx_signals,
+    _otx_verdict,
+    _parse_response,
+)
 from tests.helpers import (
     make_mock_response,
     mock_adapter_session,
@@ -203,6 +209,65 @@ class TestOTXLookup:
         assert result.detection_count == 0
         assert result.raw_stats["pulse_count"] == 0
 
+    def test_parse_response_delegates_verdict_and_raw_stats_helpers(self) -> None:
+        """Parser should not own OTX threshold or raw_stats mechanics."""
+        source = inspect.getsource(_parse_response)
+
+        assert "_otx_signals(body)" in source
+        assert "_otx_verdict(signals.pulse_count)" in source
+        assert "_otx_raw_stats(" in source
+        assert 'body.get("pulse_info"' not in source
+        assert "_MALICIOUS_THRESHOLD" not in source
+        assert "_SUSPICIOUS_MIN" not in source
+        assert '"pulse_count"' not in source
+
+    def test_signal_helper_preserves_defaults_and_pulse_mapping(self) -> None:
+        """OTX response field extraction should live in one signal helper."""
+        class NoDefaultBody(dict):
+            def get(self, key, default=None):
+                expected_defaults = {
+                    "pulse_info": None,
+                    "reputation": 0,
+                    "type_title": "",
+                }
+                if default != expected_defaults[key]:
+                    raise AssertionError("OTX signal defaults should stay provider-specific")
+                return super().get(key, default)
+
+        signals = _otx_signals(
+            NoDefaultBody({
+                "pulse_info": {"count": 4},
+                "reputation": None,
+                "type_title": None,
+            })
+        )
+
+        assert signals.pulse_count == 4
+        assert signals.reputation == 0
+        assert signals.type_title == ""
+
+    def test_verdict_helper_preserves_thresholds(self) -> None:
+        """OTX thresholds should remain malicious/suspicious/no-data by pulse count."""
+        assert _otx_verdict(5) == "malicious"
+        assert _otx_verdict(4) == "suspicious"
+        assert _otx_verdict(1) == "suspicious"
+        assert _otx_verdict(0) == "no_data"
+
+    def test_raw_stats_helper_preserves_key_order_and_values(self) -> None:
+        """Raw stats helper should preserve OTX metadata shape."""
+        raw_stats = _otx_raw_stats(
+            pulse_count=7,
+            reputation=0,
+            type_title="IPv4",
+        )
+
+        assert list(raw_stats) == ["pulse_count", "reputation", "type_title"]
+        assert raw_stats == {
+            "pulse_count": 7,
+            "reputation": 0,
+            "type_title": "IPv4",
+        }
+
     def test_domain_lookup_returns_result(self) -> None:
         """DOMAIN IOC -> GET /api/v1/indicators/domain/{value}/general."""
         ioc = make_domain_ioc("evil.com")
@@ -310,9 +375,8 @@ class TestOTXLookup:
         assert result.total_engines == 0
         assert result.scan_date is None
         assert result.raw_stats == {}
-        assert "no_data_result(ioc, self.name)" in inspect.getsource(
-            OTXAdapter._make_pre_raise_hook,
-        )
+        assert OTXAdapter._no_data_on_404 is True
+        assert "_make_pre_raise_hook" not in inspect.getsource(OTXAdapter)
 
     def test_raw_stats_contains_expected_keys(self) -> None:
         """200 response -> raw_stats dict contains keys: pulse_count, reputation, type_title."""

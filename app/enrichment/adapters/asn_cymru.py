@@ -7,9 +7,9 @@ import logging
 import dns.exception
 import dns.resolver
 
-from app.enrichment.models import EnrichmentError, EnrichmentResult, error_result, no_data_result
+from .dns_txt import decode_txt_chunks
+from ..models import EnrichmentError, EnrichmentResult, error_result, no_data_result
 from app.pipeline.models import IOC, IOCType
-from app.text_utils import decode_utf8_replace
 
 logger = logging.getLogger(__name__)
 
@@ -30,11 +30,6 @@ class CymruASNAdapter:
     supported_types: frozenset[IOCType] = frozenset((IOCType.IPV4, IOCType.IPV6))
     requires_api_key = False
 
-    def __init__(self, allowed_hosts: list[str]) -> None:
-        # Accepted for API compatibility with Provider protocol; intentionally unused.
-        # DNS uses port 53 directly — no HTTP, no SSRF surface.
-        pass
-
     def is_configured(self) -> bool:
         return True
 
@@ -47,16 +42,8 @@ class CymruASNAdapter:
         except ValueError:
             return error_result(ioc, self.name, "Invalid IP address")
 
-        if ip.version == 4:
-            query = ip.reverse_pointer.replace(_IPV4_SUFFIX, _CYMRU_ZONE_V4)
-        else:
-            query = ip.reverse_pointer.replace(_IPV6_SUFFIX, _CYMRU_ZONE_V6)
-
-        resolver = dns.resolver.Resolver(configure=True)
-        resolver.lifetime = _RESOLVER_LIFETIME
-
         try:
-            answers = resolver.resolve(query, "TXT")
+            answers = _configured_resolver().resolve(_cymru_query_name(ip), "TXT")
             txt = _decode_txt_strings(next(iter(answers)).strings)
             return _parse_response(ioc, txt, self.name)
         except dns.resolver.NXDOMAIN:
@@ -70,34 +57,40 @@ class CymruASNAdapter:
             return error_result(ioc, self.name, "Unexpected error")
 
 
+def _cymru_query_name(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> str:
+    if ip.version == 4:
+        return ip.reverse_pointer.replace(_IPV4_SUFFIX, _CYMRU_ZONE_V4)
+    return ip.reverse_pointer.replace(_IPV6_SUFFIX, _CYMRU_ZONE_V6)
+
+
+def _configured_resolver():
+    resolver = dns.resolver.Resolver(configure=True)
+    resolver.lifetime = _RESOLVER_LIFETIME
+    return resolver
+
+
 def _parse_response(ioc: IOC, txt: str, provider_name: str) -> EnrichmentResult:
     """Parse a pipe-delimited Cymru TXT record: "ASN | prefix | cc | rir | allocated"."""
     # Verdict always no_data — ASN context is informational, not a threat signal.
+    return _no_data_result(
+        ioc=ioc,
+        provider_name=provider_name,
+        raw_stats=_asn_raw_stats(txt),
+    )
+
+
+def _asn_raw_stats(txt: str) -> dict:
     asn, prefix, _country, rir, allocated = _parse_txt_fields(txt)
-    raw_stats = {
+    return {
         "asn": asn,
         "prefix": prefix,
         "rir": rir,
         "allocated": allocated,
     }
-    return _no_data_result(
-        ioc=ioc,
-        provider_name=provider_name,
-        raw_stats=raw_stats,
-    )
 
 
 def _decode_txt_strings(strings) -> str:
-    string_count = len(strings)
-    if string_count == 1:
-        raw_text = strings[0]
-    elif string_count == 2:
-        raw_text = strings[0] + strings[1]
-    elif string_count == 3:
-        raw_text = strings[0] + strings[1] + strings[2]
-    else:
-        raw_text = b"".join(strings)
-    return decode_utf8_replace(raw_text)
+    return decode_txt_chunks(strings)
 
 
 def _no_data_result(

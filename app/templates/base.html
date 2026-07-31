@@ -21,10 +21,16 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='dist/style.css') }}">
 </head>
 <body>
-    <nav class="floating-settings">
-        <a href="{{ url_for('main.history_list') }}" class="nav-link nav-link--icon" aria-label="History">{{ icon("clock", class="nav-icon nav-icon--lg") }}</a>
-        <a href="{{ url_for('main.diagnostics_export') }}" class="nav-link nav-link--icon" aria-label="Download diagnostic export">{{ icon("arrow-down-tray", class="nav-icon nav-icon--lg") }}</a>
-        <a href="{{ url_for('main.settings_get') }}" class="nav-link nav-link--icon" aria-label="Settings">{{ icon("cog-6-tooth", class="nav-icon nav-icon--lg") }}</a>
+    <nav class="floating-settings" aria-label="Primary">
+        <a href="{{ url_for('main.index') }}" class="site-nav-brand"><span class="brand-accent">sentinel</span>x</a>
+        <div class="site-nav-links">
+            <a href="{{ url_for('main.index') }}" class="nav-link nav-link--icon nav-link--workspace" aria-label="Analyze workspace">{{ icon("shield-check", class="nav-icon nav-icon--lg") }}<span class="nav-label">Analyze</span></a>
+            <a href="{{ url_for('main.audit_engagements_list') }}" class="nav-link nav-link--icon nav-link--workspace" aria-label="Audit workspace">{{ icon("clock", class="nav-icon nav-icon--lg") }}<span class="nav-label">Audit</span></a>
+            <a href="{{ url_for('main.ctf_events_list') }}" class="nav-link nav-link--icon nav-link--workspace" aria-label="CTF workspace">{{ icon("flag", class="nav-icon nav-icon--lg") }}<span class="nav-label">CTF</span></a>
+            <a href="{{ url_for('main.history_list') }}" class="nav-link nav-link--icon" aria-label="Saved online analyses">{{ icon("clock", class="nav-icon nav-icon--lg") }}<span class="nav-label">History</span></a>
+            <a href="{{ url_for('main.diagnostics_export') }}" class="nav-link nav-link--icon" aria-label="Download diagnostic export">{{ icon("arrow-down-tray", class="nav-icon nav-icon--lg") }}<span class="nav-label">Diagnostics</span></a>
+            <a href="{{ url_for('main.settings_get') }}" class="nav-link nav-link--icon nav-link--utility-primary" aria-label="Settings">{{ icon("cog-6-tooth", class="nav-icon nav-icon--lg") }}<span class="nav-label">Settings</span></a>
+        </div>
     </nav>
 
     <main class="site-main">

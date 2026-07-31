@@ -1,8 +1,9 @@
 """ThreatFox (abuse.ch) API adapter."""
 from __future__ import annotations
 
-from app.enrichment.adapters.base import BaseHTTPAdapter
-from app.enrichment.models import EnrichmentResult, no_data_result, provider_result
+from .abusech import abusech_data_records
+from .base import BaseHTTPAdapter
+from ..models import EnrichmentResult, no_data_result, provider_result
 from app.pipeline.models import IOC, IOCType
 
 TF_BASE = "https://threatfox-api.abuse.ch/api/v1/"
@@ -14,6 +15,27 @@ _HASH_TYPES = frozenset((IOCType.MD5, IOCType.SHA1, IOCType.SHA256))
 
 
 def _select_best_record(data: list[dict]) -> dict:
+    record_count = len(data)
+    if record_count == 0:
+        if type(data) is list:
+            return {}
+    else:
+        if record_count == 1:
+            return data[0]
+        first = data[0]
+        second = data[1]
+        if record_count == 2:
+            return _higher_confidence_record(first, second)
+        third = data[2]
+        if record_count == 3:
+            return _higher_confidence_record(_higher_confidence_record(first, second), third)
+        fourth = data[3]
+        if record_count == 4:
+            return _higher_confidence_record(
+                _higher_confidence_record(_higher_confidence_record(first, second), third),
+                fourth,
+            )
+
     best: dict = {}
     best_confidence = -1
     for record in data:
@@ -27,37 +49,41 @@ def _select_best_record(data: list[dict]) -> dict:
     return best
 
 
+def _higher_confidence_record(first: dict, second: dict) -> dict:
+    if first.get("confidence_level", 0) >= second.get("confidence_level", 0):
+        return first
+    return second
+
+
 def _parse_response(ioc: IOC, body: dict) -> EnrichmentResult:
-    query_status = body.get("query_status", "")
-
-    if query_status == "no_result":
-        return no_data_result(ioc, "ThreatFox")
-
-    # query_status == "ok" with results
-    raw_data = body.get("data")
-    data = raw_data if isinstance(raw_data, list) else []
-    if not data:
+    data = abusech_data_records(body, no_data_status="no_result")
+    if data is None:
         return no_data_result(ioc, "ThreatFox")
     best = _select_best_record(data)
 
     confidence_level: int = best.get("confidence_level", 0)
-    verdict = "malicious" if confidence_level >= CONFIDENCE_THRESHOLD else "suspicious"
-
-    raw_stats = {
-        "threat_type": best.get("threat_type"),
-        "malware_printable": best.get("malware_printable"),
-        "confidence_level": confidence_level,
-        "ioc_type_desc": best.get("ioc_type_desc"),
-    }
 
     return _threatfox_result(
         ioc=ioc,
-        verdict=verdict,
+        verdict=_threatfox_verdict(confidence_level),
         detection_count=1,
         total_engines=1,
         scan_date=best.get("first_seen"),
-        raw_stats=raw_stats,
+        raw_stats=_threatfox_raw_stats(best, confidence_level),
     )
+
+
+def _threatfox_verdict(confidence_level: int) -> str:
+    return "malicious" if confidence_level >= CONFIDENCE_THRESHOLD else "suspicious"
+
+
+def _threatfox_raw_stats(record: dict, confidence_level: int) -> dict[str, object]:
+    return {
+        "threat_type": record.get("threat_type"),
+        "malware_printable": record.get("malware_printable"),
+        "confidence_level": confidence_level,
+        "ioc_type_desc": record.get("ioc_type_desc"),
+    }
 
 
 def _threatfox_result(

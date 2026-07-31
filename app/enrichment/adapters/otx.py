@@ -3,9 +3,10 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from types import MappingProxyType
+from typing import NamedTuple
 
-from app.enrichment.adapters.base import BaseHTTPAdapter
-from app.enrichment.models import EnrichmentResult, no_data_result, provider_result
+from .base import BaseHTTPAdapter
+from ..models import EnrichmentResult, provider_result
 from app.pipeline.models import IOC, IOCType
 
 OTX_BASE = "https://otx.alienvault.com/api/v1/indicators"
@@ -29,12 +30,30 @@ _SUSPICIOUS_MIN = 1       # pulse_info.count >= this -> suspicious (below malici
 _EMPTY_PULSE_INFO: Mapping[str, object] = MappingProxyType({})
 
 
+class OtxSignals(NamedTuple):
+    pulse_count: int
+    reputation: int
+    type_title: str
+
+
+def _otx_signals(body: dict) -> OtxSignals:
+    raw_pulse_info = body.get("pulse_info")
+    pulse_info = raw_pulse_info if isinstance(raw_pulse_info, Mapping) else _EMPTY_PULSE_INFO
+    return OtxSignals(
+        pulse_count=pulse_info.get("count", 0) or 0,
+        reputation=body.get("reputation", 0) or 0,
+        type_title=body.get("type_title", "") or "",
+    )
+
+
 class OTXAdapter(BaseHTTPAdapter):
     """OTX AlienVault v1 endpoint — see BaseHTTPAdapter for the template pattern."""
 
-    supported_types: frozenset[IOCType] = frozenset(_OTX_TYPE_MAP)  # EMAIL excluded — OTX has no email lookup endpoint
+    # EMAIL excluded: OTX has no email lookup endpoint.
+    supported_types: frozenset[IOCType] = frozenset(_OTX_TYPE_MAP)
     name = "OTX AlienVault"
     requires_api_key = True
+    _no_data_on_404 = True
 
     def _build_url(self, ioc: IOC) -> str:
         otx_type = _OTX_TYPE_MAP[ioc.type]
@@ -46,43 +65,41 @@ class OTXAdapter(BaseHTTPAdapter):
             "Accept": "application/json",
         }
 
-    def _make_pre_raise_hook(self, ioc: IOC):
-        def _404_hook(resp):
-            if resp.status_code == 404:
-                return no_data_result(ioc, self.name)
-            return None
-        return _404_hook
-
     def _parse_response(self, ioc: IOC, body: dict) -> EnrichmentResult:
         return _parse_response(ioc, body, self.name)
 
 
 def _parse_response(ioc: IOC, body: dict, provider_name: str) -> EnrichmentResult:
-    raw_pulse_info = body.get("pulse_info")
-    pulse_info = raw_pulse_info if isinstance(raw_pulse_info, Mapping) else _EMPTY_PULSE_INFO
-    pulse_count: int = pulse_info.get("count", 0) or 0
-    reputation: int = body.get("reputation", 0) or 0
-    type_title: str = body.get("type_title", "") or ""
-
-    if pulse_count >= _MALICIOUS_THRESHOLD:
-        verdict = "malicious"
-    elif pulse_count >= _SUSPICIOUS_MIN:
-        verdict = "suspicious"
-    else:
-        verdict = "no_data"
+    signals = _otx_signals(body)
 
     return _otx_result(
         ioc=ioc,
         provider_name=provider_name,
-        verdict=verdict,
-        detection_count=pulse_count,
+        verdict=_otx_verdict(signals.pulse_count),
+        detection_count=signals.pulse_count,
         total_engines=1,
-        raw_stats={
-            "pulse_count": pulse_count,
-            "reputation": reputation,
-            "type_title": type_title,
-        },
+        raw_stats=_otx_raw_stats(
+            pulse_count=signals.pulse_count,
+            reputation=signals.reputation,
+            type_title=signals.type_title,
+        ),
     )
+
+
+def _otx_verdict(pulse_count: int) -> str:
+    if pulse_count >= _MALICIOUS_THRESHOLD:
+        return "malicious"
+    if pulse_count >= _SUSPICIOUS_MIN:
+        return "suspicious"
+    return "no_data"
+
+
+def _otx_raw_stats(*, pulse_count: int, reputation: int, type_title: str) -> dict:
+    return {
+        "pulse_count": pulse_count,
+        "reputation": reputation,
+        "type_title": type_title,
+    }
 
 
 def _otx_result(

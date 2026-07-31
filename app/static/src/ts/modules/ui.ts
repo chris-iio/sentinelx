@@ -1,8 +1,5 @@
 /**
- * UI utilities module — scroll-aware filter bar and card stagger animation.
- *
- * Extracted from main.js initScrollAwareFilterBar() (lines 811-826)
- * and initCardStagger() (lines 830-835).
+ * UI utilities module — scroll-aware filter bar behavior.
  */
 
 /**
@@ -27,23 +24,7 @@ function initScrollAwareFilterBar(): void {
   );
 }
 
-/**
- * Set --card-index CSS custom property on each .ioc-card element,
- * capped at 15 to limit stagger delay on long lists.
- */
-function initCardStagger(): void {
-  const cards = document.querySelectorAll<HTMLElement>(".ioc-card");
-  for (let i = 0; i < cards.length; i += 1) {
-    const card = cards.item(i);
-    if (!card) continue;
-    card.style.setProperty("--card-index", String(i < 15 ? i : 15));
-  }
-}
-
-/**
- * Initialise all UI enhancements: scroll-aware filter bar and card stagger.
- */
+/** Initialise the scroll-aware filter enhancement. */
 export function init(): void {
   initScrollAwareFilterBar();
-  initCardStagger();
 }

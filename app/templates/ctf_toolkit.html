@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-ctf">
+    <a href="{{ url_for('main.ctf_events_list') }}" class="back-link"
+       aria-label="Back to CTF events">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"
+             width="16" height="16">
+            <path d="M10 12L6 8l4-4"/>
+        </svg>
+        CTF events
+    </a>
+    <div class="ctf-card">
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for category, message in messages %}
+        <div class="alert alert-{{ category }}" role="alert">{{ message }}</div>
+        {% endfor %}
+        {% endwith %}
+
+        <h1 class="ctf-heading">CTF Toolkit</h1>
+        <p class="ctf-muted">Offline crypto/forensics helpers — everything runs
+        locally, nothing leaves this machine.</p>
+
+        <h2 class="ctf-subheading">Text helpers</h2>
+        <form method="post" action="{{ url_for('main.ctf_toolkit_run') }}" class="ctf-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <div class="ctf-form-row">
+                <select name="tool" class="form-input" aria-label="Tool">
+                    {% for tool in tools %}
+                    <option value="{{ tool }}"
+                            {% if result and result.tool == tool %}selected{% endif %}>
+                        {{ tool }}
+                    </option>
+                    {% endfor %}
+                </select>
+                <input type="text" name="key" class="form-input" maxlength="100"
+                       placeholder="Key / arg (vigenere key, cyclic length, pack value)"
+                       aria-label="Key or argument">
+                <select name="mode" class="form-input" aria-label="Vigenere mode">
+                    <option value="decode">decode</option>
+                    <option value="encode">encode</option>
+                </select>
+                <button type="submit" class="btn btn-primary">Run</button>
+            </div>
+            <textarea name="input" class="ioc-textarea" rows="5"
+                      placeholder="Ciphertext, hash, blob — paste it here (not needed for cyclic)"
+                      aria-label="Toolkit input">{{ request.form.get('input', '') }}</textarea>
+        </form>
+
+        <h2 class="ctf-subheading">File inspection</h2>
+        <form method="post" action="{{ url_for('main.ctf_toolkit_run') }}"
+              enctype="multipart/form-data" class="ctf-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <input type="hidden" name="tool" value="file-inspect"/>
+            <div class="ctf-form-row">
+                <input type="file" name="file" class="form-input" required
+                       aria-label="File to inspect">
+                <button type="submit" class="btn btn-primary">Inspect</button>
+            </div>
+            <p class="ctf-muted">Signature sniff, SHA-256, and strings extraction.
+            Max 4 MB.</p>
+        </form>
+
+        {% if result %}
+        <h2 class="ctf-subheading">Result — {{ result.title }}</h2>
+
+        {% if result.get('output') is not none %}
+        <pre class="ctf-note-body ctf-result">{{ result.output }}</pre>
+        {% endif %}
+
+        {% if result.get('decodes') is not none %}
+            {% if result.decodes %}
+            <div class="ctf-note-list">
+                {% for item in result.decodes %}
+                <article class="ctf-note">
+                    <p class="ctf-note-meta">{{ item.encoding }}</p>
+                    <pre class="ctf-note-body">{{ item.output }}</pre>
+                </article>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="ctf-muted">No decoder produced different output.</p>
+            {% endif %}
+        {% endif %}
+
+        {% if result.get('rows') is not none %}
+        <table class="ctf-table">
+            <thead>
+                <tr>
+                    {% if result.rows and result.rows[0].get('shift') is not none %}<th>Shift</th>{% endif %}
+                    {% if result.rows and result.rows[0].get('key') is not none %}<th>Key</th><th>Score</th>{% endif %}
+                    <th>Output</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in result.rows %}
+                <tr>
+                    {% if row.get('shift') is not none %}<td>{{ row.shift }}</td>{% endif %}
+                    {% if row.get('key') is not none %}<td>{{ row.key }}</td><td>{{ row.score }}</td>{% endif %}
+                    <td><code class="ctf-flag">{{ row.output }}</code></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+
+        {% if result.get('hash') is not none %}
+        <p class="ctf-muted">Length {{ result.hash.input_length }} —
+            candidates: {{ result.hash.candidates | join(', ') }}</p>
+        {% endif %}
+
+        {% if result.get('digests') is not none %}
+        <table class="ctf-table">
+            <thead><tr><th>Algorithm</th><th>Digest</th></tr></thead>
+            <tbody>
+                {% for digest in result.digests %}
+                <tr>
+                    <td>{{ digest.algorithm }}</td>
+                    <td><code class="ctf-flag">{{ digest.digest }}</code></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+
+        {% if result.get('file') is not none %}
+        <table class="ctf-table">
+            <tbody>
+                <tr><th>Type</th><td>{{ result.file.kind }}</td></tr>
+                <tr><th>Size</th><td>{{ result.file.size_bytes }} bytes</td></tr>
+                <tr><th>SHA-256</th><td><code class="ctf-flag">{{ result.file.sha256 }}</code></td></tr>
+            </tbody>
+        </table>
+        {% endif %}
+
+        {% if result.get('strings') is not none %}
+            {% if result.strings %}
+            <pre class="ctf-note-body ctf-result">{{ result.strings | join('\n') }}</pre>
+            {% else %}
+            <p class="ctf-muted">No printable strings found.</p>
+            {% endif %}
+        {% endif %}
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

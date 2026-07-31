@@ -98,8 +98,7 @@ export function init(): void {
       const typeMatch = typeLC === "all" || record.typeLC === typeLC;
       const searchMatch = searchLC === "" || record.valueLC.indexOf(searchLC) !== -1;
 
-      card.style.display =
-        verdictMatch && typeMatch && searchMatch ? "" : "none";
+      card.hidden = !(verdictMatch && typeMatch && searchMatch);
     }
 
     // Update active state on verdict buttons

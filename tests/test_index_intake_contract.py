@@ -278,6 +278,8 @@ def test_index_renders_recent_analyses_empty_state(client: Any) -> None:
     assert has_class(tags, "recent-analyses-empty")
     assert not has_class(tags, "recent-analysis-row")
     assert "No analyses yet" in html
+    assert "Complete an Online enrichment" in html
+    assert "Offline extractions are not saved" in html
     assert by_id(tags, "analyze-form") is not None
 
 

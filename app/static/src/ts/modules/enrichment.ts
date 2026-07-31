@@ -129,14 +129,14 @@ function updateProgressBar(done: number, total: number, elements?: ProgressEleme
   if (!fill || !text) return;
 
   const pct = total > 0 ? Math.round((done / total) * 100) : 0;
-  fill.style.width = pct + "%";
-  text.textContent = done + "/" + total + " providers complete";
+  fill.setAttribute("value", String(pct));
+  text.textContent = done + "/" + total + " lookups complete";
 }
 
 function showWarningBanner(message: string, cachedBanner: HTMLElement | null = null): void {
   const banner = cachedBanner ?? document.getElementById("enrich-warning");
   if (!banner) return;
-  banner.style.display = "block";
+  banner.hidden = false;
   banner.textContent = message;
 }
 

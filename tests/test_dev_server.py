@@ -2,13 +2,14 @@
 from __future__ import annotations
 
 import importlib.util
+import inspect
 import json
 import re
 import socket
 import sys
 import threading
 import time
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -106,10 +107,8 @@ class SlowHealthHandler(_SilentHandler):
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(payload)))
         self.end_headers()
-        try:
+        with suppress(BrokenPipeError):
             self.wfile.write(payload)
-        except BrokenPipeError:
-            pass
 
 
 @contextmanager
@@ -429,6 +428,58 @@ def test_payload_key_formatter_skips_sort_for_three_keys(monkeypatch: pytest.Mon
             "alpha": True,
             "middle": True,
         })
+
+
+def test_payload_key_formatter_skips_sort_for_four_keys(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Four-key validation errors should sort through direct comparisons."""
+    dev_server = load_dev_server_module()
+
+    def fail_sorted(*_args, **_kwargs):
+        raise AssertionError("four-key validation errors should not sort")
+
+    monkeypatch.setattr("builtins.sorted", fail_sorted)
+
+    assert dev_server.format_key_names(("zeta", "alpha", "middle", "beta")) == (
+        "alpha, beta, middle, zeta"
+    )
+    assert "key_count == 4" in SCRIPT.read_text(encoding="utf-8")
+
+
+def test_required_payload_key_scan_uses_direct_known_contract_paths() -> None:
+    """Known dev-server payload contracts should not iterate required-key frozensets."""
+    dev_server = load_dev_server_module()
+
+    missing_probe: list[str] = []
+    dev_server.append_missing_payload_keys(
+        missing_probe,
+        {"status": "healthy"},
+        dev_server._PROBE_PAYLOAD_REQUIRED_KEYS,
+    )
+    assert missing_probe == ["checked_at", "url"]
+
+    missing_status: list[str] = []
+    dev_server.append_missing_payload_keys(
+        missing_status,
+        {"status": "running", "probe": None},
+        dev_server._STATUS_PAYLOAD_REQUIRED_KEYS,
+    )
+    assert missing_status == ["host", "port", "updated_at", "restart_count"]
+
+    fallback_missing: list[str] = []
+    dev_server.append_missing_payload_keys(
+        fallback_missing,
+        {"alpha": True},
+        frozenset(("alpha", "omega")),
+    )
+    assert fallback_missing == ["omega"]
+
+    helper_source = inspect.getsource(dev_server.append_missing_payload_keys)
+    direct_source, fallback_source = helper_source.split("for key in required_keys", 1)
+    assert 'required_keys is _PROBE_PAYLOAD_REQUIRED_KEYS' in direct_source
+    assert 'missing_keys.append("checked_at")' in direct_source
+    assert 'required_keys is _STATUS_PAYLOAD_REQUIRED_KEYS' in direct_source
+    assert 'missing_keys.append("restart_count")' in direct_source
+    assert "if key not in payload" in fallback_source
 
 
 def test_payload_key_formatter_reads_short_sequence_length_once() -> None:

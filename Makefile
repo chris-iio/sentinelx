@@ -10,6 +10,8 @@ JS_ENTRY         := app/static/src/ts/main.ts
 JS_OUT           := app/static/dist/main.js
 PLATFORM         := linux-x64
 ESBUILD_VERSION  := 0.27.3
+TAILWIND_SHA256  := 7d24f7fa191d2193b78cd5f5a42a6093e14409521908529f42d80b11fde1f1d4
+ESBUILD_SHA256   := fd49340cbb5f7ca3ce6f313db78d056de21f07338135ec8dfad63294a304fd2c
 DEV_SERVER       := python3 tools/dev_server.py
 AUDIT_RUNNER     := python3 tools/optimization_audit.py
 AUDIT_M013_OUTPUT := .gsd/milestones/M013/M013-AUDIT.md
@@ -21,7 +23,7 @@ AUDIT_M020_TEMPLATE := .gsd/milestones/M020/M020-AUDIT-TEMPLATE.md
 AUDIT_OUTPUT     := $(AUDIT_M013_OUTPUT)
 AUDIT_TEMPLATE   := $(AUDIT_M013_TEMPLATE)
 
-.PHONY: tailwind-install esbuild-install css css-watch js js-dev js-watch typecheck build dev-server-start dev-server-status dev-server-restart dev-server-stop repair-runtime-state verify-runtime-boundary verify-fast verify-deep verify audit-m013-template audit-m013 audit-m017-template audit-m017 audit-m020-template audit-m020
+.PHONY: tailwind-install esbuild-install css css-watch js js-dev js-watch typecheck build dev-server-start dev-server-status dev-server-restart dev-server-stop repair-runtime-state verify-runtime-boundary security-check verify-fast verify-deep verify audit-m013-template audit-m013 audit-m017-template audit-m017 audit-m020-template audit-m020
 
 $(TAILWIND):
 	$(MAKE) tailwind-install
@@ -34,6 +36,7 @@ tailwind-install:
 	@mkdir -p tools
 	curl -sLo $(TAILWIND) \
 		https://github.com/tailwindlabs/tailwindcss/releases/download/v3.4.17/tailwindcss-$(PLATFORM)
+	@printf '%s  %s\n' '$(TAILWIND_SHA256)' '$(TAILWIND)' | sha256sum -c -
 	chmod +x $(TAILWIND)
 	@echo "Tailwind CLI installed at $(TAILWIND)"
 
@@ -42,10 +45,13 @@ esbuild-install:
 	@mkdir -p tools
 	curl -sLo /tmp/esbuild.tgz \
 		https://registry.npmjs.org/@esbuild/$(PLATFORM)/-/$(PLATFORM)-$(ESBUILD_VERSION).tgz
-	tar xzf /tmp/esbuild.tgz -C /tmp
-	mv /tmp/package/bin/esbuild $(ESBUILD)
+	rm -rf /tmp/esbuild-package
+	mkdir -p /tmp/esbuild-package
+	tar xzf /tmp/esbuild.tgz -C /tmp/esbuild-package
+	mv /tmp/esbuild-package/package/bin/esbuild $(ESBUILD)
+	@printf '%s  %s\n' '$(ESBUILD_SHA256)' '$(ESBUILD)' | sha256sum -c -
 	chmod +x $(ESBUILD)
-	rm -rf /tmp/esbuild.tgz /tmp/package
+	rm -rf /tmp/esbuild.tgz /tmp/esbuild-package
 	@echo "esbuild $(ESBUILD_VERSION) installed at $(ESBUILD)"
 
 ## Build CSS (one-shot)
@@ -121,8 +127,14 @@ verify-runtime-boundary:
 	python3 -m pytest -q tests/test_runtime_state_boundary_git.py
 	python3 tools/runtime_state_boundary.py audit --format text --fail-on-codes tracked-transient unignored-transient conflicting-rule-match unknown-root
 
+## Local static security scanner lane
+security-check:
+	python3 tools/security_check.py --path app --json
+	python3 tools/security_check.py --path tools --json
+
 ## Fast verification lane (non-E2E pytest + frontend checks + build)
 verify-fast:
+	$(MAKE) security-check
 	python3 -m pytest -q -m 'not e2e'
 	npx vitest run
 	npx tsc --noEmit

@@ -15,7 +15,7 @@ class IndexPage:
         self.workbench = page.locator(".intake-workbench")
         self.command_card = page.locator(".command-card")
         self.card_header = page.locator(".command-card-header")
-        self.hero_brand = page.locator(".index-hero-brand")
+        self.hero_brand = page.locator(".site-nav-brand")
         self.eyebrow = self.card_header.locator(".command-card-eyebrow")
         self.title = page.locator(".command-card-title")
         self.subtitle = page.locator(".command-card-help")

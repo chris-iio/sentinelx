@@ -1,0 +1,4 @@
+interface:
+  display_name: 'Git Check'
+  short_description: 'Inspect authorized upstream integration safely'
+  default_prompt: 'Use $git-check to inspect upstream changes and perform only the authorized integration.'

@@ -141,7 +141,10 @@ def test_runtime_bundle_records_omitted_and_error_sources_without_aborting(tmp_p
     assert records["config-secret-inventory"]["status"] == "omitted"
     assert records["recent-history"]["status"] == "error"
     assert records["recent-history"]["relative_path"] is None
-    assert "Bearer [REDACTED]" in records["recent-history"]["safe_error_summary"]
+    assert (
+        records["recent-history"]["safe_error_summary"]
+        == "RuntimeError: source collection failed"
+    )
     assert JOB_TOKEN not in json.dumps(manifest)
     assert "runtime/recent-history.json" not in _archive_entries(bundle.archive_bytes)
 

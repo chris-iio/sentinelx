@@ -3,6 +3,7 @@
 Verifies that build_registry() returns a ProviderRegistry with all registered
 providers, using the correct API key from ConfigStore.
 """
+from pathlib import Path
 from unittest.mock import MagicMock
 
 from app.enrichment.registry import ProviderRegistry
@@ -387,8 +388,8 @@ class TestBuildRegistry:
             ("emailrep", "EmailRepAdapter"),
         ]
 
-    def test_zero_auth_providers_share_registration_helper(self, monkeypatch):
-        """Zero-auth providers should share one registration path."""
+    def test_zero_auth_http_providers_share_registration_helper(self, monkeypatch):
+        """Zero-auth HTTP providers should share the allowlist-backed registration path."""
         import app.enrichment.setup as setup_module
 
         calls: list[str] = []
@@ -411,11 +412,38 @@ class TestBuildRegistry:
 
         assert len(registry.all()) == 16
         assert calls == [
+            "ShodanAdapter",
             "HashlookupAdapter",
             "IPApiAdapter",
-            "DnsAdapter",
             "CrtShAdapter",
             "ThreatMinerAdapter",
+        ]
+
+    def test_non_http_zero_auth_providers_use_direct_registration_helper(self, monkeypatch):
+        """DNS/ASN/WHOIS providers should not receive unused HTTP allowlist state."""
+        import app.enrichment.setup as setup_module
+
+        calls: list[str] = []
+        original = setup_module._register_direct_provider
+
+        def register_direct_provider(registry, adapter_cls):
+            calls.append(adapter_cls.__name__)
+            original(registry, adapter_cls)
+
+        monkeypatch.setattr(
+            setup_module,
+            "_register_direct_provider",
+            register_direct_provider,
+        )
+
+        registry = setup_module.build_registry(
+            allowed_hosts=_make_allowed_hosts(),
+            config_store=_make_config_store("vt-key", provider_key="shared-key"),
+        )
+
+        assert len(registry.all()) == 16
+        assert calls == [
+            "DnsAdapter",
             "CymruASNAdapter",
             "WhoisAdapter",
         ]
@@ -424,15 +452,69 @@ class TestBuildRegistry:
         """Provider setup should scan static registration tables in provider order."""
         import dis
 
+        import app.enrichment.provider_catalog as catalog
         import app.enrichment.setup as setup_module
 
-        keyed = (
-            setup_module._PRE_SHODAN_KEYED_PROVIDER_REGISTRATIONS
-            + setup_module._POST_SHODAN_KEYED_PROVIDER_REGISTRATIONS
+        source = Path("app/enrichment/setup.py").read_text(encoding="utf-8")
+        setup_source = Path("app/enrichment/setup.py").read_text(encoding="utf-8")
+        assert "PRE_SHODAN_KEYED_PROVIDER_REGISTRATIONS" not in setup_source
+        assert "POST_SHODAN_KEYED_PROVIDER_REGISTRATIONS" not in setup_source
+        assert "ZERO_AUTH_PROVIDER_CLASSES" not in setup_source
+        assert "PROVIDER_IDS" not in setup_source
+        assert "PROVIDER_INFO" not in setup_source
+
+        catalog_source = Path("app/enrichment/provider_catalog.py").read_text(encoding="utf-8")
+        assert "PRE_SHODAN_KEYED_PROVIDER_REGISTRATIONS" not in catalog_source
+        assert "POST_SHODAN_KEYED_PROVIDER_REGISTRATIONS" not in catalog_source
+        assert "ZERO_AUTH_PROVIDER_CLASSES" not in catalog_source
+        assert all(
+            isinstance(registration, catalog.ProviderRegistration)
+            for registration in catalog.PROVIDER_REGISTRATION_PLAN
         )
+        assert "ShodanAdapter" not in catalog.__all__
+        assert "VTAdapter" not in catalog.__all__
+        assert not hasattr(catalog, "ShodanAdapter")
+        assert not hasattr(catalog, "VTAdapter")
+        assert not hasattr(catalog, "MBAdapter")
+        assert not hasattr(catalog, "EmailRepAdapter")
+        assert "PROVIDER_REGISTRATION_PLAN" in catalog.__all__
+        assert "ProviderRegistration" in catalog.__all__
+        assert (
+            catalog.REGISTRATION_KIND_VIRUSTOTAL,
+            catalog.REGISTRATION_KIND_KEYED,
+            catalog.REGISTRATION_KIND_ZERO_AUTH,
+            catalog.REGISTRATION_KIND_DIRECT,
+        ) == ("vt", "keyed", "zero", "direct")
+        assert "registration.kind == REGISTRATION_KIND_VIRUSTOTAL" in setup_source
+        assert 'registration_kind == "vt"' not in setup_source
+        assert 'registration_kind == "keyed"' not in setup_source
+        assert 'registration_kind == "zero"' not in setup_source
+        plan_names = [
+            (kind, provider_id, adapter_cls.__name__)
+            for kind, provider_id, adapter_cls in catalog.PROVIDER_REGISTRATION_PLAN
+        ]
+        assert plan_names == [
+            ("vt", "virustotal", "VTAdapter"),
+            ("keyed", "malwarebazaar", "MBAdapter"),
+            ("keyed", "threatfox", "TFAdapter"),
+            ("zero", "shodan", "ShodanAdapter"),
+            ("keyed", "urlhaus", "URLhausAdapter"),
+            ("keyed", "otx", "OTXAdapter"),
+            ("keyed", "greynoise", "GreyNoiseAdapter"),
+            ("keyed", "abuseipdb", "AbuseIPDBAdapter"),
+            ("keyed", "emailrep", "EmailRepAdapter"),
+            ("zero", "hashlookup", "HashlookupAdapter"),
+            ("zero", "ip_api", "IPApiAdapter"),
+            ("direct", "dns", "DnsAdapter"),
+            ("zero", "crtsh", "CrtShAdapter"),
+            ("zero", "threatminer", "ThreatMinerAdapter"),
+            ("direct", "asn_cymru", "CymruASNAdapter"),
+            ("direct", "whois", "WhoisAdapter"),
+        ]
         keyed_names = [
             (provider_id, adapter_cls.__name__)
-            for provider_id, adapter_cls in keyed
+            for kind, provider_id, adapter_cls in catalog.PROVIDER_REGISTRATION_PLAN
+            if kind == "keyed"
         ]
         assert keyed_names == [
             ("malwarebazaar", "MBAdapter"),
@@ -445,17 +527,22 @@ class TestBuildRegistry:
         ]
         zero_auth_names = [
             adapter_cls.__name__
-            for adapter_cls in setup_module._ZERO_AUTH_PROVIDER_CLASSES
+            for kind, _provider_id, adapter_cls in catalog.PROVIDER_REGISTRATION_PLAN
+            if kind == "zero"
         ]
         assert zero_auth_names == [
+            "ShodanAdapter",
             "HashlookupAdapter",
             "IPApiAdapter",
-            "DnsAdapter",
             "CrtShAdapter",
             "ThreatMinerAdapter",
-            "CymruASNAdapter",
-            "WhoisAdapter",
         ]
+        direct_names = [
+            adapter_cls.__name__
+            for kind, _provider_id, adapter_cls in catalog.PROVIDER_REGISTRATION_PLAN
+            if kind == "direct"
+        ]
+        assert direct_names == ["DnsAdapter", "CymruASNAdapter", "WhoisAdapter"]
         assert {
             instruction.opname
             for instruction in dis.get_instructions(setup_module.build_registry)

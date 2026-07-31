@@ -18,12 +18,13 @@ from __future__ import annotations
 import argparse
 import json
 import shlex
+import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
 from fnmatch import fnmatchcase
 from pathlib import Path
-from typing import AbstractSet, Iterable, Sequence
+from typing import AbstractSet, Sequence
 
 CLASS_DURABLE = "durable"
 CLASS_TRANSIENT = "transient"
@@ -70,10 +71,7 @@ def first_non_empty_output(*streams: str | bytes | None) -> str | None:
     for stream in streams:
         if stream is None:
             continue
-        if isinstance(stream, bytes):
-            text = stream.decode("utf-8", errors="replace")
-        else:
-            text = stream
+        text = stream.decode("utf-8", errors="replace") if isinstance(stream, bytes) else stream
         stripped = stripped_text_or_none(text)
         if stripped:
             return stripped
@@ -144,7 +142,8 @@ BOUNDARY_POLICY: tuple[PolicyRule, ...] = (
             ".gsd/milestones/**/continue.md",
         ),
         rationale=(
-            "Continue files are repo-local execution cursors inside otherwise durable milestone trees."
+            "Continue files are repo-local execution cursors inside otherwise durable "
+            "milestone trees."
         ),
     ),
     PolicyRule(
@@ -272,7 +271,11 @@ def parse_args() -> argparse.Namespace:
         "classify",
         help="Classify one or more paths as durable, transient, or manual-review.",
     )
-    classify_parser.add_argument("paths", nargs="+", help="Repo-relative or absolute paths to classify.")
+    classify_parser.add_argument(
+        "paths",
+        nargs="+",
+        help="Repo-relative or absolute paths to classify.",
+    )
     classify_parser.add_argument(
         "--format",
         choices=("text", "json"),
@@ -287,7 +290,10 @@ def parse_args() -> argparse.Namespace:
 
     audit_parser = subparsers.add_parser(
         "audit",
-        help="Scan the repo boundary for tracked transient, unignored transient, and manual-review paths.",
+        help=(
+            "Scan the repo boundary for tracked transient, unignored transient, "
+            "and manual-review paths."
+        ),
     )
     audit_parser.add_argument(
         "paths",
@@ -358,7 +364,7 @@ def matches_pattern(path: str, pattern: str) -> bool:
 
 
 def rule_matches_path(relative_path: str, rule: PolicyRule) -> bool:
-    for pattern in rule.patterns:
+    for pattern in rule.patterns:  # noqa: SIM110 - tests guard direct scan without builtins.any.
         if matches_pattern(relative_path, pattern):
             return True
     return False
@@ -405,7 +411,10 @@ def classify_relative_path(
             classification=CLASS_MANUAL_REVIEW,
             issue_code=ISSUE_UNKNOWN_ROOT,
             matched_rules=(),
-            rationale="Path is outside the supported boundary roots and fails closed to manual-review.",
+            rationale=(
+                "Path is outside the supported boundary roots and fails closed "
+                "to manual-review."
+            ),
         )
 
     winner = top_matches[0]
@@ -448,6 +457,10 @@ def rule_names(rules: Sequence[PolicyRule]) -> tuple[str, ...]:
         return (rules[0].name,)
     if rule_count == 2:
         return (rules[0].name, rules[1].name)
+    if rule_count == 3:
+        return (rules[0].name, rules[1].name, rules[2].name)
+    if rule_count == 4:
+        return (rules[0].name, rules[1].name, rules[2].name, rules[3].name)
     names: list[str] = []
     for rule in rules:
         names.append(rule.name)
@@ -462,6 +475,10 @@ def format_matched_rules(matched_rules: Sequence[str]) -> str:
         return matched_rules[0]
     if rule_count == 2:
         return f"{matched_rules[0]},{matched_rules[1]}"
+    if rule_count == 3:
+        return f"{matched_rules[0]},{matched_rules[1]},{matched_rules[2]}"
+    if rule_count == 4:
+        return f"{matched_rules[0]},{matched_rules[1]},{matched_rules[2]},{matched_rules[3]}"
     return ",".join(matched_rules)
 
 
@@ -494,6 +511,10 @@ def policy_rules_tuple(rules: Sequence[PolicyRule]) -> tuple[PolicyRule, ...]:
         return (rules[0],)
     if rule_count == 2:
         return (rules[0], rules[1])
+    if rule_count == 3:
+        return (rules[0], rules[1], rules[2])
+    if rule_count == 4:
+        return (rules[0], rules[1], rules[2], rules[3])
     return tuple(rules)
 
 
@@ -504,20 +525,34 @@ def classify_paths(paths: Sequence[str], repo_root: Path) -> tuple[Classificatio
     for path_value in paths:
         normalized = normalize_repo_relative_path(path_value, repo_root)
         result = classify_relative_path(normalized)
-        results.append(
-            ClassificationResult(
-                input_path=path_value,
-                normalized_path=result.normalized_path,
-                classification=result.classification,
-                issue_code=result.issue_code,
-                matched_rules=result.matched_rules,
-                rationale=result.rationale,
-            )
+        append_classification_result(
+            results,
+            path_value,
+            result,
         )
     return classification_results_tuple(results)
 
 
-def classification_results_tuple(results: Sequence[ClassificationResult]) -> tuple[ClassificationResult, ...]:
+def append_classification_result(
+    results: list[ClassificationResult],
+    input_path: str,
+    result: ClassificationResult,
+) -> None:
+    results.append(
+        ClassificationResult(
+            input_path=input_path,
+            normalized_path=result.normalized_path,
+            classification=result.classification,
+            issue_code=result.issue_code,
+            matched_rules=result.matched_rules,
+            rationale=result.rationale,
+        )
+    )
+
+
+def classification_results_tuple(
+    results: Sequence[ClassificationResult],
+) -> tuple[ClassificationResult, ...]:
     """Return classification results as a tuple with short-sequence fast paths."""
     if isinstance(results, tuple):
         return results
@@ -528,6 +563,10 @@ def classification_results_tuple(results: Sequence[ClassificationResult]) -> tup
         return (results[0],)
     if result_count == 2:
         return (results[0], results[1])
+    if result_count == 3:
+        return (results[0], results[1], results[2])
+    if result_count == 4:
+        return (results[0], results[1], results[2], results[3])
     return tuple(results)
 
 
@@ -586,12 +625,57 @@ def ordered_discovered_paths(
             if second < first:
                 first, second = second, first
         return (first, second, third)
-    return tuple(sorted(discovered))
+    if path_count == 4:
+        iterator = iter(discovered)
+        first = next(iterator)
+        second = next(iterator)
+        third = next(iterator)
+        fourth = next(iterator)
+        if second < first:
+            first, second = second, first
+        if fourth < third:
+            third, fourth = fourth, third
+        if third < first:
+            first, third = third, first
+        if fourth < second:
+            second, fourth = fourth, second
+        if third < second:
+            second, third = third, second
+        return (first, second, third, fourth)
+    ordered: list[str] = []
+    for path in discovered:
+        append_ordered_path(ordered, path)
+    return tuple(ordered)
 
 
-def run_git_command(repo_root: Path, args: Sequence[str], *, input_bytes: bytes | None = None) -> bytes:
-    completed = subprocess.run(
-        ["git", *args],
+def append_ordered_path(ordered: list[str], path: str) -> None:
+    path_count = len(ordered)
+    if path_count == 0:
+        ordered.append(path)
+        return
+
+    index = 0
+    while index < path_count:
+        current = ordered[index]
+        if path <= current:
+            ordered.insert(index, path)
+            return
+        index += 1
+
+    ordered.append(path)
+
+
+def run_git_command(
+    repo_root: Path,
+    args: Sequence[str],
+    *,
+    input_bytes: bytes | None = None,
+) -> bytes:
+    git_path = shutil.which("git")
+    if git_path is None:
+        raise GitInspectionError("git executable was not found on PATH.")
+    completed = subprocess.run(  # noqa: S603 - fixed git executable, no shell.
+        [git_path, *args],
         cwd=repo_root,
         input=input_bytes,
         capture_output=True,
@@ -600,7 +684,8 @@ def run_git_command(repo_root: Path, args: Sequence[str], *, input_bytes: bytes 
     if completed.returncode not in GIT_INSPECTION_OK_RETURN_CODES:
         stderr = first_non_empty_output(completed.stderr)
         raise GitInspectionError(
-            f"git {format_command_args(args)} failed with exit code {completed.returncode}: {stderr or 'no stderr'}"
+            f"git {format_command_args(args)} failed with exit code "
+            f"{completed.returncode}: {stderr or 'no stderr'}"
         )
     return completed.stdout
 
@@ -671,8 +756,8 @@ def audit_paths(paths: Sequence[str], repo_root: Path) -> AuditReport:
                         issue_code=ISSUE_UNIGNORED_TRANSIENT,
                         matched_rules=rule_names,
                         rationale=(
-                            "Transient runtime path is present in the working tree but not ignored by "
-                            "Git yet."
+                            "Transient runtime path is present in the working tree but not "
+                            "ignored by Git yet."
                         ),
                         tracked=False,
                         ignored=False,
@@ -727,7 +812,43 @@ def ordered_audit_findings(findings: list[AuditFinding]) -> tuple[AuditFinding, 
             if audit_finding_sort_key(second) < audit_finding_sort_key(first):
                 first, second = second, first
         return (first, second, third)
-    return tuple(sorted(findings, key=audit_finding_sort_key))
+    if finding_count == 4:
+        first = findings[0]
+        second = findings[1]
+        third = findings[2]
+        fourth = findings[3]
+        if audit_finding_sort_key(second) < audit_finding_sort_key(first):
+            first, second = second, first
+        if audit_finding_sort_key(fourth) < audit_finding_sort_key(third):
+            third, fourth = fourth, third
+        if audit_finding_sort_key(third) < audit_finding_sort_key(first):
+            first, third = third, first
+        if audit_finding_sort_key(fourth) < audit_finding_sort_key(second):
+            second, fourth = fourth, second
+        if audit_finding_sort_key(third) < audit_finding_sort_key(second):
+            second, third = third, second
+        return (first, second, third, fourth)
+    ordered: list[AuditFinding] = []
+    for finding in findings:
+        append_ordered_audit_finding(ordered, finding)
+    return tuple(ordered)
+
+
+def append_ordered_audit_finding(ordered: list[AuditFinding], finding: AuditFinding) -> None:
+    finding_count = len(ordered)
+    if finding_count == 0:
+        ordered.append(finding)
+        return
+
+    finding_key = audit_finding_sort_key(finding)
+    index = 0
+    while index < finding_count:
+        if finding_key <= audit_finding_sort_key(ordered[index]):
+            ordered.insert(index, finding)
+            return
+        index += 1
+
+    ordered.append(finding)
 
 
 def render_classify_text(results: Sequence[ClassificationResult]) -> str:
@@ -738,6 +859,24 @@ def render_classify_text(results: Sequence[ClassificationResult]) -> str:
         return _classification_text_line(results[0])
     if result_count == 2:
         return _classification_text_line(results[0]) + "\n" + _classification_text_line(results[1])
+    if result_count == 3:
+        return (
+            _classification_text_line(results[0])
+            + "\n"
+            + _classification_text_line(results[1])
+            + "\n"
+            + _classification_text_line(results[2])
+        )
+    if result_count == 4:
+        return (
+            _classification_text_line(results[0])
+            + "\n"
+            + _classification_text_line(results[1])
+            + "\n"
+            + _classification_text_line(results[2])
+            + "\n"
+            + _classification_text_line(results[3])
+        )
 
     lines = []
     for result in results:
@@ -762,10 +901,7 @@ def render_audit_text(report: AuditReport) -> str:
         f"scanned_paths: {report.scanned_paths}",
         f"issue_count: {len(report.findings)}",
     ]
-    for issue_code in ALL_ISSUE_CODES:
-        count = counts.get(issue_code, 0)
-        if count:
-            lines.append(f"- {issue_code}: {count}")
+    append_issue_count_lines(lines, counts)
 
     if report.findings:
         lines.append("findings:")
@@ -780,6 +916,24 @@ def render_audit_text(report: AuditReport) -> str:
     else:
         lines.append("findings: none")
     return "\n".join(lines)
+
+
+def append_issue_count_lines(lines: list[str], counts: dict[str, int]) -> None:
+    count = counts.get(ISSUE_TRACKED_TRANSIENT, 0)
+    if count:
+        lines.append(f"- {ISSUE_TRACKED_TRANSIENT}: {count}")
+    count = counts.get(ISSUE_UNIGNORED_TRANSIENT, 0)
+    if count:
+        lines.append(f"- {ISSUE_UNIGNORED_TRANSIENT}: {count}")
+    count = counts.get(ISSUE_MANUAL_REVIEW, 0)
+    if count:
+        lines.append(f"- {ISSUE_MANUAL_REVIEW}: {count}")
+    count = counts.get(ISSUE_CONFLICTING_RULE, 0)
+    if count:
+        lines.append(f"- {ISSUE_CONFLICTING_RULE}: {count}")
+    count = counts.get(ISSUE_UNKNOWN_ROOT, 0)
+    if count:
+        lines.append(f"- {ISSUE_UNKNOWN_ROOT}: {count}")
 
 
 def classification_to_dict(result: ClassificationResult) -> dict[str, object]:
@@ -801,11 +955,31 @@ def classifications_to_dicts(results: Sequence[ClassificationResult]) -> list[di
         return [classification_to_dict(results[0])]
     if result_count == 2:
         return [classification_to_dict(results[0]), classification_to_dict(results[1])]
+    if result_count == 3:
+        return [
+            classification_to_dict(results[0]),
+            classification_to_dict(results[1]),
+            classification_to_dict(results[2]),
+        ]
+    if result_count == 4:
+        return [
+            classification_to_dict(results[0]),
+            classification_to_dict(results[1]),
+            classification_to_dict(results[2]),
+            classification_to_dict(results[3]),
+        ]
 
     serialized: list[dict[str, object]] = []
     for result in results:
-        serialized.append(classification_to_dict(result))
+        append_classification_dict(serialized, result)
     return serialized
+
+
+def append_classification_dict(
+    serialized: list[dict[str, object]],
+    result: ClassificationResult,
+) -> None:
+    serialized.append(classification_to_dict(result))
 
 
 def audit_findings_to_dicts(findings: Sequence[AuditFinding]) -> list[dict[str, object]]:
@@ -816,11 +990,31 @@ def audit_findings_to_dicts(findings: Sequence[AuditFinding]) -> list[dict[str, 
         return [audit_finding_to_dict(findings[0])]
     if finding_count == 2:
         return [audit_finding_to_dict(findings[0]), audit_finding_to_dict(findings[1])]
+    if finding_count == 3:
+        return [
+            audit_finding_to_dict(findings[0]),
+            audit_finding_to_dict(findings[1]),
+            audit_finding_to_dict(findings[2]),
+        ]
+    if finding_count == 4:
+        return [
+            audit_finding_to_dict(findings[0]),
+            audit_finding_to_dict(findings[1]),
+            audit_finding_to_dict(findings[2]),
+            audit_finding_to_dict(findings[3]),
+        ]
 
     serialized: list[dict[str, object]] = []
     for finding in findings:
-        serialized.append(audit_finding_to_dict(finding))
+        append_audit_finding_dict(serialized, finding)
     return serialized
+
+
+def append_audit_finding_dict(
+    serialized: list[dict[str, object]],
+    finding: AuditFinding,
+) -> None:
+    serialized.append(audit_finding_to_dict(finding))
 
 
 def audit_finding_to_dict(finding: AuditFinding) -> dict[str, object]:

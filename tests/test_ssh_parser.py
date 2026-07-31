@@ -12,12 +12,28 @@ from __future__ import annotations
 
 import io
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
+from pathlib import Path
 from types import MappingProxyType
 
 import pytest
 
-from app.ssh.parser import _BSD_MONTHS, _strip_line_ending, parse_auth_log
+import app.ssh.line_streams as line_streams
+from app.ssh.parser import _BSD_MONTHS, parse_auth_log
+
+
+def test_ssh_modules_use_relative_sibling_imports() -> None:
+    """SSH internals should not import siblings through the package facade."""
+    package_imports: list[str] = []
+
+    for path in sorted(Path("app/ssh").glob("*.py")):
+        if path.name == "__init__.py":
+            continue
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if line.startswith("from app.ssh") or line.startswith("import app.ssh"):
+                package_imports.append(f"{path}:{line}")
+
+    assert package_imports == []
 
 
 # ---------------------------------------------------------------------------
@@ -469,6 +485,25 @@ class TestPartialMatch:
         assert any("partially matched" in rec.message.lower() or "1" in rec.message
                    for rec in caplog.records)
 
+    def test_partial_warning_format_is_shared(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Partial-match warning call sites should share one sanitized logger helper."""
+        import inspect
+
+        import app.ssh.parser as parser_module
+
+        malformed = "Jan 15 09:00:00 server sshd[1234]: Accepted password MALFORMED_NO_FROM_CLAUSE"
+        with caplog.at_level(logging.WARNING, logger="app.ssh.parser"):
+            _events, summary = parse_auth_log(_str_stream(malformed + "\n"),
+                                              now=datetime(2025, 1, 15))
+
+        parse_source = inspect.getsource(parser_module.parse_auth_log)
+        helper_source = inspect.getsource(parser_module._warn_partial_match)
+        assert summary.warning_count == 1
+        assert "Line 1 partially matched SSH pattern but failed extraction" in caplog.text
+        assert "logger.warning(" not in parse_source
+        assert parse_source.count("_warn_partial_match(") == 2
+        assert "logger.warning(" in helper_source
+
 
 # ---------------------------------------------------------------------------
 # TestSkippedLines (D-07)
@@ -549,6 +584,10 @@ class TestStreamTypes:
 
     def test_line_cleanup_avoids_rstrip_allocation(self) -> None:
         """Parser line cleanup should trim CR/LF with an index scan."""
+        import inspect
+
+        import app.ssh.parser as parser_module
+
         class NoRstripLine(str):
             def rstrip(self, *_args, **_kwargs):
                 raise AssertionError("parse_auth_log should avoid direct rstrip allocation")
@@ -557,14 +596,54 @@ class TestStreamTypes:
             "Jan 15 10:00:00 server sshd[1]: Accepted publickey for bob from 10.0.0.1 port 22 ssh2\r\n"
         )
 
-        assert _strip_line_ending(line).endswith("ssh2")
-        assert "rstrip" not in _strip_line_ending.__code__.co_names
+        assert line_streams.strip_line_ending(line).endswith("ssh2")
+        assert "rstrip" not in line_streams.strip_line_ending.__code__.co_names
+        assert "line_streams.strip_line_ending(" in inspect.getsource(parser_module.parse_auth_log)
 
         events, summary = parse_auth_log(iter([line]), now=datetime(2025, 1, 15))
 
         assert len(events) == 1
         assert summary.total_lines == 1
         assert events[0].raw_line.endswith("ssh2")
+
+    def test_parser_delegates_line_stream_decoding_helpers(self) -> None:
+        """Parser should keep stream decoding helpers in app.ssh.line_streams."""
+        import inspect
+
+        import app.ssh.parser as parser_module
+
+        source = inspect.getsource(parser_module)
+        assert "def _iter_lines" not in source
+        assert "def _strip_line_ending" not in source
+        assert "line_streams.iter_lines(" in source
+        assert list(line_streams.iter_lines(io.BytesIO(b"ok\n"))) == ["ok\n"]
+
+    def test_line_stream_byte_decoding_is_shared(self) -> None:
+        """Bytes stream decoding should be owned by one coercion helper."""
+        import inspect
+
+        assert line_streams.coerce_stream_line(b"ok\n") == "ok\n"
+        assert line_streams.coerce_stream_line(bytearray(b"bad-\xff\n")) == "bad-�\n"
+        assert line_streams.coerce_stream_line("already text\n") == "already text\n"
+        source = inspect.getsource(line_streams.iter_lines)
+        helper_source = inspect.getsource(line_streams.coerce_stream_line)
+        assert "yield coerce_stream_line(raw_line)" in source
+        assert "decode_utf8_replace(raw_line)" not in source
+        assert "decode_utf8_replace(raw_line)" in helper_source
+
+    def test_parser_delegates_login_event_construction(self) -> None:
+        """BSD and RFC3339 event paths should share one LoginEvent append helper."""
+        import inspect
+
+        import app.ssh.parser as parser_module
+
+        parse_source = inspect.getsource(parser_module.parse_auth_log)
+        helper_source = inspect.getsource(parser_module._append_login_event)
+
+        assert parse_source.count("_append_login_event(") == 2
+        assert "events.append(LoginEvent(" not in parse_source
+        assert "events.append(LoginEvent(" in helper_source
+        assert "_classify_source(source)" in helper_source
 
     def test_bytes_io_malformed_utf8_does_not_crash(self) -> None:
         """Malformed UTF-8 bytes are decoded with errors='replace', not raised."""

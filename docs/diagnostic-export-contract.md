@@ -2,17 +2,18 @@
 
 ## Reader and action
 
-This document is for the engineer implementing or reviewing SentinelX diagnostic export work. After reading it, they should be able to assemble backend diagnostic sources into a deterministic bundle, inspect the manifest for every source outcome, and know which route/UI responsibilities still belong to the next slice.
+This document is for the engineer implementing or reviewing SentinelX diagnostic export work. After reading it, they should be able to assemble backend diagnostic sources into a deterministic bundle, inspect the manifest for every source outcome, and verify the supported analyst download route and its failure boundary.
 
 ## Scope
 
-The diagnostic export is a local-first troubleshooting bundle for the SentinelX app. Its backend contract covers three things:
+The diagnostic export is a local-first troubleshooting bundle for the SentinelX app. Its current contract covers four things:
 
 1. A stable manifest vocabulary for source outcomes.
 2. Redaction-before-export rules for source payloads and error summaries.
 3. Deterministic archive assembly from explicitly supplied diagnostic sources.
+4. A supported, rate-limited analyst download at `GET /diagnostics/export`.
 
-The backend contract does not itself expose a download route, add UI controls, upload logs, read planning directories, or ship telemetry. Route headers, response errors, and analyst-facing download affordances remain the responsibility of the route/UI slice.
+The contract does not add an API export alias, upload logs, read planning directories, or ship telemetry. `GET /api/diagnostics/export` remains unregistered and therefore returns Flask's normal 404 response.
 
 ## Manifest version
 
@@ -131,36 +132,42 @@ Missing optional runtime objects are represented as `omitted` records with expli
 
 ## Route boundary
 
-The backend assembly slice intentionally leaves these routes unavailable:
+`GET /diagnostics/export` is the supported analyst route. It serves the bounded, redacted ZIP assembled from the default runtime sources and returns download headers for a `sentinelx-diagnostic-YYYY-MM-DD.zip` attachment. The route is limited to three requests per minute and remains inside the loopback-only diagnostics boundary.
+
+If route assembly fails, the analyst receives a fixed single-line 500 response:
 
 ```text
-/diagnostics/export
-/api/diagnostics/export
+Diagnostic export failed. Check server logs.
 ```
 
-The route/UI slice is expected to replace this negative boundary with positive route-level tests that prove:
+The response does not include exception text, stack traces, provider keys, tokens, or other secret-bearing details. Source-level collection failures remain isolated in the archive manifest as bounded, redacted `error` records when assembly can continue.
 
-- the supported route returns a diagnostic archive with safe headers
-- route errors are bounded and secret-free
-- the archive still contains no provider secrets
-- the UI gives analysts concise guidance for generating and sharing the bundle
+`GET /api/diagnostics/export` is intentionally not registered. It remains a 404 rather than a second export surface.
 
-## What S01 and S02 prove
+Current route-level proof covers:
 
-S01 proves the manifest and redaction primitives: source records, manifest serialization, redaction metadata, safe error summaries, and route absence.
+- a ZIP response with stable attachment and source-count headers
+- a manifest that matches the archive entries
+- bounded per-source content and deterministic archive assembly
+- redaction of configured secrets and bearer-token-like values from raw ZIP bytes
+- a bounded, secret-free analyst-facing failure response
+- registration of `/diagnostics/export` and absence of `/api/diagnostics/export`
 
-S02 proves backend assembly and runtime composition: deterministic ZIP output, per-source bounds, redacted payloads and error summaries, omitted/error records for missing or failing runtime dependencies, safe archive path validation, dependency-injected runtime source collection, and continued route absence.
+## What S01 and S02 proved historically
 
-## Non-goals before the route/UI slice
+S01 established the manifest and redaction primitives: source records, manifest serialization, redaction metadata, safe error summaries, and the then-current absence of download routes.
 
-The backend slices deliberately do not provide:
+S02 established backend assembly and runtime composition: deterministic ZIP output, per-source bounds, redacted payloads and error summaries, omitted/error records for missing or failing runtime dependencies, safe archive path validation, dependency-injected runtime source collection, and the then-current continued route absence. Those route-absence assertions are historical backend-slice proof, not the current product boundary; the later route slice registered `/diagnostics/export` while preserving the API-route absence.
 
-- a diagnostic download route
-- a visible UI button or analyst workflow
+## Non-goals
+
+The diagnostic export does not provide:
+
+- an `/api/diagnostics/export` alias
 - remote upload or log shipping
 - filesystem crawling
 - reads from planning or audit directories
 - long-term log retention
 - multi-user access control
 
-Those behaviors require separate route-level and UX proof rather than ad hoc changes to the backend contract.
+Any expansion of those behaviors requires separate route-level, security, and UX proof rather than ad hoc changes to the current contract.

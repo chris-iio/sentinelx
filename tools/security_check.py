@@ -23,7 +23,8 @@ import argparse
 import json
 import re
 import shutil
-import subprocess
+# Subprocess is required for fixed Bandit and pip-audit argv.
+import subprocess  # nosec B404
 import sys
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -66,7 +67,7 @@ class Finding:
 class ScanReport:
     findings: list[Finding] = field(default_factory=list)
     bandit_ran: bool = False
-    bandit_high: int = 0
+    bandit_high_medium: int = 0
     bandit_total: int = 0
     pip_audit_ran: bool = False
     pip_audit_vulns: int = 0
@@ -88,6 +89,30 @@ def count_findings_by_severity(findings: list[Finding]) -> dict[str, int]:
     if finding_count == 1:
         finding = findings[0]
         counts[finding.severity] = counts.get(finding.severity, 0) + 1
+        return counts
+    if finding_count == 2:
+        first = findings[0]
+        second = findings[1]
+        counts[first.severity] = counts.get(first.severity, 0) + 1
+        counts[second.severity] = counts.get(second.severity, 0) + 1
+        return counts
+    if finding_count == 3:
+        first = findings[0]
+        second = findings[1]
+        third = findings[2]
+        counts[first.severity] = counts.get(first.severity, 0) + 1
+        counts[second.severity] = counts.get(second.severity, 0) + 1
+        counts[third.severity] = counts.get(third.severity, 0) + 1
+        return counts
+    if finding_count == 4:
+        first = findings[0]
+        second = findings[1]
+        third = findings[2]
+        fourth = findings[3]
+        counts[first.severity] = counts.get(first.severity, 0) + 1
+        counts[second.severity] = counts.get(second.severity, 0) + 1
+        counts[third.severity] = counts.get(third.severity, 0) + 1
+        counts[fourth.severity] = counts.get(fourth.severity, 0) + 1
         return counts
     for finding in findings:
         counts[finding.severity] = counts.get(finding.severity, 0) + 1
@@ -325,7 +350,10 @@ RULES: list[Rule] = [
         fix="Remove verify=False; use the default verify=True",
     ),
     Rule(
-        pattern=r"requests\.(?:get|post|put|delete|patch|head)\s*\([^)]*\)(?!.*timeout)",
+        pattern=(
+            r"requests\.(?:get|post|put|delete|patch|head)\s*\("
+            r"(?![^\n]*\btimeout\s*=)[^\n]*\)"
+        ),
         glob="*.py",
         severity="MEDIUM",
         rule_id="MISSING-TIMEOUT",
@@ -434,10 +462,12 @@ BANDIT_FAIL_SEVERITIES = frozenset(("HIGH", "MEDIUM"))
 def _is_test_file(path: Path) -> bool:
     """Check if a file path looks like a test file."""
     path_str = str(path)
-    for indicator in TEST_INDICATORS:
-        if indicator in path_str:
-            return True
-    return False
+    return (
+        "test_" in path_str
+        or "conftest" in path_str
+        or "tests/" in path_str
+        or "testing/" in path_str
+    )
 
 
 def _should_skip(path: Path) -> bool:
@@ -445,9 +475,7 @@ def _should_skip(path: Path) -> bool:
     for part in path.parts:
         if part in EXCLUDE_DIRS:
             return True
-    if path.name in EXCLUDE_FILES:
-        return True
-    return False
+    return path.name in EXCLUDE_FILES
 
 
 # ---------------------------------------------------------------------------
@@ -459,8 +487,13 @@ def collect_files(root: Path, glob_pattern: str) -> list[Path]:
     files = []
     for p in root.rglob(glob_pattern):
         if p.is_file() and not _should_skip(p):
-            files.append(p)
+            append_collected_file(files, p)
     return files
+
+
+def append_collected_file(files: list[Path], path: Path) -> None:
+    """Append one scanner input path to the collected file list."""
+    files.append(path)
 
 
 def scan_file(filepath: Path, rule: Rule) -> list[Finding]:
@@ -481,10 +514,7 @@ def scan_text(filepath: Path, text: str, rule: Rule, regex: re.Pattern[str]) -> 
     start = 0
     text_length = len(text)
     while start < text_length:
-        end = start
-        while end < text_length and text[end] not in "\r\n":
-            end += 1
-        line = text[start:end]
+        line, start = next_scan_line(text, start, text_length)
         # Skip nosec-suppressed lines
         if "nosec" not in line and "noqa" not in line and regex.search(line):
             findings.append(
@@ -498,12 +528,21 @@ def scan_text(filepath: Path, text: str, rule: Rule, regex: re.Pattern[str]) -> 
                     fix=rule.fix,
                 )
             )
-        if end < text_length and text[end] == "\r" and end + 1 < text_length and text[end + 1] == "\n":
-            start = end + 2
-        else:
-            start = end + 1
         lineno += 1
     return findings
+
+
+def next_scan_line(text: str, start: int, text_length: int | None = None) -> tuple[str, int]:
+    """Return one line without its line ending and the next scan offset."""
+    if text_length is None:
+        text_length = len(text)
+    end = start
+    while end < text_length and text[end] not in "\r\n":
+        end += 1
+    line = text[start:end]
+    if end < text_length and text[end] == "\r" and end + 1 < text_length and text[end + 1] == "\n":
+        return line, end + 2
+    return line, end + 1
 
 
 def bounded_stripped_snippet(line: str, limit: int = 120) -> str:
@@ -520,17 +559,25 @@ def bounded_stripped_snippet(line: str, limit: int = 120) -> str:
     return line[start:end]
 
 
+def append_compiled_rule(
+    by_glob: dict[str, list[tuple[Rule, re.Pattern[str]]]],
+    rule: Rule,
+) -> None:
+    """Append one precompiled scanner rule to its glob group."""
+    compiled_rules = by_glob.get(rule.glob)
+    if compiled_rules is None:
+        compiled_rules = []
+        by_glob[rule.glob] = compiled_rules
+    compiled_rules.append((rule, re.compile(rule.pattern, re.IGNORECASE)))
+
+
 def run_scan(root: Path) -> list[Finding]:
     """Run all rules against all matching files under root."""
     all_findings: list[Finding] = []
     # Group rules by glob to minimize filesystem traversal
     by_glob: dict[str, list[tuple[Rule, re.Pattern[str]]]] = {}
     for rule in RULES:
-        compiled_rules = by_glob.get(rule.glob)
-        if compiled_rules is None:
-            compiled_rules = []
-            by_glob[rule.glob] = compiled_rules
-        compiled_rules.append((rule, re.compile(rule.pattern, re.IGNORECASE)))
+        append_compiled_rule(by_glob, rule)
 
     for glob_pattern in by_glob:
         compiled_rules = by_glob[glob_pattern]
@@ -578,8 +625,48 @@ def ordered_findings(findings: list[Finding]) -> list[Finding]:
         findings[1] = second
         findings[2] = third
         return findings
-    findings.sort(key=finding_sort_key)
+    if finding_count == 4:
+        first = findings[0]
+        second = findings[1]
+        third = findings[2]
+        fourth = findings[3]
+        if finding_sort_key(second) < finding_sort_key(first):
+            first, second = second, first
+        if finding_sort_key(fourth) < finding_sort_key(third):
+            third, fourth = fourth, third
+        if finding_sort_key(third) < finding_sort_key(first):
+            first, third = third, first
+        if finding_sort_key(fourth) < finding_sort_key(second):
+            second, fourth = fourth, second
+        if finding_sort_key(third) < finding_sort_key(second):
+            second, third = third, second
+        findings[0] = first
+        findings[1] = second
+        findings[2] = third
+        findings[3] = fourth
+        return findings
+    ordered: list[Finding] = []
+    for finding in findings:
+        append_ordered_finding(ordered, finding)
+    findings[:] = ordered
     return findings
+
+
+def append_ordered_finding(ordered: list[Finding], finding: Finding) -> None:
+    finding_count = len(ordered)
+    if finding_count == 0:
+        ordered.append(finding)
+        return
+
+    key = finding_sort_key(finding)
+    index = 0
+    while index < finding_count:
+        if key <= finding_sort_key(ordered[index]):
+            ordered.insert(index, finding)
+            return
+        index += 1
+
+    ordered.append(finding)
 
 
 def finding_sort_key(finding: Finding) -> tuple[int, str, int]:
@@ -592,23 +679,25 @@ def finding_sort_key(finding: Finding) -> tuple[int, str, int]:
 # ---------------------------------------------------------------------------
 
 def run_bandit(root: Path) -> tuple[bool, int, int]:
-    """Run bandit if installed. Returns (ran, high_count, total_count).
+    """Run Bandit and return (ran, high_medium_count, total_count).
 
     Only HIGH and MEDIUM severity findings count toward failure.
     LOW findings are informational only.
     """
-    if not shutil.which("bandit"):
+    bandit_path = shutil.which("bandit")
+    if bandit_path is None:
         return False, 0, 0
     try:
-        result = subprocess.run(
-            ["bandit", "-r", str(root), "-f", "json", "--quiet"],
+        # The executable is resolved from PATH and all other arguments are fixed.
+        result = subprocess.run(  # noqa: S603  # nosec B603
+            [bandit_path, "-r", str(root), "-f", "json", "--quiet"],
             capture_output=True, text=True, timeout=120,
         )
         if result.stdout:
             data = json.loads(result.stdout)
             results = data.get("results", [])
-            high_count = count_bandit_high_medium(results)
-            return True, high_count, len(results)
+            high_medium_count = count_bandit_high_medium(results)
+            return True, high_medium_count, len(results)
         return True, 0, 0
     except (subprocess.TimeoutExpired, json.JSONDecodeError, OSError):
         return False, 0, 0
@@ -625,11 +714,13 @@ def count_bandit_high_medium(results: list[dict]) -> int:
 
 def run_pip_audit() -> tuple[bool, int]:
     """Run pip-audit if installed. Returns (ran, vuln_count)."""
-    if not shutil.which("pip-audit"):
+    pip_audit_path = shutil.which("pip-audit")
+    if pip_audit_path is None:
         return False, 0
     try:
-        result = subprocess.run(
-            ["pip-audit", "--format", "json", "--desc"],
+        # The executable is resolved from PATH and all arguments are fixed.
+        result = subprocess.run(  # noqa: S603  # nosec B603
+            [pip_audit_path, "--format", "json", "--desc"],
             capture_output=True, text=True, timeout=120,
         )
         if result.stdout:
@@ -707,16 +798,22 @@ def format_terminal(report: ScanReport) -> str:
     if report.bandit_ran:
         if report.bandit_total == 0:
             status = f"{_GREEN}0 issues{_NC}"
-        elif report.bandit_high == 0:
+        elif report.bandit_high_medium == 0:
             status = f"{_GREEN}{report.bandit_total} low (info only){_NC}"
         else:
-            status = f"{_RED}{report.bandit_high} high/medium{_NC}, {report.bandit_total} total"
+            status = (
+                f"{_RED}{report.bandit_high_medium} high/medium severity{_NC}, "
+                f"{report.bandit_total} total"
+            )
         lines.append(f"  Bandit:    {status}")
     else:
         lines.append(f"  Bandit:    {_DIM}not installed (pip install bandit){_NC}")
 
     if report.pip_audit_ran:
-        status = f"{_GREEN}0 vulns{_NC}" if report.pip_audit_vulns == 0 else f"{_RED}{report.pip_audit_vulns} vulns{_NC}"
+        if report.pip_audit_vulns == 0:
+            status = f"{_GREEN}0 vulns{_NC}"
+        else:
+            status = f"{_RED}{report.pip_audit_vulns} vulns{_NC}"
         lines.append(f"  pip-audit: {status}")
     else:
         lines.append(f"  pip-audit: {_DIM}skipped (use --with-deps to enable){_NC}")
@@ -724,10 +821,10 @@ def format_terminal(report: ScanReport) -> str:
     lines.append(f"{_BOLD}{'-' * 60}{_NC}")
 
     total_critical = c["CRITICAL"] + c["HIGH"]
-    if total_critical == 0 and report.bandit_high == 0 and report.pip_audit_vulns == 0:
-        lines.append(f"  {_GREEN}{_BOLD}PASS{_NC} — no critical/high issues found")
+    if total_critical == 0 and report.bandit_high_medium == 0 and report.pip_audit_vulns == 0:
+        lines.append(f"  {_GREEN}{_BOLD}PASS{_NC} — no gate-blocking issues found")
     else:
-        lines.append(f"  {_RED}{_BOLD}FAIL{_NC} — {total_critical} critical/high issue(s) require attention")
+        lines.append(f"  {_RED}{_BOLD}FAIL{_NC} — review gate-blocking findings")
 
     lines.append("")
     return "\n".join(lines)
@@ -739,7 +836,11 @@ def format_json(report: ScanReport) -> str:
         {
             "findings": findings_to_dicts(report.findings),
             "summary": report.counts,
-            "bandit": {"ran": report.bandit_ran, "high": report.bandit_high, "total": report.bandit_total},
+            "bandit": {
+                "ran": report.bandit_ran,
+                "high_medium": report.bandit_high_medium,
+                "total": report.bandit_total,
+            },
             "pip_audit": {"ran": report.pip_audit_ran, "vulns": report.pip_audit_vulns},
         },
         indent=2,
@@ -761,11 +862,23 @@ def findings_to_dicts(findings: list[Finding]) -> list[dict[str, object]]:
             finding_to_dict(findings[1]),
             finding_to_dict(findings[2]),
         ]
+    if finding_count == 4:
+        return [
+            finding_to_dict(findings[0]),
+            finding_to_dict(findings[1]),
+            finding_to_dict(findings[2]),
+            finding_to_dict(findings[3]),
+        ]
 
     serialized: list[dict[str, object]] = []
     for finding in findings:
-        serialized.append(finding_to_dict(finding))
+        append_finding_dict(serialized, finding)
     return serialized
+
+
+def append_finding_dict(serialized: list[dict[str, object]], finding: Finding) -> None:
+    """Append one serialized finding to an existing payload list."""
+    serialized.append(finding_to_dict(finding))
 
 
 def finding_to_dict(finding: Finding) -> dict[str, object]:
@@ -823,7 +936,11 @@ def main() -> int:
     report = ScanReport(findings=findings)
 
     if not args.no_bandit:
-        report.bandit_ran, report.bandit_high, report.bandit_total = run_bandit(root)
+        (
+            report.bandit_ran,
+            report.bandit_high_medium,
+            report.bandit_total,
+        ) = run_bandit(root)
 
     if args.with_deps:
         report.pip_audit_ran, report.pip_audit_vulns = run_pip_audit()
@@ -840,7 +957,7 @@ def main() -> int:
     if args.strict:
         fail_severities += c["MEDIUM"]
 
-    if fail_severities > 0 or report.bandit_high > 0 or report.pip_audit_vulns > 0:
+    if fail_severities > 0 or report.bandit_high_medium > 0 or report.pip_audit_vulns > 0:
         return 1
     return 0
 

@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-audit">
+    <a href="{{ url_for('main.audit_engagement_detail', engagement_id=engagement.id) }}" class="back-link" aria-label="Back to engagement">← {{ engagement.name }}</a>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, message in messages %}
+    <div class="alert alert-{{ category }}" role="alert">{{ message }}</div>
+    {% endfor %}
+    {% endwith %}
+
+    <header class="audit-page-header">
+        <div>
+            <p class="audit-eyebrow">Finding · {{ finding.severity }}</p>
+            <h1 class="audit-heading">{{ finding.title }}</h1>
+            <p class="audit-muted">Scanner output supports a claim. The analyst status records the decision.</p>
+        </div>
+        <span class="audit-badge audit-badge--status">{{ finding.status }}</span>
+    </header>
+
+    <ol class="audit-workflow" aria-label="Finding workflow">
+        <li><strong>Claim</strong><span>Title and severity</span></li>
+        <li><strong>Evidence</strong><span>Source, target, impact</span></li>
+        <li><strong>Reproduce</strong><span>Exact run and result</span></li>
+        <li><strong>Decide</strong><span>Analyst status</span></li>
+        <li><strong>Remediate</strong><span>Actionable fix</span></li>
+        <li><strong>Recheck</strong><span>Regression proof</span></li>
+    </ol>
+
+    <section class="audit-panel">
+        <form method="post" action="{{ url_for('main.audit_finding_edit', finding_id=finding.id) }}" class="audit-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+            <div class="audit-form-grid">
+                <div>
+                    <label class="form-label" for="finding-title">Claim</label>
+                    <input id="finding-title" class="form-input" type="text" name="title" maxlength="200" required value="{{ finding.title }}">
+                </div>
+                <div>
+                    <label class="form-label" for="finding-severity">Severity</label>
+                    <select id="finding-severity" class="form-input" name="severity">
+                        {% for severity in severities %}
+                        <option value="{{ severity }}" {% if severity == finding.severity %}selected{% endif %}>{{ severity }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <label class="form-label" for="finding-target">Affected target and source location</label>
+            <input id="finding-target" class="form-input form-input--mono" type="text" name="target" maxlength="1024" value="{{ finding.target }}" placeholder="contracts/Vault.sol#L42 · revision abc123">
+
+            <label class="form-label" for="finding-description">Evidence</label>
+            <textarea id="finding-description" class="ioc-textarea" name="description" rows="8" maxlength="256000" placeholder="Observed behavior, source revision, scope, timestamps, and supporting output">{{ finding.description }}</textarea>
+
+            <label class="form-label" for="finding-impact">Impact</label>
+            <textarea id="finding-impact" class="ioc-textarea ioc-textarea--compact" name="impact" rows="4" maxlength="256000" placeholder="Assets, users, and conditions affected">{{ finding.impact }}</textarea>
+
+            <label class="form-label" for="finding-poc">Reproducible run and recheck evidence</label>
+            <textarea id="finding-poc" class="ioc-textarea form-input--mono" name="poc" rows="10" maxlength="256000" placeholder="Exact command or test, tool identity, source revision, observed result, and later regression recheck">{{ finding.poc }}</textarea>
+            <p class="audit-help">A generated PoC skeleton is only a starting point. It is not executed proof. <a class="audit-link" href="{{ url_for('api_audit.finding_poc', finding_id=finding.id) }}">Download the unexecuted skeleton</a>.</p>
+
+            <label class="form-label" for="finding-remediation">Remediation</label>
+            <textarea id="finding-remediation" class="ioc-textarea ioc-textarea--compact" name="remediation" rows="5" maxlength="256000" placeholder="Specific fix and the regression check that must pass">{{ finding.remediation }}</textarea>
+
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">Save evidence</button>
+            </div>
+        </form>
+    </section>
+
+    <section class="audit-panel audit-disposition" aria-labelledby="disposition-heading">
+        <div>
+            <h2 id="disposition-heading" class="audit-subheading">Analyst disposition</h2>
+            <p class="audit-muted">Change status only after you review conflicting evidence and the reproducible result.</p>
+        </div>
+        <form method="post" action="{{ url_for('main.audit_finding_status', finding_id=finding.id) }}" class="audit-inline-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <select class="form-input" name="status" aria-label="Finding status">
+                {% for status in finding_statuses %}
+                <option value="{{ status }}" {% if status == finding.status %}selected{% endif %}>{{ status }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit" class="btn btn-secondary">Set status</button>
+        </form>
+    </section>
+
+    <form method="post" action="{{ url_for('main.audit_finding_delete', finding_id=finding.id) }}" class="audit-danger-zone">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-secondary">Delete finding</button>
+    </form>
+</div>
+{% endblock %}

@@ -3,7 +3,7 @@
 from app import limiter
 
 from . import bp
-from ._helpers import _get_enrichment_status
+from .enrichment_jobs import _get_enrichment_status
 
 
 @bp.route("/enrichment/status/<job_id>", methods=["GET"])

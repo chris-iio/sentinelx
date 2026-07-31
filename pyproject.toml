@@ -13,6 +13,7 @@ select = ["E", "F", "W", "S", "B"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["E501", "S101"]
+"tools/optimization_audit.py" = ["E501"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

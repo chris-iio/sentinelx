@@ -17,13 +17,11 @@ import sqlite3
 import threading
 from pathlib import Path
 
-from app.json_utils import EMPTY_JSON_OBJECT, decode_json_object, encode_json_object
-from app.sqlite import configure_connection
+from app.json_utils import decode_json_object, encode_json_object
+from app.sqlite import configure_connection, prepare_private_path
 from app.time_utils import utc_now
 
 DEFAULT_DB_PATH = Path.home() / ".sentinelx" / "cache.db"
-_EMPTY_JSON_OBJECT = EMPTY_JSON_OBJECT
-
 _CREATE_TABLE = """
 CREATE TABLE IF NOT EXISTS enrichment_cache (
     ioc_value   TEXT NOT NULL,
@@ -99,9 +97,10 @@ class CacheStore:
     """
 
     def __init__(self, db_path: Path | None = None) -> None:
-        self._db_path = db_path if db_path is not None else DEFAULT_DB_PATH
+        self._db_path = prepare_private_path(
+            db_path if db_path is not None else DEFAULT_DB_PATH
+        )
         self._lock = threading.Lock()
-        self._db_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         self._conn = self._connect()
         configure_connection(self._conn)
         self._conn.execute(_CREATE_TABLE)
@@ -191,10 +190,30 @@ class CacheStore:
                 _cache_entry(first_json, first_cached_at, first_provider),
                 _cache_entry(second_json, second_cached_at, second_provider),
             ]
+        if row_count == 3:
+            first_provider, first_json, first_cached_at = rows[0]
+            second_provider, second_json, second_cached_at = rows[1]
+            third_provider, third_json, third_cached_at = rows[2]
+            return [
+                _cache_entry(first_json, first_cached_at, first_provider),
+                _cache_entry(second_json, second_cached_at, second_provider),
+                _cache_entry(third_json, third_cached_at, third_provider),
+            ]
+        if row_count == 4:
+            first_provider, first_json, first_cached_at = rows[0]
+            second_provider, second_json, second_cached_at = rows[1]
+            third_provider, third_json, third_cached_at = rows[2]
+            fourth_provider, fourth_json, fourth_cached_at = rows[3]
+            return [
+                _cache_entry(first_json, first_cached_at, first_provider),
+                _cache_entry(second_json, second_cached_at, second_provider),
+                _cache_entry(third_json, third_cached_at, third_provider),
+                _cache_entry(fourth_json, fourth_cached_at, fourth_provider),
+            ]
 
         results: list[dict] = []
         for provider, result_json, cached_at in rows:
-            results.append(_cache_entry(result_json, cached_at, provider))
+            _append_cache_entry(results, result_json, cached_at, provider)
 
         return results
 
@@ -227,3 +246,16 @@ class CacheStore:
             )
             self._conn.commit()
             return cursor.rowcount
+
+    def close(self) -> None:
+        """Close the persistent SQLite connection."""
+        self._conn.close()
+
+
+def _append_cache_entry(
+    results: list[dict],
+    result_json: str,
+    cached_at: str,
+    provider: str,
+) -> None:
+    results.append(_cache_entry(result_json, cached_at, provider))

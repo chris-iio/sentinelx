@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 from types import MappingProxyType
+from typing import NamedTuple
 
-from app.enrichment.adapters.base import BaseHTTPAdapter
-from app.enrichment.models import EnrichmentResult, provider_result
+from .abusech import abusech_query_status
+from .base import BaseHTTPAdapter
+from ..models import EnrichmentResult, provider_result
 from app.pipeline.models import IOC, IOCType
 
 URLHAUS_BASE = "https://urlhaus-api.abuse.ch"
@@ -18,6 +20,26 @@ _ENDPOINT_MAP = MappingProxyType({
     IOCType.MD5: ("/v1/payload/", "md5_hash"),
     IOCType.SHA256: ("/v1/payload/", "sha256_hash"),
 })
+
+
+class UrlhausSignals(NamedTuple):
+    query_status: str
+    urls_count: int
+    tags: object
+    blacklists: dict
+    signature: object
+
+
+def _urlhaus_signals(body: dict) -> UrlhausSignals:
+    raw_blacklists = body.get("blacklists")
+    blacklists = raw_blacklists if isinstance(raw_blacklists, dict) else {}
+    return UrlhausSignals(
+        query_status=abusech_query_status(body),
+        urls_count=body.get("urls_count", 0) or 0,
+        tags=body.get("tags"),
+        blacklists=blacklists,
+        signature=body.get("signature"),
+    )
 
 
 class URLhausAdapter(BaseHTTPAdapter):
@@ -48,40 +70,36 @@ class URLhausAdapter(BaseHTTPAdapter):
 
 
 def _parse_response(ioc: IOC, body: dict, provider_name: str) -> EnrichmentResult:
-    query_status: str = body.get("query_status", "")
-    urls_count: int = body.get("urls_count", 0) or 0
-    tags: list[str] | None = body.get("tags")
-    raw_blacklists = body.get("blacklists")
-    blacklists = raw_blacklists if isinstance(raw_blacklists, dict) else {}
-    signature: str | None = body.get("signature")
-
-    if query_status == "is_listed":
-        verdict = "malicious"
-        detection_count = 1
-    elif query_status == "ok" and urls_count > 0:
-        verdict = "malicious"
-        detection_count = urls_count
-    elif query_status in ("no_results", "no_result"):
-        verdict = "no_data"
-        detection_count = 0
-    else:
-        # "ok" with urls_count == 0 — IP/domain seen but no active URLs
-        verdict = "no_data"
-        detection_count = 0
+    signals = _urlhaus_signals(body)
+    verdict, detection_count = _urlhaus_verdict(signals.query_status, signals.urls_count)
 
     return _urlhaus_result(
         ioc=ioc,
         provider=provider_name,
         verdict=verdict,
         detection_count=detection_count,
-        raw_stats={
-            "query_status": query_status,
-            "urls_count": urls_count,
-            "tags": tags,
-            "blacklists": blacklists,
-            "signature": signature,
-        },
+        raw_stats=_urlhaus_raw_stats(
+            signals=signals,
+        ),
     )
+
+
+def _urlhaus_verdict(query_status: str, urls_count: int) -> tuple[str, int]:
+    if query_status == "is_listed":
+        return ("malicious", 1)
+    if query_status == "ok" and urls_count > 0:
+        return ("malicious", urls_count)
+    return ("no_data", 0)
+
+
+def _urlhaus_raw_stats(*, signals: UrlhausSignals) -> dict:
+    return {
+        "query_status": signals.query_status,
+        "urls_count": signals.urls_count,
+        "tags": signals.tags,
+        "blacklists": signals.blacklists,
+        "signature": signals.signature,
+    }
 
 
 def _urlhaus_result(

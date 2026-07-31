@@ -7,6 +7,7 @@ concurrent write safety.
 from __future__ import annotations
 
 import datetime
+import inspect
 import threading
 import time
 from unittest.mock import patch
@@ -16,13 +17,15 @@ from types import MappingProxyType
 import pytest
 
 import app.enrichment.history_store as history_store_module
-from app.enrichment.history_store import (
-    HistoryStore,
+import app.enrichment.history_records as history_records_module
+from app.enrichment.history_records import (
     _FALLBACK_VERDICT,
     _MAX_VERDICT,
     _VERDICT_PRIORITY,
+    _analysis_insert_record,
     _compute_top_verdict,
 )
+from app.enrichment.history_store import DEFAULT_MAX_ROWS, HistoryStore
 
 
 # -- Fixtures ---------------------------------------------------------------
@@ -67,6 +70,24 @@ _SAMPLE_RESULTS = [
 
 # -- Test classes -----------------------------------------------------------
 
+class TestPublicExports:
+    """History store public facade tests."""
+
+    def test_history_store_public_exports_exclude_record_private_helpers(self) -> None:
+        assert history_store_module.__all__ == ("DEFAULT_MAX_ROWS", "HistoryStore")
+        assert "_analysis_insert_record" not in history_store_module.__all__
+        assert "_compute_top_verdict" not in history_store_module.__all__
+        assert "_EMPTY_JSON_ARRAY" not in history_store_module.__all__
+        assert "_VERDICT_PRIORITY" not in history_store_module.__all__
+        assert not hasattr(history_store_module, "_EMPTY_JSON_ARRAY")
+        assert not hasattr(history_store_module, "_FALLBACK_VERDICT")
+        assert not hasattr(history_store_module, "_MAX_VERDICT")
+        assert not hasattr(history_store_module, "_VERDICT_PRIORITY")
+        assert not hasattr(history_store_module, "_compute_top_verdict")
+        assert not hasattr(history_store_module, "_encode_json_array")
+        assert not hasattr(history_store_module, "_decode_json_array")
+
+
 class TestSaveAndLoad:
     """Roundtrip save → load tests."""
 
@@ -83,6 +104,34 @@ class TestSaveAndLoad:
         assert loaded["total_count"] == 2
         assert loaded["iocs"] == _SAMPLE_IOCS
         assert loaded["results"] == _SAMPLE_RESULTS
+
+    def test_workflow_metadata_roundtrip_is_separate_from_provider_results(
+        self, store: HistoryStore
+    ) -> None:
+        provider_result = {"type": "result", "verdict": "suspicious", "provider": "ProviderA"}
+        workflow = {
+            "type": "workflow",
+            "status": "failed",
+            "complete": False,
+            "terminal": True,
+            "terminal_reason": "partial_failure",
+            "error": "one lookup failed",
+            "done": 2,
+            "total": 2,
+        }
+
+        row_id = store.save_analysis(
+            "test",
+            "online",
+            [],
+            [provider_result, workflow],
+        )
+        loaded = store.load_analysis(row_id)
+
+        assert loaded is not None
+        assert loaded["results"] == [provider_result]
+        assert loaded["workflow"] == workflow
+        assert loaded["top_verdict"] == "suspicious"
 
     def test_load_returns_none_for_missing_id(self, store: HistoryStore) -> None:
         """load_analysis() returns None when the ID does not exist."""
@@ -137,10 +186,12 @@ class TestSaveAndLoad:
 
     def test_empty_payloads_use_shared_json_literal_constant(self) -> None:
         """Empty history payload paths should share one literal constant."""
-        source = Path("app/enrichment/history_store.py").read_text(encoding="utf-8")
+        from app.json_utils import EMPTY_JSON_ARRAY
 
-        assert history_store_module._EMPTY_JSON_ARRAY == "[]"
-        assert source.count("_EMPTY_JSON_ARRAY") == 1
+        source = Path("app/enrichment/history_records.py").read_text(encoding="utf-8")
+
+        assert EMPTY_JSON_ARRAY == "[]"
+        assert "_EMPTY_JSON_ARRAY" not in source
         assert "encode_json_array" in source
         assert "decode_json_array" in source
         assert '== "[]"' not in source
@@ -148,10 +199,40 @@ class TestSaveAndLoad:
 
     def test_payload_encoding_and_decoding_share_empty_fast_path(self) -> None:
         """History payload helpers should centralize empty JSON fast paths."""
-        assert history_store_module._encode_json_array([]) == history_store_module._EMPTY_JSON_ARRAY
-        assert history_store_module._decode_json_array(history_store_module._EMPTY_JSON_ARRAY) == []
-        assert "_encode_json_array" in HistoryStore.save_analysis.__code__.co_names
-        assert "_decode_json_array" in HistoryStore.load_analysis.__code__.co_names
+        from app.json_utils import EMPTY_JSON_ARRAY
+
+        assert history_records_module._encode_json_array([]) == EMPTY_JSON_ARRAY
+        assert history_records_module._decode_json_array(EMPTY_JSON_ARRAY) == []
+        assert "_analysis_insert_record" in HistoryStore.save_analysis.__code__.co_names
+        assert "_analysis_from_row" in HistoryStore.load_analysis.__code__.co_names
+        assert "_decode_json_array" in history_records_module._analysis_from_row.__code__.co_names
+
+    def test_save_analysis_delegates_insert_record_shaping(self) -> None:
+        """HistoryStore should keep payload/count/verdict shaping in history_records."""
+        record = _analysis_insert_record(
+            row_id="analysis-1",
+            input_text="1.2.3.4",
+            mode="online",
+            iocs=[{"type": "ipv4", "value": "1.2.3.4"}],
+            results=[{"verdict": "clean"}],
+            created_at="2026-01-02T03:04:05+00:00",
+        )
+
+        assert record.row_id == "analysis-1"
+        assert record.values == (
+            "analysis-1",
+            "1.2.3.4",
+            "online",
+            '[{"type": "ipv4", "value": "1.2.3.4"}]',
+            '[{"verdict": "clean"}]',
+            1,
+            "clean",
+            "2026-01-02T03:04:05+00:00",
+        )
+        assert "_analysis_insert_record" in HistoryStore.save_analysis.__code__.co_names
+        assert "_encode_json_array" not in HistoryStore.save_analysis.__code__.co_names
+        assert "_compute_top_verdict" not in HistoryStore.save_analysis.__code__.co_names
+        assert not hasattr(record, "__dict__")
 
     def test_sql_statements_are_shared_constants(self) -> None:
         """History SQL statements should be module constants, not method-local strings."""
@@ -247,8 +328,28 @@ class TestListRecent:
 
         assert [entry["id"] for entry in three_recent] == ["newest", "middle", "oldest"]
         assert [entry["input_text"] for entry in three_recent] == ["third", "second", "first"]
+
+        class FourCursor:
+            def fetchall(self):
+                return NoIterRows([
+                    ("newest", "fourth", "online", 4, "malicious", "2026-01-04T00:00:00Z"),
+                    ("newer", "third", "online", 3, "suspicious", "2026-01-03T00:00:00Z"),
+                    ("middle", "second", "online", 2, "clean", "2026-01-02T00:00:00Z"),
+                    ("oldest", "first", "offline", 1, "error", "2026-01-01T00:00:00Z"),
+                ])
+
+        class FourConn:
+            def execute(self, *_args, **_kwargs):
+                return FourCursor()
+
+        store._conn = FourConn()  # type: ignore[assignment]
+        four_recent = store.list_recent()
+
+        assert [entry["id"] for entry in four_recent] == ["newest", "newer", "middle", "oldest"]
+        assert [entry["input_text"] for entry in four_recent] == ["fourth", "third", "second", "first"]
         assert "len" in HistoryStore.list_recent.__code__.co_names
         assert "_summary_from_row" in HistoryStore.list_recent.__code__.co_names
+        assert "row_count == 4" in inspect.getsource(HistoryStore.list_recent)
 
     def test_truncates_input_text(self, store: HistoryStore) -> None:
         """list_recent() truncates input_text to 120 characters."""
@@ -272,6 +373,39 @@ class TestListRecent:
     def test_list_recent_accumulates_summaries_without_list_comprehension(self) -> None:
         """list_recent() should not allocate a list-comprehension frame for rows."""
         assert "<listcomp>" not in HistoryStore.list_recent.__code__.co_consts
+        assert "_append_history_summary" in HistoryStore.list_recent.__code__.co_names
+
+
+class TestRetention:
+    """Bounded history retention tests."""
+
+    def test_default_retention_limit_is_precomputed(self) -> None:
+        assert DEFAULT_MAX_ROWS == 500
+        assert HistoryStore.__init__.__kwdefaults__ == {"max_rows": DEFAULT_MAX_ROWS}
+
+    def test_save_prunes_oldest_rows_after_limit(self, tmp_path: Path) -> None:
+        store = HistoryStore(db_path=tmp_path / "history.db", max_rows=3)
+
+        for index in range(5):
+            store.save_analysis(
+                f"analysis {index}",
+                "online",
+                [],
+                [],
+                analysis_id=f"analysis-{index}",
+            )
+            time.sleep(0.01)
+
+        recent = store.list_recent(limit=10)
+
+        assert [row["id"] for row in recent] == ["analysis-4", "analysis-3", "analysis-2"]
+        assert store.load_analysis("analysis-0") is None
+        assert store.load_analysis("analysis-1") is None
+        assert store.load_analysis("analysis-2") is not None
+
+    def test_invalid_retention_limit_is_rejected(self, tmp_path: Path) -> None:
+        with pytest.raises(ValueError, match="history max_rows must be a positive integer"):
+            HistoryStore(db_path=tmp_path / "history.db", max_rows=0)
 
 
 class TestTopVerdict:
@@ -308,8 +442,8 @@ class TestTopVerdict:
         assert loaded is not None
         assert loaded["top_verdict"] == "error"
 
-    def test_no_data_over_clean(self, store: HistoryStore) -> None:
-        """'no_data' is more severe than 'clean'."""
+    def test_clean_over_no_data(self, store: HistoryStore) -> None:
+        """A clean provider result has more weight than absent data."""
         results = [
             {"type": "result", "verdict": "clean"},
             {"type": "result", "verdict": "no_data"},
@@ -317,7 +451,19 @@ class TestTopVerdict:
         row_id = store.save_analysis("test", "online", [], results)
         loaded = store.load_analysis(row_id)
         assert loaded is not None
-        assert loaded["top_verdict"] == "no_data"
+        assert loaded["top_verdict"] == "clean"
+
+    def test_known_good_does_not_erase_malicious_conflict(self, store: HistoryStore) -> None:
+        results = [
+            {"type": "result", "verdict": "known_good"},
+            {"type": "result", "verdict": "malicious"},
+        ]
+
+        row_id = store.save_analysis("test", "online", [], results)
+        loaded = store.load_analysis(row_id)
+
+        assert loaded is not None
+        assert loaded["top_verdict"] == "malicious"
 
     def test_empty_results(self, store: HistoryStore) -> None:
         """Empty results list produces 'error' verdict."""
@@ -353,10 +499,12 @@ class TestComputeTopVerdictUnit:
         """Top-verdict computation reuses the module-level priority map."""
         assert isinstance(_VERDICT_PRIORITY, MappingProxyType)
         assert _VERDICT_PRIORITY == {
-            "malicious": 4,
-            "suspicious": 3,
-            "no_data": 2,
-            "clean": 1,
+            "error": 0,
+            "no_data": 1,
+            "clean": 2,
+            "known_good": 3,
+            "suspicious": 4,
+            "malicious": 5,
         }
         assert _compute_top_verdict([{"verdict": "clean"}, {"verdict": "suspicious"}]) == "suspicious"
 
@@ -371,22 +519,19 @@ class TestComputeTopVerdictUnit:
         assert _compute_top_verdict([{"verdict": "malicious"}]) == _MAX_VERDICT
         assert _compute_top_verdict([]) == _FALLBACK_VERDICT
 
-    def test_empty_and_single_top_verdict_paths_skip_iteration(self) -> None:
-        """Common top-verdict cases should not enter the general result scan."""
-
-        class NoIterResults(list):
-            def __iter__(self):
-                raise AssertionError("empty/single top-verdict paths should not iterate")
-
-            def __getitem__(self, index):
-                if isinstance(index, slice):
-                    raise AssertionError("top-verdict short paths should not slice")
-                return super().__getitem__(index)
-
-        assert _compute_top_verdict(NoIterResults()) == _FALLBACK_VERDICT
-        assert _compute_top_verdict(NoIterResults([{"verdict": "clean"}])) == "clean"
-        assert _compute_top_verdict(NoIterResults([{"type": "error"}])) == _FALLBACK_VERDICT
-        assert "len" in _compute_top_verdict.__code__.co_names
+    def test_summary_precedence_is_stable_for_conflicts(self) -> None:
+        """Saved verdicts use the same conflict precedence as live verdicts."""
+        assert _compute_top_verdict([]) == "error"
+        assert _compute_top_verdict([{"verdict": "known_good"}]) == "known_good"
+        assert _compute_top_verdict(
+            [{"verdict": "known_good"}, {"verdict": "suspicious"}]
+        ) == "suspicious"
+        assert _compute_top_verdict(
+            [{"verdict": "known_good"}, {"verdict": "malicious"}]
+        ) == "malicious"
+        assert _compute_top_verdict(
+            [{"verdict": "no_data"}, {"verdict": "clean"}]
+        ) == "clean"
 
 
 class TestIOCSerialization:

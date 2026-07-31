@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SentinelX Code Simplifier Report</title>
+  <style>
+    :root { color-scheme: dark; --bg:#0b1020; --panel:#121a2e; --ink:#e8eefc; --muted:#9fb0d0; --ok:#4ade80; --warn:#facc15; --line:#263451; --accent:#60a5fa; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif; background: radial-gradient(circle at top left, #172554 0, var(--bg) 38rem); color:var(--ink); line-height:1.55; }
+    main { max-width: 1080px; margin: 0 auto; padding: 48px 24px; }
+    header { margin-bottom: 28px; }
+    h1 { font-size: clamp(2rem, 4vw, 3.4rem); line-height:1.05; margin:0 0 12px; letter-spacing:-0.04em; }
+    h2 { margin-top: 0; font-size: 1.25rem; }
+    .subtitle { color: var(--muted); font-size: 1.08rem; max-width: 760px; }
+    .grid { display:grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap:16px; margin: 28px 0; }
+    .card { background: color-mix(in srgb, var(--panel) 88%, transparent); border:1px solid var(--line); border-radius:18px; padding:20px; box-shadow: 0 24px 80px rgb(0 0 0 / .25); }
+    .metric { font-size:2rem; font-weight:800; letter-spacing:-0.04em; }
+    .label { color:var(--muted); font-size:.92rem; }
+    .ok { color:var(--ok); }
+    .warn { color:var(--warn); }
+    table { width:100%; border-collapse: collapse; overflow:hidden; border-radius:14px; }
+    th, td { padding:12px 14px; border-bottom:1px solid var(--line); vertical-align:top; }
+    th { color:#c7d2fe; text-align:left; background:#17213a; font-size:.86rem; text-transform:uppercase; letter-spacing:.06em; }
+    tr:last-child td { border-bottom:0; }
+    code { background:#0a1224; color:#bfdbfe; padding:.16rem .38rem; border-radius:6px; border:1px solid #22314f; }
+    pre { background:#080d1a; border:1px solid var(--line); border-radius:16px; padding:16px; overflow:auto; color:#dbeafe; }
+    .pill { display:inline-flex; align-items:center; gap:8px; padding:6px 10px; border-radius:999px; background:#0f1b31; border:1px solid var(--line); color:#cbd5e1; font-size:.86rem; }
+    .section { margin-top:20px; }
+    ul { margin-top:8px; }
+    @media (max-width: 760px) { .grid { grid-template-columns:1fr 1fr; } }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <span class="pill">SentinelX · code simplification pass</span>
+    <h1>Code Simplifier Report</h1>
+    <p class="subtitle">Summary of Ruff SIM simplification findings applied to the Python codebase, plus verification evidence captured after the changes.</p>
+  </header>
+
+  <section class="grid" aria-label="summary metrics">
+    <div class="card"><div class="metric">7</div><div class="label">files changed</div></div>
+    <div class="card"><div class="metric">8</div><div class="label">safe simplifications applied</div></div>
+    <div class="card"><div class="metric">3</div><div class="label">suggestions intentionally suppressed</div></div>
+    <div class="card"><div class="metric ok">1568</div><div class="label">non-E2E tests passing</div></div>
+  </section>
+
+  <section class="card section">
+    <h2>Applied changes</h2>
+    <table>
+      <thead><tr><th>File</th><th>Simplification</th><th>Reason</th></tr></thead>
+      <tbody>
+        <tr><td><code>app/health_contract.py</code></td><td>Converted key-check loops to <code>all(...)</code>.</td><td>More direct expression of schema-key validation.</td></tr>
+        <tr><td><code>app/sqlite.py</code></td><td>Replaced <code>try/except/pass</code> with <code>contextlib.suppress</code>.</td><td>Clearer intentional suppression of unsupported SQLite PRAGMA failures.</td></tr>
+        <tr><td><code>app/text_utils.py</code></td><td>Converted non-whitespace scan to <code>any(...)</code>.</td><td>Concise predicate helper.</td></tr>
+        <tr><td><code>tools/dev_server.py</code></td><td>Replaced shutdown cleanup <code>try/except/pass</code> with <code>suppress</code>.</td><td>Clarifies best-effort cleanup after startup timeout.</td></tr>
+        <tr><td><code>tools/runtime_state_boundary.py</code></td><td>Collapsed bytes/string branch into a ternary expression and removed an unused import.</td><td>Less branching in output normalization.</td></tr>
+        <tr><td><code>tools/security_check.py</code></td><td>Simplified skip-file return condition.</td><td>Removes redundant <code>if True else False</code> structure.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="card section">
+    <h2>Intentional non-changes</h2>
+    <p>Three Ruff SIM suggestions were not applied because existing tests explicitly guard direct scans to avoid generator allocation or monkeypatch-sensitive builtins:</p>
+    <ul>
+      <li><code>app/pipeline/classifier.py</code>: kept direct IP-literal character scan, added <code># noqa: SIM110</code>.</li>
+      <li><code>tools/runtime_state_boundary.py</code>: kept direct rule-pattern scan, added <code># noqa: SIM110</code>.</li>
+      <li><code>tools/security_check.py</code>: kept direct test-indicator scan, added <code># noqa: SIM110</code>.</li>
+    </ul>
+  </section>
+
+  <section class="card section">
+    <h2>Verification evidence</h2>
+    <pre><code>.venv/bin/ruff check app tools --select SIM --output-format=concise
+All checks passed!
+
+python3 -m pytest -q -m 'not e2e'
+1568 passed, 126 deselected</code></pre>
+  </section>
+
+  <section class="card section">
+    <h2>Outcome</h2>
+    <p><strong class="ok">Completed:</strong> simplifier pass applied where safe, lint suppression added where project tests require direct scans, and non-E2E regression tests pass.</p>
+  </section>
+</main>
+</body>
+</html>

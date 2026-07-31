@@ -1,10 +1,11 @@
 """CIRCL Hashlookup NSRL adapter."""
 from __future__ import annotations
 
+from dataclasses import dataclass
 from types import MappingProxyType
 
-from app.enrichment.adapters.base import BaseHTTPAdapter
-from app.enrichment.models import EnrichmentResult, no_data_result, provider_result
+from .base import BaseHTTPAdapter
+from ..models import EnrichmentResult, provider_result
 from app.pipeline.models import IOC, IOCType
 
 HASHLOOKUP_BASE = "https://hashlookup.circl.lu"
@@ -17,29 +18,31 @@ _HASH_TYPE_PATH = MappingProxyType({
 })
 
 
+@dataclass(frozen=True)
+class HashlookupSignals:
+    file_name: str
+    source: str
+    db: str
+
+
 class HashlookupAdapter(BaseHTTPAdapter):
     """CIRCL Hashlookup NSRL endpoint — see BaseHTTPAdapter for the template pattern."""
 
     supported_types: frozenset[IOCType] = frozenset(_HASH_TYPE_PATH)
     name = "CIRCL Hashlookup"
     requires_api_key = False
+    _no_data_on_404 = True
 
     def _build_url(self, ioc: IOC) -> str:
         hash_path = _HASH_TYPE_PATH[ioc.type]
         return f"{HASHLOOKUP_BASE}/lookup/{hash_path}/{ioc.value}"
-
-    def _make_pre_raise_hook(self, ioc: IOC):
-        def _404_hook(resp):
-            if resp.status_code == 404:
-                return no_data_result(ioc, self.name)
-            return None
-        return _404_hook
 
     def _parse_response(self, ioc: IOC, body: dict) -> EnrichmentResult:
         return _parse_response(ioc, body, self.name)
 
 
 def _parse_response(ioc: IOC, body: dict, provider_name: str) -> EnrichmentResult:
+    signals = _hashlookup_signals(body)
     # 200 always means known_good (hash found in NSRL)
     return _hashlookup_result(
         ioc=ioc,
@@ -47,12 +50,24 @@ def _parse_response(ioc: IOC, body: dict, provider_name: str) -> EnrichmentResul
         verdict="known_good",
         detection_count=1,
         total_engines=1,
-        raw_stats={
-            "file_name": body.get("FileName", ""),
-            "source": body.get("source", "NSRL"),
-            "db": body.get("db", ""),
-        },
+        raw_stats=_hashlookup_raw_stats(signals),
     )
+
+
+def _hashlookup_signals(body: dict) -> HashlookupSignals:
+    return HashlookupSignals(
+        file_name=body.get("FileName", ""),
+        source=body.get("source", "NSRL"),
+        db=body.get("db", ""),
+    )
+
+
+def _hashlookup_raw_stats(signals: HashlookupSignals) -> dict:
+    return {
+        "file_name": signals.file_name,
+        "source": signals.source,
+        "db": signals.db,
+    }
 
 
 def _hashlookup_result(

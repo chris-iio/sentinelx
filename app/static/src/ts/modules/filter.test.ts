@@ -45,8 +45,8 @@ describe("filter init", () => {
     const badCard = document.querySelector<HTMLElement>('[data-ioc-value="bad.example"]');
     const cleanCard = document.querySelector<HTMLElement>('[data-ioc-value="1.2.3.4"]');
 
-    expect(badCard?.style.display).toBe("");
-    expect(cleanCard?.style.display).toBe("none");
+    expect(badCard?.hidden).toBe(false);
+    expect(cleanCard?.hidden).toBe(true);
     expect(
       document.querySelector('[data-filter-verdict="malicious"]')?.classList.contains("filter-btn--active")
     ).toBe(true);
@@ -74,8 +74,8 @@ describe("filter init", () => {
     const badCard = document.querySelector<HTMLElement>('[data-ioc-value="bad.example"]');
     const cleanCard = document.querySelector<HTMLElement>('[data-ioc-value="1.2.3.4"]');
 
-    expect(badCard?.style.display).toBe("");
-    expect(cleanCard?.style.display).toBe("none");
+    expect(badCard?.hidden).toBe(false);
+    expect(cleanCard?.hidden).toBe(true);
   });
 
   it("caches static card fields while preserving live verdict updates", () => {
@@ -87,8 +87,8 @@ describe("filter init", () => {
 
     document.querySelector<HTMLElement>('[data-filter-verdict="malicious"]')?.click();
 
-    expect(badCard.style.display).toBe("");
-    expect(cleanCard.style.display).toBe("");
+    expect(badCard.hidden).toBe(false);
+    expect(cleanCard.hidden).toBe(false);
   });
 
   it("does not reread static card or control attributes during filter applications", () => {

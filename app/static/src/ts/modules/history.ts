@@ -42,15 +42,25 @@ function getHistoryReplayElements(): HistoryReplayElements {
   };
 }
 
-function markHistoryReplayComplete(results: EnrichmentItem[], elements: HistoryReplayElements): void {
+function markHistoryReplayFinished(results: EnrichmentItem[], elements: HistoryReplayElements): void {
+  let hasFailure = false;
+  for (let i = 0; i < results.length; i += 1) {
+    if (results[i]?.type === "error") {
+      hasFailure = true;
+      break;
+    }
+  }
+
   const container = elements.progressContainer;
   if (container) {
-    container.classList.add("complete");
+    container.classList.toggle("complete", !hasFailure);
   }
 
   const progressText = elements.progressText;
   if (progressText) {
-    progressText.textContent = "Enrichment complete";
+    progressText.textContent = hasFailure
+      ? "Enrichment saved with partial results"
+      : "Enrichment complete";
   }
 
   const exportBtn = elements.exportButton;
@@ -68,7 +78,7 @@ export function init(): void {
   const historyAttr = pageResults.getAttribute("data-history-results");
   const elements = getHistoryReplayElements();
   if (!historyAttr) {
-    markHistoryReplayComplete([], elements);
+    markHistoryReplayFinished([], elements);
     pageResults.setAttribute("data-results-runtime", "history");
     return;
   }
@@ -79,7 +89,7 @@ export function init(): void {
       exportButton: elements.exportButton,
       dropdown: elements.exportDropdown,
     });
-    markHistoryReplayComplete(allResults, elements);
+    markHistoryReplayFinished(allResults, elements);
     pageResults.setAttribute("data-results-runtime", "history");
     return;
   }
@@ -109,6 +119,6 @@ export function init(): void {
     exportButton: elements.exportButton,
     dropdown: elements.exportDropdown,
   });
-  markHistoryReplayComplete(allResults, elements);
+  markHistoryReplayFinished(allResults, elements);
   pageResults.setAttribute("data-results-runtime", "history");
 }

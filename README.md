@@ -7,6 +7,11 @@
 - `docs/code-analysis-launch-deck.html` summarizes the code audit, market research, launch positioning, and verification evidence as an HTML slide deck.
 - `docs/launch-checklist.md` defines the release artifact boundary, clean install smoke path, required pre-launch proof, positioning, and roadmap candidates.
 
+## Repository guidance
+
+- [`AGENTS.md`](AGENTS.md) is the canonical repository policy for contributors and coding agents.
+- Run `npm run workflow:gpt-routing` after changing routing policy, repository guidance, or governed skills.
+
 ## Supported local dev-server workflow
 
 Use the repo-native manager commands as the one supported local server path:
@@ -47,13 +52,15 @@ See `docs/runtime-state-boundary.md` for the full class table, repair action tab
 
 ## Optimization audit workflow
 
-M013 adds a checked-in SentinelX-first audit runner so later optimization work can produce durable, ranked findings instead of ad hoc notes.
+M013 introduced the checked-in SentinelX-first audit runner. The current milestone-local rerun surface is M020, and the direct CLI accepts `--milestone-id` for explicit audit generation.
 
 - `python3 tools/optimization_audit.py --help` shows the available modes and options.
-- `make audit-m013-template` writes the milestone-local scaffold at `.gsd/milestones/M013/M013-AUDIT-TEMPLATE.md`.
-- `make audit-m013` writes the working audit artifact at `.gsd/milestones/M013/M013-AUDIT.md`.
+- `make audit-m020-template` writes `.gsd/milestones/M020/M020-AUDIT-TEMPLATE.md`.
+- `make audit-m020` refreshes `.gsd/milestones/M020/M020-AUDIT.md`.
+- `python3 tools/optimization_audit.py --milestone-id M020 --mode template --output .gsd/milestones/M020/M020-AUDIT-TEMPLATE.md` is the direct template command.
+- `python3 tools/optimization_audit.py --milestone-id M020 --mode baseline --output .gsd/milestones/M020/M020-AUDIT.md` is the direct baseline rerun command.
 - Every finding must be backed by measurement when practical; otherwise it must cite explicit code-path reasoning.
 - Every finding must land in one of `do now`, `do next`, `later`, or `leave alone`.
 
-See `docs/optimization-audit.md` for the full artifact contract, ranking vocabulary, and command-capture format.
+See `docs/optimization-audit.md` for the M013 history, current M020 rerun surface, full artifact contract, ranking vocabulary, and command-capture format.
 

@@ -17,10 +17,13 @@ from app.enrichment.adapters.crtsh import (
     CrtShAdapter,
     _capped_sorted_subdomains,
     _clean_name_value,
+    _crtsh_raw_stats,
     _crtsh_result,
     _iter_name_values,
     _parse_response,
     _trim_wildcard_prefix,
+    add_name_value_subdomains,
+    append_ordered_subdomain,
 )
 from tests.helpers import (
     make_mock_response,
@@ -276,6 +279,57 @@ class TestCertDataExtraction:
             "z.example.com",
         ]
 
+    def test_four_subdomain_sets_skip_sorting(self, monkeypatch) -> None:
+        """Four-value subdomain sets can be ordered by direct comparisons."""
+        def fail_sorted(*_args, **_kwargs):
+            raise AssertionError("four-value crt.sh subdomain sets should not sort")
+
+        monkeypatch.setattr(builtins, "sorted", fail_sorted)
+
+        assert _capped_sorted_subdomains({
+            "z.example.com",
+            "a.example.com",
+            "m.example.com",
+            "b.example.com",
+        }) == [
+            "a.example.com",
+            "b.example.com",
+            "m.example.com",
+            "z.example.com",
+        ]
+        assert "subdomain_count == 4" in inspect.getsource(_capped_sorted_subdomains)
+
+    def test_capped_subdomain_sets_use_direct_ordered_insertion(self, monkeypatch) -> None:
+        """Capped crt.sh subdomain sets should not allocate a full sorted list."""
+        def fail_sorted(*_args, **_kwargs):
+            raise AssertionError("capped crt.sh subdomain sets should not call sorted")
+
+        monkeypatch.setattr(builtins, "sorted", fail_sorted)
+
+        assert _capped_sorted_subdomains({
+            "z.example.com",
+            "a.example.com",
+            "m.example.com",
+            "b.example.com",
+        }) == [
+            "a.example.com",
+            "b.example.com",
+            "m.example.com",
+            "z.example.com",
+        ]
+
+        ordered: list[str] = []
+        append_ordered_subdomain(ordered, "z.example.com")
+        append_ordered_subdomain(ordered, "a.example.com")
+        append_ordered_subdomain(ordered, "m.example.com")
+        append_ordered_subdomain(ordered, "b.example.com")
+        assert ordered == [
+            "a.example.com",
+            "b.example.com",
+            "m.example.com",
+            "z.example.com",
+        ]
+
     def test_null_not_before_skipped_in_date_range(self) -> None:
         """Cert entries with null/missing not_before are skipped when computing date range."""
         ioc = make_domain_ioc("example.com")
@@ -315,6 +369,45 @@ class TestCertDataExtraction:
         assert result.raw_stats["earliest"] == "2023-06-01"
         assert result.raw_stats["latest"] == "2024-02-01"
         assert "www.example.com" in result.raw_stats["subdomains"]
+
+    def test_parse_response_delegates_raw_stats_helper(self) -> None:
+        """crt.sh parser should not own certificate raw_stats mechanics."""
+        source = inspect.getsource(_parse_response)
+
+        assert "_crtsh_raw_stats(body=body, cert_count=cert_count)" in source
+        assert "subdomain_set" not in source
+        assert '"cert_count"' not in source
+        assert '"subdomains"' not in source
+
+    def test_raw_stats_helper_preserves_key_order_and_values(self) -> None:
+        """crt.sh raw_stats helper should preserve public metadata shape."""
+        raw_stats = _crtsh_raw_stats(body=SAMPLE_CERTS, cert_count=len(SAMPLE_CERTS))
+
+        assert list(raw_stats) == ["cert_count", "earliest", "latest", "subdomains"]
+        assert raw_stats["cert_count"] == 3
+        assert raw_stats["earliest"] == "2023-06-01"
+        assert raw_stats["latest"] == "2024-02-01"
+        assert raw_stats["subdomains"] == [
+            "api.example.com",
+            "example.com",
+            "mail.example.com",
+            "www.example.com",
+        ]
+
+    def test_raw_stats_delegates_san_collection(self) -> None:
+        """crt.sh raw_stats should delegate SAN parsing and subdomain deduplication."""
+        subdomains: set[str] = set()
+
+        add_name_value_subdomains(subdomains, "WWW.Example.com\n*.Example.com\n\n")
+
+        raw_stats_source = inspect.getsource(_crtsh_raw_stats)
+        helper_source = inspect.getsource(add_name_value_subdomains)
+        assert subdomains == {"www.example.com", "example.com"}
+        assert "add_name_value_subdomains(subdomain_set, name_value)" in raw_stats_source
+        assert "_iter_name_values(name_value)" not in raw_stats_source
+        assert "_clean_name_value(raw_name)" not in raw_stats_source
+        assert "_iter_name_values(name_value)" in helper_source
+        assert "_clean_name_value(raw_name)" in helper_source
 
     def test_name_value_parsing_does_not_allocate_split_list(self) -> None:
         """SAN name parsing should stream newline-delimited values."""
@@ -427,6 +520,12 @@ class TestCertDataExtraction:
         assert result.scan_date is None
         assert result.raw_stats is raw_stats
         assert "no_data_result(ioc, provider, raw_stats)" in inspect.getsource(_crtsh_result)
+
+    def test_adapter_uses_base_lookup_for_json_list_response(self) -> None:
+        """crt.sh should share the BaseHTTPAdapter lookup pipeline."""
+        from app.enrichment.adapters.base import BaseHTTPAdapter
+
+        assert CrtShAdapter.lookup is BaseHTTPAdapter.lookup
 
 
 class TestEmptyResponse:

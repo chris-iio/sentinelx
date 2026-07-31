@@ -1,6 +1,5 @@
 /**
- * Form controls module — submit button state, auto-grow textarea,
- * mode toggle, and paste feedback.
+ * Form controls module — submit button state, mode toggle, and paste feedback.
  *
  * Extracted from main.js initSubmitButton(), initAutoGrow(),
  * initModeToggle(), updateSubmitLabel(), showPasteFeedback() (lines 34-162).
@@ -17,7 +16,7 @@ function showPasteFeedback(charCount: number): void {
   const feedback = document.getElementById("paste-feedback");
   if (!feedback) return;
   feedback.textContent = charCount + " characters pasted";
-  feedback.style.display = "";
+  feedback.hidden = false;
   feedback.classList.remove("is-hiding");
   feedback.classList.add("is-visible");
   if (pasteTimer !== null) clearTimeout(pasteTimer);
@@ -25,7 +24,7 @@ function showPasteFeedback(charCount: number): void {
     feedback.classList.remove("is-visible");
     feedback.classList.add("is-hiding");
     setTimeout(function () {
-      feedback.style.display = "none";
+      feedback.hidden = true;
       feedback.classList.remove("is-hiding");
     }, 250);
   }, 2000);
@@ -138,28 +137,6 @@ function initSubmitButton(elements: FormElements): void {
   }
 }
 
-// ---- Auto-grow textarea (INP-02) ----
-
-function initAutoGrow(textarea: HTMLTextAreaElement | null): void {
-  if (!textarea) return;
-
-  // Non-nullable alias for use inside closures (TypeScript can't narrow through closures)
-  const ta: HTMLTextAreaElement = textarea;
-
-  function grow(): void {
-    ta.style.height = "auto";
-    ta.style.height = ta.scrollHeight + "px";
-  }
-
-  ta.addEventListener("input", grow);
-
-  ta.addEventListener("paste", function () {
-    setTimeout(grow, 0);
-  });
-
-  grow();
-}
-
 // ---- Mode toggle switch (INPUT-01, INPUT-03) ----
 
 function initModeToggle(elements: FormElements): void {
@@ -205,7 +182,7 @@ function initModeToggle(elements: FormElements): void {
 // ---- Public API ----
 
 /**
- * Initialise all form controls: submit button state, auto-grow, and mode toggle.
+ * Initialise all form controls: submit button state and mode toggle.
  */
 export function init(): void {
   const elements: FormElements = {
@@ -220,6 +197,5 @@ export function init(): void {
   };
 
   initSubmitButton(elements);
-  initAutoGrow(elements.textarea);
   initModeToggle(elements);
 }

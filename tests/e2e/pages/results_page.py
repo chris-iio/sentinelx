@@ -61,7 +61,7 @@ class ResultsPage:
     def expect_mode(self, mode: str) -> None:
         """Assert the mode indicator shows the expected mode text."""
         if mode == "offline":
-            expect(self.mode_indicator).to_contain_text("Offline Mode")
+            expect(self.mode_indicator).to_contain_text("Offline Extraction")
         else:
             expect(self.mode_indicator).to_contain_text("Online Mode")
 
@@ -98,9 +98,8 @@ class ResultsPage:
         return self.page.locator(".filter-verdict-buttons .filter-btn")
 
     def filter_by_verdict(self, verdict: str) -> None:
-        """Click the filter button for the given verdict (e.g., 'malicious', 'all')."""
-        label = verdict.replace("_", " ").title()
-        self.page.locator(".filter-btn").filter(has_text=label).click()
+        """Click the filter button for the given verdict state."""
+        self.page.locator(f'[data-filter-verdict="{verdict}"]').click()
 
     @property
     def filter_type_pills(self) -> Locator:
@@ -109,7 +108,7 @@ class ResultsPage:
 
     def filter_by_type(self, ioc_type: str) -> None:
         """Click the type pill for the given IOC type (e.g., 'ipv4')."""
-        self.page.locator(".filter-pill").filter(has_text=ioc_type.upper()).click()
+        self.page.locator(f'[data-filter-type="{ioc_type}"]').click()
 
     @property
     def search_input(self) -> Locator:

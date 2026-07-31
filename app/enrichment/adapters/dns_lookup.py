@@ -6,9 +6,9 @@ import logging
 import dns.exception
 import dns.resolver
 
-from app.enrichment.models import EnrichmentError, EnrichmentResult, error_result, no_data_result
+from .dns_txt import decode_txt_chunks
+from ..models import EnrichmentError, EnrichmentResult, error_result, no_data_result
 from app.pipeline.models import IOC, IOCType
-from app.text_utils import decode_utf8_replace
 
 logger = logging.getLogger(__name__)
 
@@ -18,16 +18,31 @@ def _extract_text_records(answers) -> list[str]:
     if answer_count == 0:
         return []
     if answer_count == 1:
-        return [answers[0].to_text()]
+        return [_record_text(answers[0])]
     if answer_count == 2:
-        return [answers[0].to_text(), answers[1].to_text()]
+        return [_record_text(answers[0]), _record_text(answers[1])]
     if answer_count == 3:
-        return [answers[0].to_text(), answers[1].to_text(), answers[2].to_text()]
+        return [_record_text(answers[0]), _record_text(answers[1]), _record_text(answers[2])]
+    if answer_count == 4:
+        return [
+            _record_text(answers[0]),
+            _record_text(answers[1]),
+            _record_text(answers[2]),
+            _record_text(answers[3]),
+        ]
 
     records: list[str] = []
     for record in answers:
-        records.append(record.to_text())
+        _append_text_record(records, record)
     return records
+
+
+def _record_text(record) -> str:
+    return record.to_text()
+
+
+def _append_text_record(records: list[str], record) -> None:
+    records.append(_record_text(record))
 
 
 def _extract_mx_records(answers) -> list[str]:
@@ -35,29 +50,35 @@ def _extract_mx_records(answers) -> list[str]:
     if answer_count == 0:
         return []
     if answer_count == 1:
-        record = answers[0]
-        return [f"{record.preference} {record.exchange.to_text()}"]
+        return [_mx_record_text(answers[0])]
     if answer_count == 2:
-        first = answers[0]
-        second = answers[1]
-        return [
-            f"{first.preference} {first.exchange.to_text()}",
-            f"{second.preference} {second.exchange.to_text()}",
-        ]
+        return [_mx_record_text(answers[0]), _mx_record_text(answers[1])]
     if answer_count == 3:
-        first = answers[0]
-        second = answers[1]
-        third = answers[2]
         return [
-            f"{first.preference} {first.exchange.to_text()}",
-            f"{second.preference} {second.exchange.to_text()}",
-            f"{third.preference} {third.exchange.to_text()}",
+            _mx_record_text(answers[0]),
+            _mx_record_text(answers[1]),
+            _mx_record_text(answers[2]),
+        ]
+    if answer_count == 4:
+        return [
+            _mx_record_text(answers[0]),
+            _mx_record_text(answers[1]),
+            _mx_record_text(answers[2]),
+            _mx_record_text(answers[3]),
         ]
 
     records: list[str] = []
     for record in answers:
-        records.append(f"{record.preference} {record.exchange.to_text()}")
+        _append_mx_record(records, record)
     return records
+
+
+def _mx_record_text(record) -> str:
+    return f"{record.preference} {record.exchange.to_text()}"
+
+
+def _append_mx_record(records: list[str], record) -> None:
+    records.append(_mx_record_text(record))
 
 
 def _extract_txt_records(answers) -> list[str]:
@@ -69,24 +90,31 @@ def _extract_txt_records(answers) -> list[str]:
     if answer_count == 2:
         return [_decode_txt_record(answers[0]), _decode_txt_record(answers[1])]
     if answer_count == 3:
-        return [_decode_txt_record(answers[0]), _decode_txt_record(answers[1]), _decode_txt_record(answers[2])]
+        return [
+            _decode_txt_record(answers[0]),
+            _decode_txt_record(answers[1]),
+            _decode_txt_record(answers[2]),
+        ]
+    if answer_count == 4:
+        return [
+            _decode_txt_record(answers[0]),
+            _decode_txt_record(answers[1]),
+            _decode_txt_record(answers[2]),
+            _decode_txt_record(answers[3]),
+        ]
 
     records: list[str] = []
     for record in answers:
-        records.append(_decode_txt_record(record))
+        _append_txt_record(records, record)
     return records
 
 
 def _decode_txt_record(record) -> str:
-    strings = record.strings
-    string_count = len(strings)
-    if string_count == 1:
-        raw_text = strings[0]
-    elif string_count == 2:
-        raw_text = strings[0] + strings[1]
-    else:
-        raw_text = b"".join(strings)
-    return decode_utf8_replace(raw_text)
+    return decode_txt_chunks(record.strings)
+
+
+def _append_txt_record(records: list[str], record) -> None:
+    records.append(_decode_txt_record(record))
 
 
 # Record types to query, in order. Tuple of (rdtype string, raw_stats key).
@@ -108,10 +136,6 @@ class DnsAdapter:
     supported_types: frozenset[IOCType] = frozenset((IOCType.DOMAIN,))
     requires_api_key = False
 
-    def __init__(self, allowed_hosts: list[str]) -> None:
-        # allowed_hosts accepted for Provider protocol compat; unused (DNS, not HTTP).
-        pass
-
     def is_configured(self) -> bool:
         return True
 
@@ -119,39 +143,22 @@ class DnsAdapter:
         if ioc.type not in self.supported_types:
             return error_result(ioc, self.name, "Unsupported type")
 
-        resolver = dns.resolver.Resolver(configure=True)
-        resolver.lifetime = _RESOLVER_LIFETIME
-
-        raw_stats: dict = {
-            "a": [],
-            "mx": [],
-            "ns": [],
-            "txt": [],
-            "lookup_errors": [],
-        }
+        resolver = _configured_resolver()
+        raw_stats = _empty_raw_stats()
+        lookup_errors = raw_stats["lookup_errors"]
 
         for rdtype, key, extract_records in _RECORD_TYPES:
-            try:
-                answers = resolver.resolve(ioc.value, rdtype)
-                raw_stats[key] = extract_records(answers)
-            except dns.resolver.NXDOMAIN:
-                # Domain does not exist — expected; leave lists empty, no error entry.
-                pass
-            except dns.resolver.NoAnswer:
-                # No records of this type exist for the domain — expected; leave list empty.
-                pass
-            except dns.resolver.NoNameservers:
-                raw_stats["lookup_errors"].append(f"{rdtype}: no nameservers")
-            except dns.exception.Timeout:
-                raw_stats["lookup_errors"].append(f"{rdtype}: timeout")
-            except Exception:
-                logger.exception(
-                    "Unexpected error resolving %s %s for %s",
-                    rdtype,
-                    ioc.value,
-                    self.name,
-                )
-                raw_stats["lookup_errors"].append(f"{rdtype}: unexpected error")
+            records, error = _resolve_record_type(
+                resolver=resolver,
+                domain=ioc.value,
+                rdtype=rdtype,
+                extract_records=extract_records,
+                provider=self.name,
+            )
+            if records is not None:
+                raw_stats[key] = records
+            if error is not None:
+                _append_lookup_error(lookup_errors, error)
 
         return _dns_result(
             ioc=ioc,
@@ -162,3 +169,54 @@ class DnsAdapter:
 
 def _dns_result(*, ioc: IOC, provider: str, raw_stats: dict) -> EnrichmentResult:
     return no_data_result(ioc, provider, raw_stats)
+
+
+def _empty_raw_stats() -> dict:
+    return {
+        "a": [],
+        "mx": [],
+        "ns": [],
+        "txt": [],
+        "lookup_errors": [],
+    }
+
+
+def _append_lookup_error(lookup_errors: list[str], error: str) -> None:
+    lookup_errors.append(error)
+
+
+def _configured_resolver():
+    resolver = dns.resolver.Resolver(configure=True)
+    resolver.lifetime = _RESOLVER_LIFETIME
+    return resolver
+
+
+def _resolve_record_type(
+    *,
+    resolver,
+    domain: str,
+    rdtype: str,
+    extract_records,
+    provider: str,
+) -> tuple[list[str] | None, str | None]:
+    try:
+        answers = resolver.resolve(domain, rdtype)
+        return extract_records(answers), None
+    except dns.resolver.NXDOMAIN:
+        # Domain does not exist — expected; leave lists empty, no error entry.
+        return None, None
+    except dns.resolver.NoAnswer:
+        # No records of this type exist for the domain — expected; leave list empty.
+        return None, None
+    except dns.resolver.NoNameservers:
+        return None, f"{rdtype}: no nameservers"
+    except dns.exception.Timeout:
+        return None, f"{rdtype}: timeout"
+    except Exception:
+        logger.exception(
+            "Unexpected error resolving %s %s for %s",
+            rdtype,
+            domain,
+            provider,
+        )
+        return None, f"{rdtype}: unexpected error"

@@ -1,0 +1,4 @@
+interface:
+  display_name: 'Sybil'
+  short_description: 'Guide an authorized change to a green draft PR'
+  default_prompt: 'Use $sybil for the explicitly authorized fresh-branch-to-green-draft-PR workflow.'

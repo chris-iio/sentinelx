@@ -23,7 +23,7 @@ import { computeWorstVerdict, computeAttribution } from "./verdict-compute";
  * Compute verdict category counts from entries for micro-bar rendering.
  */
 function computeVerdictCounts(entries: VerdictEntry[]): {
-  malicious: number; suspicious: number; clean: number; noData: number; total: number;
+  malicious: number; suspicious: number; clean: number; noData: number;
 } {
   let malicious = 0, suspicious = 0, clean = 0, noData = 0;
   for (let i = 0; i < entries.length; i++) {
@@ -34,7 +34,7 @@ function computeVerdictCounts(entries: VerdictEntry[]): {
     else if (e.verdict === "clean") clean++;
     else noData++;
   }
-  return { malicious, suspicious, clean, noData, total: entries.length };
+  return { malicious, suspicious, clean, noData };
 }
 
 export function oldestCachedAt(entries: VerdictEntry[]): string | undefined {
@@ -407,7 +407,6 @@ export function updateSummaryRow(
 
   // c. Verdict micro-bar (replaces consensus badge)
   const counts = computeVerdictCounts(entries);
-  const total = Math.max(1, counts.total);
   const microBar = document.createElement("div");
   microBar.className = "verdict-micro-bar";
   microBar.setAttribute("title",
@@ -424,11 +423,11 @@ export function updateSummaryRow(
     if (!segment) continue;
     const count = segment[0];
     const verdict = segment[1];
-    if (count === 0) continue;
-    const seg = document.createElement("div");
-    seg.className = "micro-bar-segment micro-bar-segment--" + verdict;
-    seg.style.width = Math.round((count / total) * 100) + "%";
-    microBar.appendChild(seg);
+    for (let unit = 0; unit < count; unit++) {
+      const seg = document.createElement("div");
+      seg.className = "micro-bar-segment micro-bar-segment--" + verdict;
+      microBar.appendChild(seg);
+    }
   }
   summaryRow.appendChild(microBar);
 

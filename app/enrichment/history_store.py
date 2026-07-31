@@ -22,14 +22,23 @@ import sqlite3
 import threading
 import uuid
 from pathlib import Path
-from types import MappingProxyType
 
-from app.json_utils import EMPTY_JSON_ARRAY, decode_json_array, encode_json_array
-from app.sqlite import configure_connection
+from .history_records import (
+    _analysis_insert_record,
+    _analysis_from_row,
+    _coerce_max_rows,
+    _summary_from_row,
+)
+from app.sqlite import configure_connection, prepare_private_path
 from app.time_utils import utc_now
 
 DEFAULT_DB_PATH = Path.home() / ".sentinelx" / "history.db"
-_EMPTY_JSON_ARRAY = EMPTY_JSON_ARRAY
+DEFAULT_MAX_ROWS = 500
+
+__all__ = (
+    "DEFAULT_MAX_ROWS",
+    "HistoryStore",
+)
 
 _CREATE_TABLE = """
 CREATE TABLE IF NOT EXISTS analysis_history (
@@ -45,7 +54,7 @@ CREATE TABLE IF NOT EXISTS analysis_history (
 """
 _CREATE_CREATED_AT_INDEX = (
     "CREATE INDEX IF NOT EXISTS idx_history_created_at "
-    "ON analysis_history (created_at DESC)"
+    "ON analysis_history (created_at DESC, id DESC)"
 )
 _INSERT_ANALYSIS_QUERY = (
     "INSERT INTO analysis_history "
@@ -65,72 +74,22 @@ _LOAD_ANALYSIS_QUERY = (
     "FROM analysis_history "
     "WHERE id = ?"
 )
-
-_VERDICT_PRIORITY = MappingProxyType({
-    "malicious": 4,
-    "suspicious": 3,
-    "no_data": 2,
-    "clean": 1,
-})
-_MAX_VERDICT = "malicious"
-_FALLBACK_VERDICT = "error"
-
-
-def _summary_from_row(row) -> dict:
-    return {
-        "id": row[0],
-        "input_text": row[1],
-        "mode": row[2],
-        "total_count": row[3],
-        "top_verdict": row[4],
-        "created_at": row[5],
-    }
-
+_PRUNE_OLD_HISTORY_QUERY = (
+    "DELETE FROM analysis_history "
+    "WHERE id IN ("
+    "    SELECT id FROM analysis_history "
+    "    ORDER BY created_at DESC, id DESC "
+    "    LIMIT -1 OFFSET ?"
+    ")"
+)
 
 def _utc_now() -> datetime.datetime:
     """Return the current UTC datetime for persisted history timestamps."""
     return utc_now()
 
 
-def _encode_json_array(payload: list[dict]) -> str:
-    """Serialize a history payload, skipping JSON encoder work for empty lists."""
-    return encode_json_array(payload)
-
-
-def _decode_json_array(payload_json: str) -> list[dict]:
-    """Deserialize a history payload, skipping JSON decoder work for empty lists."""
-    return decode_json_array(payload_json)
-
-
-def _compute_top_verdict(results: list[dict]) -> str:
-    """Derive the most severe verdict from a list of serialized results.
-
-    Priority: malicious > suspicious > no_data > clean > unknown.
-    Error-only results (type == "error") are ignored for verdict
-    computation; if *all* results are errors the verdict is "error".
-    """
-    result_count = len(results)
-    if result_count == 0:
-        return _FALLBACK_VERDICT
-    if result_count == 1:
-        verdict = results[0].get("verdict")
-        return verdict if verdict is not None else _FALLBACK_VERDICT
-
-    best: str | None = None
-    best_rank = -1
-
-    for r in results:
-        verdict = r.get("verdict")
-        if verdict is None:
-            continue  # error entries have no verdict
-        rank = _VERDICT_PRIORITY.get(verdict, 0)
-        if rank > best_rank:
-            best_rank = rank
-            best = verdict
-            if verdict == _MAX_VERDICT:
-                return verdict
-
-    return best if best is not None else _FALLBACK_VERDICT
+def _append_history_summary(summaries: list[dict], row: tuple) -> None:
+    summaries.append(_summary_from_row(row))
 
 
 class HistoryStore:
@@ -144,10 +103,12 @@ class HistoryStore:
                  Defaults to ~/.sentinelx/history.db.
     """
 
-    def __init__(self, db_path: Path | None = None) -> None:
-        self._db_path = db_path if db_path is not None else DEFAULT_DB_PATH
+    def __init__(self, db_path: Path | None = None, *, max_rows: int = DEFAULT_MAX_ROWS) -> None:
+        self._db_path = prepare_private_path(
+            db_path if db_path is not None else DEFAULT_DB_PATH
+        )
+        self._max_rows = _coerce_max_rows(max_rows)
         self._lock = threading.Lock()
-        self._db_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         self._conn = self._connect()
         configure_connection(self._conn)
         self._conn.execute(_CREATE_TABLE)
@@ -183,29 +144,28 @@ class HistoryStore:
             The generated row id (UUID4 hex string).
         """
         row_id = analysis_id if analysis_id is not None else uuid.uuid4().hex
-        now = _utc_now().isoformat()
-        iocs_json = _encode_json_array(iocs)
-        results_json = _encode_json_array(results)
-        total_count = len(iocs)
-        top_verdict = _compute_top_verdict(results)
+        record = _analysis_insert_record(
+            row_id=row_id,
+            input_text=input_text,
+            mode=mode,
+            iocs=iocs,
+            results=results,
+            created_at=_utc_now().isoformat(),
+        )
 
         with self._lock:
             self._conn.execute(
                 _INSERT_ANALYSIS_QUERY,
-                (
-                    row_id,
-                    input_text,
-                    mode,
-                    iocs_json,
-                    results_json,
-                    total_count,
-                    top_verdict,
-                    now,
-                ),
+                record.values,
             )
+            self._prune_old_rows_locked()
             self._conn.commit()
 
-        return row_id
+        return record.row_id
+
+    def _prune_old_rows_locked(self) -> None:
+        """Remove rows beyond the configured retention count."""
+        self._conn.execute(_PRUNE_OLD_HISTORY_QUERY, (self._max_rows,))
 
     def list_recent(self, limit: int = 20) -> list[dict]:
         """Return the most recent analysis summaries.
@@ -236,10 +196,17 @@ class HistoryStore:
                 _summary_from_row(rows[1]),
                 _summary_from_row(rows[2]),
             ]
+        if row_count == 4:
+            return [
+                _summary_from_row(rows[0]),
+                _summary_from_row(rows[1]),
+                _summary_from_row(rows[2]),
+                _summary_from_row(rows[3]),
+            ]
 
         summaries: list[dict] = []
         for row in rows:
-            summaries.append(_summary_from_row(row))
+            _append_history_summary(summaries, row)
         return summaries
 
     def load_analysis(self, analysis_id: str) -> dict | None:
@@ -258,16 +225,8 @@ class HistoryStore:
         if row is None:
             return None
 
-        iocs = _decode_json_array(row[3])
-        results = _decode_json_array(row[4])
+        return _analysis_from_row(row)
 
-        return {
-            "id": row[0],
-            "input_text": row[1],
-            "mode": row[2],
-            "iocs": iocs,
-            "results": results,
-            "total_count": row[5],
-            "top_verdict": row[6],
-            "created_at": row[7],
-        }
+    def close(self) -> None:
+        """Close the persistent SQLite connection."""
+        self._conn.close()

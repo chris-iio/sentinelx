@@ -15,9 +15,13 @@ from types import MappingProxyType
 from app.enrichment.models import EnrichmentError, EnrichmentResult
 from app.enrichment.adapters.virustotal import (
     VTAdapter,
+    _engine_counts,
     _parse_response,
+    _top_detections,
     _trim_base64_padding,
+    _virustotal_raw_stats,
     _virustotal_result,
+    _virustotal_verdict,
 )
 from tests.helpers import (
     make_mock_response,
@@ -166,8 +170,19 @@ class TestLookupSuccess:
                 raise AssertionError("VT URL id padding trim should not use generic strip")
 
         assert _trim_base64_padding(NoStripBase64("YWJjZA==")) == "YWJjZA"
+        assert _trim_base64_padding(NoStripBase64("YWJjZDE=")) == "YWJjZDE"
         assert _trim_base64_padding(NoStripBase64("YWJjZA")) == "YWJjZA"
+        assert _trim_base64_padding(NoStripBase64("YWJjZA===")) == "YWJjZA"
         assert "strip" not in _trim_base64_padding.__code__.co_names
+
+    def test_url_id_padding_trim_direct_paths_before_fallback_loop(self) -> None:
+        source = inspect.getsource(_trim_base64_padding)
+        direct_path, fallback = source.split("end = len(value)", 1)
+
+        assert "while " not in direct_path
+        assert 'value.endswith("=")' in direct_path
+        assert 'value.endswith("==")' in direct_path
+        assert "while " in fallback
 
     def test_lookup_hash_sha256(self) -> None:
         sha256 = "a" * 64
@@ -311,6 +326,99 @@ class TestLookupSuccess:
         assert result.raw_stats["top_detections"] == []
         assert result.raw_stats["reputation"] == 0
 
+    def test_parse_response_delegates_stats_verdict_and_raw_stats_helpers(self) -> None:
+        """VT parser should not own stats scans, verdict branching, or raw_stats assembly."""
+        from app.enrichment.adapters import virustotal
+
+        source = inspect.getsource(virustotal._parse_response)
+
+        assert "_analysis_map(" in source
+        assert "_engine_counts(" in source
+        assert "_virustotal_verdict(" in source
+        assert "_scan_date(" in source
+        assert "_virustotal_raw_stats(" in source
+        assert "for stat_name in stats" not in source
+        assert "top_detections: list[str]" not in source
+        assert '"top_detections":' not in source
+
+    def test_adapter_uses_base_lookup_with_status_hook(self) -> None:
+        """VT should share the BaseHTTPAdapter lookup pipeline."""
+        from app.enrichment.adapters.base import BaseHTTPAdapter
+
+        assert VTAdapter.lookup is BaseHTTPAdapter.lookup
+
+        hook_source = inspect.getsource(VTAdapter._make_pre_raise_hook)
+        assert "_no_data_on_404_hook(ioc, self.name)" in hook_source
+        assert "_rate_limit_on_429(resp, ioc, self.name)" in hook_source
+        assert "Authentication error" in hook_source
+
+    def test_engine_counts_and_verdict_helper_preserve_semantics(self) -> None:
+        """VT engine count and verdict helpers should preserve existing thresholds."""
+        stats = {
+            "malicious": 2,
+            "suspicious": 1,
+            "harmless": 7,
+            "timeout": 9,
+            "type-unsupported": 4,
+        }
+
+        malicious, total = _engine_counts(stats)
+
+        assert malicious == 2
+        assert total == 10
+        assert _virustotal_verdict(malicious=malicious, total=total) == "malicious"
+        assert _virustotal_verdict(malicious=0, total=10) == "clean"
+        assert _virustotal_verdict(malicious=0, total=0) == "no_data"
+
+    def test_top_detections_helper_preserves_unique_cap(self) -> None:
+        """VT top detections should keep first five unique malicious names."""
+        from app.enrichment.adapters import virustotal
+
+        attrs = {
+            "last_analysis_results": {
+                "EngineA": {"category": "malicious", "result": "Trojan.A"},
+                "EngineB": {"category": "malicious", "result": "Trojan.A"},
+                "EngineC": {"category": "malicious", "result": "Dropper.C"},
+                "EngineD": {"category": "harmless", "result": "Clean"},
+                "EngineE": {"category": "malicious", "result": "Ransom.E"},
+                "EngineF": {"category": "malicious", "result": "Miner.F"},
+                "EngineG": {"category": "malicious", "result": "Worm.G"},
+                "EngineH": {"category": "malicious", "result": "Extra.H"},
+            }
+        }
+        top_source = inspect.getsource(virustotal._top_detections)
+        append_source = inspect.getsource(virustotal._append_top_detection)
+
+        assert _top_detections(attrs) == [
+            "Trojan.A",
+            "Dropper.C",
+            "Ransom.E",
+            "Miner.F",
+            "Worm.G",
+        ]
+        assert "_append_top_detection(top_detections, seen, engine_result)" in top_source
+        assert "top_detections.append(name)" not in top_source
+        assert "top_detections.append(name)" in append_source
+
+    def test_raw_stats_helper_preserves_stats_and_reputation(self) -> None:
+        """VT raw_stats helper should enrich the public stats envelope once."""
+        stats = {"malicious": 1, "harmless": 2}
+        attrs = {
+            "last_analysis_results": {
+                "EngineA": {"category": "malicious", "result": "Trojan.A"},
+            },
+            "reputation": -4,
+        }
+
+        raw_stats = _virustotal_raw_stats(attrs=attrs, stats=stats)
+
+        assert raw_stats == {
+            "malicious": 1,
+            "harmless": 2,
+            "top_detections": ["Trojan.A"],
+            "reputation": -4,
+        }
+
     def test_result_helper_preserves_provider_envelope(self) -> None:
         """Parsed VT results should keep the provider envelope centralized."""
         ioc = make_ipv4_ioc("1.2.3.4")
@@ -354,7 +462,9 @@ class TestLookupErrors:
         assert result.total_engines == 0
         assert result.scan_date is None
         assert result.raw_stats == {}
-        assert 'no_data_result(ioc, "VirusTotal")' in inspect.getsource(VTAdapter.lookup)
+        assert "_no_data_on_404_hook(ioc, self.name)" in inspect.getsource(
+            VTAdapter._make_pre_raise_hook
+        )
 
     def test_lookup_429_returns_rate_limit_error(self) -> None:
         ioc = make_ipv4_ioc()
@@ -367,6 +477,9 @@ class TestLookupErrors:
 
         assert isinstance(result, EnrichmentError)
         assert "Rate limit" in result.error or "429" in result.error
+        assert "_rate_limit_on_429(resp, ioc, self.name)" in inspect.getsource(
+            VTAdapter._make_pre_raise_hook
+        )
 
     def test_lookup_401_returns_auth_error(self) -> None:
         ioc = make_ipv4_ioc()

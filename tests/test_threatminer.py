@@ -13,10 +13,18 @@ import requests
 import requests.exceptions
 
 from app.enrichment.adapters.threatminer import (
+    THREATMINER_BASE_DOMAIN,
     ThreatMinerAdapter,
+    _domain_raw_stats,
     _extract_field_values,
     _extract_samples,
+    _has_results,
     _no_data_result,
+    _passive_dns_raw_stats,
+    _samples_raw_stats,
+    _threatminer_request_url,
+    append_domain_passive_dns,
+    append_domain_samples,
 )
 from tests.helpers import (
     make_mock_response,
@@ -228,7 +236,7 @@ class TestIPLookup:
         """A zero passive-DNS cap should return empty without reading rows."""
         assert _extract_field_values(_ExplodingResults(), "domain", limit=0) == []
 
-    def test_empty_single_and_pair_passive_dns_lists_skip_accumulator_loop(self) -> None:
+    def test_empty_single_pair_three_and_four_passive_dns_lists_skip_accumulator_loop(self) -> None:
         class NoIterList(list):
             def __iter__(self):
                 raise AssertionError("short passive DNS extraction should not iterate")
@@ -248,7 +256,37 @@ class TestIPLookup:
             "domain",
             limit=1,
         ) == ["second.example"]
+        assert _extract_field_values(
+            NoIterList([
+                {"domain": "first.example"},
+                {"domain": "second.example"},
+                {"domain": "third.example"},
+            ]),
+            "domain",
+            limit=25,
+        ) == ["first.example", "second.example", "third.example"]
+        assert _extract_field_values(
+            NoIterList([
+                {"ip": "1.2.3.4"},
+                {"domain": "second.example"},
+                {"domain": "third.example"},
+            ]),
+            "domain",
+            limit=1,
+        ) == ["second.example"]
+        assert _extract_field_values(
+            NoIterList([
+                {"domain": "first.example"},
+                {"domain": "second.example"},
+                {"domain": "third.example"},
+                {"domain": "fourth.example"},
+            ]),
+            "domain",
+            limit=25,
+        ) == ["first.example", "second.example", "third.example", "fourth.example"]
         assert "len" in _extract_field_values.__code__.co_names
+        assert "result_count == 4" in inspect.getsource(_extract_field_values)
+        assert "_append_field_value" in _extract_field_values.__code__.co_names
 
     def test_ip_lookup_verdict_is_no_data(self) -> None:
         """IP lookup verdict is always 'no_data' (informational context, not threat signal)."""
@@ -431,7 +469,7 @@ class TestDomainLookup:
         """A zero sample cap should return empty without reading rows."""
         assert _extract_samples(_ExplodingResults(), limit=0) == []
 
-    def test_empty_single_and_pair_sample_lists_skip_accumulator_loop(self) -> None:
+    def test_empty_single_pair_three_and_four_sample_lists_skip_accumulator_loop(self) -> None:
         class NoIterList(list):
             def __iter__(self):
                 raise AssertionError("short sample extraction should not iterate")
@@ -448,10 +486,25 @@ class TestDomainLookup:
             NoIterList([{"sha256": "first-hash"}, "second-hash"]),
             limit=1,
         ) == ["first-hash"]
+        assert _extract_samples(
+            NoIterList(["first-hash", {"sha256": "second-hash"}, "third-hash"]),
+            limit=20,
+        ) == ["first-hash", "second-hash", "third-hash"]
+        assert _extract_samples(
+            NoIterList([{"count": 1}, {"sha256": "second-hash"}, "third-hash"]),
+            limit=1,
+        ) == ["second-hash"]
+        assert _extract_samples(
+            NoIterList(["first-hash", {"sha256": "second-hash"}, "third-hash", "fourth-hash"]),
+            limit=20,
+        ) == ["first-hash", "second-hash", "third-hash", "fourth-hash"]
         assert "len" in _extract_samples.__code__.co_names
+        assert "result_count == 4" in inspect.getsource(_extract_samples)
+        assert "_append_sample_value" in _extract_samples.__code__.co_names
 
     def test_dict_sample_rows_do_not_allocate_values_view(self) -> None:
         """Defensive dict sample extraction should scan keys directly."""
+        from app.enrichment.adapters import threatminer
 
         class NoValuesDict(dict):
             def values(self):
@@ -465,6 +518,13 @@ class TestDomainLookup:
         )
 
         assert samples == ["hash-from-dict"]
+        append_source = inspect.getsource(threatminer._append_sample_value)
+        string_append_source = inspect.getsource(threatminer._append_sample_string)
+        assert "_append_sample_string(samples, row)" in append_source
+        assert "_append_sample_string(samples, v)" in append_source
+        assert "samples.append(row)" not in append_source
+        assert "samples.append(v)" not in append_source
+        assert "samples.append(value)" in string_append_source
 
     def test_domain_lookup_verdict_is_no_data(self) -> None:
         """Domain lookup verdict is always 'no_data'."""
@@ -634,6 +694,38 @@ class TestHashLookup:
 
 class TestNoDataHandling:
 
+    def test_call_delegates_request_url_construction(self) -> None:
+        """ThreatMiner safe_request dispatch should not own query-string construction."""
+        from app.enrichment.adapters import threatminer
+
+        call_source = inspect.getsource(threatminer.ThreatMinerAdapter._call)
+
+        assert "_threatminer_request_url(base_url, ioc.value, rt)" in call_source
+        assert "?q=" not in call_source
+        assert "&rt=" not in call_source
+
+    def test_request_url_helper_preserves_query_shape(self) -> None:
+        """ThreatMiner request URL construction should live in one helper."""
+        assert _threatminer_request_url(THREATMINER_BASE_DOMAIN, "example.com", "4") == (
+            "https://api.threatminer.org/v2/domain.php?q=example.com&rt=4"
+        )
+
+    def test_lookup_paths_delegate_result_gates_and_raw_stats_helpers(self) -> None:
+        """ThreatMiner lookup paths should not own repeated raw_stats mechanics."""
+        from app.enrichment.adapters import threatminer
+
+        ip_source = inspect.getsource(threatminer.ThreatMinerAdapter._lookup_ip)
+        domain_source = inspect.getsource(threatminer.ThreatMinerAdapter._lookup_domain)
+        hash_source = inspect.getsource(threatminer.ThreatMinerAdapter._lookup_hash)
+
+        assert "not _has_results(body)" in ip_source
+        assert "_passive_dns_raw_stats(body, field_name=\"domain\")" in ip_source
+        assert "_domain_raw_stats(dns_body=dns_body, samples_body=samples_body)" in domain_source
+        assert "raw_stats: dict = {}" not in domain_source
+        assert "not _has_results(body)" in hash_source
+        assert "_samples_raw_stats(body)" in hash_source
+        assert '{"samples": samples}' not in hash_source
+
     def test_no_data_result_helper_preserves_informational_shape(self) -> None:
         """ThreatMiner no-data branches should share one result shape."""
         ioc = make_domain_ioc()
@@ -649,6 +741,62 @@ class TestNoDataHandling:
         assert result.scan_date is None
         assert result.raw_stats is raw_stats
         assert "no_data_result(ioc, provider_name, raw_stats)" in inspect.getsource(_no_data_result)
+
+    def test_result_body_gate_preserves_404_and_empty_semantics(self) -> None:
+        """ThreatMiner body gate should reject 404 and empty result bodies."""
+        assert _has_results(NO_DATA_RESPONSE) is False
+        assert _has_results(EMPTY_RESULTS_RESPONSE) is False
+        assert _has_results(IP_PASSIVE_DNS_RESPONSE) is True
+
+    def test_raw_stats_helpers_preserve_public_shapes(self) -> None:
+        """ThreatMiner raw_stats helpers should preserve passive DNS and sample envelopes."""
+        passive_stats = _passive_dns_raw_stats(IP_PASSIVE_DNS_RESPONSE, field_name="domain")
+        sample_stats = _samples_raw_stats(HASH_SAMPLES_RESPONSE)
+        merged_stats = _domain_raw_stats(
+            dns_body=DOMAIN_PASSIVE_DNS_RESPONSE,
+            samples_body=DOMAIN_SAMPLES_RESPONSE,
+        )
+
+        assert list(passive_stats) == ["passive_dns"]
+        assert passive_stats["passive_dns"] == ["evil.com", "malware.net", "bad.org"]
+        assert list(sample_stats) == ["samples"]
+        assert sample_stats["samples"] == HASH_SAMPLES_RESPONSE["results"]
+        assert list(merged_stats) == ["passive_dns", "samples"]
+        assert merged_stats["passive_dns"] == ["1.2.3.4", "5.6.7.8"]
+        assert merged_stats["samples"] == DOMAIN_SAMPLES_RESPONSE["results"]
+
+    def test_domain_raw_stats_omits_empty_extracted_lists(self) -> None:
+        """Domain raw_stats should only include ThreatMiner data that exists."""
+        dns_without_ips = {
+            "status_code": "200",
+            "results": [{"domain": "example.com"}],
+        }
+
+        assert _domain_raw_stats(
+            dns_body=dns_without_ips,
+            samples_body=NO_DATA_RESPONSE,
+        ) == {}
+
+    def test_domain_raw_stats_delegates_optional_sections(self) -> None:
+        """Domain raw_stats should delegate optional passive DNS and sample sections."""
+        raw_stats: dict = {}
+
+        append_domain_passive_dns(raw_stats, DOMAIN_PASSIVE_DNS_RESPONSE)
+        append_domain_samples(raw_stats, DOMAIN_SAMPLES_RESPONSE)
+
+        domain_source = inspect.getsource(_domain_raw_stats)
+        passive_source = inspect.getsource(append_domain_passive_dns)
+        samples_source = inspect.getsource(append_domain_samples)
+        assert raw_stats == {
+            "passive_dns": ["1.2.3.4", "5.6.7.8"],
+            "samples": DOMAIN_SAMPLES_RESPONSE["results"],
+        }
+        assert "append_domain_passive_dns(raw_stats, dns_body)" in domain_source
+        assert "append_domain_samples(raw_stats, samples_body)" in domain_source
+        assert "_passive_dns_raw_stats(" not in domain_source
+        assert "_samples_raw_stats(" not in domain_source
+        assert "_passive_dns_raw_stats(dns_body, field_name=\"ip\")" in passive_source
+        assert "_samples_raw_stats(samples_body)" in samples_source
 
     def test_ip_body_404_returns_no_data(self) -> None:
         """IP lookup with body status_code '404' returns EnrichmentResult(verdict='no_data')."""

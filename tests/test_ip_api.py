@@ -6,12 +6,20 @@ All HTTP calls are mocked using unittest.mock — no real API calls.
 """
 from __future__ import annotations
 
+import inspect
 from unittest.mock import MagicMock
 
 import pytest
 
 from app.enrichment.models import EnrichmentError, EnrichmentResult
-from app.enrichment.adapters.ip_api import IPApiAdapter
+from app.enrichment.adapters.ip_api import (
+    IPApiAdapter,
+    _asn_context,
+    _geo_context,
+    _ip_context_signals,
+    _parse_response,
+    _raw_stats,
+)
 from tests.helpers import (
     make_mock_response,
     mock_adapter_session,
@@ -295,6 +303,7 @@ class TestGeoFormatting:
 
         assert ip_api._GEO_SEPARATOR == " \u00b7 "
         assert ip_api._parse_response.__code__.co_consts.count(" \u00b7 ") == 0
+        assert ip_api._geo_context.__code__.co_consts.count(" \u00b7 ") == 0
 
     def test_geo_format_cc_city_asn_isp(self) -> None:
         """geo string is formatted as 'CC · City · ASN (ISP)'."""
@@ -327,8 +336,6 @@ class TestGeoFormatting:
 
     def test_org_parsing_does_not_allocate_split_parts(self) -> None:
         """ASN/ISP parsing should avoid a split-list allocation."""
-        from app.enrichment.adapters.ip_api import _parse_response
-
         class NoSplitText(str):
             def split(self, *_args, **_kwargs):
                 raise AssertionError("IP Context org parsing should use partition")
@@ -340,6 +347,101 @@ class TestGeoFormatting:
 
         assert result.raw_stats["geo"] == "DE \u00b7 Nuremberg \u00b7 AS24940 (Hetzner Online GmbH)"
         assert result.raw_stats["asname"] == "Hetzner Online GmbH"
+
+    def test_parser_delegates_geo_and_raw_stats_helpers(self) -> None:
+        """The parser should coordinate helpers instead of owning formatting details."""
+        source = inspect.getsource(_parse_response)
+
+        assert "_ip_context_signals(body)" in source
+        assert "_asn_context(signals.org)" in source
+        assert "_geo_context(signals.country_code, signals.city, asn_display)" in source
+        assert "_raw_stats(" in source
+        assert 'body.get("country"' not in source
+        assert "partition(" not in source
+        assert '"country_code": country_code' not in source
+        assert "proxy = False" not in source
+
+    def test_signal_helper_preserves_defaults_and_flags_identity(self) -> None:
+        """IP Context response-field extraction should live in one signal helper."""
+        class NoDefaultBody(dict):
+            def get(self, key, default=None):
+                expected_defaults = {
+                    "country": "",
+                    "city": "",
+                    "org": "",
+                    "hostname": "",
+                }
+                if default != expected_defaults[key]:
+                    raise AssertionError("IP Context signal defaults should stay provider-specific")
+                return super().get(key, default)
+
+        signals = _ip_context_signals(NoDefaultBody({"country": "DE"}))
+        missing = _ip_context_signals(NoDefaultBody({}))
+
+        assert signals is not None
+        assert signals.country_code == "DE"
+        assert signals.city == ""
+        assert signals.org == ""
+        assert signals.reverse == ""
+        assert signals.flags == []
+        assert type(signals.flags) is list
+        assert missing is None
+
+    def test_asn_context_uses_partition_without_split(self) -> None:
+        """ASN parsing should remain isolated and split-list free."""
+        class NoSplitText(str):
+            def split(self, *_args, **_kwargs):
+                raise AssertionError("IP Context ASN parsing should use partition")
+
+        assert _asn_context(NoSplitText("AS24940 Hetzner Online GmbH")) == (
+            "AS24940 (Hetzner Online GmbH)",
+            "Hetzner Online GmbH",
+        )
+        assert _asn_context("AS15169") == ("AS15169", "")
+        assert _asn_context("") == ("", "")
+
+    def test_geo_context_builds_without_parts_list(self) -> None:
+        """Geo formatting should stay direct and preserve missing-field separators."""
+        source = inspect.getsource(_geo_context)
+
+        assert _geo_context("DE", "Nuremberg", "AS24940 (Hetzner Online GmbH)") == (
+            "DE \u00b7 Nuremberg \u00b7 AS24940 (Hetzner Online GmbH)"
+        )
+        assert _geo_context("US", "", "") == "US"
+        assert _geo_context("", "Nuremberg", "") == "Nuremberg"
+        assert "append" not in source
+        assert "join" not in source
+
+    def test_raw_stats_helper_preserves_flags_identity_and_key_order(self) -> None:
+        """Raw stats shape should be stable without copying the flags list."""
+        flags: list[str] = []
+
+        raw_stats = _raw_stats(
+            country_code="DE",
+            city="Nuremberg",
+            org="AS24940 Hetzner Online GmbH",
+            asname="Hetzner Online GmbH",
+            reverse="host.example",
+            geo="DE \u00b7 Nuremberg \u00b7 AS24940 (Hetzner Online GmbH)",
+            flags=flags,
+        )
+
+        assert list(raw_stats) == [
+            "country_code",
+            "city",
+            "as_info",
+            "asname",
+            "reverse",
+            "proxy",
+            "hosting",
+            "mobile",
+            "geo",
+            "flags",
+        ]
+        assert raw_stats["flags"] is flags
+        assert raw_stats["proxy"] is False
+        assert raw_stats["hosting"] is False
+        assert raw_stats["mobile"] is False
 
     def test_geo_format_exact_minimal_context(self) -> None:
         """geo string omits separators for missing optional city and ASN fields."""

@@ -14,6 +14,7 @@ from app.time_utils import (
 from app.text_utils import (
     collapse_whitespace,
     decode_utf8_replace,
+    has_non_whitespace,
     stripped_bounded_non_whitespace,
     stripped_bounded_text,
     stripped_text_or_none,
@@ -66,6 +67,23 @@ def test_utc_display_seconds_uses_utc_suffix() -> None:
 
 def test_utcnow_iso_uses_shared_formatter() -> None:
     assert "utc_iso" in utcnow_iso.__code__.co_names
+
+
+def test_has_non_whitespace_scans_without_generator_frame() -> None:
+    class NoStripText(str):
+        def strip(self, *_args, **_kwargs):
+            raise AssertionError("text presence should scan directly")
+
+    nested_code_names = {
+        const.co_name
+        for const in has_non_whitespace.__code__.co_consts
+        if hasattr(const, "co_name")
+    }
+
+    assert has_non_whitespace(NoStripText("  alpha  ")) is True
+    assert has_non_whitespace(NoStripText("  \n\t  ")) is False
+    assert "<genexpr>" not in nested_code_names
+    assert "any" not in has_non_whitespace.__code__.co_names
 
 
 def test_stripped_bounded_non_whitespace_scans_before_stripping() -> None:

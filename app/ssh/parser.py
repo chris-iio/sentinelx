@@ -26,18 +26,16 @@ Security notes:
 """
 from __future__ import annotations
 
-import io
 import ipaddress
 import logging
 import re
-from collections.abc import Iterator
 from datetime import datetime, timedelta
 from functools import lru_cache
 from types import MappingProxyType
 from typing import IO
 
-from app.ssh.models import LoginEvent, ParseSummary
-from app.text_utils import decode_utf8_replace
+from . import line_streams
+from .models import LoginEvent, ParseSummary
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +54,7 @@ _BSD_ACCEPTED_RE = re.compile(
 )
 
 # RFC 3339 full-line match.
-# Matches:  "2024-01-15T14:30:00+00:00 hostname sshd[1234]: Accepted password for user from source port N"
+# Matches an RFC 3339 sshd "Accepted" line with source host and port.
 # Groups:   ts, method, user, source
 _RFC3339_ACCEPTED_RE = re.compile(
     r'^(?P<ts>\S+)\s+\S+\s+sshd\[\d+\]:\s+Accepted\s+(?P<method>\S+)\s+for\s+(?P<user>\S+)\s+'
@@ -138,31 +136,35 @@ def _parse_bsd_timestamp(month: str, day: str, time_str: str, now: datetime) -> 
     return dt
 
 
-def _iter_lines(stream: IO[bytes] | IO[str]) -> Iterator[str]:
-    """Yield lines from a bytes or text stream.
+def _append_login_event(
+    events: list[LoginEvent],
+    *,
+    user: str,
+    source: str,
+    timestamp: datetime,
+    auth_method: str,
+    line_number: int,
+    raw_line: str,
+) -> None:
+    source_ip, hostname = _classify_source(source)
+    events.append(LoginEvent(
+        username=user,
+        source_ip=source_ip,
+        hostname=hostname,
+        timestamp=timestamp,
+        auth_method=auth_method,
+        line_number=line_number,
+        raw_line=raw_line,
+    ))
 
-    Bytes streams are decoded as UTF-8 with errors='replace' (T-06-09).
-    The trailing newline, if any, is preserved by iteration and stripped
-    per-line during processing.
-    """
-    if isinstance(stream, (io.RawIOBase, io.BufferedIOBase, io.BytesIO)):
-        for raw_line in stream:
-            if isinstance(raw_line, (bytes, bytearray)):
-                yield decode_utf8_replace(raw_line)
-            else:
-                yield str(raw_line)
-        return
 
-    for raw_line in stream:
-        yield raw_line
-
-
-def _strip_line_ending(value: str) -> str:
-    """Return *value* without trailing CR/LF characters."""
-    end = len(value)
-    while end > 0 and value[end - 1] in "\r\n":
-        end -= 1
-    return value[:end]
+def _warn_partial_match(line_number: int, line: str, reason: str) -> None:
+    logger.warning(
+        "Line %d partially matched SSH pattern but failed %s: %r",
+        line_number,
+        reason,
+        line,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -201,9 +203,9 @@ def parse_auth_log(
     warning_count = 0
     total_lines = 0
 
-    for line_number, raw_line in enumerate(_iter_lines(stream), start=1):
+    for line_number, raw_line in enumerate(line_streams.iter_lines(stream), start=1):
         total_lines += 1
-        line = _strip_line_ending(raw_line)
+        line = line_streams.strip_line_ending(raw_line)
 
         # -- BSD syslog format -----------------------------------------------
         bsd_match = _BSD_ACCEPTED_RE.match(line)
@@ -215,16 +217,15 @@ def parse_auth_log(
             user = bsd_match.group("user")
             source = bsd_match.group("source")
             ts = _parse_bsd_timestamp(month, day, time_str, now)
-            source_ip, hostname = _classify_source(source)
-            events.append(LoginEvent(
-                username=user,
-                source_ip=source_ip,
-                hostname=hostname,
+            _append_login_event(
+                events,
+                user=user,
+                source=source,
                 timestamp=ts,
                 auth_method=method,
                 line_number=line_number,
                 raw_line=line,
-            ))
+            )
             parsed_count += 1
             continue
 
@@ -239,33 +240,24 @@ def parse_auth_log(
                 ts = datetime.fromisoformat(ts_str)
             except ValueError:
                 # Malformed RFC 3339 timestamp — treat as partial match
-                logger.warning(
-                    "Line %d partially matched SSH pattern but failed timestamp extraction: %r",
-                    line_number,
-                    line,
-                )
+                _warn_partial_match(line_number, line, "timestamp extraction")
                 warning_count += 1
                 continue
-            source_ip, hostname = _classify_source(source)
-            events.append(LoginEvent(
-                username=user,
-                source_ip=source_ip,
-                hostname=hostname,
+            _append_login_event(
+                events,
+                user=user,
+                source=source,
                 timestamp=ts,
                 auth_method=method,
                 line_number=line_number,
                 raw_line=line,
-            ))
+            )
             parsed_count += 1
             continue
 
         # -- Partial-match sentinel (D-06) ------------------------------------
         if _PARTIAL_SSH_RE.search(line):
-            logger.warning(
-                "Line %d partially matched SSH pattern but failed extraction: %r",
-                line_number,
-                line,
-            )
+            _warn_partial_match(line_number, line, "extraction")
             warning_count += 1
             continue
 

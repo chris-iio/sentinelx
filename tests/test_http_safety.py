@@ -170,6 +170,57 @@ class TestSafeRequestSSRF:
         with pytest.raises(ValueError, match="allowed_hosts is empty"):
             validate_endpoint(URL, [])
 
+    def test_non_https_endpoint_rejected_before_network_call(self):
+        session = MagicMock()
+        bad_url = "http://api.example.com/v1/check"
+
+        result = safe_request(session, bad_url, ALLOWED, IOC, PROVIDER)
+
+        assert isinstance(result, EnrichmentError)
+        assert "must use HTTPS" in result.error
+        session.get.assert_not_called()
+
+        with pytest.raises(ValueError, match="must use HTTPS"):
+            validate_endpoint(bad_url, ALLOWED)
+
+    def test_endpoint_userinfo_rejected_before_network_call(self):
+        session = MagicMock()
+        bad_url = "https://user:pass@api.example.com/v1/check"
+
+        result = safe_request(session, bad_url, ALLOWED, IOC, PROVIDER)
+
+        assert isinstance(result, EnrichmentError)
+        assert "must not include userinfo" in result.error
+        session.get.assert_not_called()
+
+        with pytest.raises(ValueError, match="must not include userinfo"):
+            validate_endpoint(bad_url, ALLOWED)
+
+    def test_endpoint_missing_hostname_rejected_before_network_call(self):
+        session = MagicMock()
+        bad_url = "https:///v1/check"
+
+        result = safe_request(session, bad_url, ALLOWED, IOC, PROVIDER)
+
+        assert isinstance(result, EnrichmentError)
+        assert "must include a hostname" in result.error
+        session.get.assert_not_called()
+
+        with pytest.raises(ValueError, match="must include a hostname"):
+            validate_endpoint(bad_url, ALLOWED)
+
+    def test_parsed_endpoint_validation_is_shared(self):
+        import inspect
+
+        parsed = http_safety.urlparse(URL)
+
+        assert http_safety._validated_endpoint_hostname(parsed) == "api.example.com"
+        source = inspect.getsource(http_safety.validate_endpoint)
+        helper_source = inspect.getsource(http_safety._validated_endpoint_hostname)
+        assert "_validated_endpoint_hostname(urlparse(url))" in source
+        assert "provider URLs must use HTTPS" not in source
+        assert "provider URLs must use HTTPS" in helper_source
+
 
 # ── Exception chain ────────────────────────────────────────────────────────
 

@@ -11,7 +11,7 @@ function renderIndexForm(options: { mode?: string; ariaChecked?: string } = {}):
   document.body.innerHTML = `
     <form id="analyze-form">
       <textarea id="ioc-text"></textarea>
-      <span id="paste-feedback" style="display:none;"></span>
+      <span id="paste-feedback" hidden></span>
       <div class="mode-toggle" aria-labelledby="mode-title" aria-describedby="mode-help mode-status">
         <div class="mode-toggle-copy">
           <h2 id="mode-title" class="mode-toggle-title">Analysis mode</h2>

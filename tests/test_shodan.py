@@ -15,7 +15,14 @@ from __future__ import annotations
 import inspect
 
 from app.enrichment.models import EnrichmentError, EnrichmentResult
-from app.enrichment.adapters.shodan import ShodanAdapter, _parse_response
+from app.enrichment.adapters.shodan import (
+    ShodanAdapter,
+    _malicious_tag_count,
+    _parse_response,
+    _raw_stats,
+    _shodan_signals,
+    _shodan_verdict,
+)
 from tests.helpers import (
     make_mock_response,
     make_ipv4_ioc,
@@ -237,7 +244,8 @@ class TestLookupFound:
         assert result.verdict == "no_data"
         assert result.detection_count == 0
         assert result.raw_stats["tags"] is tags
-        assert "not tags" in inspect.getsource(_parse_response)
+        assert "not tags" not in inspect.getsource(_parse_response)
+        assert "not tags" in inspect.getsource(_shodan_verdict)
 
     def test_vuln_only_response_skips_bad_tag_scan(self) -> None:
         """Responses with vulns but no tags should not iterate an empty tag list."""
@@ -263,7 +271,7 @@ class TestLookupFound:
         assert result.raw_stats["tags"] is tags
 
     def test_short_tag_lists_skip_bad_tag_loop(self) -> None:
-        """One-, two-, and three-tag Shodan responses should count bad tags directly."""
+        """One-, two-, three-, and four-tag Shodan responses should count bad tags directly."""
         class NoIterTags(list):
             def __iter__(self):
                 raise AssertionError("short Shodan tag lists should not iterate")
@@ -295,6 +303,17 @@ class TestLookupFound:
             },
             "Shodan InternetDB",
         )
+        four = _parse_response(
+            make_ipv4_ioc("10.0.0.4"),
+            {
+                "ports": [],
+                "hostnames": [],
+                "cpes": [],
+                "vulns": [],
+                "tags": NoIterTags(["malware", "benign", "doublepulsar", "compromised"]),
+            },
+            "Shodan InternetDB",
+        )
 
         assert single.verdict == "malicious"
         assert single.detection_count == 1
@@ -302,6 +321,87 @@ class TestLookupFound:
         assert pair.detection_count == 2
         assert three.verdict == "malicious"
         assert three.detection_count == 2
+        assert four.verdict == "malicious"
+        assert four.detection_count == 3
+
+    def test_parse_response_delegates_raw_stats_and_tag_count_helpers(self) -> None:
+        """Verdict parsing should not duplicate raw_stats or tag-count mechanics."""
+        source = inspect.getsource(_parse_response)
+
+        assert "_shodan_signals(body)" in source
+        assert "_shodan_verdict(signals.tags, signals.vulns)" in source
+        assert "_raw_stats(" in source
+        assert "_malicious_tag_count(tags)" not in source
+        assert "_malicious_tag_count(tags)" in inspect.getsource(_shodan_verdict)
+        assert "_list_field(" not in source
+        assert source.count('"ports": ports') == 0
+        assert source.count("for tag in tags") == 0
+        assert "len(tags)" in inspect.getsource(_malicious_tag_count)
+
+    def test_shodan_signal_helper_preserves_list_identity_and_defaults(self) -> None:
+        """Signal extraction should own Shodan list-field normalization."""
+        class NoDefaultBody(dict):
+            def get(self, key, default=None):
+                if key in {"vulns", "tags", "ports", "hostnames", "cpes"} and default is not None:
+                    raise AssertionError("Shodan list field parsing should avoid eager default list allocation")
+                return super().get(key, default)
+
+        ports = [443]
+        tags = ["malware"]
+        signals = _shodan_signals(NoDefaultBody({"ports": ports, "tags": tags}))
+
+        assert signals.ports is ports
+        assert signals.tags is tags
+        assert signals.vulns == []
+        assert signals.hostnames == []
+        assert signals.cpes == []
+
+    def test_verdict_helper_preserves_priority_and_counts(self) -> None:
+        """Shodan verdict helper should own signal priority without raw_stats mechanics."""
+        assert _shodan_verdict([], []) == ("no_data", 0)
+        assert _shodan_verdict([], ["CVE-1", "CVE-2"]) == ("suspicious", 2)
+        assert _shodan_verdict(["malware", "compromised"], ["CVE-1"]) == ("malicious", 2)
+        assert _shodan_verdict(["benign"], ["CVE-1"]) == ("suspicious", 1)
+        assert _shodan_verdict(["benign"], []) == ("no_data", 0)
+
+    def test_raw_stats_helper_preserves_list_identity_and_key_order(self) -> None:
+        """The shared raw_stats envelope should preserve existing list objects."""
+        ports = [80]
+        vulns = ["CVE-1"]
+        tags = ["malware"]
+        hostnames = ["host.example"]
+        cpes = ["cpe:/a:test"]
+
+        raw_stats = _raw_stats(
+            ports=ports,
+            vulns=vulns,
+            tags=tags,
+            hostnames=hostnames,
+            cpes=cpes,
+        )
+
+        assert list(raw_stats) == ["ports", "vulns", "tags", "hostnames", "cpes"]
+        assert raw_stats["ports"] is ports
+        assert raw_stats["vulns"] is vulns
+        assert raw_stats["tags"] is tags
+        assert raw_stats["hostnames"] is hostnames
+        assert raw_stats["cpes"] is cpes
+
+    def test_malicious_tag_count_preserves_short_no_iteration_paths(self) -> None:
+        """The tag-count helper should keep the existing short-list fast paths."""
+        class NoIterTags(list):
+            def __iter__(self):
+                raise AssertionError("short Shodan tag counts should not iterate")
+
+        assert _malicious_tag_count(NoIterTags(["malware"])) == 1
+        assert _malicious_tag_count(NoIterTags(["malware", "benign"])) == 1
+        assert _malicious_tag_count(
+            NoIterTags(["malware", "compromised", "benign"])
+        ) == 2
+        assert _malicious_tag_count(
+            NoIterTags(["malware", "compromised", "benign", "doublepulsar"])
+        ) == 3
+        assert "tag_count == 4" in inspect.getsource(_malicious_tag_count)
 
     def test_raw_stats_contains_ports_vulns_tags(self) -> None:
         """200 response -> raw_stats dict contains keys: ports, vulns, tags, hostnames, cpes."""
@@ -356,9 +456,8 @@ class TestLookupNotFound:
         assert result.total_engines == 0
         assert result.scan_date is None
         assert result.raw_stats == {}
-        assert "no_data_result(ioc, self.name)" in inspect.getsource(
-            ShodanAdapter._make_pre_raise_hook,
-        )
+        assert ShodanAdapter._no_data_on_404 is True
+        assert "_make_pre_raise_hook" not in inspect.getsource(ShodanAdapter)
 
     def test_404_returns_result_not_error(self) -> None:
         """404 response -> isinstance(result, EnrichmentResult) is True, NOT EnrichmentError."""

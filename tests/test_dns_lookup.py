@@ -12,6 +12,7 @@ All DNS calls are mocked using unittest.mock.patch -- no real DNS queries.
 """
 from __future__ import annotations
 
+import inspect
 from unittest.mock import MagicMock, patch
 
 import dns.exception
@@ -29,11 +30,11 @@ DOMAIN_IOC = IOC(type=IOCType.DOMAIN, value="example.com", raw_match="example.co
 IPV4_IOC = IOC(type=IOCType.IPV4, value="1.2.3.4", raw_match="1.2.3.4")
 
 
-def _make_adapter(allowed_hosts: list[str] | None = None):
-    """Construct a DnsAdapter.  allowed_hosts is accepted but unused (DNS is port 53)."""
+def _make_adapter():
+    """Construct a DnsAdapter. DNS uses port 53 directly, not HTTP allowlists."""
     from app.enrichment.adapters.dns_lookup import DnsAdapter
 
-    return DnsAdapter(allowed_hosts=allowed_hosts or [])
+    return DnsAdapter()
 
 
 def _make_a_rdata(ip: str) -> MagicMock:
@@ -203,6 +204,32 @@ class TestSuccessfulLookup:
         mock_resolver.resolve.assert_called_once_with("example.com", "CUSTOM")
         assert extractor_calls == [answers]
         assert result.raw_stats["custom"] == ["custom-value"]
+
+    def test_lookup_delegates_raw_stats_and_record_resolution_helpers(self) -> None:
+        """DNS lookup should not own raw_stats initialization or exception policy."""
+        from app.enrichment.adapters.dns_lookup import DnsAdapter
+
+        source = inspect.getsource(DnsAdapter.lookup)
+
+        assert "_configured_resolver()" in source
+        assert "_empty_raw_stats()" in source
+        assert "_resolve_record_type(" in source
+        assert "dns.resolver.Resolver" not in source
+        assert ".lifetime" not in source
+        assert '"lookup_errors": []' not in source
+        assert "except dns.resolver.NoNameservers" not in source
+        assert "except dns.exception.Timeout" not in source
+
+    def test_configured_resolver_helper_preserves_lifetime_policy(self) -> None:
+        """DNS resolver construction and timeout policy should live in one helper."""
+        import app.enrichment.adapters.dns_lookup as dns_module
+
+        resolver = MagicMock()
+        with patch("dns.resolver.Resolver", return_value=resolver) as resolver_factory:
+            assert dns_module._configured_resolver() is resolver
+
+        resolver_factory.assert_called_once_with(configure=True)
+        assert resolver.lifetime == dns_module._RESOLVER_LIFETIME
 
 
 # ---------------------------------------------------------------------------
@@ -387,8 +414,9 @@ class TestTXTRecords:
         mock_rdata.to_text.assert_not_called()
 
     def test_short_chunk_txt_records_skip_join_iteration(self) -> None:
-        """One- and two-chunk TXT records should decode directly instead of joining."""
-        from app.enrichment.adapters.dns_lookup import _extract_txt_records
+        """One-, two-, three-, and four-chunk TXT records should decode directly."""
+        from app.enrichment.adapters.dns_lookup import _decode_txt_record, _extract_txt_records
+        from app.enrichment.adapters.dns_txt import decode_txt_chunks
 
         class ShortChunkStrings:
             def __init__(self, chunks: tuple[bytes, ...]) -> None:
@@ -405,13 +433,24 @@ class TestTXTRecords:
             def __iter__(self):
                 raise AssertionError("short TXT chunks should not be joined through iteration")
 
+        empty_record = MagicMock()
+        empty_record.strings = ShortChunkStrings(())
         record = MagicMock()
         record.strings = ShortChunkStrings((b"v=spf1 ~all",))
         pair_record = MagicMock()
         pair_record.strings = ShortChunkStrings((b"google-site-", b"verification=abc"))
+        triple_record = MagicMock()
+        triple_record.strings = ShortChunkStrings((b"google-", b"site-", b"verification=abc"))
+        fourth_record = MagicMock()
+        fourth_record.strings = ShortChunkStrings((b"google-", b"site-", b"verification=", b"abc"))
 
+        assert _extract_txt_records([empty_record]) == [""]
         assert _extract_txt_records([record]) == ["v=spf1 ~all"]
         assert _extract_txt_records([pair_record]) == ["google-site-verification=abc"]
+        assert _extract_txt_records([triple_record]) == ["google-site-verification=abc"]
+        assert _extract_txt_records([fourth_record]) == ["google-site-verification=abc"]
+        assert "decode_txt_chunks" in _decode_txt_record.__code__.co_names
+        assert "string_count == 4" in inspect.getsource(decode_txt_chunks)
 
 
 # ---------------------------------------------------------------------------
@@ -437,7 +476,50 @@ class TestRecordExtractorImplementation:
             }
             assert "<listcomp>" not in nested_code_names
 
-    def test_record_extractors_skip_iteration_for_empty_single_pair_or_three_answers(self) -> None:
+    def test_record_extractors_share_record_formatters(self) -> None:
+        """Short and long extraction paths should use the same record text helpers."""
+        from app.enrichment.adapters.dns_lookup import (
+            _append_mx_record,
+            _append_text_record,
+            _append_txt_record,
+            _extract_mx_records,
+            _extract_text_records,
+            _extract_txt_records,
+            _mx_record_text,
+            _record_text,
+        )
+
+        text_record = _make_a_rdata("93.184.216.34")
+        mx_record = _make_mx_rdata(10, "mail.example.com.")
+
+        assert _record_text(text_record) == "93.184.216.34"
+        assert _mx_record_text(mx_record) == "10 mail.example.com."
+        assert "_record_text" in _extract_text_records.__code__.co_names
+        assert "_mx_record_text" in _extract_mx_records.__code__.co_names
+        assert ".to_text()" not in inspect.getsource(_extract_text_records)
+        assert ".exchange.to_text()" not in inspect.getsource(_extract_mx_records)
+        assert "_record_text" in _append_text_record.__code__.co_names
+        assert "_mx_record_text" in _append_mx_record.__code__.co_names
+        assert "_decode_txt_record" in _append_txt_record.__code__.co_names
+        assert "_append_text_record(records, record)" in inspect.getsource(_extract_text_records)
+        assert "_append_mx_record(records, record)" in inspect.getsource(_extract_mx_records)
+        assert "_append_txt_record(records, record)" in inspect.getsource(_extract_txt_records)
+        assert "records.append(_record_text(record))" not in inspect.getsource(
+            _extract_text_records
+        )
+        assert "records.append(_mx_record_text(record))" not in inspect.getsource(
+            _extract_mx_records
+        )
+        assert "records.append(_decode_txt_record(record))" not in inspect.getsource(
+            _extract_txt_records
+        )
+        assert "records.append(_record_text(record))" in inspect.getsource(_append_text_record)
+        assert "records.append(_mx_record_text(record))" in inspect.getsource(_append_mx_record)
+        assert "records.append(_decode_txt_record(record))" in inspect.getsource(
+            _append_txt_record
+        )
+
+    def test_record_extractors_skip_iteration_for_empty_single_pair_three_or_four_answers(self) -> None:
         from app.enrichment.adapters.dns_lookup import (
             _extract_mx_records,
             _extract_text_records,
@@ -472,12 +554,15 @@ class TestRecordExtractorImplementation:
         text_record = _make_a_rdata("93.184.216.34")
         second_text_record = _make_a_rdata("93.184.216.35")
         third_text_record = _make_a_rdata("93.184.216.36")
+        fourth_text_record = _make_a_rdata("93.184.216.37")
         mx_record = _make_mx_rdata(10, "mail.example.com.")
         second_mx_record = _make_mx_rdata(20, "backup.example.com.")
         third_mx_record = _make_mx_rdata(30, "fallback.example.com.")
+        fourth_mx_record = _make_mx_rdata(40, "overflow.example.com.")
         txt_record = _make_txt_rdata(b"v=spf1 ~all")
         second_txt_record = _make_txt_rdata(b"google-site-verification=abc")
         third_txt_record = _make_txt_rdata(b"apple-domain-verification=xyz")
+        fourth_txt_record = _make_txt_rdata(b"atlassian-domain-verification=def")
 
         assert _extract_text_records(EmptyAnswers()) == []
         assert _extract_mx_records(EmptyAnswers()) == []
@@ -512,9 +597,36 @@ class TestRecordExtractorImplementation:
             "google-site-verification=abc",
             "apple-domain-verification=xyz",
         ]
+        assert _extract_text_records(
+            ShortAnswers(text_record, second_text_record, third_text_record, fourth_text_record)
+        ) == [
+            "93.184.216.34",
+            "93.184.216.35",
+            "93.184.216.36",
+            "93.184.216.37",
+        ]
+        assert _extract_mx_records(
+            ShortAnswers(mx_record, second_mx_record, third_mx_record, fourth_mx_record)
+        ) == [
+            "10 mail.example.com.",
+            "20 backup.example.com.",
+            "30 fallback.example.com.",
+            "40 overflow.example.com.",
+        ]
+        assert _extract_txt_records(
+            ShortAnswers(txt_record, second_txt_record, third_txt_record, fourth_txt_record)
+        ) == [
+            "v=spf1 ~all",
+            "google-site-verification=abc",
+            "apple-domain-verification=xyz",
+            "atlassian-domain-verification=def",
+        ]
         assert "len" in _extract_text_records.__code__.co_names
         assert "len" in _extract_mx_records.__code__.co_names
         assert "len" in _extract_txt_records.__code__.co_names
+        assert "answer_count == 4" in inspect.getsource(_extract_text_records)
+        assert "answer_count == 4" in inspect.getsource(_extract_mx_records)
+        assert "answer_count == 4" in inspect.getsource(_extract_txt_records)
 
 
 # ---------------------------------------------------------------------------
@@ -523,6 +635,23 @@ class TestRecordExtractorImplementation:
 
 
 class TestRawStatsStructure:
+
+    def test_empty_raw_stats_helper_preserves_key_order_and_fresh_lists(self) -> None:
+        """DNS raw_stats defaults should keep public shape and avoid shared lists."""
+        from app.enrichment.adapters.dns_lookup import _empty_raw_stats
+
+        first = _empty_raw_stats()
+        second = _empty_raw_stats()
+
+        assert list(first) == ["a", "mx", "ns", "txt", "lookup_errors"]
+        assert first == {
+            "a": [],
+            "mx": [],
+            "ns": [],
+            "txt": [],
+            "lookup_errors": [],
+        }
+        assert first["lookup_errors"] is not second["lookup_errors"]
 
     def test_raw_stats_has_all_keys(self) -> None:
         """raw_stats must contain 'a', 'mx', 'ns', 'txt', 'lookup_errors'."""
@@ -632,6 +761,58 @@ class TestNoAnswer:
 
 class TestPartialFailure:
 
+    def test_record_resolution_helper_preserves_error_mapping(self) -> None:
+        """DNS per-record helper should map expected failures to existing errors."""
+        from app.enrichment.adapters.dns_lookup import _resolve_record_type
+
+        resolver = MagicMock()
+        resolver.resolve.side_effect = dns.resolver.NoNameservers()
+        records, error = _resolve_record_type(
+            resolver=resolver,
+            domain="example.com",
+            rdtype="MX",
+            extract_records=lambda answers: ["unused"],
+            provider="DNS Records",
+        )
+
+        assert records is None
+        assert error == "MX: no nameservers"
+
+        resolver.resolve.side_effect = dns.exception.Timeout()
+        records, error = _resolve_record_type(
+            resolver=resolver,
+            domain="example.com",
+            rdtype="TXT",
+            extract_records=lambda answers: ["unused"],
+            provider="DNS Records",
+        )
+
+        assert records is None
+        assert error == "TXT: timeout"
+
+    def test_record_resolution_helper_preserves_expected_empty_outcomes(self) -> None:
+        """NXDOMAIN and NoAnswer should remain empty non-error outcomes."""
+        from app.enrichment.adapters.dns_lookup import _resolve_record_type
+
+        resolver = MagicMock()
+        resolver.resolve.side_effect = dns.resolver.NXDOMAIN()
+        assert _resolve_record_type(
+            resolver=resolver,
+            domain="example.com",
+            rdtype="A",
+            extract_records=lambda answers: ["unused"],
+            provider="DNS Records",
+        ) == (None, None)
+
+        resolver.resolve.side_effect = dns.resolver.NoAnswer()
+        assert _resolve_record_type(
+            resolver=resolver,
+            domain="example.com",
+            rdtype="A",
+            extract_records=lambda answers: ["unused"],
+            provider="DNS Records",
+        ) == (None, None)
+
     def test_mx_timeout_does_not_prevent_a_records(self) -> None:
         """MX timeout -> A records still populated (each type resolved independently)."""
         def resolve_side_effect(domain, rdtype):
@@ -652,6 +833,9 @@ class TestPartialFailure:
 
     def test_partial_failure_populates_lookup_errors(self) -> None:
         """MX timeout -> 'MX: timeout' (or similar) in lookup_errors list."""
+        import inspect
+        from app.enrichment.adapters import dns_lookup
+
         def resolve_side_effect(domain, rdtype):
             if rdtype == "MX":
                 raise dns.exception.Timeout()
@@ -667,6 +851,11 @@ class TestPartialFailure:
         assert len(errors) == 1
         assert "MX" in errors[0] or "mx" in errors[0].lower()
         assert "timeout" in errors[0].lower()
+        lookup_source = inspect.getsource(dns_lookup.DnsAdapter.lookup)
+        append_source = inspect.getsource(dns_lookup._append_lookup_error)
+        assert "_append_lookup_error(lookup_errors, error)" in lookup_source
+        assert "lookup_errors.append(error)" not in lookup_source
+        assert "lookup_errors.append(error)" in append_source
 
     def test_all_four_types_resolved_independently(self) -> None:
         """All four rdtypes are resolved via separate resolver.resolve() calls."""
